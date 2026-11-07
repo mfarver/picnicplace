@@ -417,7 +417,7 @@ Device):
 | **Prepare** | Import boards, edit placements, assign parts/packages, set up panels and fiducials. Central canvas shows the board with placements. |
 | **Feeders** | Feeder layout on a machine-bed view, Photon feeder discovery, part assignment, pick-location teaching. |
 | **Run** | Job progress, live camera views, placement list with status, pause/step/stop, error prompts. |
-| **Machine** | Jog controls, camera views, actuators, guided calibration wizards, machine settings. |
+| **Machine** | Machine view (§8.3), camera views in the sidebar, jog controls, actuators, guided calibration wizards, machine settings. |
 | **Vision** | Pipeline editor with live preview of each stage. |
 
 Design principles:
@@ -431,7 +431,59 @@ Design principles:
   machine.
 - Design tokens (color, spacing, type) in one place so themes are easy to adjust.
 
-### 8.3 CLI
+### 8.3 Machine view
+
+The center of the Machine workspace is the **machine view**: a scale overhead map of the
+machine, with a **head inset** in its lower-right corner. Live camera feeds sit in the
+sidebar beside it, and the axis positions are in the status bar.
+
+#### Overhead view
+
+- Drawn to scale in machine coordinates (X right, Y up), with zoom and pan. The machine
+  coordinates under the cursor are shown.
+- Shows:
+  - the travel limits (soft limits) and machine bed outline
+  - boards, with their placements as markers colored by status
+  - feeders (Photon slots on the LumenPnP) and their pick locations
+  - the bottom camera, with its field of view
+  - the homing fiducial
+  - nozzle tip holders and the discard location
+- The head is a crosshair at the current position, with the top camera's field-of-view
+  rectangle and each nozzle's offset drawn around it. Its live position comes from the
+  `machine.state` events.
+- **Click to move**, only while motion is enabled. A modifier key or a confirm step is
+  required so a stray click or tap cannot move the head. Moves to the target at safe Z.
+
+#### Head inset
+
+A side view of a generic head, floating in the lower-right corner of the overhead view.
+It can be collapsed.
+
+- Each nozzle's height, drawn to scale against the safe-Z line. On the LumenPnP v4 both
+  nozzles share one Z motor and move in opposite directions, and the drawing shows that.
+- Each nozzle's rotation as a small dial, the fitted nozzle tip, and whether a part is
+  held.
+- **Status lights along the edge**, generated from the machine profile rather than hard
+  coded, so the panel matches each machine's actual I/O:
+  - **Inputs** are read-only lights: endstops/home sensors, safe Z, and others the
+    profile declares.
+  - **Safe Z** is a solid light when sensed by a physical input (§5.2) and an outlined
+    light when computed.
+  - **Vacuum** per nozzle is a small bar showing the pressure reading with the pick
+    threshold marked, plus a lit state. This makes weak picks visible before they fail.
+  - **Outputs** (pump, valves, ring lights) look different from inputs and can be
+    toggled with a click in manual mode, when the client holds the control lease.
+
+#### Core support needed
+
+- A **machine description** endpoint: bed size and limits, camera and fiducial positions,
+  nozzles and their offsets, tip holders, feeders, and the list of inputs and outputs with
+  their kinds (digital, analog, sensed or computed).
+- Input and output states in the `machine.state` events.
+- The simulator provides all of the above with simulated sensor values, so the machine
+  view can be developed and tested without hardware.
+
+### 8.4 CLI
 
 A `picnic` command line client for scripting and headless use: connect, status, home,
 jog, run a job, export logs. Uses the same API.
@@ -486,7 +538,7 @@ refusing to connect.
 | Milestone | Scope |
 |---|---|
 | **M0 — Skeleton** | Repo layout, tooling, CI, `picnicd` with health endpoint, simulator driver, event socket, GUI shell with theme and status bar. |
-| **M1 — Manual control** | Connect to LumenPnP, home, jog, actuators, vacuum readings, MJPEG camera streams in the GUI, control lease, E-stop. |
+| **M1 — Manual control** | Machine description API and I/O state; machine view with head inset (built first, against the simulator); connect to LumenPnP, home, jog, actuators, vacuum readings, safe-Z interlock, MJPEG camera streams in the GUI, control lease, E-stop. |
 | **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. |
 | **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. |
 | **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. |

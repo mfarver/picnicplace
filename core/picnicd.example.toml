@@ -13,35 +13,5 @@ heartbeat_timeout_s = 6.0  # Silent clients are disconnected after this long.
 
 [machine]
 driver = "simulator"
+profile = "lumenpnp-v4"    # Built-in profile ID, or a path to a profile TOML file.
 sim_time_scale = 1.0       # Simulator only. 10 runs ten times faster than real time.
-
-# Simulator axes. Real machines will use machine profiles (see profiles/).
-[[machine.axes]]
-name = "X"
-min = 0
-max = 450
-max_speed = 500
-
-[[machine.axes]]
-name = "Y"
-min = 0
-max = 400
-max_speed = 500
-
-[[machine.axes]]
-name = "Z"
-min = -30
-max = 30
-max_speed = 100
-
-[[machine.axes]]
-name = "A"
-min = -360
-max = 360
-max_speed = 1000
-
-[[machine.axes]]
-name = "B"
-min = -360
-max = 360
-max_speed = 1000

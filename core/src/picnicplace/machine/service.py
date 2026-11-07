@@ -7,7 +7,6 @@ presence, E-stop, homing, busy state, and soft limits are checked (spec section 
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 
-from picnicplace.config import MachineConfig
 from picnicplace.events import EventBus
 from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.errors import (
@@ -17,7 +16,9 @@ from picnicplace.machine.errors import (
     NoClientPresentError,
     NotConnectedError,
     NotHomedError,
+    UnknownOutputError,
 )
+from picnicplace.machine.profile import MachineProfile, nozzle_height
 from picnicplace.operations import OperationManager
 from picnicplace.presence import PresenceTracker
 from picnicplace.schemas import MachineState, MachineStateEvent, Operation
@@ -30,13 +31,14 @@ _Work = Callable[[], Awaitable[None]]
 class MachineService:
     def __init__(
         self,
-        config: MachineConfig,
+        profile: MachineProfile,
         driver: MotionDriver,
         bus: EventBus,
         presence: PresenceTracker,
         operations: OperationManager,
     ) -> None:
-        self._axes = {a.name: a for a in config.axes}
+        self._profile = profile
+        self._axes = {a.name: a for a in profile.axes}
         self._driver = driver
         self._bus = bus
         self._presence = presence
@@ -50,6 +52,25 @@ class MachineService:
         presence.on_empty.append(self._on_no_clients)
 
     @property
+    def profile(self) -> MachineProfile:
+        return self._profile
+
+    @property
+    def z_safe(self) -> bool:
+        """Whether every nozzle is at safe travel height.
+
+        A safe-Z input, when the profile has one, is authoritative (spec section 5.2).
+        Otherwise this is computed from the Z positions.
+        """
+        if self._profile.safe_z_input is not None:
+            return bool(self._driver.inputs.get(self._profile.safe_z_input, False))
+        position = self._driver.position
+        return all(
+            nozzle_height(n, position[n.z_axis]) >= self._profile.safe_z
+            for n in self._profile.nozzles
+        )
+
+    @property
     def state(self) -> MachineState:
         return MachineState(
             driver=self._driver.name,
@@ -60,6 +81,9 @@ class MachineService:
             motion_enabled=self._driver.connected and self._presence.present and not self._estop,
             axes=list(self._driver.axes),
             position=dict(self._driver.position),
+            inputs=dict(self._driver.inputs),
+            outputs=dict(self._driver.outputs),
+            z_safe=self.z_safe,
         )
 
     async def start(self) -> None:
@@ -80,6 +104,16 @@ class MachineService:
         self._check_target(target)
         return self._start_operation("move", lambda: self._move(target, speed))
 
+    async def set_output(self, output_id: str, on: bool) -> None:
+        """Switch an output. Turning one off is allowed whenever the machine is connected."""
+        if output_id not in self._driver.outputs:
+            raise UnknownOutputError(f"unknown output {output_id!r}")
+        if on:
+            self._check_can_actuate()
+        elif not self._driver.connected:
+            raise NotConnectedError("the machine is not connected")
+        await self._driver.set_output(output_id, on)
+
     async def emergency_stop(self) -> None:
         """Always allowed, from any client, in any state."""
         log.warning("emergency stop")
@@ -95,13 +129,16 @@ class MachineService:
         self._estop = False
         self._publish_state()
 
-    def _check_can_move(self) -> None:
+    def _check_can_actuate(self) -> None:
         if not self._driver.connected:
             raise NotConnectedError("the machine is not connected")
         if self._estop:
             raise EmergencyStopActiveError("emergency stop is active; reset first")
         if not self._presence.present:
             raise NoClientPresentError("motion requires a connected client")
+
+    def _check_can_move(self) -> None:
+        self._check_can_actuate()
         if self._busy:
             raise MachineBusyError("the machine is busy")
 

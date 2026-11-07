@@ -20,6 +20,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--host", help="override server.host")
     p.add_argument("--port", type=int, help="override server.port")
     p.add_argument("--studio-dir", type=Path, help="override server.studio_dir")
+    p.add_argument("--profile", help="override machine.profile (built-in ID or TOML path)")
     p.add_argument(
         "--sim-time-scale", type=float, help="override machine.sim_time_scale (simulator)"
     )
@@ -39,6 +40,7 @@ def _build_config(args: argparse.Namespace) -> Config:
         ("server", "host"): args.host,
         ("server", "port"): args.port,
         ("server", "studio_dir"): args.studio_dir,
+        ("machine", "profile"): args.profile,
         ("machine", "sim_time_scale"): args.sim_time_scale,
     }
     for (section, key), value in overrides.items():

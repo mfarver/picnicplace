@@ -4,7 +4,7 @@ interface Props {
   icon: LucideIcon;
   title: string;
   description: string;
-  milestone: string;
+  milestone?: string;
 }
 
 /** Stand-in for a workspace or view that a later milestone will build. */
@@ -14,7 +14,7 @@ export function Placeholder({ icon: Icon, title, description, milestone }: Props
       <Icon size={40} strokeWidth={1.25} aria-hidden />
       <h2>{title}</h2>
       <p>{description}</p>
-      <span className="chip">{milestone}</span>
+      {milestone && <span className="chip">{milestone}</span>}
     </div>
   );
 }

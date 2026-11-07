@@ -548,9 +548,9 @@ refusing to connect.
 
 ```
 picnicplace/
-  core/            Python package: picnicd, drivers, vision, job engine, CLI
+  core/            Python package: picnicd, drivers, vision, job engine, CLI, and the
+                   built-in machine profiles (core/src/picnicplace/profiles/)
   studio/          TypeScript GUI
-  profiles/        Machine profiles (LumenPnP, …)
   docs/            Specs, ADRs, user docs, generated OpenAPI document (docs/api/)
   testdata/        Vision image corpus, sample boards
 ```

@@ -33,3 +33,8 @@ class InvalidTargetError(MachineError):
 
 class MotionInterruptedError(MachineError):
     code = "interrupted"
+
+
+class UnknownOutputError(MachineError):
+    code = "unknown_output"
+    http_status = 404

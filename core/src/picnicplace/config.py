@@ -3,9 +3,11 @@
 import ipaddress
 import tomllib
 from pathlib import Path
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+
+from picnicplace.machine.profile import MachineProfile, is_profile_path, load_profile
 
 
 class _Section(BaseModel):
@@ -50,46 +52,27 @@ class PresenceConfig(_Section):
     )
 
 
-class AxisConfig(_Section):
-    name: str = Field(min_length=1, max_length=8)
-    min: float
-    max: float
-    home: float = 0.0
-    max_speed: float = Field(gt=0, description="Units per second (mm/s or deg/s).")
-
-    @model_validator(mode="after")
-    def _check_range(self) -> Self:
-        if self.min >= self.max:
-            raise ValueError(f"axis {self.name}: min must be less than max")
-        if not self.min <= self.home <= self.max:
-            raise ValueError(f"axis {self.name}: home must be within min..max")
-        return self
-
-
-def _default_axes() -> list[AxisConfig]:
-    # Simulator defaults, roughly the size of a desktop machine. Not a real machine profile.
-    return [
-        AxisConfig(name="X", min=0, max=450, home=0, max_speed=500),
-        AxisConfig(name="Y", min=0, max=400, home=0, max_speed=500),
-        AxisConfig(name="Z", min=-30, max=30, home=0, max_speed=100),
-        AxisConfig(name="A", min=-360, max=360, home=0, max_speed=1000),
-        AxisConfig(name="B", min=-360, max=360, home=0, max_speed=1000),
-    ]
-
-
 class MachineConfig(_Section):
     driver: Literal["simulator"] = "simulator"
-    axes: list[AxisConfig] = Field(default_factory=_default_axes, min_length=1)
+    profile: str = Field(
+        default="lumenpnp-v4",
+        description="Built-in machine profile ID, or a path to a profile TOML file.",
+    )
     sim_time_scale: float = Field(
         default=1.0, gt=0, description="Simulator only: values above 1 run faster than real time."
     )
 
+    _profile: MachineProfile | None = PrivateAttr(default=None)
+
     @model_validator(mode="after")
-    def _unique_axes(self) -> Self:
-        names = [a.name for a in self.axes]
-        if len(names) != len(set(names)):
-            raise ValueError("axis names must be unique")
+    def _load_profile(self) -> Self:
+        self._profile = load_profile(self.profile)
         return self
+
+    @property
+    def machine_profile(self) -> MachineProfile:
+        assert self._profile is not None
+        return self._profile
 
 
 class Config(_Section):
@@ -112,4 +95,10 @@ def load_config(path: Path | None) -> Config:
     if path is None:
         return Config()
     with path.open("rb") as f:
-        return Config.model_validate(tomllib.load(f))
+        data = tomllib.load(f)
+    # A profile given as a relative path is relative to the config file.
+    machine: dict[str, Any] = data.get("machine", {})
+    profile = machine.get("profile")
+    if isinstance(profile, str) and is_profile_path(profile) and not Path(profile).is_absolute():
+        machine["profile"] = str(path.parent / profile)
+    return Config.model_validate(data)

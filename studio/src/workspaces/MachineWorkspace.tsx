@@ -3,13 +3,17 @@ import { useState } from "react";
 import { api } from "../api/client";
 import { useCore } from "../api/core";
 import { useAction } from "../api/useAction";
+import { useDescription } from "../api/useDescription";
 import { CameraView } from "../components/CameraView";
 import { Panel } from "../components/Panel";
+import { HeadInset } from "../components/machine/HeadInset";
+import { MachineView } from "../components/machine/MachineView";
 import { Placeholder } from "../components/Placeholder";
 
 export function MachineWorkspace() {
   const { status, machine, operations } = useCore();
   const { run, pending, error } = useAction();
+  const description = useDescription();
   const [lastOpId, setLastOpId] = useState<string | null>(null);
 
   const lastOp = lastOpId ? operations[lastOpId] : undefined;
@@ -20,6 +24,13 @@ export function MachineWorkspace() {
     if (op) setLastOpId(op.id);
   };
   const reset = () => run(() => api.POST("/api/v1/machine/reset"));
+  const setOutput = (id: string, on: boolean) =>
+    void run(() =>
+      api.PUT("/api/v1/machine/outputs/{output_id}", {
+        params: { path: { output_id: id } },
+        body: { on },
+      }),
+    );
 
   return (
     <div className="workspace">
@@ -43,24 +54,36 @@ export function MachineWorkspace() {
           {machine?.estop && (
             <p className="note note-danger">Emergency stop is latched. Reset, then home again.</p>
           )}
-          {lastOp && (
+          {lastOp && !machine?.estop && (
             <p className="note">
               {lastOp.kind}: <strong>{lastOp.status}</strong>
               {lastOp.error && ` (${lastOp.error})`}
             </p>
           )}
           {error && <p className="note note-danger">{error}</p>}
-          <p className="note text-muted">Jogging and actuators arrive in M1.</p>
+          <p className="note text-muted">Jogging and click-to-move come next.</p>
         </Panel>
       </aside>
 
-      <div className="canvas">
-        <Placeholder
-          icon={MapIcon}
-          title="Machine view"
-          description="The machine bed with the head position, feeders, and boards. Click to move."
-          milestone="M1"
-        />
+      <div className="canvas machine-canvas">
+        {description ? (
+          <>
+            <MachineView description={description} machine={machine} />
+            <HeadInset
+              description={description}
+              machine={machine}
+              canActuate={status === "open" && !!machine?.motion_enabled}
+              busy={pending}
+              onSetOutput={setOutput}
+            />
+          </>
+        ) : (
+          <Placeholder
+            icon={MapIcon}
+            title="Machine view"
+            description="Waiting for the machine description from the core."
+          />
+        )}
       </div>
     </div>
   );

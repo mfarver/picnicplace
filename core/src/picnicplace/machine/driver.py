@@ -13,7 +13,7 @@ class MotionDriver(ABC):
 
     def __init__(self) -> None:
         self.on_change: Callable[[], None] | None = None
-        """Called whenever position or connection state changes."""
+        """Called whenever position, connection, or I/O state changes."""
 
     @property
     @abstractmethod
@@ -26,6 +26,19 @@ class MotionDriver(ABC):
     @property
     @abstractmethod
     def connected(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def inputs(self) -> Mapping[str, bool | float]:
+        """Latest reading of every profile input: bool for digital, float for analog."""
+
+    @property
+    @abstractmethod
+    def outputs(self) -> Mapping[str, bool]:
+        """Current state of every profile output."""
+
+    @abstractmethod
+    async def set_output(self, output_id: str, on: bool) -> None: ...
 
     @abstractmethod
     async def connect(self) -> None: ...
@@ -47,7 +60,7 @@ class MotionDriver(ABC):
 
     @abstractmethod
     async def emergency_stop(self) -> None:
-        """Immediate stop that bypasses any command queue."""
+        """Immediate stop that bypasses any command queue. Turns all outputs off."""
 
     @abstractmethod
     async def reset(self) -> None:

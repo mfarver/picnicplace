@@ -41,6 +41,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/description": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Machine Description
+         * @description The machine profile: geometry, nozzles, cameras, feeders, and the list of I/O.
+         */
+        get: operations["get_machine_description_api_v1_machine_description_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/estop": {
         parameters: {
             query?: never;
@@ -95,6 +115,26 @@ export interface paths {
          * @description Start an absolute move. Returns an operation; follow it over the event socket.
          */
         post: operations["move_api_v1_machine_move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/machine/outputs/{output_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Output
+         * @description Switch an output on or off. Turning one on requires motion to be enabled.
+         */
+        put: operations["set_output_api_v1_machine_outputs__output_id__put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -159,6 +199,54 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Axis */
+        Axis: {
+            /**
+             * Home
+             * @default 0
+             */
+            home: number;
+            /**
+             * Kind
+             * @default linear
+             * @enum {string}
+             */
+            kind: "linear" | "rotary";
+            /** Max */
+            max: number;
+            /**
+             * Max Speed
+             * @description Units per second (mm/s or deg/s).
+             */
+            max_speed: number;
+            /** Min */
+            min: number;
+            /** Name */
+            name: string;
+        };
+        /** Camera */
+        Camera: {
+            /** @description Width (x) and height (y) of the view in mm. */
+            field_of_view: components["schemas"]["Point"];
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Light Output */
+            light_output: string | null;
+            /**
+             * Looking
+             * @enum {string}
+             */
+            looking: "down" | "up";
+            /**
+             * Mount
+             * @enum {string}
+             */
+            mount: "head" | "fixed";
+            /** @description Head cameras: offset from the head. Fixed cameras: machine coordinates. */
+            position: components["schemas"]["Point"];
+        };
         /**
          * PingMessage
          * @description Heartbeat. Clients send one every couple of seconds; the server answers with pong.
@@ -187,6 +275,38 @@ export interface components {
             code: string;
             /** Detail */
             detail: string;
+        };
+        /**
+         * FeederBank
+         * @description A row of evenly spaced feeder slots, such as one LumenPnP feeder rail.
+         */
+        FeederBank: {
+            /** Count */
+            count: number;
+            /** @description Pick location of the first slot. */
+            first_pick: components["schemas"]["Point"];
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Length
+             * @description Feeder length along the tape, in mm.
+             */
+            length: number;
+            /** @description Step from one slot's pick location to the next. */
+            pitch: components["schemas"]["Point"];
+            /**
+             * Rotation
+             * @description Tape direction in degrees; 90 means parts feed toward +Y.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * Width
+             * @description Feeder width across the tape, in mm.
+             */
+            width: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -225,6 +345,91 @@ export interface components {
              */
             type: "hello";
         };
+        /** Input */
+        Input: {
+            /**
+             * Axis
+             * @description Home sensors: the axis they home.
+             */
+            axis: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "digital" | "analog";
+            /** Label */
+            label: string;
+            /** @description Analog inputs: the display range. */
+            range: components["schemas"]["ValueRange"] | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "home" | "safe_z" | "vacuum" | "other";
+            /**
+             * Threshold
+             * @description Vacuum inputs: readings at or above this mean a part is held.
+             */
+            threshold: number | null;
+            /** Unit */
+            unit: string | null;
+        };
+        /** Location */
+        Location: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "homing_fiducial" | "tip_holder" | "discard";
+            /** Label */
+            label: string;
+            position: components["schemas"]["Point"];
+        };
+        /** MachineProfile */
+        MachineProfile: {
+            /** Axes */
+            axes: components["schemas"]["Axis"][];
+            /** @description Outline of the machine bed, for drawing. */
+            bed: components["schemas"]["Rect"];
+            /** Cameras */
+            cameras: components["schemas"]["Camera"][];
+            /** Feeder Banks */
+            feeder_banks: components["schemas"]["FeederBank"][];
+            /** Id */
+            id: string;
+            /** Inputs */
+            inputs: components["schemas"]["Input"][];
+            /** Locations */
+            locations: components["schemas"]["Location"][];
+            /** Name */
+            name: string;
+            /** Nozzles */
+            nozzles: components["schemas"]["Nozzle"][];
+            /** Outputs */
+            outputs: components["schemas"]["Output"][];
+            /**
+             * Provisional
+             * @description Dimensions are estimates that have not been measured on a real machine.
+             * @default false
+             */
+            provisional: boolean;
+            /**
+             * Safe Z
+             * @description A nozzle at or above this height (on its own Z scale) is safe for travel.
+             */
+            safe_z: number;
+            /**
+             * Safe Z Input
+             * @description A digital input that reads true when every nozzle is at safe height.
+             */
+            safe_z_input: string | null;
+            /** @description Where boards go. */
+            work_area: components["schemas"]["Rect"] | null;
+        };
         /** MachineState */
         MachineState: {
             /** Axes */
@@ -246,10 +451,24 @@ export interface components {
             /** Homed */
             homed: boolean;
             /**
+             * Inputs
+             * @description Reading per profile input: bool for digital, number for analog.
+             */
+            inputs: {
+                [key: string]: boolean | number;
+            };
+            /**
              * Motion Enabled
              * @description Motion commands are currently allowed (connected, client present, no E-stop).
              */
             motion_enabled: boolean;
+            /**
+             * Outputs
+             * @description State per profile output.
+             */
+            outputs: {
+                [key: string]: boolean;
+            };
             /**
              * Position
              * @description Current position per axis, mm or degrees.
@@ -257,6 +476,11 @@ export interface components {
             position: {
                 [key: string]: number;
             };
+            /**
+             * Z Safe
+             * @description Every nozzle is at safe travel height. From the safe-Z input when the profile has one, otherwise computed from the Z position.
+             */
+            z_safe: boolean;
         };
         /** MachineStateEvent */
         MachineStateEvent: {
@@ -281,6 +505,32 @@ export interface components {
              * @description Speed limit in units per second. Defaults to axis max.
              */
             speed?: number | null;
+        };
+        /** Nozzle */
+        Nozzle: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** @description Position relative to the head (top camera center). */
+            offset: components["schemas"]["Point"];
+            /** Pump Output */
+            pump_output: string | null;
+            /** Rotation Axis */
+            rotation_axis: string;
+            /** Vacuum Input */
+            vacuum_input: string | null;
+            /** Valve Output */
+            valve_output: string | null;
+            /** Z Axis */
+            z_axis: string;
+            /**
+             * Z Sign
+             * @description Direction of this nozzle on its Z axis. Two nozzles sharing one Z motor move in opposite directions: one has 1, the other -1.
+             * @default 1
+             * @enum {integer}
+             */
+            z_sign: 1 | -1;
         };
         /** Operation */
         Operation: {
@@ -317,6 +567,30 @@ export interface components {
              * @enum {string}
              */
             type: "operation";
+        };
+        /** Output */
+        Output: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "pump" | "valve" | "light" | "other";
+        };
+        /** OutputRequest */
+        OutputRequest: {
+            /** On */
+            on: boolean;
+        };
+        /** Point */
+        Point: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
         };
         /** PongEvent */
         PongEvent: {
@@ -363,6 +637,17 @@ export interface components {
             /** Present */
             present: boolean;
         };
+        /** Rect */
+        Rect: {
+            /** X Max */
+            x_max: number;
+            /** X Min */
+            x_min: number;
+            /** Y Max */
+            y_max: number;
+            /** Y Min */
+            y_min: number;
+        };
         ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
         /** ValidationError */
         ValidationError: {
@@ -376,6 +661,13 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** ValueRange */
+        ValueRange: {
+            /** Max */
+            max: number;
+            /** Min */
+            min: number;
         };
     };
     responses: never;
@@ -422,6 +714,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MachineState"];
+                };
+            };
+        };
+    };
+    get_machine_description_api_v1_machine_description_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineProfile"];
                 };
             };
         };
@@ -513,6 +825,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    set_output_api_v1_machine_outputs__output_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                output_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutputRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineState"];
+                };
+            };
+            /** @description No output with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The machine cannot do this right now. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

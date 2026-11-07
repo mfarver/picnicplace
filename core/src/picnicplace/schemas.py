@@ -33,6 +33,16 @@ class MachineState(WireModel):
     )
     axes: list[str]
     position: dict[str, float] = Field(description="Current position per axis, mm or degrees.")
+    inputs: dict[str, bool | float] = Field(
+        description="Reading per profile input: bool for digital, number for analog."
+    )
+    outputs: dict[str, bool] = Field(description="State per profile output.")
+    z_safe: bool = Field(
+        description=(
+            "Every nozzle is at safe travel height. From the safe-Z input when the profile "
+            "has one, otherwise computed from the Z position."
+        )
+    )
 
 
 class PresenceState(WireModel):
@@ -68,6 +78,10 @@ class MoveRequest(WireModel):
     speed: float | None = Field(
         default=None, gt=0, description="Speed limit in units per second. Defaults to axis max."
     )
+
+
+class OutputRequest(WireModel):
+    on: bool
 
 
 class ErrorResponse(WireModel):

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from picnicplace import __version__
 from picnicplace.api.context import Context, require
 from picnicplace.auth import Permission
+from picnicplace.machine.profile import MachineProfile
 from picnicplace.schemas import (
     PROTOCOL_VERSION,
     ErrorResponse,
@@ -14,6 +15,7 @@ from picnicplace.schemas import (
     MachineState,
     MoveRequest,
     Operation,
+    OutputRequest,
     PresenceState,
 )
 
@@ -38,6 +40,27 @@ async def get_presence(ctx: Context) -> PresenceState:
 
 @router.get("/machine", tags=["machine"])
 async def get_machine(ctx: Context) -> MachineState:
+    return ctx.machine.state
+
+
+@router.get("/machine/description", tags=["machine"])
+async def get_machine_description(ctx: Context) -> MachineProfile:
+    """The machine profile: geometry, nozzles, cameras, feeders, and the list of I/O."""
+    return ctx.machine.profile
+
+
+@router.put(
+    "/machine/outputs/{output_id}",
+    tags=["machine"],
+    responses={
+        **MACHINE_ERRORS,
+        404: {"model": ErrorResponse, "description": "No output with this ID."},
+    },
+    dependencies=[Depends(require(Permission.MOTION))],
+)
+async def set_output(ctx: Context, output_id: str, body: OutputRequest) -> MachineState:
+    """Switch an output on or off. Turning one on requires motion to be enabled."""
+    await ctx.machine.set_output(output_id, body.on)
     return ctx.machine.state
 
 

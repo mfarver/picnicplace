@@ -29,7 +29,7 @@ export function StatusBar() {
           <span className="status-item">{machine.homed ? "Homed" : "Not homed"}</span>
           {machine.estop && <span className="status-item badge-danger">E-STOP LATCHED</span>}
           <span className="status-item mono">
-            {machine.axes.slice(0, 3).map((axis) => (
+            {machine.axes.map((axis) => (
               <span key={axis} className="status-axis">
                 {axis} {formatAxis(axis, machine.position[axis])}
               </span>

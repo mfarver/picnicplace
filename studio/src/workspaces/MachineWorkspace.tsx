@@ -1,11 +1,11 @@
-import { Camera, House, RotateCcw } from "lucide-react";
+import { House, Map as MapIcon, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { api } from "../api/client";
 import { useCore } from "../api/core";
 import { useAction } from "../api/useAction";
+import { CameraView } from "../components/CameraView";
 import { Panel } from "../components/Panel";
 import { Placeholder } from "../components/Placeholder";
-import { formatAxis } from "../format";
 
 export function MachineWorkspace() {
   const { status, machine, operations } = useCore();
@@ -24,22 +24,8 @@ export function MachineWorkspace() {
   return (
     <div className="workspace">
       <aside className="sidebar">
-        <Panel title="Position">
-          <table className="dro">
-            <tbody>
-              {machine?.axes.map((axis) => (
-                <tr key={axis}>
-                  <th scope="row">{axis}</th>
-                  <td className="mono">{formatAxis(axis, machine.position[axis])}</td>
-                </tr>
-              )) ?? (
-                <tr>
-                  <td className="text-muted">Not connected</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </Panel>
+        <CameraView title="Top camera" />
+        <CameraView title="Bottom camera" />
 
         <Panel title="Control">
           <div className="button-row">
@@ -68,17 +54,11 @@ export function MachineWorkspace() {
         </Panel>
       </aside>
 
-      <div className="canvas camera-grid">
+      <div className="canvas">
         <Placeholder
-          icon={Camera}
-          title="Top camera"
-          description="Live video from the head camera."
-          milestone="M1"
-        />
-        <Placeholder
-          icon={Camera}
-          title="Bottom camera"
-          description="Live video from the up-looking camera."
+          icon={MapIcon}
+          title="Machine view"
+          description="The machine bed with the head position, feeders, and boards. Click to move."
           milestone="M1"
         />
       </div>

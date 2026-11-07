@@ -180,8 +180,9 @@ shows Python cannot hold target throughput.
   configurable time (default 5 s), so a browser reload or a Wi-Fi blip does not interrupt
   a job.
 - **Safe pause point.** The job pauses at the next safe point: the current move finishes,
-  the head goes to safe Z, and vacuum stays on so a part already picked is not dropped.
-  **[OPEN]** Whether to finish placing a part already on the nozzle before pausing.
+  the head goes to safe Z, and vacuum stays on so a part already picked is held on the
+  nozzle. A part on the nozzle is not placed before pausing; the job continues with it
+  on resume. (A vacuum check runs on resume in case the part was lost while paused.)
 - **Resume is manual.** A job paused for lost presence resumes only when a client
   reconnects and an operator chooses Resume. It never resumes automatically.
 - The CLI's `run` command stays connected while the job runs (it follows progress), so
@@ -218,9 +219,36 @@ for factory/home automation.
 - Default bind is `127.0.0.1`. Binding to the network is an explicit setting.
 - When network-bound: token authentication (API tokens for scripts; login for the GUI),
   and TLS with a self-signed certificate generated on first run, or a user-supplied one.
-- Roles: `observer` (read only, view cameras), `operator` (run jobs, jog), `admin`
-  (change config, manage users). **[OPEN]** Is a role system wanted for 1.0, or is a
-  single shared token enough?
+- **1.0: single shared secret.** One token/password grants full access. This fits the
+  common setup of one operator with a GUI running at the machine.
+- **Built for more later.** Every request is resolved internally to a `Principal`
+  (identity, client kind, and permission set), and every endpoint declares the
+  permission it needs (`view`, `motion`, `job`, `config`). In 1.0 the one principal has
+  all permissions, so adding the features below does not change the API.
+
+#### Planned next: local-only motion
+
+Expected soon after 1.0: remote clients can watch, but anything that causes motion must
+come from a client flagged as **local**, meaning physically at the machine.
+
+- **Local clients:**
+  - Connections over loopback (a GUI running on the machine's host computer) are local
+    automatically.
+  - Other devices, such as an ESP32 touchscreen mounted on the machine, become local by
+    **pairing at the machine**: the device shows a short code that is confirmed on an
+    already-local client (or the reverse). Pairing issues that device its own token
+    flagged local, which can be revoked.
+  - IP address or subnet alone is not used to decide "local," since it is easy to spoof
+    on a LAN.
+- **Remote clients** get `view` (and optionally `job` actions that do not move the
+  machine, such as editing a job), but not `motion`.
+- The control lease (§5.2) can only be held by a local client.
+- Presence (§5.3) may later be tightened to require a local client, not just any client.
+
+#### Later: user roles
+
+`observer` (view only), `operator` (run jobs, jog), and `admin` (change config, manage
+users), layered on the same permission model.
 
 ### 6.4 Sketch of resources
 
@@ -429,7 +457,12 @@ PicnicPlace should ship a **LumenPnP machine profile** so a new user selects the
 version and goes straight to guided calibration.
 
 **Reference machine: LumenPnP v4.** The first machine profile targets v4. Other versions
-are community supported. **[OPEN]** Record the v4 test machine's firmware version.
+are community supported. The test machine was built by Opulo around October 2026, so it
+should have recent stock firmware.
+
+The Marlin driver reads the firmware name and version (`M115`) on connect, records it in
+the machine state, and warns when the version is not in the known-tested list instead of
+refusing to connect.
 
 ## 11. Milestones
 
@@ -460,13 +493,13 @@ picnicplace/
 2. ~~Config format~~ **Decided: TOML.**
 3. ~~GUI framework~~ **Decided: React.**
 4. ~~Video transport~~ **Decided: MJPEG and WebRTC** (see §6.5).
-5. Roles and multi-user auth in 1.0, or a single token? (§6.3)
+5. ~~Auth~~ **Decided:** single shared secret for 1.0; local-only motion planned next;
+   roles later (§6.3).
 6. ~~Client disconnect~~ **Decided:** motion requires a connected client; jobs pause, not
    end, when none are connected (§5.3).
-7. LumenPnP v4 firmware version to target first.
+7. Exact LumenPnP v4 firmware version: read it from the machine (`M115`) at M1.
 8. ~~Platforms~~ **Decided:** Linux only for 1.0 (§9).
-9. When a job pauses for lost presence with a part on the nozzle, place it first or hold
-   it? (§5.3)
+9. ~~Part on nozzle at pause~~ **Decided:** hold it (§5.3).
 
 ## 14. Licensing (decided)
 

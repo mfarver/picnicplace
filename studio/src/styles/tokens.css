@@ -1,0 +1,77 @@
+/* Design tokens. Every color, size, and radius used by the Studio is defined here. */
+
+:root {
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 18px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --topbar-height: 48px;
+  --statusbar-height: 28px;
+  --sidebar-width: 300px;
+
+  --transition: 120ms ease;
+}
+
+/* Dark is the default theme. */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121418;
+  --surface: #1a1d23;
+  --surface-raised: #22262e;
+  --surface-hover: #2a2f38;
+  --border: #2c313a;
+  --border-strong: #3a404b;
+  --text: #e7e9ee;
+  --text-muted: #8b93a1;
+  --text-faint: #5c6370;
+  --accent: #2fbf86;
+  --accent-hover: #3dd496;
+  --accent-text: #08130e;
+  --accent-soft: rgb(47 191 134 / 14%);
+  --ok: #2fbf86;
+  --warn: #f2b84b;
+  --danger: #ef4d55;
+  --danger-hover: #ff5f67;
+  --danger-soft: rgb(239 77 85 / 14%);
+  --shadow: 0 8px 32px rgb(0 0 0 / 45%);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #eef0f3;
+  --surface: #ffffff;
+  --surface-raised: #f6f7f9;
+  --surface-hover: #eceef2;
+  --border: #dde0e6;
+  --border-strong: #c8ccd4;
+  --text: #1b1e24;
+  --text-muted: #5f6774;
+  --text-faint: #9aa1ad;
+  --accent: #1f9d6b;
+  --accent-hover: #188a5d;
+  --accent-text: #ffffff;
+  --accent-soft: rgb(31 157 107 / 12%);
+  --ok: #1f9d6b;
+  --warn: #c98a12;
+  --danger: #d93a42;
+  --danger-hover: #c22f37;
+  --danger-soft: rgb(217 58 66 / 10%);
+  --shadow: 0 8px 32px rgb(20 24 30 / 16%);
+}

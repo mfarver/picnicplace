@@ -1,0 +1,776 @@
+{
+  "components": {
+    "schemas": {
+      "ClientMessage": {
+        "description": "Heartbeat. Clients send one every couple of seconds; the server answers with pong.",
+        "properties": {
+          "type": {
+            "const": "ping",
+            "default": "ping",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "PingMessage",
+        "type": "object"
+      },
+      "ErrorEvent": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "const": "error",
+            "default": "error",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "message"
+        ],
+        "title": "ErrorEvent",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "code"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "protocol": {
+            "title": "Protocol",
+            "type": "integer"
+          },
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "protocol"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "HelloEvent": {
+        "description": "First message on every connection.",
+        "properties": {
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "machine": {
+            "$ref": "#/components/schemas/MachineState"
+          },
+          "presence": {
+            "$ref": "#/components/schemas/PresenceState"
+          },
+          "protocol": {
+            "title": "Protocol",
+            "type": "integer"
+          },
+          "server_version": {
+            "title": "Server Version",
+            "type": "string"
+          },
+          "type": {
+            "const": "hello",
+            "default": "hello",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "protocol",
+          "server_version",
+          "client_id",
+          "machine",
+          "presence"
+        ],
+        "title": "HelloEvent",
+        "type": "object"
+      },
+      "MachineState": {
+        "properties": {
+          "axes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Axes",
+            "type": "array"
+          },
+          "busy": {
+            "description": "A motion operation is in progress.",
+            "title": "Busy",
+            "type": "boolean"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "driver": {
+            "title": "Driver",
+            "type": "string"
+          },
+          "estop": {
+            "description": "An emergency stop is latched; reset before moving.",
+            "title": "Estop",
+            "type": "boolean"
+          },
+          "homed": {
+            "title": "Homed",
+            "type": "boolean"
+          },
+          "motion_enabled": {
+            "description": "Motion commands are currently allowed (connected, client present, no E-stop).",
+            "title": "Motion Enabled",
+            "type": "boolean"
+          },
+          "position": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "Current position per axis, mm or degrees.",
+            "title": "Position",
+            "type": "object"
+          }
+        },
+        "required": [
+          "driver",
+          "connected",
+          "homed",
+          "estop",
+          "busy",
+          "motion_enabled",
+          "axes",
+          "position"
+        ],
+        "title": "MachineState",
+        "type": "object"
+      },
+      "MachineStateEvent": {
+        "properties": {
+          "machine": {
+            "$ref": "#/components/schemas/MachineState"
+          },
+          "type": {
+            "const": "machine.state",
+            "default": "machine.state",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "machine"
+        ],
+        "title": "MachineStateEvent",
+        "type": "object"
+      },
+      "MoveRequest": {
+        "properties": {
+          "position": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "Target per axis. Axes left out do not move.",
+            "minProperties": 1,
+            "title": "Position",
+            "type": "object"
+          },
+          "speed": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Speed limit in units per second. Defaults to axis max.",
+            "title": "Speed"
+          }
+        },
+        "required": [
+          "position"
+        ],
+        "title": "MoveRequest",
+        "type": "object"
+      },
+      "Operation": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "error",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "Operation",
+        "type": "object"
+      },
+      "OperationEvent": {
+        "properties": {
+          "operation": {
+            "$ref": "#/components/schemas/Operation"
+          },
+          "type": {
+            "const": "operation",
+            "default": "operation",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "operation"
+        ],
+        "title": "OperationEvent",
+        "type": "object"
+      },
+      "PongEvent": {
+        "properties": {
+          "server_time": {
+            "format": "date-time",
+            "title": "Server Time",
+            "type": "string"
+          },
+          "type": {
+            "const": "pong",
+            "default": "pong",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "server_time"
+        ],
+        "title": "PongEvent",
+        "type": "object"
+      },
+      "PresenceEvent": {
+        "properties": {
+          "presence": {
+            "$ref": "#/components/schemas/PresenceState"
+          },
+          "type": {
+            "const": "presence",
+            "default": "presence",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "presence"
+        ],
+        "title": "PresenceEvent",
+        "type": "object"
+      },
+      "PresenceLostEvent": {
+        "description": "No client has been connected for the grace period. Running jobs pause.",
+        "properties": {
+          "grace_period_s": {
+            "title": "Grace Period S",
+            "type": "number"
+          },
+          "type": {
+            "const": "presence.lost",
+            "default": "presence.lost",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "grace_period_s"
+        ],
+        "title": "PresenceLostEvent",
+        "type": "object"
+      },
+      "PresenceState": {
+        "properties": {
+          "clients": {
+            "description": "Clients with a live event-socket connection.",
+            "title": "Clients",
+            "type": "integer"
+          },
+          "present": {
+            "title": "Present",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "clients",
+          "present"
+        ],
+        "title": "PresenceState",
+        "type": "object"
+      },
+      "ServerEvent": {
+        "discriminator": {
+          "mapping": {
+            "error": "#/components/schemas/ErrorEvent",
+            "hello": "#/components/schemas/HelloEvent",
+            "machine.state": "#/components/schemas/MachineStateEvent",
+            "operation": "#/components/schemas/OperationEvent",
+            "pong": "#/components/schemas/PongEvent",
+            "presence": "#/components/schemas/PresenceEvent",
+            "presence.lost": "#/components/schemas/PresenceLostEvent"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/HelloEvent"
+          },
+          {
+            "$ref": "#/components/schemas/MachineStateEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PresenceEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PresenceLostEvent"
+          },
+          {
+            "$ref": "#/components/schemas/OperationEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PongEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorEvent"
+          }
+        ]
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "REST API for PicnicPlace Core. Live state streams over the WebSocket at `/api/v1/events`; its messages are described by the `ServerEvent` and `ClientMessage` schemas.",
+    "title": "PicnicPlace Core API",
+    "version": "0.1.0.dev0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "description": "Liveness check. Does not require authentication.",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/machine": {
+      "get": {
+        "operationId": "get_machine_api_v1_machine_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Machine",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/estop": {
+      "post": {
+        "description": "Emergency stop. Allowed for any authenticated client, in any state.",
+        "operationId": "estop_api_v1_machine_estop_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Estop",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/home": {
+      "post": {
+        "description": "Start homing. Returns an operation; follow it over the event socket.",
+        "operationId": "home_api_v1_machine_home_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Home",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/move": {
+      "post": {
+        "description": "Start an absolute move. Returns an operation; follow it over the event socket.",
+        "operationId": "move_api_v1_machine_move_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The target is invalid or out of limits."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Move",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/reset": {
+      "post": {
+        "description": "Clear a latched emergency stop. The machine must be homed again afterward.",
+        "operationId": "reset_api_v1_machine_reset_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reset",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/operations/{operation_id}": {
+      "get": {
+        "operationId": "get_operation_api_v1_operations__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No operation with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Operation",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/v1/presence": {
+      "get": {
+        "operationId": "get_presence_api_v1_presence_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresenceState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Presence",
+        "tags": [
+          "system"
+        ]
+      }
+    }
+  }
+}

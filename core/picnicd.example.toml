@@ -1,0 +1,47 @@
+# Example picnicd configuration. Run with: picnicd --config picnicd.example.toml
+# All values shown are the defaults unless noted. Units: millimeters, degrees, seconds.
+
+[server]
+host = "127.0.0.1"   # Loopback only. Any other address requires `token`.
+port = 7420
+# token = "change-me-to-a-long-random-secret"
+# studio_dir = "../studio/dist"   # Serve the built Studio GUI at http://host:port/
+
+[presence]
+grace_period_s = 5.0       # Last client gone this long: running jobs pause.
+heartbeat_timeout_s = 6.0  # Silent clients are disconnected after this long.
+
+[machine]
+driver = "simulator"
+sim_time_scale = 1.0       # Simulator only. 10 runs ten times faster than real time.
+
+# Simulator axes. Real machines will use machine profiles (see profiles/).
+[[machine.axes]]
+name = "X"
+min = 0
+max = 450
+max_speed = 500
+
+[[machine.axes]]
+name = "Y"
+min = 0
+max = 400
+max_speed = 500
+
+[[machine.axes]]
+name = "Z"
+min = -30
+max = 30
+max_speed = 100
+
+[[machine.axes]]
+name = "A"
+min = -360
+max = 360
+max_speed = 1000
+
+[[machine.axes]]
+name = "B"
+min = -360
+max = 360
+max_speed = 1000

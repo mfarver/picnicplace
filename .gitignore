@@ -9,16 +9,16 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
-develop-eggs/
+/develop-eggs/
 dist/
-downloads/
-eggs/
+/downloads/
+/eggs/
 .eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
 wheels/
 share/python-wheels/
 *.egg-info/
@@ -218,3 +218,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node / TypeScript (studio GUI)
+node_modules/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+
+# Editors and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

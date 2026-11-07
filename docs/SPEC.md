@@ -106,7 +106,7 @@ shows Python cannot hold target throughput.
 | Serial | `pyserial` + async wrapper | |
 | Vision | `opencv-python` (or `opencv-contrib-python`), NumPy | |
 | Camera capture | OpenCV `VideoCapture` with per-OS backend (V4L2, AVFoundation, Media Foundation) | Abstracted behind a `Camera` interface so other backends (e.g. GenICam) can be added. |
-| Persistence | SQLite (job history, logs, part library) + human-editable YAML/TOML for machine config | **[OPEN]** YAML vs TOML. |
+| Persistence | SQLite (job history, logs, part library) + human-editable TOML for machine config | TOML: unambiguous types, comments, `tomllib` in the standard library. |
 | Tooling | `uv`, `ruff`, `pyright`/`mypy` (strict), `pytest` | Type hints required in the core. |
 | Distribution | `pip`/`uv` install; Docker image for Linux; later PyInstaller/Briefcase bundles | |
 
@@ -175,7 +175,7 @@ shows Python cannot hold target throughput.
 |---|---|---|
 | REST over HTTP(S) | Resources and commands (config, parts, jobs, motion requests) | JSON, described by OpenAPI 3.1 |
 | WebSocket `/api/v1/events` | Server-to-client state, progress, logs, alerts; low-latency jog/E-stop from client | JSON messages with a `type` field |
-| Video | Live camera feeds | MJPEG over HTTP for v1 (simple, universal); WebRTC later for lower latency and bandwidth **[OPEN]** |
+| Video | Live camera feeds | MJPEG over HTTP (always available) and WebRTC (preferred for Studio). See §6.5. |
 
 Alternatives considered: gRPC (strong typing, streaming) was rejected as the primary API
 because browsers cannot call it directly. MQTT may be offered later as an optional bridge
@@ -219,6 +219,40 @@ POST   /api/v1/jobs/{id}/run | pause | resume | stop | step
 GET    /api/v1/operations/{id}
 POST   /api/v1/lease                   request/release control lease
 ```
+
+### 6.5 Video streaming
+
+Live video is for people only. Vision always runs inside the core on raw, uncompressed
+frames, so stream compression never affects placement accuracy.
+
+The core offers two transports from one capture pipeline per camera:
+
+| | MJPEG over HTTP | WebRTC |
+|---|---|---|
+| Role | Universal fallback; embedded and simple clients | Default for Studio |
+| Client support | Anything that can decode JPEG: browsers, `<img>` tags, scripts, ESP32-S3/P4 displays | Browsers, native WebRTC libraries |
+| Latency on LAN | Low (one frame plus encode) | Low (about 100–200 ms with jitter buffer) |
+| Bandwidth | High (roughly 5–20 Mbit/s per 1080p stream) | Low and adaptive (roughly 1–4 Mbit/s) |
+| Wi-Fi / remote | Struggles | Good; adapts to the link |
+| Host cost | JPEG encode is cheap; often native from UVC cameras | H.264/VP8 encode. The Raspberry Pi 5 has no hardware video encoder, so this is software encode there. |
+| Complexity | Very low | Signaling, ICE, codec negotiation (`aiortc`) |
+
+Requirements:
+
+- **MJPEG stays a permanent, supported endpoint.** Clients can request resolution, frame
+  rate, and JPEG quality (e.g. `?width=320&fps=10&quality=70`) so small displays such as
+  ESP32-based control panels receive a stream they can decode. A single-frame JPEG
+  snapshot endpoint is also provided.
+- **Embedded clients do not need video.** An ESP32 control panel should work with the
+  REST and WebSocket API alone; video is optional for it.
+- **WebRTC** is negotiated over the existing authenticated API (no separate signaling
+  server), LAN-only by default. Studio uses WebRTC when available and falls back to MJPEG.
+- **Overlays are data, not pixels.** Crosshairs, detected features, and vision results are
+  sent as vector data over the event socket and drawn by the client, so they stay sharp
+  at any stream quality and work with both transports.
+- **Frame timestamps** are attached to frames on both transports so clients can line up
+  video with machine position and overlay data.
+- When no client is watching a stream, the core stops encoding it.
 
 ## 7. Core subsystems
 
@@ -302,7 +336,7 @@ correction. Implementations:
 
 ### 8.1 Technology
 
-- **TypeScript**, **React** **[OPEN: React vs Svelte]**, built with **Vite**.
+- **TypeScript**, **React**, built with **Vite**.
 - 2D board/machine view on canvas or WebGL (e.g. PixiJS); 3D view optional later.
 - Served by the core for browser use. Optionally packaged as a desktop app with **Tauri**,
   which also gives a native window, menus, and file dialogs.
@@ -377,8 +411,8 @@ are community supported. **[OPEN]** Record the v4 test machine's firmware versio
 | Milestone | Scope |
 |---|---|
 | **M0 — Skeleton** | Repo layout, tooling, CI, `picnicd` with health endpoint, simulator driver, event socket, GUI shell with theme and status bar. |
-| **M1 — Manual control** | Connect to LumenPnP, home, jog, actuators, vacuum readings, live camera streams in the GUI, control lease, E-stop. |
-| **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. |
+| **M1 — Manual control** | Connect to LumenPnP, home, jog, actuators, vacuum readings, MJPEG camera streams in the GUI, control lease, E-stop. |
+| **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. |
 | **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. |
 | **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. |
 | **M5 — 1.0 polish** | Strip and tray feeders, installer/packaging, docs, OpenPnP library import. |
@@ -398,9 +432,9 @@ picnicplace/
 ## 13. Open questions
 
 1. ~~License~~ **Decided: MPL-2.0** (see §14).
-2. YAML vs TOML for machine config.
-3. React vs Svelte for the GUI.
-4. MJPEG only for v1, or WebRTC from the start?
+2. ~~Config format~~ **Decided: TOML.**
+3. ~~GUI framework~~ **Decided: React.**
+4. ~~Video transport~~ **Decided: MJPEG and WebRTC** (see §6.5).
 5. Roles and multi-user auth in 1.0, or a single token?
 6. Should a running job stop when its controlling client disconnects? (Proposed: no,
    configurable.)

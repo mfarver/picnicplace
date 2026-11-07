@@ -162,6 +162,19 @@ shows Python cannot hold target throughput.
   bypasses the command queue and sends the firmware's immediate stop (e.g. `M112` or
   realtime reset). A physical E-stop remains the primary safety device; the software stop
   is a convenience.
+- **Safe-Z interlock.** A machine profile may declare a physical safe-Z input (a switch
+  that reads true when every nozzle is at or above safe-travel height). When present it is
+  authoritative:
+  - X/Y motion is refused unless the input reads safe, whatever the computed Z position.
+  - On power-up or reconnect, if it reads not safe, Z must be raised or homed before any
+    X/Y motion, including X/Y homing.
+  - If the computed Z position says safe but the input says not safe, Z has lost steps.
+    The core stops motion, reports a fault, and requires re-homing.
+  - Machines without the input use a computed safe-Z state, and clients label it as
+    computed rather than sensed.
+  - The core can only check the input before sending a move. A firmware-level interlock
+    (firmware refuses or halts X/Y motion while the input is unsafe) is the stronger
+    guarantee and is recommended where firmware supports it.
 - **Control lease.** Many clients may observe; only one holds the **control lease** at a
   time and can move the machine. Leases can be requested, handed over, or forcibly taken
   with confirmation.
@@ -452,6 +465,10 @@ To verify against the actual machine and Opulo's published configuration:
 - Vacuum pump(s), valves, and vacuum pressure sensors per nozzle.
 - Photon feeders on an RS-485 bus via the motherboard.
 - Ring lights on both cameras.
+
+**Likely second target: Quad 4c.** An older industrial machine the project lead plans to
+convert. It has a physical safe-Z input. Driver and machine-profile interfaces must not
+assume LumenPnP-only behavior.
 
 PicnicPlace should ship a **LumenPnP machine profile** so a new user selects their machine
 version and goes straight to guided calibration.

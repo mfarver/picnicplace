@@ -24,8 +24,8 @@ The first-class hardware target is the **Opulo LumenPnP**.
    visual feedback, while still exposing advanced settings.
 4. **Strong vision** built on OpenCV: fiducials, top-camera part and feeder vision, and
    bottom-camera part alignment.
-5. **Cross platform core** on Linux, macOS, and Windows, with Linux as the reference
-   platform (see §9).
+5. **Linux first.** The 1.0 core targets Linux. The core avoids Linux-only assumptions
+   outside of driver and camera backends, so macOS and Windows can be added later (see §9).
 6. **Approachable for contributors.** A popular language, conventional tooling, a
    simulator so most work needs no hardware, and good tests.
 
@@ -47,7 +47,7 @@ The first-class hardware target is the **Opulo LumenPnP**.
 
 | Requirement | Weight |
 |---|---|
-| Cross platform (Linux, macOS, Windows) | Must |
+| Cross platform (Linux for 1.0; macOS and Windows later) | High |
 | First-class OpenCV support, hardware acceleration where available | Must |
 | Large contributor pool / easy onboarding | High |
 | Adequate performance for vision and serial I/O at PnP rates | Must |
@@ -156,9 +156,8 @@ shows Python cannot hold target throughput.
 
 - **The core owns safety.** Soft limits, collision-safe Z, vacuum checks, and motion
   interlocks are enforced in the core, never only in a client.
-- **Client disconnect is safe.** If the controlling client disconnects during manual
-  jogging, motion stops. A running job continues (it is owned by the core) unless
-  configured otherwise.
+- **Motion requires a connected client.** The core enables motion only while at least one
+  client holds a live event-socket connection. See §5.3.
 - **Emergency stop** is a dedicated, highest-priority API call and WebSocket message that
   bypasses the command queue and sends the firmware's immediate stop (e.g. `M112` or
   realtime reset). A physical E-stop remains the primary safety device; the software stop
@@ -166,6 +165,28 @@ shows Python cannot hold target throughput.
 - **Control lease.** Many clients may observe; only one holds the **control lease** at a
   time and can move the machine. Leases can be requested, handed over, or forcibly taken
   with confirmation.
+
+### 5.3 Client presence rules
+
+- **Presence** means at least one authenticated client has an open WebSocket on
+  `/api/v1/events` and is answering heartbeats. One-shot REST calls do not count.
+  Observer clients count; the point is that a person can see the machine.
+- **Manual motion** (jog, move, actuators) is allowed only from the lease holder while it
+  is connected. If the lease holder disconnects, manual motion stops immediately and the
+  lease is released.
+- **Jobs survive disconnects but pause.** If no clients are present, a running job
+  pauses. The job is not ended and its progress is kept.
+- **Grace period.** The pause triggers after the last client has been gone for a short,
+  configurable time (default 5 s), so a browser reload or a Wi-Fi blip does not interrupt
+  a job.
+- **Safe pause point.** The job pauses at the next safe point: the current move finishes,
+  the head goes to safe Z, and vacuum stays on so a part already picked is not dropped.
+  **[OPEN]** Whether to finish placing a part already on the nozzle before pausing.
+- **Resume is manual.** A job paused for lost presence resumes only when a client
+  reconnects and an operator chooses Resume. It never resumes automatically.
+- The CLI's `run` command stays connected while the job runs (it follows progress), so
+  it counts as presence. Detaching from a job leaves it to pause unless another client is
+  connected.
 
 ## 6. Network API
 
@@ -376,18 +397,22 @@ jog, run a job, export logs. Uses the same API.
 
 ## 9. Platform support
 
+**Decided: the 1.0 core supports Linux only.**
+
 | Platform | Core | GUI (browser) | GUI (desktop) |
 |---|---|---|---|
-| Linux x86_64 | Tier 1 (reference) | Tier 1 | Tier 1 |
-| Linux ARM64 (Raspberry Pi 5, other SBCs) | Tier 1 | Tier 1 | Tier 2 |
-| macOS (Apple silicon) | Tier 2 | Tier 1 | Tier 2 |
-| Windows 10/11 x86_64 | Tier 2 | Tier 1 | Tier 2 |
+| Linux x86_64 | Supported (reference) | Supported | Supported |
+| Linux ARM64 (Raspberry Pi 5, other SBCs) | Supported | Supported | Best effort |
+| macOS (Apple silicon) | Development only (simulator) | Supported | Not in 1.0 |
+| Windows 10/11 x86_64 | Not in 1.0 | Supported | Not in 1.0 |
 
-- **Tier 1:** tested in CI and on real hardware before release.
-- **Tier 2:** tested in CI (unit tests, simulator); hardware testing by the community.
+- **Supported:** tested in CI and on real hardware before release.
+- **Development only:** the core runs against the simulator so contributors can develop on
+  a Mac, but real hardware is not supported or tested.
+- The browser GUI works on any OS, since it only needs a modern browser.
 
-The main cross-platform risks are camera capture (backend differences, exposure control,
-camera ordering) and serial port naming. Both are isolated behind interfaces.
+Camera capture and serial port naming are kept behind interfaces, which is where most
+porting work will be when macOS and Windows support is added.
 
 ## 10. LumenPnP target
 
@@ -435,11 +460,13 @@ picnicplace/
 2. ~~Config format~~ **Decided: TOML.**
 3. ~~GUI framework~~ **Decided: React.**
 4. ~~Video transport~~ **Decided: MJPEG and WebRTC** (see §6.5).
-5. Roles and multi-user auth in 1.0, or a single token?
-6. Should a running job stop when its controlling client disconnects? (Proposed: no,
-   configurable.)
+5. Roles and multi-user auth in 1.0, or a single token? (§6.3)
+6. ~~Client disconnect~~ **Decided:** motion requires a connected client; jobs pause, not
+   end, when none are connected (§5.3).
 7. LumenPnP v4 firmware version to target first.
-8. Linux-only for 1.0 with macOS/Windows later, or Tier 2 support from day one as above?
+8. ~~Platforms~~ **Decided:** Linux only for 1.0 (§9).
+9. When a job pauses for lost presence with a part on the nozzle, place it first or hold
+   it? (§5.3)
 
 ## 14. Licensing (decided)
 

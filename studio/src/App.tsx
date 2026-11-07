@@ -2,6 +2,7 @@ import { CircuitBoard, Cog, Eye, Layers, Play } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useCore } from "./api/core";
 import { Placeholder } from "./components/Placeholder";
+import { Splash } from "./components/Splash";
 import { StatusBar } from "./components/StatusBar";
 import { TokenPrompt } from "./components/TokenPrompt";
 import { TopBar, type WorkspaceTab } from "./components/TopBar";
@@ -86,6 +87,7 @@ export function App() {
       <main className="main">{workspace.render()}</main>
       <StatusBar />
       {status === "unauthorized" && <TokenPrompt />}
+      <Splash />
     </div>
   );
 }

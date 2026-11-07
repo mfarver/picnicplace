@@ -648,7 +648,7 @@
                 }
               }
             },
-            "description": "Unprocessable Content"
+            "description": "The target is invalid or out of limits."
           }
         },
         "security": [
@@ -722,7 +722,7 @@
                 }
               }
             },
-            "description": "Not Found"
+            "description": "No operation with this ID."
           },
           "422": {
             "content": {

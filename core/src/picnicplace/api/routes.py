@@ -57,7 +57,10 @@ async def home(ctx: Context) -> Operation:
     "/machine/move",
     tags=["machine"],
     status_code=status.HTTP_202_ACCEPTED,
-    responses={**MACHINE_ERRORS, 422: {"model": ErrorResponse}},
+    responses={
+        **MACHINE_ERRORS,
+        422: {"model": ErrorResponse, "description": "The target is invalid or out of limits."},
+    },
     dependencies=[Depends(require(Permission.MOTION))],
 )
 async def move(ctx: Context, body: MoveRequest) -> Operation:
@@ -86,7 +89,7 @@ async def reset(ctx: Context) -> MachineState:
 @router.get(
     "/operations/{operation_id}",
     tags=["operations"],
-    responses={404: {"model": ErrorResponse}},
+    responses={404: {"model": ErrorResponse, "description": "No operation with this ID."}},
 )
 async def get_operation(ctx: Context, operation_id: str) -> Operation:
     op = ctx.operations.get(operation_id)

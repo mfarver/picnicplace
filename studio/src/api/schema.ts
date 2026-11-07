@@ -506,7 +506,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description The target is invalid or out of limits. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -557,7 +557,7 @@ export interface operations {
                     "application/json": components["schemas"]["Operation"];
                 };
             };
-            /** @description Not Found */
+            /** @description No operation with this ID. */
             404: {
                 headers: {
                     [name: string]: unknown;

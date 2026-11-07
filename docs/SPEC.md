@@ -475,15 +475,14 @@ refusing to connect.
 | **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. |
 | **M5 — 1.0 polish** | Strip and tray feeders, installer/packaging, docs, OpenPnP library import. |
 
-## 12. Repository layout (proposed)
+## 12. Repository layout
 
 ```
 picnicplace/
-  core/            Python package: picnicd, drivers, vision, job engine
+  core/            Python package: picnicd, drivers, vision, job engine, CLI
   studio/          TypeScript GUI
-  cli/             picnic CLI (Python, may live in core/)
   profiles/        Machine profiles (LumenPnP, …)
-  docs/            Specs, ADRs, user docs
+  docs/            Specs, ADRs, user docs, generated OpenAPI document (docs/api/)
   testdata/        Vision image corpus, sample boards
 ```
 

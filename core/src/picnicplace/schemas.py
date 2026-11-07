@@ -1,0 +1,145 @@
+"""Models that appear on the wire: REST payloads and WebSocket messages.
+
+Everything here is part of the public API and is exported into the OpenAPI document,
+from which the Studio's TypeScript types are generated.
+"""
+
+from datetime import datetime
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+PROTOCOL_VERSION = 1
+"""Version of the WebSocket event protocol. Bumped on breaking changes."""
+
+
+class WireModel(BaseModel):
+    # Fields with defaults (such as the `type` tags) are still always sent, so mark them
+    # required in the schema; this gives clients a proper discriminated union.
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+
+# --- State -------------------------------------------------------------------------------
+
+
+class MachineState(WireModel):
+    driver: str
+    connected: bool
+    homed: bool
+    estop: bool = Field(description="An emergency stop is latched; reset before moving.")
+    busy: bool = Field(description="A motion operation is in progress.")
+    motion_enabled: bool = Field(
+        description="Motion commands are currently allowed (connected, client present, no E-stop)."
+    )
+    axes: list[str]
+    position: dict[str, float] = Field(description="Current position per axis, mm or degrees.")
+
+
+class PresenceState(WireModel):
+    clients: int = Field(description="Clients with a live event-socket connection.")
+    present: bool
+
+
+OperationStatus = Literal["running", "succeeded", "failed", "cancelled"]
+
+
+class Operation(WireModel):
+    id: str
+    kind: str
+    status: OperationStatus
+    error: str | None = None
+    started_at: datetime
+    finished_at: datetime | None = None
+
+
+# --- REST --------------------------------------------------------------------------------
+
+
+class HealthResponse(WireModel):
+    status: Literal["ok"] = "ok"
+    version: str
+    protocol: int
+
+
+class MoveRequest(WireModel):
+    position: dict[str, float] = Field(
+        min_length=1, description="Target per axis. Axes left out do not move."
+    )
+    speed: float | None = Field(
+        default=None, gt=0, description="Speed limit in units per second. Defaults to axis max."
+    )
+
+
+class ErrorResponse(WireModel):
+    detail: str
+    code: str
+
+
+# --- WebSocket: server to client -------------------------------------------------------
+
+
+class HelloEvent(WireModel):
+    """First message on every connection."""
+
+    type: Literal["hello"] = "hello"
+    protocol: int
+    server_version: str
+    client_id: str
+    machine: MachineState
+    presence: PresenceState
+
+
+class MachineStateEvent(WireModel):
+    type: Literal["machine.state"] = "machine.state"
+    machine: MachineState
+
+
+class PresenceEvent(WireModel):
+    type: Literal["presence"] = "presence"
+    presence: PresenceState
+
+
+class PresenceLostEvent(WireModel):
+    """No client has been connected for the grace period. Running jobs pause."""
+
+    type: Literal["presence.lost"] = "presence.lost"
+    grace_period_s: float
+
+
+class OperationEvent(WireModel):
+    type: Literal["operation"] = "operation"
+    operation: Operation
+
+
+class PongEvent(WireModel):
+    type: Literal["pong"] = "pong"
+    server_time: datetime
+
+
+class ErrorEvent(WireModel):
+    type: Literal["error"] = "error"
+    message: str
+
+
+Event = (
+    HelloEvent
+    | MachineStateEvent
+    | PresenceEvent
+    | PresenceLostEvent
+    | OperationEvent
+    | PongEvent
+    | ErrorEvent
+)
+ServerEvent = Annotated[Event, Field(discriminator="type")]
+
+
+# --- WebSocket: client to server -------------------------------------------------------
+
+
+class PingMessage(WireModel):
+    """Heartbeat. Clients send one every couple of seconds; the server answers with pong."""
+
+    type: Literal["ping"] = "ping"
+
+
+ClientMessage = PingMessage

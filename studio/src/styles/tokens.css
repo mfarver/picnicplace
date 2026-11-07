@@ -26,6 +26,10 @@
   --sidebar-width: 300px;
 
   --transition: 120ms ease;
+
+  /* Splash colors match the logo artwork, so they do not change with the theme. */
+  --splash-bg: #c0d4d2;
+  --splash-text: #3f6b3a;
 }
 
 /* Dark is the default theme. */

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/brand/picnicplace-logo-cropped.jpg" alt="PicnicPlace. Assemble. Picnic. Repeat." width="420">
+</p>
+
 # PicnicPlace
 
 PicnicPlace is an open source software controller for automated PCB assembly

@@ -639,6 +639,16 @@
           },
           "position": {
             "$ref": "#/components/schemas/Point"
+          },
+          "style": {
+            "default": "dot",
+            "description": "How the simulator draws a fiducial: a plain dot, or the LumenPnP datum board (a 1 mm copper dot in a reticle, with rings, a 5 mm grid, and corner fiducials).",
+            "enum": [
+              "dot",
+              "lumenpnp-datum"
+            ],
+            "title": "Style",
+            "type": "string"
           }
         },
         "required": [
@@ -646,7 +656,8 @@
           "label",
           "kind",
           "position",
-          "diameter"
+          "diameter",
+          "style"
         ],
         "title": "Location",
         "type": "object"

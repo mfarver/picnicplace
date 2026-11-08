@@ -58,6 +58,11 @@ VISUAL_TOLERANCE_MM = 0.02
 
 VISUAL_PASSES = 4
 
+VISUAL_SEARCH_RADIUS_MM = 4.0
+"""Only accept a fiducial this close to where it should be. Endstop homing is far more
+repeatable than this, and on the LumenPnP datum board the nearest other fiducial is
+more than 11 mm away, so a wrong fiducial is never mistaken for the homing one."""
+
 FRAME_WAIT_S = 5.0
 
 CAMERA_SCALE_STEP_MM = 1.0
@@ -437,12 +442,18 @@ class MachineService:
         expected = fiducial.diameter
         low, high = (expected * 0.6, expected * 1.5) if expected else (0.5, 4.0)
         circle = await asyncio.get_running_loop().run_in_executor(
-            None, find_circle, frame.image, low / mm_per_px, high / mm_per_px
+            None,
+            find_circle,
+            frame.image,
+            low / mm_per_px,
+            high / mm_per_px,
+            VISUAL_SEARCH_RADIUS_MM / mm_per_px,
         )
         if circle is None:
             raise VisionError(
-                f"the homing fiducial was not found near ({fiducial.position.x:g}, "
-                f"{fiducial.position.y:g}); check the light and the fiducial location"
+                f"the homing fiducial was not found within {VISUAL_SEARCH_RADIUS_MM:g} mm of "
+                f"({fiducial.position.x:g}, {fiducial.position.y:g}); check the light, the "
+                "fiducial location in the machine profile, and that homing is close"
             )
         return circle.x, circle.y, w, h
 

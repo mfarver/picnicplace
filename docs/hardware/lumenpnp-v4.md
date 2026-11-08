@@ -132,9 +132,35 @@ protocol and is not described here yet.
 - Home sensors are not read yet (`M119` replies have not been captured).
 - Visual homing is on in the profile: after `G28` the top camera is centered on the
   homing fiducial at (217, 106) and X/Y are corrected with `G92`, as OpenPnP does. The
-  fiducial's diameter is not in the profile yet, so the finder accepts round marks from
-  0.5 to 4 mm. Until the camera is calibrated, the scale comes from the profile's field
-  of view; the Calibration panel's Camera scale button measures the real one.
+  profile gives the fiducial's 1.0 mm diameter, and the simulator draws the datum board.
+  Until the camera is calibrated, the scale comes from the profile's field of view; the
+  Calibration panel's Camera scale button measures the real one.
+
+## Datum board (homing fiducial)
+
+From the board's KiCad design (PCB-0004 rev 00, 80 × 35 mm, 1.6 mm). Positions are
+relative to the center fiducial, with +Y toward the back if the board is mounted with
+its ruler toward the front (the mounting orientation is not confirmed).
+
+- **Homing fiducial (FID1):** a 1.0 mm copper dot. The solder mask opening is 2.0 mm and
+  the ground pour is cleared 0.5 mm around the dot, so the dot sits in a ring of bare
+  board (no mask, no copper) inside the mask. OpenPnP's calibration measured it as
+  0.967 mm at Z −27.5, at (217.21, 106.70), 0.7 mm from the homing location.
+- **Around it:** a reticle (a copper ring about 5 mm across with four ticks pointing
+  in), an 8 mm copper ring 0.15 mm wide, and a 5 mm grid of 0.15 mm copper lines
+  spanning X −10 … +10 and Y −10 … +5.
+- **Other fiducials:** 1.0 mm dots in 3 mm openings at (±10, +5) and (±10, −10), the grid
+  corners, and at (±35, −20).
+- **Also on the board:** a 30 mm ruler with 1 mm ticks along the front edge (Y −15), a
+  5 mm exposed copper disc at (−22.5, −7.5), four plated M3 mounting holes, and on the
+  back a mask-defined dot grid (likely for bottom camera calibration).
+- **For detection:** the board has three brightness levels around the dot (copper, bare
+  board, mask), so a single threshold merges the dot with its 2 mm window. The finder
+  sweeps thresholds and keeps blobs that stay round and 0.6–1.5 mm across many levels.
+  It only accepts a fiducial within 4 mm of the expected position; the nearest other
+  fiducial is more than 11 mm away, so it cannot lock onto the wrong one.
+- **Useful later:** the grid corners (20 × 15 mm) and the ruler are known distances for
+  checking camera scale, rotation, and X/Y squareness.
 
 ## Cameras
 

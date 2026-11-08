@@ -80,12 +80,50 @@ def test_visual_homing_corrects_the_homing_error(visual_client: TestClient) -> N
         assert found_offset(again["message"]) == pytest.approx((0, 0), abs=0.02)
 
 
-def test_visual_homing_large_error_needs_several_passes(tmp_path: Path) -> None:
-    config = visual_config(tmp_path, sim_home_error=(4.0, 2.5))
+def test_visual_homing_larger_error(tmp_path: Path) -> None:
+    config = visual_config(tmp_path, sim_home_error=(2.5, 1.5))
     with TestClient(create_app(config)) as client, connect(client) as s:
         op = home(s)
         assert op["status"] == "succeeded", op
-        assert found_offset(op["message"]) == pytest.approx((4.0, 2.5), abs=0.02)
+        assert found_offset(op["message"]) == pytest.approx((2.5, 1.5), abs=0.02)
+
+
+def test_visual_homing_refuses_a_far_fiducial(tmp_path: Path) -> None:
+    """Farther off than the search radius: fail clearly rather than guess."""
+    config = visual_config(tmp_path, sim_home_error=(5.0, 0.0))
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        op = home(s)
+        assert op["status"] == "failed"
+        assert "not found within 4 mm" in op["error"]
+
+
+@pytest.mark.parametrize(
+    ("dx", "dy", "light"),
+    [(0.0, 0.0, True), (3.0, -2.0, True), (-1.2, 0.7, False), (2.2, 2.9, True)],
+)
+def test_finds_the_datum_board_center(dx: float, dy: float, light: bool) -> None:
+    """The LumenPnP datum board: a 1 mm dot in a bare-board window inside a reticle,
+    rings, grid lines, and other fiducials. Only the center dot is the homing one."""
+    from picnicplace.camera.synthetic import SceneState, TopRenderer, render_size
+    from picnicplace.machine.profile import load_profile
+
+    profile = load_profile("lumenpnp-v4")
+    camera = next(c for c in profile.cameras if c.id == "top")
+    size = render_size(camera)
+    fiducial = next(loc for loc in profile.locations if loc.kind == "homing_fiducial")
+    image = TopRenderer(profile, camera, size).render(
+        SceneState(
+            position={"X": fiducial.position.x + dx, "Y": fiducial.position.y + dy},
+            outputs={"light_top": light},
+            held={},
+        )
+    )
+    mm_per_px = camera.field_of_view.x / size[0]
+    found = find_circle(image, 0.6 / mm_per_px, 1.5 / mm_per_px, 4.0 / mm_per_px)
+    assert found is not None
+    seen = ((found.x - size[0] / 2) * mm_per_px, -(found.y - size[1] / 2) * mm_per_px)
+    assert seen == pytest.approx((-dx, -dy), abs=0.01)
+    assert found.diameter * mm_per_px == pytest.approx(1.0, abs=0.05)
 
 
 def test_visual_homing_fails_without_a_camera(tmp_path: Path) -> None:

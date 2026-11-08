@@ -105,11 +105,15 @@ looking = "up"
 field_of_view = { x = 39.6, y = 22.3 }
 light_output = "light_bottom"
 
+# The center fiducial of the datum board (PCB-0004): a 1.0 mm copper dot in a 2 mm
+# opening of bare board, inside a reticle. OpenPnP measured it as 0.967 mm.
 [[locations]]
 id = "homing_fiducial"
 label = "Homing fiducial"
 kind = "homing_fiducial"
 position = { x = 217, y = 106 }
+diameter = 1.0
+style = "lumenpnp-datum"
 
 [[locations]]
 id = "discard"

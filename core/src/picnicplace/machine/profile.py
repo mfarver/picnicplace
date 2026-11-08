@@ -117,6 +117,13 @@ class Location(ProfileModel):
     diameter: float | None = Field(
         default=None, gt=0, description="Fiducials: the round mark's diameter in mm."
     )
+    style: Literal["dot", "lumenpnp-datum"] = Field(
+        default="dot",
+        description=(
+            "How the simulator draws a fiducial: a plain dot, or the LumenPnP datum board "
+            "(a 1 mm copper dot in a reticle, with rings, a 5 mm grid, and corner fiducials)."
+        ),
+    )
 
 
 class FeederBank(ProfileModel):

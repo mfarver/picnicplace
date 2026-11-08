@@ -662,6 +662,13 @@ export interface components {
             /** Label */
             label: string;
             position: components["schemas"]["Point"];
+            /**
+             * Style
+             * @description How the simulator draws a fiducial: a plain dot, or the LumenPnP datum board (a 1 mm copper dot in a reticle, with rings, a 5 mm grid, and corner fiducials).
+             * @default dot
+             * @enum {string}
+             */
+            style: "dot" | "lumenpnp-datum";
         };
         /** MachineProfile */
         MachineProfile: {

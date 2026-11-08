@@ -111,6 +111,14 @@ class Camera(ProfileModel):
         ge=0,
         description="Wait this long after a move before using a frame (vibration, latency).",
     )
+    focus_height: float | None = Field(
+        default=None,
+        description=(
+            "Up-looking cameras: the nozzle height (see safe_z) at which the bottom of a "
+            "held part is in focus. A part is shown with the nozzle this high plus the "
+            "part's height."
+        ),
+    )
 
 
 class Location(ProfileModel):
@@ -155,6 +163,10 @@ class FeederBank(ProfileModel):
         ),
     )
 
+    pick_height: float | None = Field(
+        default=None,
+        description="Nozzle height at the top of a part in the tape, at the pick location.",
+    )
     pick_to_front: float = Field(
         default=8.0,
         ge=0,
@@ -332,6 +344,13 @@ class MachineProfile(ProfileModel):
     safe_z_input: str | None = Field(
         default=None,
         description="A digital input that reads true when every nozzle is at safe height.",
+    )
+    board_height: float | None = Field(
+        default=None,
+        description=(
+            "Nozzle height at the top surface of a board on the staging plates. A job can "
+            "give its own."
+        ),
     )
     feeder_bus: Literal["photon"] | None = Field(
         default=None,

@@ -41,6 +41,13 @@ safe_z = -15.0
 # After G28, center the top camera on the homing fiducial and correct X/Y (as OpenPnP does).
 visual_homing = true
 
+# Heights are nozzle heights: 0 at the top of travel, negative going down, the same for
+# both nozzles. A board's top surface on the staging plates is about -27.5 (the datum
+# board's height, and the reference machine's), the top of a part in a feeder about
+# -27.6 (its taught Photon slots, -27.5 to -29), and the bottom camera is focused on a
+# part's bottom at -3.52 (from the reference machine's calibration).
+board_height = -27.5
+
 # Feeders talk Opulo's Photon protocol over RS-485, through the motherboard (M485).
 feeder_bus = "photon"
 
@@ -122,6 +129,7 @@ position = { x = 217.736, y = 153.071 }
 looking = "up"
 field_of_view = { x = 39.6, y = 22.3 }
 light_output = "light_bottom"
+focus_height = -3.52
 
 # The center fiducial of the datum board (PCB-0004), mounted on a raised spacer just in
 # front of the bottom camera, its notched edge toward the camera: a 1.0 mm copper dot in a
@@ -223,6 +231,7 @@ first_address = 1
 width = 15
 length = 154
 pick_to_front = 27.3
+pick_height = -27.6
 rotation = 90
 fiducial_offset = { x = 19.15, y = -4.1 }
 fiducial_diameter = 1.0
@@ -237,6 +246,7 @@ first_address = 26
 width = 15
 length = 154
 pick_to_front = 27.3
+pick_height = -27.6
 rotation = -90
 fiducial_offset = { x = 19.15, y = -4.1 }
 fiducial_diameter = 1.0

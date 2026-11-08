@@ -1,6 +1,29 @@
 {
   "components": {
     "schemas": {
+      "Alignment": {
+        "properties": {
+          "angle": {
+            "title": "Angle",
+            "type": "number"
+          },
+          "dx": {
+            "title": "Dx",
+            "type": "number"
+          },
+          "dy": {
+            "title": "Dy",
+            "type": "number"
+          }
+        },
+        "required": [
+          "dx",
+          "dy",
+          "angle"
+        ],
+        "title": "Alignment",
+        "type": "object"
+      },
       "Axis": {
         "additionalProperties": false,
         "properties": {
@@ -318,6 +341,18 @@
             "$ref": "#/components/schemas/Point",
             "description": "Width (x) and height (y) of the view in mm."
           },
+          "focus_height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Up-looking cameras: the nozzle height (see safe_z) at which the bottom of a held part is in focus. A part is shown with the nozzle this high plus the part's height.",
+            "title": "Focus Height"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -373,7 +408,8 @@
           "looking",
           "field_of_view",
           "light_output",
-          "settle_s"
+          "settle_s",
+          "focus_height"
         ],
         "title": "Camera",
         "type": "object"
@@ -457,6 +493,87 @@
           "error"
         ],
         "title": "CameraInfo",
+        "type": "object"
+      },
+      "CaptureInfo": {
+        "properties": {
+          "camera": {
+            "title": "Camera",
+            "type": "string"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "homed": {
+            "title": "Homed",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "outputs": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Outputs",
+            "type": "object"
+          },
+          "position": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Position",
+            "type": "object"
+          },
+          "taken": {
+            "format": "date-time",
+            "title": "Taken",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "camera",
+          "label",
+          "taken",
+          "width",
+          "height",
+          "position",
+          "outputs",
+          "homed"
+        ],
+        "title": "CaptureInfo",
+        "type": "object"
+      },
+      "CaptureRequest": {
+        "properties": {
+          "cameras": {
+            "description": "Cameras to capture. Empty: every camera on.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Cameras",
+            "type": "array"
+          },
+          "label": {
+            "default": "",
+            "description": "What the frame shows.",
+            "maxLength": 200,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "title": "CaptureRequest",
         "type": "object"
       },
       "ClientInfo": {
@@ -756,6 +873,18 @@
             "title": "Length",
             "type": "number"
           },
+          "pick_height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nozzle height at the top of a part in the tape, at the pick location.",
+            "title": "Pick Height"
+          },
           "pick_to_front": {
             "default": 8.0,
             "description": "How far a feeder reaches past its pick location, along the feed.",
@@ -790,6 +919,7 @@
           "length",
           "rotation",
           "first_address",
+          "pick_height",
           "pick_to_front",
           "fiducial_offset",
           "fiducial_diameter"
@@ -2097,6 +2227,18 @@
             "$ref": "#/components/schemas/Rect",
             "description": "Outline of the machine bed, for drawing."
           },
+          "board_height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nozzle height at the top surface of a board on the staging plates. A job can give its own.",
+            "title": "Board Height"
+          },
           "cameras": {
             "items": {
               "$ref": "#/components/schemas/Camera"
@@ -2269,6 +2411,7 @@
           "y_points",
           "visual_homing",
           "safe_z_input",
+          "board_height",
           "feeder_bus",
           "nozzles",
           "cameras",
@@ -2788,6 +2931,65 @@
           "valve_output"
         ],
         "title": "Nozzle",
+        "type": "object"
+      },
+      "NozzleLoad": {
+        "properties": {
+          "alignment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Alignment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "angle": {
+            "title": "Angle",
+            "type": "number"
+          },
+          "nozzle": {
+            "title": "Nozzle",
+            "type": "string"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Id"
+          },
+          "slot_id": {
+            "title": "Slot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nozzle",
+          "part_id",
+          "slot_id",
+          "angle",
+          "alignment"
+        ],
+        "title": "NozzleLoad",
+        "type": "object"
+      },
+      "NozzleRequest": {
+        "properties": {
+          "nozzle_id": {
+            "title": "Nozzle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nozzle_id"
+        ],
+        "title": "NozzleRequest",
         "type": "object"
       },
       "OpenPnpImportRequest": {
@@ -3320,21 +3522,78 @@
         "title": "Part",
         "type": "object"
       },
-      "PickRequest": {
+      "PickAndPlaceRequest": {
         "properties": {
-          "at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Point"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The pick location. Empty: where the top camera is now."
+          "feed": {
+            "default": true,
+            "description": "Feed the tape first.",
+            "title": "Feed",
+            "type": "boolean"
+          },
+          "find_pocket": {
+            "default": true,
+            "description": "Find the pocket from the sprocket holes before picking.",
+            "title": "Find Pocket",
+            "type": "boolean"
+          },
+          "nozzle_id": {
+            "title": "Nozzle Id",
+            "type": "string"
+          },
+          "rotation": {
+            "default": 0.0,
+            "title": "Rotation",
+            "type": "number"
+          },
+          "slot_id": {
+            "title": "Slot Id",
+            "type": "string"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
           }
         },
-        "title": "PickRequest",
+        "required": [
+          "slot_id",
+          "nozzle_id",
+          "x",
+          "y"
+        ],
+        "title": "PickAndPlaceRequest",
+        "type": "object"
+      },
+      "PlaceRequest": {
+        "properties": {
+          "nozzle_id": {
+            "title": "Nozzle Id",
+            "type": "string"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "The part's angle, in machine degrees.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "nozzle_id",
+          "x",
+          "y"
+        ],
+        "title": "PlaceRequest",
         "type": "object"
       },
       "Placement-Input": {
@@ -3507,6 +3766,22 @@
           "note"
         ],
         "title": "Placement",
+        "type": "object"
+      },
+      "PlacementState": {
+        "properties": {
+          "loads": {
+            "items": {
+              "$ref": "#/components/schemas/NozzleLoad"
+            },
+            "title": "Loads",
+            "type": "array"
+          }
+        },
+        "required": [
+          "loads"
+        ],
+        "title": "PlacementState",
         "type": "object"
       },
       "PocketCheck": {
@@ -4343,6 +4618,53 @@
         ],
         "title": "ValueRange",
         "type": "object"
+      },
+      "picnicplace__api__feeders__PickRequest": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The pick location. Empty: where the top camera is now."
+          }
+        },
+        "title": "PickRequest",
+        "type": "object"
+      },
+      "picnicplace__api__placement__PickRequest": {
+        "properties": {
+          "feed": {
+            "default": true,
+            "description": "Feed the tape first.",
+            "title": "Feed",
+            "type": "boolean"
+          },
+          "find_pocket": {
+            "default": true,
+            "description": "Find the pocket from the sprocket holes before picking.",
+            "title": "Find Pocket",
+            "type": "boolean"
+          },
+          "nozzle_id": {
+            "title": "Nozzle Id",
+            "type": "string"
+          },
+          "slot_id": {
+            "title": "Slot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slot_id",
+          "nozzle_id"
+        ],
+        "title": "PickRequest",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -4542,6 +4864,227 @@
           }
         ],
         "summary": "List Cameras",
+        "tags": [
+          "cameras"
+        ]
+      }
+    },
+    "/api/v1/cameras/captures": {
+      "get": {
+        "description": "Recent captures, newest first.",
+        "operationId": "list_captures_api_v1_cameras_captures_get",
+        "parameters": [
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CaptureInfo"
+                  },
+                  "title": "Response List Captures Api V1 Cameras Captures Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Captures",
+        "tags": [
+          "cameras"
+        ]
+      },
+      "post": {
+        "description": "Save a full-resolution frame from each camera, losslessly, with the machine's\nposition and outputs, to the data directory's captures folder.",
+        "operationId": "capture_api_v1_cameras_captures_post",
+        "parameters": [
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CaptureInfo"
+                  },
+                  "title": "Response Capture Api V1 Cameras Captures Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such camera."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The camera is off or failing."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Capture",
+        "tags": [
+          "cameras"
+        ]
+      }
+    },
+    "/api/v1/cameras/captures/{capture_id}.png": {
+      "get": {
+        "operationId": "capture_image_api_v1_cameras_captures__capture_id__png_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capture_id",
+            "required": true,
+            "schema": {
+              "title": "Capture Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {}
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Capture Image",
         "tags": [
           "cameras"
         ]
@@ -5400,7 +5943,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PickRequest"
+                "$ref": "#/components/schemas/picnicplace__api__feeders__PickRequest"
               }
             }
           },
@@ -7221,6 +7764,413 @@
         "summary": "Get Operation",
         "tags": [
           "operations"
+        ]
+      }
+    },
+    "/api/v1/placement": {
+      "get": {
+        "description": "What each nozzle holds, and how it sits on the nozzle once aligned.",
+        "operationId": "placement_state_api_v1_placement_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacementState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Placement State",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/v1/placement/align": {
+      "post": {
+        "operationId": "align_api_v1_placement_align_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NozzleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Find a held part with the bottom camera",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/v1/placement/discard": {
+      "post": {
+        "operationId": "discard_api_v1_placement_discard_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NozzleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Drop a held part in the discard bin",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/v1/placement/pick": {
+      "post": {
+        "operationId": "pick_api_v1_placement_pick_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/picnicplace__api__placement__PickRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pick a part from a feeder slot",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/v1/placement/pick-and-place": {
+      "post": {
+        "operationId": "pick_and_place_api_v1_placement_pick_and_place_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PickAndPlaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pick, align, and place one part",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/v1/placement/place": {
+      "post": {
+        "operationId": "place_api_v1_placement_place_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Place an aligned part",
+        "tags": [
+          "placement"
         ]
       }
     },

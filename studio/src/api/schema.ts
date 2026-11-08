@@ -62,6 +62,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cameras/captures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Captures
+         * @description Recent captures, newest first.
+         */
+        get: operations["list_captures_api_v1_cameras_captures_get"];
+        put?: never;
+        /**
+         * Capture
+         * @description Save a full-resolution frame from each camera, losslessly, with the machine's
+         *     position and outputs, to the data directory's captures folder.
+         */
+        post: operations["capture_api_v1_cameras_captures_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/captures/{capture_id}.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Capture Image */
+        get: operations["capture_image_api_v1_cameras_captures__capture_id__png_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cameras/{camera_id}/snapshot.jpg": {
         parameters: {
             query?: never;
@@ -793,6 +835,111 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/placement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Placement State
+         * @description What each nozzle holds, and how it sits on the nozzle once aligned.
+         */
+        get: operations["placement_state_api_v1_placement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/align": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Find a held part with the bottom camera */
+        post: operations["align_api_v1_placement_align_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Drop a held part in the discard bin */
+        post: operations["discard_api_v1_placement_discard_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/pick": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pick a part from a feeder slot */
+        post: operations["pick_api_v1_placement_pick_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/pick-and-place": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pick, align, and place one part */
+        post: operations["pick_and_place_api_v1_placement_pick_and_place_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/place": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Place an aligned part */
+        post: operations["place_api_v1_placement_place_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/presence": {
         parameters: {
             query?: never;
@@ -814,6 +961,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Alignment */
+        Alignment: {
+            /** Angle */
+            angle: number;
+            /** Dx */
+            dx: number;
+            /** Dy */
+            dy: number;
+        };
         /** Axis */
         Axis: {
             /**
@@ -990,6 +1146,11 @@ export interface components {
         Camera: {
             /** @description Width (x) and height (y) of the view in mm. */
             field_of_view: components["schemas"]["Point"];
+            /**
+             * Focus Height
+             * @description Up-looking cameras: the nozzle height (see safe_z) at which the bottom of a held part is in focus. A part is shown with the nozzle this high plus the part's height.
+             */
+            focus_height: number | null;
             /** Id */
             id: string;
             /** Label */
@@ -1048,6 +1209,48 @@ export interface components {
              * @description Native frame width, when the camera is on.
              */
             width: number | null;
+        };
+        /** CaptureInfo */
+        CaptureInfo: {
+            /** Camera */
+            camera: string;
+            /** Height */
+            height: number;
+            /** Homed */
+            homed: boolean;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Outputs */
+            outputs: {
+                [key: string]: boolean;
+            };
+            /** Position */
+            position: {
+                [key: string]: number;
+            };
+            /**
+             * Taken
+             * Format: date-time
+             */
+            taken: string;
+            /** Width */
+            width: number;
+        };
+        /** CaptureRequest */
+        CaptureRequest: {
+            /**
+             * Cameras
+             * @description Cameras to capture. Empty: every camera on.
+             */
+            cameras?: string[];
+            /**
+             * Label
+             * @description What the frame shows.
+             * @default
+             */
+            label: string;
         };
         /** ClientInfo */
         ClientInfo: {
@@ -1196,6 +1399,11 @@ export interface components {
              * @description Feeder length along the tape, in mm.
              */
             length: number;
+            /**
+             * Pick Height
+             * @description Nozzle height at the top of a part in the tape, at the pick location.
+             */
+            pick_height: number | null;
             /**
              * Pick To Front
              * @description How far a feeder reaches past its pick location, along the feed.
@@ -1795,6 +2003,11 @@ export interface components {
             axes: components["schemas"]["Axis"][];
             /** @description Outline of the machine bed, for drawing. */
             bed: components["schemas"]["Rect"];
+            /**
+             * Board Height
+             * @description Nozzle height at the top surface of a board on the staging plates. A job can give its own.
+             */
+            board_height: number | null;
             /** Cameras */
             cameras: components["schemas"]["Camera"][];
             /** Feeder Banks */
@@ -2100,6 +2313,23 @@ export interface components {
              */
             z_sign: 1 | -1;
         };
+        /** NozzleLoad */
+        NozzleLoad: {
+            alignment: components["schemas"]["Alignment"] | null;
+            /** Angle */
+            angle: number;
+            /** Nozzle */
+            nozzle: string;
+            /** Part Id */
+            part_id: string | null;
+            /** Slot Id */
+            slot_id: string;
+        };
+        /** NozzleRequest */
+        NozzleRequest: {
+            /** Nozzle Id */
+            nozzle_id: string;
+        };
         /** OpenPnpImportRequest */
         OpenPnpImportRequest: {
             /**
@@ -2377,10 +2607,48 @@ export interface components {
             speed: number;
             tape: components["schemas"]["Tape-Output"] | null;
         };
-        /** PickRequest */
-        PickRequest: {
-            /** @description The pick location. Empty: where the top camera is now. */
-            at?: components["schemas"]["Point"] | null;
+        /** PickAndPlaceRequest */
+        PickAndPlaceRequest: {
+            /**
+             * Feed
+             * @description Feed the tape first.
+             * @default true
+             */
+            feed: boolean;
+            /**
+             * Find Pocket
+             * @description Find the pocket from the sprocket holes before picking.
+             * @default true
+             */
+            find_pocket: boolean;
+            /** Nozzle Id */
+            nozzle_id: string;
+            /**
+             * Rotation
+             * @default 0
+             */
+            rotation: number;
+            /** Slot Id */
+            slot_id: string;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** PlaceRequest */
+        PlaceRequest: {
+            /** Nozzle Id */
+            nozzle_id: string;
+            /**
+             * Rotation
+             * @description The part's angle, in machine degrees.
+             * @default 0
+             */
+            rotation: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
         };
         /** Placement */
         "Placement-Input": {
@@ -2489,6 +2757,11 @@ export interface components {
             x: number;
             /** Y */
             y: number;
+        };
+        /** PlacementState */
+        PlacementState: {
+            /** Loads */
+            loads: components["schemas"]["NozzleLoad"][];
         };
         /**
          * PocketCheck
@@ -2839,6 +3112,30 @@ export interface components {
             /** Min */
             min: number;
         };
+        /** PickRequest */
+        picnicplace__api__feeders__PickRequest: {
+            /** @description The pick location. Empty: where the top camera is now. */
+            at?: components["schemas"]["Point"] | null;
+        };
+        /** PickRequest */
+        picnicplace__api__placement__PickRequest: {
+            /**
+             * Feed
+             * @description Feed the tape first.
+             * @default true
+             */
+            feed: boolean;
+            /**
+             * Find Pocket
+             * @description Find the pocket from the sprocket holes before picking.
+             * @default true
+             */
+            find_pocket: boolean;
+            /** Nozzle Id */
+            nozzle_id: string;
+            /** Slot Id */
+            slot_id: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -2962,6 +3259,135 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CameraInfo"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_captures_api_v1_cameras_captures_get: {
+        parameters: {
+            query?: {
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureInfo"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capture_api_v1_cameras_captures_post: {
+        parameters: {
+            query?: {
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureInfo"][];
+                };
+            };
+            /** @description No such camera. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The camera is off or failing. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    capture_image_api_v1_cameras_captures__capture_id__png_get: {
+        parameters: {
+            query?: {
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                capture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3408,7 +3834,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PickRequest"];
+                "application/json": components["schemas"]["picnicplace__api__feeders__PickRequest"];
             };
         };
         responses: {
@@ -4640,6 +5066,251 @@ export interface operations {
             };
             /** @description No operation with this ID. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    placement_state_api_v1_placement_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlacementState"];
+                };
+            };
+        };
+    };
+    align_api_v1_placement_align_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NozzleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_api_v1_placement_discard_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NozzleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pick_api_v1_placement_pick_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["picnicplace__api__placement__PickRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pick_and_place_api_v1_placement_pick_and_place_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PickAndPlaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    place_api_v1_placement_place_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

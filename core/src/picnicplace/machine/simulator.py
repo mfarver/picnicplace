@@ -7,8 +7,9 @@ Besides motion, it simulates the profile's I/O:
 - Vacuum sensors follow their nozzle's pump and valve. With both on, the reading rises
   toward an open-nozzle level, or a higher level while a part is held. A nozzle "picks" a
   part when suction is on while it is lowered at least ``PICK_DEPTH``, and drops it when
-  suction goes off. This happens anywhere; ``on_pick`` reports where, so the feeders can
-  show the part gone from the tape.
+  suction goes off. With a ``pick_source`` (simulated parts, see ``simparts.py``) a
+  nozzle only picks where there is a part; without one it picks anywhere. ``on_drop``
+  reports where a part was let go.
 - Photon feeders on the feeder bus (``feeders/sim.py``), if given.
 
 Faults can be injected for tests: ``inject_z_slip`` makes the real Z position differ from
@@ -63,8 +64,12 @@ class SimulatorDriver(MotionDriver):
     ) -> None:
         super().__init__()
         self.photon = photon
-        self.on_pick: Callable[[str, float, float], None] | None = None
-        """Called with the nozzle ID and its physical X/Y when a nozzle picks up a part."""
+        self.pick_source: Callable[[str, float, float, float], bool] | None = None
+        """Asked, with the nozzle ID, its physical X/Y, and its angle, whether a part is
+        there to pick (and to take it). None: there always is."""
+        self.on_drop: Callable[[str, float, float, float, float], None] | None = None
+        """Called with the nozzle ID, its physical X/Y, angle, and height when it lets go
+        of a part."""
         self._home_error = home_error
         self._offset = {"X": 0.0, "Y": 0.0}
         """Physical minus reported position: what homing gets wrong."""
@@ -229,6 +234,12 @@ class SimulatorDriver(MotionDriver):
         real_z = self._position[nozzle.z_axis] + self._z_slip.get(nozzle.z_axis, 0.0)
         return nozzle_height(nozzle, real_z)
 
+    def _nozzle_at(self, nozzle: Nozzle) -> tuple[float, float, float]:
+        """Where a nozzle physically is, and its angle."""
+        at = self.scene_position
+        angle = self._position.get(nozzle.rotation_axis, 0.0)
+        return at["X"] + nozzle.offset.x, at["Y"] + nozzle.offset.y, angle
+
     def _suction(self, nozzle: Nozzle) -> bool:
         outputs = (nozzle.pump_output, nozzle.valve_output)
         return all(self._outputs[o] for o in outputs if o is not None) and any(
@@ -239,12 +250,16 @@ class SimulatorDriver(MotionDriver):
         """Apply the pick and drop rules, and wake the vacuum loop if anything changed."""
         for n in self._profile.nozzles:
             if not self._suction(n):
-                self._held[n.id] = False
+                if self._held[n.id]:
+                    self._held[n.id] = False
+                    if self.on_drop is not None:
+                        x, y, angle = self._nozzle_at(n)
+                        self.on_drop(n.id, x, y, angle, self._height(n))
             elif self._height(n) <= -PICK_DEPTH and not self._held[n.id]:
-                self._held[n.id] = True
-                if self.on_pick is not None:
-                    at = self.scene_position
-                    self.on_pick(n.id, at["X"] + n.offset.x, at["Y"] + n.offset.y)
+                if self.pick_source is None:
+                    self._held[n.id] = True
+                else:
+                    self._held[n.id] = self.pick_source(n.id, *self._nozzle_at(n))
         self._io_wake.set()
 
     def _vacuum_target(self, nozzle: Nozzle) -> float:

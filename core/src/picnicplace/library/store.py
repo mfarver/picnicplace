@@ -197,6 +197,19 @@ class Library:
             raise NotFound(f"no part {part_id!r}")
         return Part.model_validate_json(row[0])
 
+    def find_part(self, part_id: str) -> Part | None:
+        """A part, or None if the library has none with this ID."""
+        try:
+            return self.part(part_id)
+        except NotFound:
+            return None
+
+    def find_footprint(self, footprint_id: str) -> Footprint | None:
+        try:
+            return self.footprint(footprint_id)
+        except NotFound:
+            return None
+
     def export(self) -> LibraryDocument:
         return LibraryDocument(footprints=self.footprints(), parts=self.parts())
 

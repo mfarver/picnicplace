@@ -18,6 +18,7 @@ from picnicplace.api import cameras as camera_routes
 from picnicplace.api import feeders as feeder_routes
 from picnicplace.api import jobs as job_routes
 from picnicplace.api import library as library_routes
+from picnicplace.api import placement as placement_routes
 from picnicplace.api import routes, websocket
 from picnicplace.api.context import AppContext
 from picnicplace.api.fingerprint import openapi_text
@@ -25,6 +26,7 @@ from picnicplace.auth import Authenticator
 from picnicplace.bringup import BringUpStore
 from picnicplace.camera.manager import CameraManager
 from picnicplace.camera.source import Frame
+from picnicplace.capture import CaptureStore
 from picnicplace.config import Config
 from picnicplace.events import EventBus
 from picnicplace.feeders.service import FeederService
@@ -35,6 +37,7 @@ from picnicplace.machine.errors import MachineError
 from picnicplace.machine.factory import build_driver
 from picnicplace.machine.service import MachineService
 from picnicplace.operations import OperationManager
+from picnicplace.placement import PlacementService
 from picnicplace.presence import PresenceTracker
 from picnicplace.schemas import ClientMessage, ErrorResponse, ServerEvent
 
@@ -74,6 +77,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         lease=lease,
         cameras=cameras,
         bring_up=BringUpStore(config.data.bringup_path),
+        captures=CaptureStore(config.data.captures_dir),
     )
 
     @asynccontextmanager
@@ -86,6 +90,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             lambda: ctx.library,
             bundle.photon_sim,
         )
+        ctx.placement = PlacementService(machine, ctx.feeders, lambda: ctx.library)
         await machine.start()
         try:
             yield
@@ -93,6 +98,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             ctx.library.close()
             ctx.library = None
             ctx.feeders = None
+            ctx.placement = None
             await cameras.shutdown()
             await operations.shutdown()
             await presence.shutdown()
@@ -108,6 +114,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(board_routes.router)
     app.include_router(job_routes.router)
     app.include_router(feeder_routes.router)
+    app.include_router(placement_routes.router)
     app.include_router(websocket.router)
 
     @app.exception_handler(MachineError)

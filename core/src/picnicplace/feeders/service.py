@@ -26,6 +26,7 @@ from picnicplace.machine.service import MachineService
 from picnicplace.machine.simulator import SimulatorDriver
 from picnicplace.operations import OperationManager
 from picnicplace.schemas import Operation, WireModel
+from picnicplace.simparts import PartShape, SimulatedParts
 
 log = logging.getLogger(__name__)
 
@@ -137,12 +138,18 @@ class FeederService:
         self._sim = simulated
         self._sim_full: dict[int, bool] = {}
         self._tapes: tuple[TapeScene, ...] | None = None
+        self._tape_at: dict[int, TapeScene] = {}
+        self.sim_parts: SimulatedParts | None = None
         if simulated is not None:
             simulated.on_change = self._invalidate
             machine.scene_tapes = self._scene_tapes
             driver = machine.driver
             if isinstance(driver, SimulatorDriver):
-                driver.on_pick = self._sim_picked
+                parts = SimulatedParts(self._take_from_tape)
+                self.sim_parts = parts
+                driver.pick_source = lambda nozzle, x, y, angle: parts.pick(nozzle, x, y, angle)
+                driver.on_drop = parts.drop
+                machine.scene_parts = parts.scene
 
     # --- State ---------------------------------------------------------------------------
 
@@ -264,28 +271,48 @@ class FeederService:
             return part.tape.pitch
         return DEFAULT_PITCH
 
-    def start_feed(self, slot_id: str, distance: float | None) -> Operation:
-        slot = self.slot(slot_id)
-        bus = self._need_bus()
-        address = self._address(slot)
-        self._machine.check_can_actuate()
+    def check_can_feed(self, slot: Slot) -> None:
+        self._need_bus()
+        self._address(slot)
         if slot.id not in self._initialized:
             raise FeederError(f"{slot.label}: no initialized feeder; scan the feeders first")
+
+    async def feed(self, slot: Slot, distance: float | None = None) -> float:
+        """Feed a slot's tape and wait for it. For use inside an operation. Returns the
+        distance fed."""
+        self.check_can_feed(slot)
+        bus = self._need_bus()
+        address = self._address(slot)
         mm = self.feed_distance(slot) if distance is None else distance
+        try:
+            await bus.feed(address, mm)
+        except FeederError as e:
+            self._errors[slot.id] = str(e)
+            raise
+        self._errors.pop(slot.id, None)
+        if mm > 0:
+            self._sim_full[address] = True
+        self._invalidate()
+        return mm
+
+    def start_feed(self, slot_id: str, distance: float | None) -> Operation:
+        slot = self.slot(slot_id)
+        self._machine.check_can_actuate()
+        self.check_can_feed(slot)
 
         async def work() -> str:
-            try:
-                await bus.feed(address, mm)
-            except FeederError as e:
-                self._errors[slot.id] = str(e)
-                raise
-            self._errors.pop(slot.id, None)
-            if mm > 0:
-                self._sim_full[address] = True
-            self._invalidate()
+            mm = await self.feed(slot, distance)
             return f"{slot.label}: fed {mm:g} mm."
 
         return self._operations.start("feed", work)
+
+    def part(self, slot: Slot) -> Part | None:
+        """The library part in the feeder found in a slot, if it has one."""
+        uuid = self._found.get(slot.id)
+        return self._part(self._store.setup.feeders.get(uuid) if uuid else None)
+
+    def bank(self, slot: Slot) -> FeederBank:
+        return self._banks[slot.bank]
 
     async def identify(self, slot_id: str) -> bool:
         slot = self.slot(slot_id)
@@ -471,7 +498,7 @@ class FeederService:
         library = self._library()
         if assignment is None or assignment.part_id is None or library is None:
             return None
-        return library.part(assignment.part_id)
+        return library.find_part(assignment.part_id)
 
     def _invalidate(self) -> None:
         self._tapes = None
@@ -480,17 +507,25 @@ class FeederService:
         error = sim_slot_error(slot.number)
         return Point(x=slot.pick.x + error.x, y=slot.pick.y + error.y)
 
-    def _sim_picked(self, _nozzle: str, x: float, y: float) -> None:
-        if self._sim is None:
-            return
-        for address in self._sim.feeders:
-            slot = next((s for s in self._slots if s.address == address), None)
-            if slot is None:
+    def _take_from_tape(self, x: float, y: float) -> tuple[PartShape, float, float, float] | None:
+        """The part in the pocket under (x, y), taken out of its tape: its shape, true
+        center, and angle. None if no full pocket is there."""
+        self._scene_tapes()
+        for address, tape in self._tape_at.items():
+            a = math.radians(tape.rotation)
+            phase = tape.advance % tape.pitch
+            along = phase if phase <= tape.pitch / 2 else phase - tape.pitch
+            px = tape.pick[0] + math.cos(a) * along
+            py = tape.pick[1] + math.sin(a) * along
+            if math.hypot(px - x, py - y) > SIM_PICK_RADIUS:
                 continue
-            p = self._sim_true_pick(slot)
-            if math.hypot(p.x - x, p.y - y) <= SIM_PICK_RADIUS:
-                self._sim_full[address] = False
-                self._invalidate()
+            if not tape.pick_full:
+                return None
+            self._sim_full[address] = False
+            self._invalidate()
+            shape = PartShape(body=tape.body, pads=tape.pads)
+            return shape, px, py, tape.rotation + tape.part_rotation
+        return None
 
     def _scene_tapes(self) -> tuple[TapeScene, ...]:
         if self._tapes is None:
@@ -502,6 +537,7 @@ class FeederService:
             return ()
         library = self._library()
         tapes: list[TapeScene] = []
+        self._tape_at = {}
         by_address = {s.address: s for s in self._slots if s.address is not None}
         for address, feeder in sorted(self._sim.feeders.items()):
             slot = by_address.get(address)
@@ -512,7 +548,7 @@ class FeederService:
             assignment = self._store.setup.feeders.get(feeder.uuid.hex().upper())
             part = self._part(assignment)
             footprint = (
-                library.footprint(part.footprint_id) if part is not None and library else None
+                library.find_footprint(part.footprint_id) if part is not None and library else None
             )
             tape = part.tape if part is not None else None
             width = tape.width if tape is not None and tape.width else 8.0
@@ -555,6 +591,7 @@ class FeederService:
                     feeder_length=bank.length,
                 )
             )
+            self._tape_at[address] = tapes[-1]
         return tuple(tapes)
 
 

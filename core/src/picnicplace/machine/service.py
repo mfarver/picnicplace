@@ -40,10 +40,18 @@ from picnicplace.machine.errors import (
     VisionError,
     ZNotSafeError,
 )
-from picnicplace.machine.profile import Camera, Location, MachineProfile, Point, nozzle_height
+from picnicplace.machine.profile import (
+    Camera,
+    Location,
+    MachineProfile,
+    Nozzle,
+    Point,
+    nozzle_height,
+)
 from picnicplace.operations import OperationManager
 from picnicplace.presence import PresenceTracker
 from picnicplace.schemas import MachineState, MachineStateEvent, Operation
+from picnicplace.simparts import HeldPart, PlacedPart
 from picnicplace.vision.fiducial import find_circle, find_circles
 
 log = logging.getLogger(__name__)
@@ -106,6 +114,10 @@ class MachineService:
         self._grab: Grab | None = None
         self.scene_tapes: Callable[[], tuple[TapeScene, ...]] | None = None
         """Simulated feeder tapes for the synthetic cameras, if any."""
+        self.scene_parts: (
+            Callable[[], tuple[tuple[tuple[str, HeldPart], ...], tuple[PlacedPart, ...]]] | None
+        ) = None
+        """Simulated parts held by nozzles and placed on boards, if any."""
 
         driver.on_change = self._on_driver_change
         presence.on_change.append(self._publish_state)
@@ -156,11 +168,14 @@ class MachineService:
                 and not isinstance(value, bool)
                 and sensor.past_threshold(float(value))
             )
+        held_parts, placed = self.scene_parts() if self.scene_parts is not None else ((), ())
         return SceneState(
             position={a: round(v, 3) for a, v in self._driver.scene_position.items()},
             outputs=dict(self._driver.outputs),
             held=held,
-            tapes=self.scene_tapes() if self.scene_tapes is not None else (),
+            tapes=self.scene_tapes() if self.scene_tapes is not None else None,
+            held_parts=held_parts,
+            placed=placed,
         )
 
     @property
@@ -314,6 +329,97 @@ class MachineService:
         self._check_can_move()
         self._check_homed()
         return self._start_operation(kind, work)
+
+    async def frame(self, camera_id: str, settle: bool = True) -> Frame:
+        """A frame taken now (after the camera's settle time, if asked)."""
+        camera = next((c for c in self._profile.cameras if c.id == camera_id), None)
+        if camera is None:
+            raise VisionError(f"no camera {camera_id!r}")
+        if self._grab is None:
+            raise VisionError("the cameras are not available")
+        if settle:
+            await asyncio.sleep(camera.settle_s)
+        frame = await self._grab(camera_id, time.time(), FRAME_WAIT_S)
+        if frame is None:
+            raise VisionError(f"the {camera.label.lower()} sent no frame")
+        return frame
+
+    # --- Nozzles, for tasks such as picking and placing ----------------------------------
+
+    def nozzle(self, nozzle_id: str) -> Nozzle:
+        n = next((n for n in self._profile.nozzles if n.id == nozzle_id), None)
+        if n is None:
+            raise InvalidTargetError(f"no nozzle {nozzle_id!r}")
+        return n
+
+    def nozzle_angle(self, nozzle: Nozzle) -> float:
+        return self._driver.position.get(nozzle.rotation_axis, 0.0)
+
+    def nozzle_position(self, nozzle: Nozzle) -> Point:
+        here = self._driver.position
+        return Point(x=here["X"] + nozzle.offset.x, y=here["Y"] + nozzle.offset.y)
+
+    async def move_axes(self, target: Mapping[str, float]) -> None:
+        """Move to an absolute position, at safe Z if X or Y change. For use in a task."""
+        self._check_target(target)
+        await self._run_steps(self._plan_move(target), None)
+
+    async def move_nozzle_over(
+        self, nozzle: Nozzle, x: float, y: float, angle: float | None = None
+    ) -> None:
+        """Put a nozzle over a point (at safe Z), turned to ``angle`` if given."""
+        target = {"X": x - nozzle.offset.x, "Y": y - nozzle.offset.y}
+        if angle is not None:
+            target[nozzle.rotation_axis] = angle
+        await self.move_axes(target)
+
+    async def lower_nozzle(self, nozzle: Nozzle, height: float) -> None:
+        """Move a nozzle down (or up) to a height: 0 at the top, negative down."""
+        await self.move_axes({nozzle.z_axis: nozzle.z_sign * min(0.0, height)})
+
+    async def raise_nozzles(self) -> None:
+        await self.move_axes({axis: TRAVEL_HEIGHT for axis in sorted(self._z_axes)})
+
+    async def suction(self, nozzle: Nozzle, on: bool) -> None:
+        """Pump and valve on together, or both off (which lets go of a part)."""
+        outputs = [o for o in (nozzle.pump_output, nozzle.valve_output) if o is not None]
+        for output in outputs if on else reversed(outputs):
+            await self._driver.set_output(output, on)
+
+    async def holds_part(self, nozzle: Nozzle, expect: bool, timeout_s: float) -> bool | None:
+        """Wait up to ``timeout_s`` for the vacuum to say whether a part is held (until
+        it says ``expect``). None if the nozzle has no vacuum sensor."""
+        sensor = self._inputs.get(nozzle.vacuum_input or "")
+        if sensor is None:
+            return None
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_s
+        while True:
+            await self._driver.refresh_input(sensor.id)
+            value = self._driver.inputs.get(sensor.id)
+            held = (
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and sensor.past_threshold(float(value))
+            )
+            if held == expect or loop.time() >= deadline:
+                return held
+            await asyncio.sleep(0.03)
+
+    def vacuum_reading(self, nozzle: Nozzle) -> float | None:
+        value = self._driver.inputs.get(nozzle.vacuum_input or "")
+        return float(value) if isinstance(value, (int, float)) else None
+
+    async def set_light(self, camera: Camera, on: bool) -> None:
+        if camera.light_output is not None:
+            await self._driver.set_output(camera.light_output, on)
+
+    def image_to_machine(self, camera: Camera, right: float, down: float) -> tuple[float, float]:
+        """A displacement seen in a camera's image (mm right and mm down, as shown) as a
+        machine X/Y displacement. Up-looking cameras see the machine mirrored left to
+        right, as from below."""
+        x, y = self._profile.image_to_machine(right, down)
+        return (-x, y) if camera.looking == "up" else (x, y)
 
     def top_camera(self) -> Camera:
         camera = next(

@@ -1,0 +1,91 @@
+# Website and documentation for picnicplace.org, built with Zensical
+# (https://zensical.org). Build it with `make docs`, or preview it with `make docs-serve`.
+
+[project]
+site_name = "PicnicPlace"
+site_description = "Open source, network-first pick-and-place controller"
+site_url = "https://picnicplace.org/"
+repo_url = "https://github.com/mfarver/picnicplace"
+repo_name = "mfarver/picnicplace"
+edit_uri = "edit/main/docs/"
+extra_css = ["stylesheets/extra.css"]
+copyright = "PicnicPlace is licensed under the Mozilla Public License 2.0."
+
+nav = [
+  { "Home" = "index.md" },
+  { "Get started" = [
+    { "Try the simulator" = "guide/try-the-simulator.md" },
+    { "Bring up a machine" = "guide/bring-up.md" },
+  ] },
+  { "Design" = [
+    { "Specification" = "SPEC.md" },
+    { "Network API" = "api/overview.md" },
+  ] },
+  { "Hardware" = [
+    { "LumenPnP v4" = "hardware/lumenpnp-v4.md" },
+  ] },
+  { "Project" = [
+    { "Contributing" = "contributing.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"
+logo = "brand/picnicplace-icon-transparent.png"
+favicon = "brand/picnicplace-icon-transparent.png"
+features = [
+  "content.action.edit",
+  "content.code.copy",
+  "content.tabs.link",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "teal"
+accent = "teal"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "teal"
+accent = "teal"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/mfarver/picnicplace"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+pymdownx.blocks.caption = {}
+pymdownx.details = {}
+pymdownx.highlight.anchor_linenums = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.superfences = {}
+pymdownx.tabbed.alternate_style = true
+pymdownx.tasklist.custom_checkbox = true

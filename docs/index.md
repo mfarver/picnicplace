@@ -1,0 +1,117 @@
+---
+title: Open source pick-and-place control
+description: PicnicPlace is an open source, network-first controller for PCB pick-and-place machines.
+hide:
+  - navigation
+  - toc
+---
+
+<div class="pp-hero" markdown>
+
+![PicnicPlace. Assemble. Picnic. Repeat.](brand/picnicplace-logo-cropped.jpg){ .pp-logo }
+
+<div markdown>
+
+# PicnicPlace
+
+An open source controller for PCB pick-and-place machines, built **network first**: a
+headless core runs the machine, and every interface connects to it over a documented API.
+
+[Try the simulator](guide/try-the-simulator.md){ .md-button .md-button--primary }
+[Read the specification](SPEC.md){ .md-button }
+
+</div>
+</div>
+
+!!! warning "Early development"
+
+    PicnicPlace can't assemble a board yet. Manual control (homing, jogging, vacuum,
+    cameras) and visual homing work against the built-in simulator; the first tests on a
+    real LumenPnP are next. Follow along on
+    [GitHub](https://github.com/mfarver/picnicplace).
+
+![PicnicPlace Studio's machine view, running against the simulator](images/studio-machine.jpg){ .pp-screenshot }
+/// caption
+PicnicPlace Studio connected to the simulator: the machine map with staging plates, feeder
+rails, and the area every nozzle can reach, live camera views, and the head with vacuum,
+pumps, valves, and lights.
+///
+
+## Why PicnicPlace
+
+<div class="grid cards" markdown>
+
+-   **Network first**
+
+    ---
+
+    The core (`picnicd`) runs on the machine's computer. The Studio GUI, scripts, and
+    your own tools connect over a versioned REST and WebSocket API. Closing a browser
+    never stops a job.
+
+-   **Safety in the core**
+
+    ---
+
+    Moves travel at safe Z, a physical safe-Z sensor is authoritative when the machine
+    has one, only one client controls the machine at a time, and STOP works from
+    anywhere.
+
+-   **Vision built in**
+
+    ---
+
+    OpenCV-based fiducial finding, visual homing on the machine's datum, and camera
+    calibration, with part alignment and board fiducials to come.
+
+-   **Develop without a machine**
+
+    ---
+
+    A built-in simulator renders camera images from the machine's real geometry, and a
+    fake Marlin firmware exercises the real driver, so most work needs no hardware.
+
+-   **Machine profiles**
+
+    ---
+
+    One TOML file describes a machine: axes, nozzles, cameras, staging plates, keep-outs,
+    and I/O. Where boards can go is computed from where every nozzle can reach.
+
+-   **Open, and staying open**
+
+    ---
+
+    Licensed under the MPL-2.0: improvements to PicnicPlace stay open, while separate
+    add-ons and API clients may use any license.
+
+</div>
+
+## Machines
+
+The first machine is the **LumenPnP v4.1**, with a machine profile built from the
+machine's published design files and real OpenPnP configurations. A
+[Quad 4c](SPEC.md#10-lumenpnp-target)
+conversion is planned next, and the driver and profile design avoid LumenPnP-only
+assumptions. See the [LumenPnP notes](hardware/lumenpnp-v4.md).
+
+## Roadmap
+
+| Milestone | Scope | Status |
+|---|---|---|
+| M0: Skeleton | Core, simulator, event socket, Studio shell | Done |
+| M1: Manual control | Machine profiles, machine view, jogging, safe-Z interlock, control lease, Marlin driver, camera streams | Done, awaiting real-machine tests |
+| M2: Calibration | Visual homing and camera scale (done); lens calibration, nozzle offsets and runout, guided wizards | In progress |
+| M3: Single placement | Parts and packages, Photon feeders, pick, bottom-camera alignment, place | Planned |
+| M4: Jobs | KiCad and CSV import, board fiducials, planner, run history | Planned |
+| M5: 1.0 | Strip and tray feeders, packaging, user documentation, OpenPnP library import | Planned |
+
+## Get involved
+
+PicnicPlace is written in Python (the core) and TypeScript with React (the Studio), on
+Linux first, with macOS supported for development. Start with
+[Contributing](contributing.md), and open an issue or a discussion on
+[GitHub](https://github.com/mfarver/picnicplace).
+
+<small>LumenPnP and Opulo are trademarks of Opulo. PicnicPlace is an independent project
+and is not affiliated with or endorsed by Opulo.</small>

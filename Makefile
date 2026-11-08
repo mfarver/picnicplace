@@ -1,6 +1,6 @@
 # Developer shortcuts. Requires uv (https://docs.astral.sh/uv/) and Node.js 22+.
 
-.PHONY: setup core studio dev api check test
+.PHONY: setup core studio dev api check test docs docs-serve
 
 setup:  ## Install core and Studio dependencies
 	cd core && uv sync
@@ -22,3 +22,9 @@ check:  ## Run every linter, type checker, and test suite (what CI runs)
 	cd studio && npm run lint && npm run typecheck && npm test && npm run build
 
 test: check
+
+docs:  ## Build the website (picnicplace.org) into site/
+	cd core && uv run --group docs zensical build --strict --clean -f ../zensical.toml
+
+docs-serve:  ## Preview the website at http://localhost:8000
+	cd core && uv run --group docs zensical serve -f ../zensical.toml

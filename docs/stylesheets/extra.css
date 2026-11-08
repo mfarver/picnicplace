@@ -1,0 +1,45 @@
+/* PicnicPlace site styles, on top of the Zensical theme. */
+
+:root {
+  /* The logo artwork's background, so the cropped logo blends in. */
+  --pp-logo-bg: #c0d4d2;
+}
+
+.pp-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 18rem) minmax(0, 1fr);
+  gap: 2rem;
+  align-items: center;
+  margin: 1rem 0 2rem;
+}
+
+.pp-hero h1 {
+  margin: 0 0 0.6rem;
+  font-weight: 700;
+}
+
+.pp-hero p {
+  font-size: 1.05rem;
+}
+
+.pp-logo {
+  width: 100%;
+  border-radius: 0.6rem;
+  background: var(--pp-logo-bg);
+}
+
+.pp-screenshot {
+  border-radius: 0.5rem;
+  box-shadow: 0 0.4rem 1.6rem rgb(0 0 0 / 25%);
+}
+
+@media screen and (max-width: 44.9375em) {
+  .pp-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .pp-logo {
+    max-width: 16rem;
+  }
+}

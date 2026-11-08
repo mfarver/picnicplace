@@ -12,13 +12,15 @@ jobs), and every user interface, including the modern PicnicPlace Studio GUI, co
 it over a documented, versioned API. Closing a GUI never ends a running job, and
 anyone can build their own client.
 
-The reference hardware is the **Opulo LumenPnP v4**.
+The reference hardware is the **Opulo LumenPnP v4.1**.
 
 ## Status
 
-Early development (milestone M0). The core runs against a built-in machine simulator,
-and the Studio GUI connects to it; real hardware support begins in M1. Start with the
-[specification](docs/SPEC.md).
+Early development. Manual control (machine profiles, the machine view, jogging, the
+safe-Z interlock, the Marlin driver, and camera streams) and the start of calibration
+(visual homing and camera scale) work against the built-in simulator. First tests on a
+real LumenPnP are next. Start with the [specification](docs/SPEC.md), or visit
+**[picnicplace.org](https://picnicplace.org)**.
 
 ## Try it
 

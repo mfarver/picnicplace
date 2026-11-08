@@ -51,8 +51,16 @@ class SimulatorDriver(MotionDriver):
     name = "simulator"
     firmware = "PicnicPlace simulator"
 
-    def __init__(self, profile: MachineProfile, time_scale: float = 1.0) -> None:
+    def __init__(
+        self,
+        profile: MachineProfile,
+        time_scale: float = 1.0,
+        home_error: tuple[float, float] = (0.0, 0.0),
+    ) -> None:
         super().__init__()
+        self._home_error = home_error
+        self._offset = {"X": 0.0, "Y": 0.0}
+        """Physical minus reported position: what homing gets wrong."""
         self._profile = profile
         self._time_scale = time_scale
         self._position = {a.name: 0.0 for a in profile.axes}
@@ -139,6 +147,9 @@ class SimulatorDriver(MotionDriver):
             for axis in group:
                 self._position[axis.name] = axis.home
                 self._z_slip.pop(axis.name, None)
+            if group and group[0].name not in z_axes:
+                # Endstops are only so repeatable: the head really stops a little off.
+                self._offset = {"X": self._home_error[0], "Y": self._home_error[1]}
             self._update_parts()
             self._notify()
 
@@ -174,6 +185,17 @@ class SimulatorDriver(MotionDriver):
 
     async def reset(self) -> None:
         self._stop.clear()
+
+    @property
+    def scene_position(self) -> Mapping[str, float]:
+        return {a: v + self._offset.get(a, 0.0) for a, v in self._position.items()}
+
+    async def set_position(self, position: Mapping[str, float]) -> None:
+        for axis, value in position.items():
+            # The head does not move: its physical position stays, the reported one changes.
+            self._offset[axis] = self._offset.get(axis, 0.0) + self._position[axis] - value
+            self._position[axis] = value
+        self._notify()
 
     def inject_z_slip(self, axis: str, distance: float) -> None:
         """Simulator only: make the real position of a Z axis differ from the commanded one."""

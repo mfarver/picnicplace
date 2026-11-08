@@ -714,9 +714,40 @@ code,
   stroke-width: 1.5;
 }
 
+.mv-plate rect {
+  fill: var(--mv-plate);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.mv-plate-hole {
+  fill: var(--bg);
+}
+
+.mv-plate-knockout {
+  fill: var(--bg);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
 .mv-work {
   fill: var(--mv-work);
   stroke: var(--mv-work-stroke);
+  stroke-width: 1;
+}
+
+.mv-reach rect {
+  fill: none;
+  stroke: var(--accent);
+  stroke-opacity: 0.35;
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.mv-keepout rect {
+  fill: var(--danger-soft);
+  stroke: var(--danger);
+  stroke-opacity: 0.6;
   stroke-width: 1;
 }
 

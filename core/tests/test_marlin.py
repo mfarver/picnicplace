@@ -30,7 +30,7 @@ async def lumenpnp(
     variant: str | None = None, **fake: float | bool
 ) -> AsyncIterator[tuple[MarlinDriver, FakeMarlin]]:
     """A Marlin driver connected to a fake LumenPnP."""
-    profile = load_profile("lumenpnp-v4")
+    profile = load_profile("lumenpnp-v4.1")
     assert profile.marlin is not None
     host = FakeMarlinMemory(FakeSettings(time_scale=FAST, **fake))  # type: ignore[arg-type]
     driver = MarlinDriver(profile, profile.marlin.resolved(variant), host.open, connect_wait_s=0)
@@ -195,7 +195,7 @@ def test_emergency_stop_and_reset() -> None:
 
 def test_connection_lost() -> None:
     async def scenario() -> None:
-        profile = load_profile("lumenpnp-v4")
+        profile = load_profile("lumenpnp-v4.1")
         assert profile.marlin is not None
         host = FakeMarlinMemory(FakeSettings(time_scale=FAST))
         transports = []
@@ -222,7 +222,7 @@ def test_over_a_pseudo_terminal() -> None:
     async def scenario() -> None:
         fake = FakeMarlinPty(FakeSettings(time_scale=FAST))
         path = await fake.start()
-        profile = load_profile("lumenpnp-v4")
+        profile = load_profile("lumenpnp-v4.1")
         assert profile.marlin is not None
         driver = MarlinDriver(
             profile,
@@ -252,7 +252,7 @@ def test_core_with_fake_marlin() -> None:
 
     from .conftest import connect, fast_config
 
-    config = fast_config(machine={"driver": "fake-marlin", "profile": "lumenpnp-v4"})
+    config = fast_config(machine={"driver": "fake-marlin", "profile": "lumenpnp-v4.1"})
     with TestClient(create_app(config)) as client, connect(client) as s:
         state = s.state()
         assert state["driver"] == "marlin"
@@ -275,7 +275,7 @@ def test_core_starts_without_the_machine() -> None:
     config = fast_config(
         machine={
             "driver": "marlin",
-            "profile": "lumenpnp-v4",
+            "profile": "lumenpnp-v4.1",
             "marlin": {"port": "/dev/does-not-exist", "connect_wait_s": 0},
         }
     )
@@ -311,7 +311,7 @@ def test_wrong_variant_warns() -> None:
 
 def test_unanswered_command_drops_the_link() -> None:
     async def scenario() -> None:
-        profile = load_profile("lumenpnp-v4")
+        profile = load_profile("lumenpnp-v4.1")
         assert profile.marlin is not None
         host = FakeMarlinMemory(FakeSettings(time_scale=FAST))
         driver = MarlinDriver(

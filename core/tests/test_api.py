@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -140,3 +142,14 @@ def test_openapi_includes_event_schemas(client: TestClient) -> None:
     assert "ServerEvent" in schemas
     assert "HelloEvent" in schemas
     assert "ClientMessage" in schemas
+
+
+def test_studio_pages_are_not_cached(tmp_path: Path) -> None:
+    (tmp_path / "index.html").write_text("<!doctype html><title>Studio</title>")
+    (tmp_path / "app-abc123.js").write_text("console.log(1)")
+    config = fast_config(server={"studio_dir": str(tmp_path)})
+    with TestClient(create_app(config)) as client:
+        page = client.get("/")
+        assert page.status_code == 200
+        assert page.headers["cache-control"] == "no-cache"
+        assert "cache-control" not in client.get("/app-abc123.js").headers

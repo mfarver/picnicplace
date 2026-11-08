@@ -18,11 +18,12 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from picnicplace.camera.source import CameraSource, Image
+from picnicplace.camera.source import CameraSource, Frame, Image
 from picnicplace.machine.profile import Camera, MachineProfile, Point
 
 # Colors, BGR.
-BED = (58, 62, 64)
+BED = (30, 30, 32)
+"""The LumenPnP's staging plates: black PCBs."""
 PCB = (40, 92, 30)
 COPPER = (70, 150, 200)
 SILK = (225, 230, 230)
@@ -59,8 +60,17 @@ class SceneState:
 class _Canvas:
     """Maps machine millimeters to pixels for one frame."""
 
-    def __init__(self, size: tuple[int, int], center: Point, fov_w: float, mirror_x: bool):
+    def __init__(
+        self,
+        size: tuple[int, int],
+        center: Point,
+        fov_w: float,
+        mirror_x: bool,
+        x_sign: int = 1,
+        y_sign: int = 1,
+    ):
         self.w, self.h = size
+        self.x_sign, self.y_sign = x_sign, y_sign
         self.ppm = self.w / fov_w
         self.cx, self.cy = center.x, center.y
         self.mirror = mirror_x
@@ -68,11 +78,14 @@ class _Canvas:
         self.half_h = self.h / self.ppm / 2
 
     def px(self, x: float, y: float) -> tuple[int, int]:
-        dx = x - self.cx
+        # Images are shown like the machine view, front at the bottom (see
+        # MachineProfile.x_points and y_points).
+        dx = (x - self.cx) * self.x_sign
+        dy = (y - self.cy) * self.y_sign
         if self.mirror:
             dx = -dx
         u = self.w / 2 + dx * self.ppm
-        v = self.h / 2 - (y - self.cy) * self.ppm
+        v = self.h / 2 - dy * self.ppm
         return round(u * ONE), round(v * ONE)
 
     def visible(self, x: float, y: float, margin: float) -> bool:
@@ -162,13 +175,37 @@ class TopRenderer:
         w, h = self.size
         head = Point(x=state.position.get("X", 0.0), y=state.position.get("Y", 0.0))
         center = Point(x=head.x + self.camera.position.x, y=head.y + self.camera.position.y)
-        canvas = _Canvas(self.size, center, self.camera.field_of_view.x, mirror_x=False)
+        canvas = _Canvas(
+            self.size,
+            center,
+            self.camera.field_of_view.x,
+            False,
+            self.profile.x_sign,
+            self.profile.y_sign,
+        )
         img = np.empty((h, w, 3), dtype=np.uint8)
         img[:] = BED
+        self._plates(canvas, img)
         self._board(canvas, img)
         self._locations(canvas, img)
         self._feeders(canvas, img)
         return _finish(img, self._grain, self.camera, state)
+
+    def _plates(self, c: _Canvas, img: Image) -> None:
+        for plate in self.profile.staging_plates:
+            for hole in plate.holes:
+                if c.visible(hole.x, hole.y, 5):
+                    c.circle(img, hole.x, hole.y, plate.hole_diameter / 2, (10, 10, 10))
+            for corner in plate.corner_holes:
+                x, y = plate.center.x + corner.x, plate.center.y + corner.y
+                if c.visible(x, y, 6):
+                    c.circle(img, x, y, plate.corner_hole_diameter / 2, (10, 10, 10))
+            if plate.knockout_diameter and c.visible(
+                plate.center.x, plate.center.y, plate.knockout_diameter
+            ):
+                c.circle(
+                    img, plate.center.x, plate.center.y, plate.knockout_diameter / 2, (6, 6, 8)
+                )
 
     def _board(self, c: _Canvas, img: Image) -> None:
         b = self.board
@@ -192,11 +229,20 @@ class TopRenderer:
     def _locations(self, c: _Canvas, img: Image) -> None:
         for loc in self.profile.locations:
             p = loc.position
-            if not c.visible(p.x, p.y, 10):
+            if not c.visible(p.x, p.y, 50):
                 continue
-            if loc.kind == "homing_fiducial":
-                c.circle(img, p.x, p.y, 3.0, (20, 20, 20))
-                c.circle(img, p.x, p.y, 1.0, (235, 235, 235))
+            if loc.kind == "homing_fiducial" and loc.style == "lumenpnp-datum":
+                _datum_board(c, img, p)
+            elif loc.kind == "homing_fiducial":
+                r = (loc.diameter or 2.0) / 2
+                c.circle(img, p.x, p.y, r * 3, (20, 20, 20))
+                c.circle(img, p.x, p.y, r, (235, 235, 235))
+            elif loc.kind == "fiducial":
+                # A 20 x 20 mm green board (cal-fid) with a copper dot in a mask opening.
+                c.rect(img, p.x, p.y, 20, 20, 0, (40, 110, 45))
+                r = (loc.diameter or 1.0) / 2
+                c.circle(img, p.x, p.y, r * 2, (95, 140, 150))
+                c.circle(img, p.x, p.y, r, DATUM_COPPER)
             elif loc.kind == "discard":
                 c.rect(img, p.x, p.y, 14, 14, 0, (30, 30, 30))
                 c.rect(img, p.x, p.y, 12, 12, 0, (15, 15, 15))
@@ -237,6 +283,89 @@ class TopRenderer:
                     c.circle(img, qx + nx * 3.5, qy + ny * 3.5, 0.75, BED)
 
 
+# --- The LumenPnP datum board ----------------------------------------------------------
+# Geometry from the board's KiCad design (PCB-0004 rev 00), relative to its center
+# fiducial, in machine millimeters (+Y toward the back). Bare copper shows through the
+# solder mask wherever the design opens the mask over the ground pour.
+
+# LumenPnP boards are black with white silkscreen. The copper finish is not known; gold
+# (ENIG) is assumed.
+DATUM_MASK = (34, 33, 32)  # black mask over copper
+DATUM_COPPER = (120, 190, 225)  # exposed copper
+DATUM_FR4 = (95, 140, 150)  # bare board, where neither mask nor copper covers it
+DATUM_SILK = (225, 228, 230)
+
+DATUM_OUTLINE = [
+    (-40, -10),
+    (-20, 10),
+    (20, 10),
+    (40, -10),
+    (40, -20),
+    (35, -25),
+    (25, -25),
+    (15, -15),
+    (-15, -15),
+    (-25, -25),
+    (-35, -25),
+    (-40, -20),
+]
+DATUM_FIDUCIALS = [(-10, 5), (10, 5), (-10, -10), (10, -10), (-35, -20), (35, -20)]
+"""Other 1 mm fiducials on the board, in 3 mm openings (FID2 to FID7)."""
+DATUM_HOLES = [(-15, 0), (-30, -15), (30, -15), (15, 0)]
+
+
+def _datum_board(c: _Canvas, img: Image, o: Point) -> None:
+    # The offsets below have +X to the operator's right and +Y toward the back, with the
+    # board's notched edge (ruler side) toward the front, facing the bottom camera.
+    # Turned into machine coordinates by which way the machine's axes point (on a
+    # LumenPnP, +Y is the front).
+    def at(dx: float, dy: float) -> tuple[float, float]:
+        return o.x + c.x_sign * dx, o.y + c.y_sign * dy
+
+    pts = np.array([c.px(*at(dx, dy)) for dx, dy in DATUM_OUTLINE], dtype=np.int32)
+    cv2.fillPoly(img, [pts], DATUM_MASK, cv2.LINE_AA, SHIFT)
+
+    def line(a: tuple[float, float], b: tuple[float, float], w: float = 0.15) -> None:
+        cx, cy = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+        length = math.dist(a, b) + w
+        angle = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
+        c.rect(img, *at(cx, cy), length, w, angle, DATUM_COPPER)
+
+    # A 5 mm grid of exposed copper lines, 20 x 15 mm, from 5 mm behind the center
+    # fiducial to 10 mm in front of it, broken where it meets the 8 mm ring.
+    for x in (-10, -5, 5, 10):
+        line((x, 5), (x, -10))
+    for y in (5, -5, -10):
+        line((-10, y), (10, y))
+    line((-10, 0), (-4, 0))
+    line((4, 0), (10, 0))
+    line((0, 5), (0, 4))
+    line((0, -4), (0, -10))
+    c.ring(img, *at(0, 0), 4.0, 0.15, DATUM_COPPER)
+
+    # The reticle: a ring with four ticks pointing in at the fiducial.
+    c.ring(img, *at(0, 0), 2.35, 0.3, DATUM_COPPER)
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        line((dx * 1.6, dy * 1.6), (dx * 2.85, dy * 2.85), 0.3)
+
+    # Fiducials: a 1 mm copper dot isolated in an opening of bare board.
+    c.circle(img, *at(0, 0), 1.0, DATUM_FR4)
+    c.circle(img, *at(0, 0), 0.5, DATUM_COPPER)
+    for dx, dy in DATUM_FIDUCIALS:
+        c.circle(img, *at(dx, dy), 1.5, DATUM_FR4)
+        c.circle(img, *at(dx, dy), 0.5, DATUM_COPPER)
+
+    # A 5 mm exposed copper disc, mounting holes, and a 30 mm ruler along the front edge.
+    c.circle(img, *at(-22.5, -7.5), 2.5, DATUM_COPPER)
+    c.ring(img, *at(22.5, -7.5), 1.25, 0.15, DATUM_SILK)  # the one front silkscreen mark
+    for dx, dy in DATUM_HOLES:
+        c.circle(img, *at(dx, dy), 3.2, DATUM_COPPER)
+        c.circle(img, *at(dx, dy), 1.6, (15, 15, 15))
+    for i in range(31):
+        length = 3.0 if i % 10 == 0 else 2.0 if i % 5 == 0 else 1.0
+        line((-15 + i, -15), (-15 + i, -15 + length), 0.15)
+
+
 class BottomRenderer:
     def __init__(self, profile: MachineProfile, camera: Camera, size: tuple[int, int]):
         self.profile = profile
@@ -248,7 +377,14 @@ class BottomRenderer:
 
     def render(self, state: SceneState) -> Image:
         w, h = self.size
-        canvas = _Canvas(self.size, self.camera.position, self.camera.field_of_view.x, True)
+        canvas = _Canvas(
+            self.size,
+            self.camera.position,
+            self.camera.field_of_view.x,
+            True,
+            self.profile.x_sign,
+            self.profile.y_sign,
+        )
         img = np.empty((h, w, 3), dtype=np.uint8)
         img[:] = (12, 12, 14)
         head_x, head_y = state.position.get("X", 0.0), state.position.get("Y", 0.0)
@@ -315,6 +451,12 @@ class SyntheticCamera(CameraSource):
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
+
+    async def fresh_frame(self, after: float, wait_s: float) -> Frame | None:
+        """Render the present right away rather than waiting for the next tick."""
+        image = await asyncio.to_thread(self._renderer.render, self._scene())
+        await self._publish(image)
+        return self.latest
 
     async def _run(self) -> None:
         last: SceneState | None = None

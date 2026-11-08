@@ -6,6 +6,7 @@ import { useAction } from "../api/useAction";
 import { useCameras } from "../api/useCameras";
 import { useDescription } from "../api/useDescription";
 import type { Operation } from "../api/types";
+import { CalibrationPanel } from "../components/CalibrationPanel";
 import { CameraView } from "../components/CameraView";
 import { JogPanel } from "../components/JogPanel";
 import { LeaseStatus } from "../components/LeaseStatus";
@@ -130,6 +131,15 @@ export function MachineWorkspace() {
             canMove={canMove}
             onJog={jog}
             onSafeZ={safeZ}
+          />
+        )}
+
+        {description?.locations.some((loc) => loc.kind === "homing_fiducial") && (
+          <CalibrationPanel
+            operations={operations}
+            canRun={canMove && !!machine?.homed}
+            onVisualHome={() => void track(() => api.POST("/api/v1/machine/visual-home"))}
+            onCameraScale={() => void track(() => api.POST("/api/v1/machine/camera-scale"))}
           />
         )}
       </aside>

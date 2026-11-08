@@ -14,7 +14,7 @@ from picnicplace.machine.profile import (
 
 
 def lumenpnp_data() -> dict[str, Any]:
-    text = (resources.files("picnicplace") / "profiles" / "lumenpnp-v4.toml").read_text()
+    text = (resources.files("picnicplace") / "profiles" / "lumenpnp-v4.1.toml").read_text()
     return tomllib.loads(text)
 
 
@@ -26,14 +26,14 @@ def test_builtin_profiles_load(profile_id: str) -> None:
 
 def test_reversed_range_threshold() -> None:
     # LumenPnP vacuum counts grow more negative with more vacuum.
-    profile = load_profile("lumenpnp-v4")
+    profile = load_profile("lumenpnp-v4.1")
     vac = next(i for i in profile.inputs if i.id == "vac_n1")
     assert not vac.past_threshold(-1_500_000)  # open nozzle
     assert vac.past_threshold(-2_000_000)  # part held
 
 
 def test_lumenpnp_shared_z() -> None:
-    profile = load_profile("lumenpnp-v4")
+    profile = load_profile("lumenpnp-v4.1")
     n1, n2 = profile.nozzles
     assert n1.z_axis == n2.z_axis == "Z"
     # Lowering Z lowers N1 while N2 stays parked at the top, and the reverse.
@@ -65,3 +65,19 @@ def test_safe_z_input_must_be_digital() -> None:
     data["safe_z_input"] = "vac_n1"
     with pytest.raises(ValidationError, match="safe_z_input"):
         MachineProfile.model_validate(data)
+
+
+def test_placement_area_is_where_every_nozzle_reaches() -> None:
+    profile = load_profile("lumenpnp-v4.1")
+    reach = profile.nozzle_reach
+    area = profile.placement_area
+    assert area is not None
+    # The nozzles are about 47 mm apart: each reaches farther on its own side, and boards
+    # go only where both can.
+    assert area.x_min == pytest.approx(max(r.x_min for r in reach.values()))
+    assert area.x_max == pytest.approx(min(r.x_max for r in reach.values()))
+    assert reach["N1"].x_min < area.x_min < reach["N2"].x_min + 0.001
+    # Within the staging plates, and the keep-outs sit inside it.
+    assert area.y_max == pytest.approx(213.071)
+    for zone in profile.keep_outs:
+        assert area.x_min < zone.area.x_min and zone.area.x_max < area.x_max

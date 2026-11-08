@@ -15,10 +15,24 @@ heartbeat_timeout_s = 6.0  # Silent clients are disconnected after this long.
 # "simulator": no hardware. "marlin": a real machine on marlin.port.
 # "fake-marlin": the real Marlin driver talking to a built-in fake LumenPnP firmware.
 driver = "simulator"
-profile = "lumenpnp-v4"    # Built-in profile ID, or a path to a profile TOML file.
+profile = "lumenpnp-v4.1"    # Built-in profile ID, or a path to a profile TOML file.
 sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times faster.
 speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 when
                            # bringing up a machine. Homing speed is the firmware's.
+
+# Places you choose for this machine: where rejected parts are dropped, and where the
+# head waits. These values are from one LumenPnP; set your own.
+# [[machine.locations]]
+# id = "discard"
+# label = "Discard"
+# kind = "discard"
+# position = { x = 157.751, y = 112.758 }
+#
+# [[machine.locations]]
+# id = "park"
+# label = "Park"
+# kind = "park"
+# position = { x = 389.292, y = 421.551 }
 
 [machine.marlin]
 # port = "/dev/ttyACM0"    # Required for driver = "marlin".
@@ -32,8 +46,12 @@ command_timeout_s = 10.0
 # left out are simulated with the simulator and fake-marlin drivers, and off otherwise.
 # Find stable device paths with: ls /dev/v4l/by-id/ (or run picnicplace-probe).
 #
-# The flips and rotations below are what OpenPnP used on a LumenPnP v4. Check yours: jog
-# +X and the picture should move left (the head moves right over a still bed).
+# PicnicPlace shows camera images as you see the machine from the front, like the
+# machine view. On a LumenPnP that is turned 180 degrees from OpenPnP's images (+Y up),
+# so the values below are OpenPnP's flips turned 180 degrees: the top camera needs no
+# flip (OpenPnP: X and Y), the bottom camera flip_y (OpenPnP: X). Check yours: jog with
+# the Right arrow and the picture should slide left (the head moves right over a still
+# bed); jog Back and it should slide down.
 #
 # [cameras.top]
 # source = "device"          # "device", "synthetic", or "none"
@@ -41,12 +59,10 @@ command_timeout_s = 10.0
 # width = 1920
 # height = 1080
 # fps = 30
-# flip_x = true
-# flip_y = true
 # rotation = 0.37            # degrees counterclockwise, after flips
 #
 # [cameras.bottom]
 # source = "device"
 # device = "/dev/v4l/by-id/usb-..._LumenPnP_Bottom-video-index0"
-# flip_x = true
+# flip_y = true
 # rotation = 0.09

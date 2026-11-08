@@ -25,7 +25,7 @@ class DriverBundle:
 def build_driver(config: MachineConfig) -> DriverBundle:
     profile = config.machine_profile
     if config.driver == "simulator":
-        return DriverBundle(SimulatorDriver(profile, config.sim_time_scale))
+        return DriverBundle(SimulatorDriver(profile, config.sim_time_scale, config.sim_home_error))
 
     assert profile.marlin is not None  # checked when the config was loaded
     settings = profile.marlin.resolved(config.marlin.variant)

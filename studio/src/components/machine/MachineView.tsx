@@ -1,13 +1,64 @@
 import { Maximize } from "lucide-react";
-import { type PointerEvent, useCallback, useEffect, useRef, useState } from "react";
-import type { FeederBank, MachineProfile, MachineState, Point } from "../../api/types";
+import {
+  createContext,
+  type PointerEvent,
+  type SVGProps,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import type {
+  FeederBank,
+  MachineProfile,
+  MachineState,
+  Point,
+  StagingPlate,
+} from "../../api/types";
 
 /**
  * Scale overhead map of the machine (spec section 8.3).
  *
- * Drawn in machine millimeters. SVG's Y axis points down and the machine's points to the
- * back, so every Y is negated when drawn. Scroll to zoom, drag to pan.
+ * Drawn in machine millimeters with every Y negated (SVG's Y points down), then flipped
+ * as the profile says (x_points, y_points) so the front of the machine is at the bottom
+ * of the screen and X runs the way the operator sees it. Labels are flipped back so
+ * they stay readable. Scroll to zoom, drag to pan.
  */
+
+interface Orientation {
+  /** +1 if +X points right as the operator sees it, -1 if left. */
+  xs: number;
+  /** +1 if +Y points toward the back, -1 if toward the front. */
+  ys: number;
+}
+
+function orientation(d: MachineProfile): Orientation {
+  return { xs: d.x_points === "left" ? -1 : 1, ys: d.y_points === "front" ? -1 : 1 };
+}
+
+const ViewOrientation = createContext<Orientation>({ xs: 1, ys: 1 });
+
+/** SVG text at a point in the drawing, kept readable however the view is flipped. */
+function Label({ x, y, ...rest }: SVGProps<SVGTextElement> & { x: number; y: number }) {
+  const { xs, ys } = useContext(ViewOrientation);
+  const flipped = xs !== 1 || ys !== 1;
+  return (
+    <text
+      x={x}
+      y={y}
+      transform={
+        flipped ? `translate(${x} ${y}) scale(${xs} ${ys}) translate(${-x} ${-y})` : undefined
+      }
+      {...rest}
+    />
+  );
+}
+
+/** Drawing coordinates (after the view's flips) to machine coordinates. */
+function toMachine(p: { x: number; y: number }, o: Orientation): Point {
+  return { x: o.xs * p.x, y: -o.ys * p.y };
+}
 
 interface ViewBox {
   x: number;
@@ -34,8 +85,10 @@ function fitView(d: MachineProfile, size?: { width: number; height: number }): V
   const { bed } = d;
   const bw = bed.x_max - bed.x_min + 2 * MARGIN;
   const bh = bed.y_max - bed.y_min + 2 * MARGIN;
-  const bx = bed.x_min - MARGIN;
-  const by = -bed.y_max - MARGIN;
+  // The bed's corners in drawing coordinates: (xs * x, -ys * y).
+  const { xs, ys } = orientation(d);
+  const bx = Math.min(xs * bed.x_min, xs * bed.x_max) - MARGIN;
+  const by = Math.min(-ys * bed.y_min, -ys * bed.y_max) - MARGIN;
   if (!size || size.width <= 0 || size.height <= 0) return { x: bx, y: by, w: bw, h: bh };
 
   const reserve = size.width - INSET_RESERVE_PX > size.width * 0.5 ? INSET_RESERVE_PX : 0;
@@ -151,7 +204,7 @@ export function MachineView({ description, machine, canMove = false, onMoveTo }:
       return;
     }
     const p = svgPoint(svg, e.clientX, e.clientY);
-    if (p) setCursor({ x: p.x, y: -p.y });
+    if (p) setCursor(toMachine(p, orientation(description)));
   };
 
   const onPointerUp = (e: PointerEvent<SVGSVGElement>) => {
@@ -161,7 +214,7 @@ export function MachineView({ description, machine, canMove = false, onMoveTo }:
     // A click, not a drag: pick a move target. Moving needs a second, explicit step.
     const svg = svgRef.current;
     const p = svg ? svgPoint(svg, e.clientX, e.clientY) : null;
-    if (p) setTarget({ x: p.x, y: -p.y });
+    if (p) setTarget(toMachine(p, orientation(description)));
   };
 
   const endDrag = () => {
@@ -207,91 +260,79 @@ export function MachineView({ description, machine, canMove = false, onMoveTo }:
         role="img"
         aria-label={`Overhead view of the ${description.name}`}
       >
-        <Grid description={description} />
-        <rect
-          className="mv-bed"
-          x={description.bed.x_min}
-          y={-description.bed.y_max}
-          width={description.bed.x_max - description.bed.x_min}
-          height={description.bed.y_max - description.bed.y_min}
-          rx={4}
-        />
-        {description.work_area && (
-          <g>
+        <ViewOrientation.Provider value={orientation(description)}>
+          <g transform={`scale(${orientation(description).xs} ${orientation(description).ys})`}>
+            <Grid description={description} />
             <rect
-              className="mv-work"
-              x={description.work_area.x_min}
-              y={-description.work_area.y_max}
-              width={description.work_area.x_max - description.work_area.x_min}
-              height={description.work_area.y_max - description.work_area.y_min}
+              className="mv-bed"
+              x={description.bed.x_min}
+              y={-description.bed.y_max}
+              width={description.bed.x_max - description.bed.x_min}
+              height={description.bed.y_max - description.bed.y_min}
+              rx={4}
             />
-            <text
-              className="mv-label mv-label-faint"
-              x={(description.work_area.x_min + description.work_area.x_max) / 2}
-              y={-(description.work_area.y_min + description.work_area.y_max) / 2}
-              textAnchor="middle"
-              dominantBaseline="middle"
-            >
-              Board area
-            </text>
-          </g>
-        )}
-        {xAxis && yAxis && (
-          <rect
-            className="mv-travel"
-            x={xAxis.min}
-            y={-yAxis.max}
-            width={xAxis.max - xAxis.min}
-            height={yAxis.max - yAxis.min}
-          >
-            <title>Travel limits</title>
-          </rect>
-        )}
-
-        {description.feeder_banks.map((bank) => (
-          <FeederBankShape key={bank.id} bank={bank} />
-        ))}
-
-        {description.cameras
-          .filter((c) => c.mount === "fixed")
-          .map((c) => (
-            <g key={c.id} className="mv-camera">
-              <title>{c.label}</title>
+            {description.staging_plates.map((plate) => (
+              <PlateShape key={plate.id} plate={plate} />
+            ))}
+            <PlacementLayer description={description} />
+            {xAxis && yAxis && (
               <rect
-                x={c.position.x - c.field_of_view.x / 2}
-                y={-c.position.y - c.field_of_view.y / 2}
-                width={c.field_of_view.x}
-                height={c.field_of_view.y}
-              />
-              <circle cx={c.position.x} cy={-c.position.y} r={3} />
-              <text
-                className="mv-label"
-                x={c.position.x}
-                y={-c.position.y + c.field_of_view.y / 2 + 8}
-                textAnchor="middle"
+                className="mv-travel"
+                x={xAxis.min}
+                y={-yAxis.max}
+                width={xAxis.max - xAxis.min}
+                height={yAxis.max - yAxis.min}
               >
-                {c.label}
-              </text>
-            </g>
-          ))}
+                <title>Travel limits</title>
+              </rect>
+            )}
 
-        {description.locations.map((loc) => (
-          <g key={loc.id} className={`mv-location mv-${loc.kind}`}>
-            <title>{loc.label}</title>
-            <LocationMarker kind={loc.kind} at={loc.position} />
-            <text
-              className="mv-label"
-              x={loc.position.x}
-              y={-loc.position.y + 14}
-              textAnchor="middle"
-            >
-              {loc.label}
-            </text>
+            {description.feeder_banks.map((bank) => (
+              <FeederBankShape key={bank.id} bank={bank} />
+            ))}
+
+            {description.cameras
+              .filter((c) => c.mount === "fixed")
+              .map((c) => (
+                <g key={c.id} className="mv-camera">
+                  <title>{c.label}</title>
+                  <rect
+                    x={c.position.x - c.field_of_view.x / 2}
+                    y={-c.position.y - c.field_of_view.y / 2}
+                    width={c.field_of_view.x}
+                    height={c.field_of_view.y}
+                  />
+                  <circle cx={c.position.x} cy={-c.position.y} r={3} />
+                  <Label
+                    className="mv-label"
+                    x={c.position.x}
+                    y={-c.position.y + c.field_of_view.y / 2 + 8}
+                    textAnchor="middle"
+                  >
+                    {c.label}
+                  </Label>
+                </g>
+              ))}
+
+            {description.locations.map((loc) => (
+              <g key={loc.id} className={`mv-location mv-${loc.kind}`}>
+                <title>{loc.label}</title>
+                <LocationMarker kind={loc.kind} at={loc.position} />
+                <Label
+                  className="mv-label"
+                  x={loc.position.x}
+                  y={-loc.position.y + 14}
+                  textAnchor="middle"
+                >
+                  {loc.label}
+                </Label>
+              </g>
+            ))}
+
+            {head && <Head description={description} at={head} />}
+            {target && <TargetMarker at={target} />}
           </g>
-        ))}
-
-        {head && <Head description={description} at={head} />}
-        {target && <TargetMarker at={target} />}
+        </ViewOrientation.Provider>
       </svg>
 
       <div className="mv-overlay mv-overlay-top">
@@ -338,6 +379,97 @@ function Grid({ description }: { description: MachineProfile }) {
   return <g className="mv-grid">{lines}</g>;
 }
 
+/**
+ * Where boards can go: the area every nozzle can reach, within the staging plates, minus
+ * the keep-outs (such as the bottom camera). Each nozzle's own reach is a dashed outline.
+ */
+function PlacementLayer({ description }: { description: MachineProfile }) {
+  const area = description.placement_area;
+  const reaches = Object.entries(description.nozzle_reach);
+  return (
+    <g>
+      {area && (
+        <g>
+          <rect
+            className="mv-work"
+            x={area.x_min}
+            y={-area.y_max}
+            width={area.x_max - area.x_min}
+            height={area.y_max - area.y_min}
+          >
+            <title>Placement area: every nozzle can reach here</title>
+          </rect>
+          <Label
+            className="mv-label mv-label-faint"
+            // Off center: the middle is usually a keep-out (the bottom camera).
+            x={(area.x_min + area.x_max) / 2}
+            y={-(area.y_min + (area.y_max - area.y_min) * 0.2)}
+            textAnchor="middle"
+            dominantBaseline="middle"
+          >
+            Placement area
+          </Label>
+        </g>
+      )}
+      {reaches.map(([id, r]) => (
+        <g key={id} className="mv-reach">
+          <rect x={r.x_min} y={-r.y_max} width={r.x_max - r.x_min} height={r.y_max - r.y_min}>
+            <title>{`${id} reach`}</title>
+          </rect>
+        </g>
+      ))}
+      {description.keep_outs.map((zone) => (
+        <g key={zone.id} className="mv-keepout">
+          <title>{`${zone.label}: no boards here`}</title>
+          <rect
+            x={zone.area.x_min}
+            y={-zone.area.y_max}
+            width={zone.area.x_max - zone.area.x_min}
+            height={zone.area.y_max - zone.area.y_min}
+          />
+        </g>
+      ))}
+    </g>
+  );
+}
+
+/** A staging plate: its outline, tapped holes, and camera knockout. */
+function PlateShape({ plate }: { plate: StagingPlate }) {
+  const { center, size } = plate;
+  return (
+    <g className="mv-plate">
+      <title>{plate.label}</title>
+      <rect
+        x={center.x - size.x / 2}
+        y={-center.y - size.y / 2}
+        width={size.x}
+        height={size.y}
+        rx={3}
+      />
+      {plate.holes.map((h, i) => (
+        <circle key={i} className="mv-plate-hole" cx={h.x} cy={-h.y} r={plate.hole_diameter / 2} />
+      ))}
+      {plate.corner_holes.map((c, i) => (
+        <circle
+          key={`c${i}`}
+          className="mv-plate-hole"
+          cx={center.x + c.x}
+          cy={-(center.y + c.y)}
+          r={plate.corner_hole_diameter / 2}
+        />
+      ))}
+      {plate.knockout_diameter && (
+        <circle
+          className="mv-plate-knockout"
+          cx={center.x}
+          cy={-center.y}
+          r={plate.knockout_diameter / 2}
+        />
+      )}
+    </g>
+  );
+}
+
 /** Feeders in one bank: the body extends behind the pick location, against the feed. */
 function FeederBankShape({ bank }: { bank: FeederBank }) {
   const ahead = 8;
@@ -370,6 +502,7 @@ function LocationMarker({ kind, at }: { kind: string; at: Point }) {
   const y = -at.y;
   switch (kind) {
     case "homing_fiducial":
+    case "fiducial":
       return (
         <g>
           <circle cx={x} cy={y} r={5} className="mv-ring" />
@@ -380,9 +513,9 @@ function LocationMarker({ kind, at }: { kind: string; at: Point }) {
       return (
         <g>
           <rect x={x - 7} y={y - 7} width={14} height={14} rx={3} />
-          <text className="mv-park-letter" x={x} y={y + 3.5} textAnchor="middle">
+          <Label className="mv-park-letter" x={x} y={y + 3.5} textAnchor="middle">
             P
-          </text>
+          </Label>
         </g>
       );
     case "tip_holder":
@@ -426,14 +559,14 @@ function Head({ description, at }: { description: MachineProfile; at: Point }) {
           <circle className="mv-nozzle" cx={n.offset.x} cy={-n.offset.y} r={3.5}>
             <title>{n.label}</title>
           </circle>
-          <text
+          <Label
             className="mv-label mv-label-head"
             x={n.offset.x}
             y={-n.offset.y + 11}
             textAnchor="middle"
           >
             {n.id}
-          </text>
+          </Label>
         </g>
       ))}
       <path className="mv-crosshair" d={`M${-reach} 0 H${reach} M0 ${-reach} V${reach}`} />

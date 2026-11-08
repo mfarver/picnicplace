@@ -32,9 +32,9 @@ def test_unknown_profile_rejected() -> None:
 
 def test_profile_path_is_relative_to_config(tmp_path: Path) -> None:
     (tmp_path / "profiles").mkdir()
-    builtin = Path(__file__).parents[1] / "src/picnicplace/profiles/lumenpnp-v4.toml"
+    builtin = Path(__file__).parents[1] / "src/picnicplace/profiles/lumenpnp-v4.1.toml"
     (tmp_path / "profiles/mine.toml").write_text(
-        builtin.read_text().replace('name = "LumenPnP v4"', 'name = "My machine"')
+        builtin.read_text().replace('name = "LumenPnP v4.1"', 'name = "My machine"')
     )
     (tmp_path / "picnicd.toml").write_text('[machine]\nprofile = "profiles/mine.toml"\n')
     config = load_config(tmp_path / "picnicd.toml")
@@ -44,4 +44,41 @@ def test_profile_path_is_relative_to_config(tmp_path: Path) -> None:
 def test_example_config_loads() -> None:
     config = load_config(EXAMPLE)
     assert config.machine.driver == "simulator"
-    assert config.machine.machine_profile.id == "lumenpnp-v4"
+    assert config.machine.machine_profile.id == "lumenpnp-v4.1"
+
+
+def test_machine_locations_are_added_to_the_profile() -> None:
+    config = Config.model_validate(
+        {
+            "machine": {
+                "profile": "lumenpnp-v4.1",
+                "locations": [
+                    {
+                        "id": "discard",
+                        "label": "Discard",
+                        "kind": "discard",
+                        "position": {"x": 150, "y": 110},
+                    },
+                ],
+            }
+        }
+    )
+    profile = config.machine.machine_profile
+    assert [loc.id for loc in profile.locations][-1] == "discard"
+    assert profile.marlin is not None  # driver settings survive the merge
+    with pytest.raises(ValidationError, match="duplicate location id"):
+        Config.model_validate(
+            {
+                "machine": {
+                    "profile": "lumenpnp-v4.1",
+                    "locations": [
+                        {
+                            "id": "homing_fiducial",
+                            "label": "X",
+                            "kind": "discard",
+                            "position": {"x": 0, "y": 0},
+                        },
+                    ],
+                }
+            }
+        )

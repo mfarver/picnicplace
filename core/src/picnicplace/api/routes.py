@@ -112,6 +112,32 @@ async def move(ctx: Context, body: MoveRequest) -> Operation:
 
 
 @router.post(
+    "/machine/visual-home",
+    tags=["machine"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def visual_home(ctx: Context) -> Operation:
+    """Find the homing fiducial with the top camera and correct X and Y. Homing does
+    this by itself when the profile enables visual homing; this runs it again."""
+    return ctx.machine.start_visual_home()
+
+
+@router.post(
+    "/machine/camera-scale",
+    tags=["machine"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def measure_camera_scale(ctx: Context) -> Operation:
+    """Measure the top camera's millimeters per pixel by moving over the homing fiducial.
+    The result is reported in the operation's message; it is not saved yet."""
+    return ctx.machine.start_measure_camera_scale()
+
+
+@router.post(
     "/machine/jog",
     tags=["machine"],
     status_code=status.HTTP_202_ACCEPTED,

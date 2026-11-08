@@ -8,17 +8,21 @@ endpoint) all work from the same profile.
 Profiles are TOML files. Built-in ones ship in ``picnicplace/profiles``; a config can also
 point at a profile file by path.
 
-Coordinates are machine coordinates in millimeters: X increases to the right and Y
-increases toward the back of the machine, seen from above. The head position (the X and Y
-axis positions) is the center of the top camera; nozzles are offsets from it.
+Coordinates are the machine's own, in millimeters, as its firmware reports them. Machines
+differ in where the origin is and which way the axes point; ``x_points`` and ``y_points``
+say which way +X and +Y point for an operator facing the machine. Clients draw the
+machine and its camera images that way (front at the bottom of the screen), so the
+picture, the map, and the jog arrows all agree with what the operator sees. The head position (the
+X and Y axis positions) is the center of the top camera; nozzles are offsets from it.
 """
 
+import math
 import tomllib
 from importlib import resources
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from picnicplace.machine.marlin.settings import MarlinSettings
 
@@ -102,13 +106,31 @@ class Camera(ProfileModel):
     looking: Literal["down", "up"]
     field_of_view: Point = Field(description="Width (x) and height (y) of the view in mm.")
     light_output: str | None = None
+    settle_s: float = Field(
+        default=0.25,
+        ge=0,
+        description="Wait this long after a move before using a frame (vibration, latency).",
+    )
 
 
 class Location(ProfileModel):
     id: str
     label: str
-    kind: Literal["homing_fiducial", "tip_holder", "discard", "park"]
+    kind: Literal["homing_fiducial", "fiducial", "tip_holder", "discard", "park"]
     position: Point
+    z: float | None = Field(
+        default=None, description="Height of the surface, where it matters (fiducials)."
+    )
+    diameter: float | None = Field(
+        default=None, gt=0, description="Fiducials: the round mark's diameter in mm."
+    )
+    style: Literal["dot", "lumenpnp-datum"] = Field(
+        default="dot",
+        description=(
+            "How the simulator draws a fiducial: a plain dot, or the LumenPnP datum board "
+            "(a 1 mm copper dot in a reticle, with rings, a 5 mm grid, and corner fiducials)."
+        ),
+    )
 
 
 class FeederBank(ProfileModel):
@@ -142,6 +164,61 @@ class ValueRange(ProfileModel):
     def fraction(self, value: float) -> float:
         """Where a value falls from min (0) to max (1), unclamped."""
         return (value - self.min) / (self.max - self.min)
+
+
+class StagingPlate(ProfileModel):
+    """A plate that boards and trays mount on, with a grid of tapped holes."""
+
+    id: str
+    label: str
+    center: Point
+    size: Point
+    hole_pitch: float = Field(gt=0, description="Spacing of the hole grid, in mm.")
+    hole_diameter: float = Field(gt=0)
+    hole_columns: int = Field(ge=1, description="Columns of the grid, centered on the plate.")
+    hole_rows: int = Field(ge=1)
+    checkerboard: bool = Field(
+        default=True, description="Holes only where column + row (from the center) is even."
+    )
+    corner_holes: list[Point] = Field(
+        default_factory=list[Point],
+        description=(
+            "Large mounting holes, relative to the center; grid holes near them are left out."
+        ),
+    )
+    corner_hole_diameter: float = 5.3
+    knockout_diameter: float | None = Field(
+        default=None,
+        description=(
+            "A round opening at the center (for a bottom camera); grid holes inside are left out."
+        ),
+    )
+
+    @computed_field
+    @property
+    def holes(self) -> list[Point]:
+        """Grid hole centers, in machine coordinates."""
+        out: list[Point] = []
+        half_c, half_r = (self.hole_columns - 1) // 2, (self.hole_rows - 1) // 2
+        for i in range(-half_c, half_c + 1):
+            for j in range(-half_r, half_r + 1):
+                if self.checkerboard and (i + j) % 2:
+                    continue
+                dx, dy = i * self.hole_pitch, j * self.hole_pitch
+                if self.knockout_diameter and math.hypot(dx, dy) < self.knockout_diameter / 2 + 3:
+                    continue
+                if any(math.hypot(dx - c.x, dy - c.y) < 10 for c in self.corner_holes):
+                    continue
+                out.append(Point(x=self.center.x + dx, y=self.center.y + dy))
+        return out
+
+
+class KeepOut(ProfileModel):
+    """An area where boards cannot go, such as the bottom camera or a fiducial mount."""
+
+    id: str
+    label: str
+    area: Rect
 
 
 class Input(ProfileModel):
@@ -192,6 +269,21 @@ class MachineProfile(ProfileModel):
     safe_z: float = Field(
         description="A nozzle at or above this height (on its own Z scale) is safe for travel."
     )
+    x_points: Literal["right", "left"] = Field(
+        default="right",
+        description="Which way +X points for an operator facing the machine.",
+    )
+    y_points: Literal["back", "front"] = Field(
+        default="back",
+        description="Which way +Y points for an operator facing the machine.",
+    )
+    visual_homing: bool = Field(
+        default=False,
+        description=(
+            "After homing, center the top camera on the homing fiducial and correct the "
+            "X/Y coordinates to its known position."
+        ),
+    )
     safe_z_input: str | None = Field(
         default=None,
         description="A digital input that reads true when every nozzle is at safe height.",
@@ -200,6 +292,11 @@ class MachineProfile(ProfileModel):
     cameras: list[Camera] = Field(default_factory=list[Camera])
     locations: list[Location] = Field(default_factory=list[Location])
     feeder_banks: list[FeederBank] = Field(default_factory=list[FeederBank])
+    staging_plates: list[StagingPlate] = Field(default_factory=list[StagingPlate])
+    keep_outs: list[KeepOut] = Field(
+        default_factory=list[KeepOut],
+        description="Areas inside the placement area where boards cannot be mounted.",
+    )
     inputs: list[Input] = Field(default_factory=list[Input])
     outputs: list[Output] = Field(default_factory=list[Output])
     marlin: MarlinSettings | None = Field(
@@ -257,6 +354,67 @@ class MachineProfile(ProfileModel):
                 raise ValueError("safe_z_input must name a digital input")
         return self
 
+    @property
+    def x_sign(self) -> int:
+        """+1 if +X points right (as the operator sees it), -1 if left."""
+        return 1 if self.x_points == "right" else -1
+
+    @property
+    def y_sign(self) -> int:
+        """+1 if +Y points toward the back, -1 if toward the front."""
+        return 1 if self.y_points == "back" else -1
+
+    def image_to_machine(self, right: float, down: float) -> tuple[float, float]:
+        """A displacement seen in a top camera image (mm right and mm down, as shown to
+        the operator, front at the bottom) as a machine X/Y displacement."""
+        return self.x_sign * right, -self.y_sign * down
+
+    @computed_field
+    @property
+    def nozzle_reach(self) -> dict[str, Rect]:
+        """Where each nozzle can reach: the head's X/Y travel shifted by its offset."""
+        x = next((a for a in self.axes if a.name == "X"), None)
+        y = next((a for a in self.axes if a.name == "Y"), None)
+        if x is None or y is None:
+            return {}
+        return {
+            n.id: Rect(
+                x_min=x.min + n.offset.x,
+                y_min=y.min + n.offset.y,
+                x_max=x.max + n.offset.x,
+                y_max=y.max + n.offset.y,
+            )
+            for n in self.nozzles
+        }
+
+    @computed_field
+    @property
+    def placement_area(self) -> Rect | None:
+        """Where boards can go so that every nozzle can place anywhere on them: the
+        nozzles' reach, all of them, within the staging plates (or the work area). Boards
+        must also stay clear of the keep-outs inside it."""
+        areas = list(self.nozzle_reach.values())
+        if self.staging_plates:
+            areas.append(
+                Rect(
+                    x_min=min(p.center.x - p.size.x / 2 for p in self.staging_plates),
+                    y_min=min(p.center.y - p.size.y / 2 for p in self.staging_plates),
+                    x_max=max(p.center.x + p.size.x / 2 for p in self.staging_plates),
+                    y_max=max(p.center.y + p.size.y / 2 for p in self.staging_plates),
+                )
+            )
+        elif self.work_area is not None:
+            areas.append(self.work_area)
+        if not areas:
+            return None
+        x_min = max(a.x_min for a in areas)
+        y_min = max(a.y_min for a in areas)
+        x_max = min(a.x_max for a in areas)
+        y_max = min(a.y_max for a in areas)
+        if x_min >= x_max or y_min >= y_max:
+            return None
+        return Rect(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
+
     def axis(self, name: str) -> Axis:
         return next(a for a in self.axes if a.name == name)
 
@@ -292,7 +450,7 @@ def is_profile_path(ref: str) -> bool:
 
 
 def load_profile(ref: str) -> MachineProfile:
-    """Load a profile by built-in ID (such as ``lumenpnp-v4``) or by path to a TOML file."""
+    """Load a profile by built-in ID (such as ``lumenpnp-v4.1``) or by path to a TOML file."""
     if is_profile_path(ref):
         try:
             data = tomllib.loads(Path(ref).read_text(encoding="utf-8"))

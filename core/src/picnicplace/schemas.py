@@ -80,6 +80,9 @@ class Operation(WireModel):
     kind: str
     status: OperationStatus
     error: str | None = None
+    message: str | None = Field(
+        default=None, description="What the operation found or did, for people."
+    )
     started_at: datetime
     finished_at: datetime | None = None
 

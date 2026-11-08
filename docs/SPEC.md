@@ -545,8 +545,9 @@ assume LumenPnP-only behavior.
 PicnicPlace should ship a **LumenPnP machine profile** so a new user selects their machine
 version and goes straight to guided calibration.
 
-**Reference machine: LumenPnP v4.** The first machine profile targets v4. Other versions
-are community supported. The test machine was built by Opulo around October 2026, so it
+**Reference machine: LumenPnP v4.1.** The first machine profile targets v4.1 (PCB
+staging plates, bottom camera at the center). v4.2 (metal plates, camera near one end)
+needs its own profile. Other versions are community supported. The test machine was built by Opulo around October 2026, so it
 should have recent stock firmware.
 
 The Marlin driver reads the firmware name and version (`M115`) on connect, records it in
@@ -559,9 +560,9 @@ refusing to connect.
 |---|---|
 | **M0 — Skeleton** | Repo layout, tooling, CI, `picnicd` with health endpoint, simulator driver, event socket, GUI shell with theme and status bar. |
 | **M1 — Manual control** | Machine description API and I/O state; machine view with head inset (built first, against the simulator); connect to LumenPnP, home, jog, actuators, vacuum readings, safe-Z interlock, MJPEG camera streams in the GUI, control lease, E-stop. |
-| **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. |
+| **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. Started: fiducial finder, visual homing (after `G28`, center the top camera on the homing fiducial and correct X/Y with `G92`), and a camera scale measurement, all tested against the simulator, whose homing has a realistic error for visual homing to find. |
 | **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. |
-| **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. |
+| **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. Boards must lie inside the profile's placement area (where every nozzle can reach, on the staging plates) and clear of its keep-outs; import warns about any placement a nozzle cannot reach. |
 | **M5 — 1.0 polish** | Strip and tray feeders, installer/packaging, docs, OpenPnP library import. |
 
 ## 12. Repository layout

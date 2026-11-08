@@ -68,3 +68,9 @@ class ConnectFailedError(MachineError):
     """The machine could not be reached."""
 
     code = "connect_failed"
+
+
+class VisionError(MachineError):
+    """A vision step could not find what it was looking for."""
+
+    code = "vision_failed"

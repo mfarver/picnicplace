@@ -7,7 +7,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
-from picnicplace.machine.profile import MachineProfile, is_profile_path, load_profile
+from picnicplace.machine.profile import Location, MachineProfile, is_profile_path, load_profile
 
 
 class _Section(BaseModel):
@@ -76,12 +76,26 @@ class MachineConfig(_Section):
         ),
     )
     marlin: MarlinConfig = Field(default_factory=MarlinConfig)
+    locations: list[Location] = Field(
+        default_factory=list[Location],
+        description=(
+            "Places this machine's owner chooses, such as the discard and park positions. "
+            "Added to the machine profile's locations, which describe only the design."
+        ),
+    )
     profile: str = Field(
-        default="lumenpnp-v4",
+        default="lumenpnp-v4.1",
         description="Built-in machine profile ID, or a path to a profile TOML file.",
     )
     sim_time_scale: float = Field(
         default=1.0, gt=0, description="Simulator only: values above 1 run faster than real time."
+    )
+    sim_home_error: tuple[float, float] = Field(
+        default=(0.3, -0.2),
+        description=(
+            "Simulator only: how far (X, Y in mm) the head really is from where homing "
+            "says, as with real endstops. Visual homing finds and corrects it."
+        ),
     )
     speed_scale: float = Field(
         default=1.0,
@@ -97,7 +111,14 @@ class MachineConfig(_Section):
 
     @model_validator(mode="after")
     def _load_profile(self) -> Self:
-        self._profile = load_profile(self.profile)
+        profile = load_profile(self.profile)
+        if self.locations:
+            # Re-validate so the merged locations get the profile's checks (unique IDs).
+            data = profile.model_dump(exclude_computed_fields=True)
+            data["marlin"] = profile.marlin
+            data["locations"] = [*profile.locations, *self.locations]
+            profile = MachineProfile.model_validate(data)
+        self._profile = profile
         if self.driver in ("marlin", "fake-marlin"):
             if self._profile.marlin is None:
                 raise ValueError(f"machine profile {self.profile!r} has no [marlin] settings")

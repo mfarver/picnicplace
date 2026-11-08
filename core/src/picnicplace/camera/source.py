@@ -62,6 +62,22 @@ class CameraSource(ABC):
                 return None
             return self._frame
 
+    async def fresh_frame(self, after: float, wait_s: float) -> Frame | None:
+        """A frame captured at or after ``after`` (a Unix time), for vision."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + wait_s
+        seq = 0
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                return None
+            frame = await self.next_frame(seq, remaining)
+            if frame is None:
+                return None
+            if frame.timestamp >= after:
+                return frame
+            seq = frame.seq
+
     def forget(self) -> None:
         """Drop the last frame (the source stopped, so it no longer shows the present)."""
         self._frame = None

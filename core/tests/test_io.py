@@ -261,7 +261,7 @@ def test_raising_z_with_unchanged_xy_is_allowed(client: TestClient) -> None:
 
 
 def test_firmware_halt_latches_estop() -> None:
-    config = fast_config(machine={"driver": "fake-marlin", "profile": "lumenpnp-v4"})
+    config = fast_config(machine={"driver": "fake-marlin", "profile": "lumenpnp-v4.1"})
     with TestClient(create_app(config)) as client, connect(client) as s:
         s.home()
         driver = client.app.state.ctx.machine.driver  # type: ignore[attr-defined]

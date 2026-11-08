@@ -105,6 +105,13 @@
           "position": {
             "$ref": "#/components/schemas/Point",
             "description": "Head cameras: offset from the head. Fixed cameras: machine coordinates."
+          },
+          "settle_s": {
+            "default": 0.25,
+            "description": "Wait this long after a move before using a frame (vibration, latency).",
+            "minimum": 0.0,
+            "title": "Settle S",
+            "type": "number"
           }
         },
         "required": [
@@ -114,7 +121,8 @@
           "position",
           "looking",
           "field_of_view",
-          "light_output"
+          "light_output",
+          "settle_s"
         ],
         "title": "Camera",
         "type": "object"
@@ -544,6 +552,30 @@
         "title": "JogRequest",
         "type": "object"
       },
+      "KeepOut": {
+        "additionalProperties": false,
+        "description": "An area where boards cannot go, such as the bottom camera or a fiducial mount.",
+        "properties": {
+          "area": {
+            "$ref": "#/components/schemas/Rect"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "area"
+        ],
+        "title": "KeepOut",
+        "type": "object"
+      },
       "LeaseEvent": {
         "properties": {
           "lease": {
@@ -598,6 +630,19 @@
       "Location": {
         "additionalProperties": false,
         "properties": {
+          "diameter": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Fiducials: the round mark's diameter in mm.",
+            "title": "Diameter"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -605,6 +650,7 @@
           "kind": {
             "enum": [
               "homing_fiducial",
+              "fiducial",
               "tip_holder",
               "discard",
               "park"
@@ -618,13 +664,38 @@
           },
           "position": {
             "$ref": "#/components/schemas/Point"
+          },
+          "style": {
+            "default": "dot",
+            "description": "How the simulator draws a fiducial: a plain dot, or the LumenPnP datum board (a 1 mm copper dot in a reticle, with rings, a 5 mm grid, and corner fiducials).",
+            "enum": [
+              "dot",
+              "lumenpnp-datum"
+            ],
+            "title": "Style",
+            "type": "string"
+          },
+          "z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Height of the surface, where it matters (fiducials).",
+            "title": "Z"
           }
         },
         "required": [
           "id",
           "label",
           "kind",
-          "position"
+          "position",
+          "z",
+          "diameter",
+          "style"
         ],
         "title": "Location",
         "type": "object"
@@ -669,6 +740,14 @@
             "title": "Inputs",
             "type": "array"
           },
+          "keep_outs": {
+            "description": "Areas inside the placement area where boards cannot be mounted.",
+            "items": {
+              "$ref": "#/components/schemas/KeepOut"
+            },
+            "title": "Keep Outs",
+            "type": "array"
+          },
           "locations": {
             "items": {
               "$ref": "#/components/schemas/Location"
@@ -679,6 +758,15 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "nozzle_reach": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Rect"
+            },
+            "description": "Where each nozzle can reach: the head's X/Y travel shifted by its offset.",
+            "readOnly": true,
+            "title": "Nozzle Reach",
+            "type": "object"
           },
           "nozzles": {
             "items": {
@@ -693,6 +781,18 @@
             },
             "title": "Outputs",
             "type": "array"
+          },
+          "placement_area": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Rect"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where boards can go so that every nozzle can place anywhere on them: the\nnozzles' reach, all of them, within the staging plates (or the work area). Boards\nmust also stay clear of the keep-outs inside it.",
+            "readOnly": true
           },
           "provisional": {
             "default": false,
@@ -717,6 +817,19 @@
             "description": "A digital input that reads true when every nozzle is at safe height.",
             "title": "Safe Z Input"
           },
+          "staging_plates": {
+            "items": {
+              "$ref": "#/components/schemas/StagingPlate"
+            },
+            "title": "Staging Plates",
+            "type": "array"
+          },
+          "visual_homing": {
+            "default": false,
+            "description": "After homing, center the top camera on the homing fiducial and correct the X/Y coordinates to its known position.",
+            "title": "Visual Homing",
+            "type": "boolean"
+          },
           "work_area": {
             "anyOf": [
               {
@@ -727,6 +840,26 @@
               }
             ],
             "description": "Where boards go."
+          },
+          "x_points": {
+            "default": "right",
+            "description": "Which way +X points for an operator facing the machine.",
+            "enum": [
+              "right",
+              "left"
+            ],
+            "title": "X Points",
+            "type": "string"
+          },
+          "y_points": {
+            "default": "back",
+            "description": "Which way +Y points for an operator facing the machine.",
+            "enum": [
+              "back",
+              "front"
+            ],
+            "title": "Y Points",
+            "type": "string"
           }
         },
         "required": [
@@ -737,13 +870,20 @@
           "work_area",
           "axes",
           "safe_z",
+          "x_points",
+          "y_points",
+          "visual_homing",
           "safe_z_input",
           "nozzles",
           "cameras",
           "locations",
           "feeder_banks",
+          "staging_plates",
+          "keep_outs",
           "inputs",
-          "outputs"
+          "outputs",
+          "nozzle_reach",
+          "placement_area"
         ],
         "title": "MachineProfile",
         "type": "object"
@@ -1277,6 +1417,19 @@
             "title": "Kind",
             "type": "string"
           },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "What the operation found or did, for people.",
+            "title": "Message"
+          },
           "started_at": {
             "format": "date-time",
             "title": "Started At",
@@ -1298,6 +1451,7 @@
           "kind",
           "status",
           "error",
+          "message",
           "started_at",
           "finished_at"
         ],
@@ -1534,6 +1688,105 @@
             "$ref": "#/components/schemas/ErrorEvent"
           }
         ]
+      },
+      "StagingPlate": {
+        "additionalProperties": false,
+        "description": "A plate that boards and trays mount on, with a grid of tapped holes.",
+        "properties": {
+          "center": {
+            "$ref": "#/components/schemas/Point"
+          },
+          "checkerboard": {
+            "default": true,
+            "description": "Holes only where column + row (from the center) is even.",
+            "title": "Checkerboard",
+            "type": "boolean"
+          },
+          "corner_hole_diameter": {
+            "default": 5.3,
+            "title": "Corner Hole Diameter",
+            "type": "number"
+          },
+          "corner_holes": {
+            "description": "Large mounting holes, relative to the center; grid holes near them are left out.",
+            "items": {
+              "$ref": "#/components/schemas/Point"
+            },
+            "title": "Corner Holes",
+            "type": "array"
+          },
+          "hole_columns": {
+            "description": "Columns of the grid, centered on the plate.",
+            "minimum": 1.0,
+            "title": "Hole Columns",
+            "type": "integer"
+          },
+          "hole_diameter": {
+            "exclusiveMinimum": 0.0,
+            "title": "Hole Diameter",
+            "type": "number"
+          },
+          "hole_pitch": {
+            "description": "Spacing of the hole grid, in mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Hole Pitch",
+            "type": "number"
+          },
+          "hole_rows": {
+            "minimum": 1.0,
+            "title": "Hole Rows",
+            "type": "integer"
+          },
+          "holes": {
+            "description": "Grid hole centers, in machine coordinates.",
+            "items": {
+              "$ref": "#/components/schemas/Point"
+            },
+            "readOnly": true,
+            "title": "Holes",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "knockout_diameter": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A round opening at the center (for a bottom camera); grid holes inside are left out.",
+            "title": "Knockout Diameter"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "size": {
+            "$ref": "#/components/schemas/Point"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "center",
+          "size",
+          "hole_pitch",
+          "hole_diameter",
+          "hole_columns",
+          "hole_rows",
+          "checkerboard",
+          "corner_holes",
+          "corner_hole_diameter",
+          "knockout_diameter",
+          "holes"
+        ],
+        "title": "StagingPlate",
+        "type": "object"
       },
       "ValidationError": {
         "properties": {
@@ -2149,6 +2402,73 @@
         ]
       }
     },
+    "/api/v1/machine/camera-scale": {
+      "post": {
+        "description": "Measure the top camera's millimeters per pixel by moving over the homing fiducial.\nThe result is reported in the operation's message; it is not saved yet.",
+        "operationId": "measure_camera_scale_api_v1_machine_camera_scale_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Measure Camera Scale",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
     "/api/v1/machine/connect": {
       "post": {
         "description": "Connect to the machine if it is not connected (for example, after it was off).",
@@ -2609,6 +2929,73 @@
           }
         ],
         "summary": "Reset",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/visual-home": {
+      "post": {
+        "description": "Find the homing fiducial with the top camera and correct X and Y. Homing does\nthis by itself when the profile enables visual homing; this runs it again.",
+        "operationId": "visual_home_api_v1_machine_visual_home_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Visual Home",
         "tags": [
           "machine"
         ]

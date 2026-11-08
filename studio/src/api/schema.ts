@@ -123,6 +123,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/camera-scale": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Measure Camera Scale
+         * @description Measure the top camera's millimeters per pixel by moving over the homing fiducial.
+         *     The result is reported in the operation's message; it is not saved yet.
+         */
+        post: operations["measure_camera_scale_api_v1_machine_camera_scale_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/connect": {
         parameters: {
             query?: never;
@@ -284,6 +305,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/visual-home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Visual Home
+         * @description Find the homing fiducial with the top camera and correct X and Y. Homing does
+         *     this by itself when the profile enables visual homing; this runs it again.
+         */
+        post: operations["visual_home_api_v1_machine_visual_home_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/operations/{operation_id}": {
         parameters: {
             query?: never;
@@ -382,6 +424,12 @@ export interface components {
             mount: "head" | "fixed";
             /** @description Head cameras: offset from the head. Fixed cameras: machine coordinates. */
             position: components["schemas"]["Point"];
+            /**
+             * Settle S
+             * @description Wait this long after a move before using a frame (vibration, latency).
+             * @default 0.25
+             */
+            settle_s: number;
         };
         /** CameraInfo */
         CameraInfo: {
@@ -574,6 +622,17 @@ export interface components {
             /** Speed */
             speed?: number | null;
         };
+        /**
+         * KeepOut
+         * @description An area where boards cannot go, such as the bottom camera or a fiducial mount.
+         */
+        KeepOut: {
+            area: components["schemas"]["Rect"];
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+        };
         /** LeaseEvent */
         LeaseEvent: {
             lease: components["schemas"]["LeaseState"];
@@ -599,16 +658,33 @@ export interface components {
         };
         /** Location */
         Location: {
+            /**
+             * Diameter
+             * @description Fiducials: the round mark's diameter in mm.
+             */
+            diameter: number | null;
             /** Id */
             id: string;
             /**
              * Kind
              * @enum {string}
              */
-            kind: "homing_fiducial" | "tip_holder" | "discard" | "park";
+            kind: "homing_fiducial" | "fiducial" | "tip_holder" | "discard" | "park";
             /** Label */
             label: string;
             position: components["schemas"]["Point"];
+            /**
+             * Style
+             * @description How the simulator draws a fiducial: a plain dot, or the LumenPnP datum board (a 1 mm copper dot in a reticle, with rings, a 5 mm grid, and corner fiducials).
+             * @default dot
+             * @enum {string}
+             */
+            style: "dot" | "lumenpnp-datum";
+            /**
+             * Z
+             * @description Height of the surface, where it matters (fiducials).
+             */
+            z: number | null;
         };
         /** MachineProfile */
         MachineProfile: {
@@ -624,14 +700,32 @@ export interface components {
             id: string;
             /** Inputs */
             inputs: components["schemas"]["Input"][];
+            /**
+             * Keep Outs
+             * @description Areas inside the placement area where boards cannot be mounted.
+             */
+            keep_outs: components["schemas"]["KeepOut"][];
             /** Locations */
             locations: components["schemas"]["Location"][];
             /** Name */
             name: string;
+            /**
+             * Nozzle Reach
+             * @description Where each nozzle can reach: the head's X/Y travel shifted by its offset.
+             */
+            readonly nozzle_reach: {
+                [key: string]: components["schemas"]["Rect"];
+            };
             /** Nozzles */
             nozzles: components["schemas"]["Nozzle"][];
             /** Outputs */
             outputs: components["schemas"]["Output"][];
+            /**
+             * @description Where boards can go so that every nozzle can place anywhere on them: the
+             *     nozzles' reach, all of them, within the staging plates (or the work area). Boards
+             *     must also stay clear of the keep-outs inside it.
+             */
+            readonly placement_area: components["schemas"]["Rect"] | null;
             /**
              * Provisional
              * @description Dimensions are estimates that have not been measured on a real machine.
@@ -648,8 +742,30 @@ export interface components {
              * @description A digital input that reads true when every nozzle is at safe height.
              */
             safe_z_input: string | null;
+            /** Staging Plates */
+            staging_plates: components["schemas"]["StagingPlate"][];
+            /**
+             * Visual Homing
+             * @description After homing, center the top camera on the homing fiducial and correct the X/Y coordinates to its known position.
+             * @default false
+             */
+            visual_homing: boolean;
             /** @description Where boards go. */
             work_area: components["schemas"]["Rect"] | null;
+            /**
+             * X Points
+             * @description Which way +X points for an operator facing the machine.
+             * @default right
+             * @enum {string}
+             */
+            x_points: "right" | "left";
+            /**
+             * Y Points
+             * @description Which way +Y points for an operator facing the machine.
+             * @default back
+             * @enum {string}
+             */
+            y_points: "back" | "front";
         };
         /** MachineState */
         MachineState: {
@@ -888,6 +1004,12 @@ export interface components {
             /** Kind */
             kind: string;
             /**
+             * Message
+             * @description What the operation found or did, for people.
+             * @default null
+             */
+            message: string | null;
+            /**
              * Started At
              * Format: date-time
              */
@@ -988,6 +1110,58 @@ export interface components {
             y_min: number;
         };
         ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
+        /**
+         * StagingPlate
+         * @description A plate that boards and trays mount on, with a grid of tapped holes.
+         */
+        StagingPlate: {
+            center: components["schemas"]["Point"];
+            /**
+             * Checkerboard
+             * @description Holes only where column + row (from the center) is even.
+             * @default true
+             */
+            checkerboard: boolean;
+            /**
+             * Corner Hole Diameter
+             * @default 5.3
+             */
+            corner_hole_diameter: number;
+            /**
+             * Corner Holes
+             * @description Large mounting holes, relative to the center; grid holes near them are left out.
+             */
+            corner_holes: components["schemas"]["Point"][];
+            /**
+             * Hole Columns
+             * @description Columns of the grid, centered on the plate.
+             */
+            hole_columns: number;
+            /** Hole Diameter */
+            hole_diameter: number;
+            /**
+             * Hole Pitch
+             * @description Spacing of the hole grid, in mm.
+             */
+            hole_pitch: number;
+            /** Hole Rows */
+            hole_rows: number;
+            /**
+             * Holes
+             * @description Grid hole centers, in machine coordinates.
+             */
+            readonly holes: components["schemas"]["Point"][];
+            /** Id */
+            id: string;
+            /**
+             * Knockout Diameter
+             * @description A round opening at the center (for a bottom camera); grid holes inside are left out.
+             */
+            knockout_diameter: number | null;
+            /** Label */
+            label: string;
+            size: components["schemas"]["Point"];
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -1315,6 +1489,47 @@ export interface operations {
             };
         };
     };
+    measure_camera_scale_api_v1_machine_camera_scale_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     connect_machine_api_v1_machine_connect_post: {
         parameters: {
             query?: never;
@@ -1590,6 +1805,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MachineState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    visual_home_api_v1_machine_visual_home_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */

@@ -458,6 +458,7 @@ function LocationMarker({ kind, at }: { kind: string; at: Point }) {
   const y = -at.y;
   switch (kind) {
     case "homing_fiducial":
+    case "fiducial":
       return (
         <g>
           <circle cx={x} cy={y} r={5} className="mv-ring" />

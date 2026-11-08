@@ -155,8 +155,9 @@ From the plate's KiCad design (LumenPnP Staging Plate rev 00): 600 × 120 mm, bl
   broken out for the bottom camera. The same design is used for both plates; only the
   one over the camera has its knockout removed.
 - On the reference machine the camera plate is centered on the bottom camera at
-  (217.74, 153.07), so it spans X −82 … 518 and Y 93 … 213. Where the second plate sits
-  is not recorded yet.
+  (217.74, 153.07), so it spans X −82 … 518 and Y 93 … 213.
+- The second plate is toward the back (−Y) of the camera plate, knockout left in. The
+  profile assumes the two butt together (second plate Y −27 … 93); not measured.
 - The datum board stands on a raised spacer just behind the knockout (Y 106) with its
   notched edge toward the camera. A small green board in a clear holder just in front of
   the knockout carries the aiming fiducial, at (217.46, 196.03), Z −31.5, 1.2 mm across.

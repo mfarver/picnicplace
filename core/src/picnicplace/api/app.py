@@ -10,6 +10,8 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import TypeAdapter
+from starlette.responses import Response
+from starlette.types import Scope
 
 from picnicplace import __version__
 from picnicplace.api import cameras as camera_routes
@@ -98,9 +100,21 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.openapi = openapi
 
     if config.server.studio_dir is not None:
-        app.mount("/", StaticFiles(directory=config.server.studio_dir, html=True), name="studio")
+        app.mount("/", StudioFiles(directory=config.server.studio_dir, html=True), name="studio")
 
     return app
+
+
+class StudioFiles(StaticFiles):
+    """The built Studio. Its pages must be re-checked on every load, or browsers keep an
+    old page after an update (asset files have content hashes in their names, so they
+    can be cached)."""
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        if response.media_type == "text/html":
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 def build_openapi(app: FastAPI) -> dict[str, Any]:

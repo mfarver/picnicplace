@@ -5,7 +5,9 @@
 # nozzle offsets differ a little between machines and are refined by calibration.
 #
 # Still PROVISIONAL: the feeder rails. Photon feeder positions are not stored in OpenPnP's
-# config, so the rails below are estimates.
+# config, so the rails below are rough estimates, and the back rail overlaps the rear
+# staging plate, so it is surely misplaced. The rear plate's exact position (assumed to
+# butt against the camera plate) is not measured either.
 #
 # Units: millimeters, degrees, seconds. The origin is at the right rear corner: facing
 # the machine, +X points left and +Y toward the front. view_rotation = 180 makes clients
@@ -19,9 +21,10 @@ view_rotation = 180
 
 # The outline is drawn to cover where the nozzles can reach (64 mm in front of the camera).
 bed = { x_min = -90, y_min = -75, x_max = 525, y_max = 500 }
-# Where the staging plates hold trays and boards, from the tray feeders on the reference
-# machine. Boards sit at about Z = -27.5.
-work_area = { x_min = 60, y_min = 90, x_max = 440, y_max = 300 }
+# Where boards can go: the two staging plates (Y -27 to 213), within the top camera's
+# reach (X 0 to 433, Y from 44.5) so their fiducials can be seen. Boards sit at about
+# Z = -27.5.
+work_area = { x_min = 0, y_min = 44.5, x_max = 433, y_max = 213 }
 
 # Both nozzles share the Z motor: N1 goes down as Z decreases, N2 as Z increases.
 # Z = 0 has both nozzles up. OpenPnP's LumenPnP config treats -15..15 as safe for travel.
@@ -146,7 +149,7 @@ position = { x = 389.292, y = 421.551 }
 # The staging plate with the camera knockout (LumenPnP Staging Plate rev 00): 600 x 120
 # mm, centered on the bottom camera, M3 holes on a 15 mm checkerboard (columns 1-39,
 # rows A-G), M5 holes near the corners, and a 44 mm round knockout for the camera. The
-# second plate uses the same design; where it sits is not recorded yet.
+# second plate uses the same design, knockout left in.
 [[staging_plates]]
 id = "camera_plate"
 label = "Staging plate (camera)"
@@ -158,6 +161,19 @@ hole_columns = 39
 hole_rows = 7
 corner_holes = [{ x = -290, y = -50 }, { x = 290, y = -50 }, { x = -290, y = 50 }, { x = 290, y = 50 }]
 knockout_diameter = 44
+
+# The second plate, toward the back (-Y) of the camera plate. Assumed to butt against
+# it (no gap); not measured.
+[[staging_plates]]
+id = "rear_plate"
+label = "Staging plate (rear)"
+center = { x = 217.736, y = 33.071 }
+size = { x = 600, y = 120 }
+hole_pitch = 15
+hole_diameter = 3.2
+hole_columns = 39
+hole_rows = 7
+corner_holes = [{ x = -290, y = -50 }, { x = 290, y = -50 }, { x = -290, y = 50 }, { x = 290, y = 50 }]
 
 # Estimated: see the note at the top.
 [[feeder_banks]]

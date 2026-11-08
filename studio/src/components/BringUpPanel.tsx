@@ -221,7 +221,11 @@ const STEPS: Step[] = [
         Jog +X: the picture should slide {c.description.x_points === "right" ? "left" : "right"}.
         Jog +Y: it should slide {c.description.y_points === "back" ? "down" : "up"}. If not, set{" "}
         <code>flip_x</code>, <code>flip_y</code>, or <code>rotation</code> under{" "}
-        <code>[cameras.top]</code>.
+        <code>[cameras.top]</code>. The bottom camera looks up, so it shows the nozzle mirrored:
+        with a nozzle over it, jog +X and the nozzle should move{" "}
+        {c.description.x_points === "right" ? "left" : "right"} in its picture, and +Y{" "}
+        {c.description.y_points === "back" ? "up" : "down"}; if not, set the flips under{" "}
+        <code>[cameras.bottom]</code>. Save a few frames with the Capture panel.
       </p>
     ),
   },
@@ -275,6 +279,17 @@ const STEPS: Step[] = [
           Scan feeders
         </button>
       </>
+    ),
+  },
+  {
+    id: "first_part",
+    title: "One part, one step at a time",
+    body: () => (
+      <p>
+        Put a scrap board on the plate and give a feeder its part (with its height). In the
+        Single placement panel, Pick, then Align, then Place on the board, checking each step.
+        Capture the bottom camera while a part is held, so alignment can be tuned on real images.
+      </p>
     ),
   },
   {

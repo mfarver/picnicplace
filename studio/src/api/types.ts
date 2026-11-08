@@ -43,3 +43,6 @@ export type FeederAssignment = Schemas["FeederAssignment-Output"];
 export type BringUpRecord = Schemas["BringUpRecord-Output"];
 export type StepRecord = Schemas["StepRecord-Output"];
 export type RecordedPoint = Schemas["RecordedPoint"];
+export type PlacementState = Schemas["PlacementState"];
+export type NozzleLoad = Schemas["NozzleLoad"];
+export type CaptureInfo = Schemas["CaptureInfo"];

@@ -9,11 +9,13 @@ import type { Operation } from "../api/types";
 import { BringUpPanel } from "../components/BringUpPanel";
 import { CalibrationPanel } from "../components/CalibrationPanel";
 import { CameraView } from "../components/CameraView";
+import { CapturePanel } from "../components/CapturePanel";
 import { JogPanel } from "../components/JogPanel";
 import { LeaseStatus } from "../components/LeaseStatus";
 import { Panel } from "../components/Panel";
 import { HeadInset } from "../components/machine/HeadInset";
 import { MachineView } from "../components/machine/MachineView";
+import { PlacementPanel } from "../components/PlacementPanel";
 import { Placeholder } from "../components/Placeholder";
 
 export function MachineWorkspace() {
@@ -139,6 +141,16 @@ export function MachineWorkspace() {
             onSafeZ={safeZ}
           />
         )}
+
+        {description && (
+          <PlacementPanel
+            description={description}
+            machine={machine}
+            canMove={canMove && !!machine?.homed}
+          />
+        )}
+
+        <CapturePanel />
 
         {description && (
           <BringUpPanel

@@ -460,7 +460,7 @@ function SlotDetail(p: DetailProps) {
       <h3 className="detail-heading">Feeder fiducial</h3>
       <p className="text-muted">
         {offset
-          ? `The fiducial is ${fmt(offset.x)} mm along the feed and ${fmt(offset.y)} mm across it from the pick location (${state.fiducial_offset_source === "measured" ? "measured" : "from the profile"}).`
+          ? `The fiducial is ${fmt(offset.x)} mm along the feed from the pick location and ${fmt(offset.y)} mm across from the sprocket holes (${state.fiducial_offset_source === "measured" ? "measured" : "from the profile"}). Measure it on one feeder to replace the design value.`
           : "Not measured yet. Teach this slot's pick location, center the camera on the feeder's fiducial, then measure it here."}
       </p>
       <div className="button-row">

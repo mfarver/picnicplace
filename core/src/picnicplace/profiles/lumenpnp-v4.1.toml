@@ -8,8 +8,7 @@
 # between machines and are refined by calibration.
 #
 # Still PROVISIONAL: the rear plate's exact position (assumed to butt against the camera
-# plate) is not measured, and the feeder rails' outlines (not their pick positions) are
-# estimates.
+# plate) is not measured.
 #
 # Units: millimeters, degrees, seconds. +X points right and +Y toward the back, with the
 # origin at the front left. The bottom camera (Y 153 of 0-487) is near the front, as on
@@ -199,9 +198,21 @@ area = { x_min = 197.5, y_min = 188, x_max = 237.5, y_max = 204 }
 # Photon feeders on two rails, 25 slots each, numbered as LumenPnP owners number them:
 # 1-25 along the front rail from left to right, then 26-50 along the back rail from
 # right to left. Each slot's address is programmed into the rail (the "feeder floor")
-# and is the same number. Both rails feed toward the middle of the bed. Pick positions are fitted to that machine's
-# taught slot positions, which scatter about 1 mm around these lines: each slot's own
-# correction is taught in the Feeders workspace. Feeder outlines are estimated.
+# and is the same number. Both rails feed toward the middle of the bed. Pick positions
+# are fitted to the reference machine's taught slot positions, which scatter about 1 mm
+# around these lines: each slot's own correction is taught in the Feeders workspace, or
+# found from its feeder's fiducial.
+#
+# Feeder geometry is from Opulo's Photon feeder design (8 mm assembly; the 12 mm one
+# shares the nose): the frame is 137 mm long plus the peel gears, 15 mm wide, and
+# reaches 27.3 mm past the pick location (the middle of its 12.75 mm pick window). Its
+# noses on the front rail reach over the camera plate's front edge, so boards cannot go
+# there. A small board on the nose carries a 1.0 mm fiducial in a 2 mm mask opening,
+# 19.15 mm along the feed from the pick location and 4.1 mm from the sprocket holes'
+# line toward the pockets, with two 0.5 mm marks 2 mm to either side of it (their
+# spacing encodes the feeder's width). Opulo notes the board's placement varies a
+# little from feeder to feeder, so the fiducial gives the pick location roughly and
+# vision on the tape finds the pocket.
 [[feeder_banks]]
 id = "front"
 label = "Front rail"
@@ -210,8 +221,11 @@ pitch = { x = 15.769, y = 0 }
 count = 25
 first_address = 1
 width = 15
-length = 100
+length = 154
+pick_to_front = 27.3
 rotation = 90
+fiducial_offset = { x = 19.15, y = -4.1 }
+fiducial_diameter = 1.0
 
 [[feeder_banks]]
 id = "back"
@@ -221,8 +235,11 @@ pitch = { x = -15.758, y = 0 }
 count = 25
 first_address = 26
 width = 15
-length = 100
+length = 154
+pick_to_front = 27.3
 rotation = -90
+fiducial_offset = { x = 19.15, y = -4.1 }
+fiducial_diameter = 1.0
 
 [[inputs]]
 id = "home_x"

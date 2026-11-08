@@ -198,8 +198,20 @@ every packet in the reference machine's log with a valid checksum.
   with commands 0x0A and 0x0B and report extra diagnostics. Stock OpenPnP and stock
   feeders use 0x04 and 0x06, which is what PicnicPlace sends.
 
-Photon feeders have an alignment fiducial. PicnicPlace measures its offset from the pick
-location once, then finds every slot's pick location from its feeder's fiducial. At pick
+From Opulo's feeder design (the 8 mm assembly; the 12 mm one shares the nose): the frame
+is 137 mm long and 15 mm wide, and its pick window is 12.75 mm long, open over both the
+pockets and the sprocket holes. The profile's pick location is the window's middle
+pocket; the feeder reaches 27.3 mm past it, so on the front rail the noses reach over
+the camera plate's front edge, and boards are kept clear of them. A 4 × 12 mm board on
+the nose carries a 1.0 mm fiducial in a 2 mm opening, 19.15 mm along the feed from the
+pick location and 4.1 mm from the sprocket holes' line toward the pockets (so 0.6 mm
+past the pocket line on 8 mm tape, and 1.4 mm short of it on 12 mm), with 0.5 mm marks
+2 mm to either side whose spacing encodes the feeder's width. Opulo's design notes say
+the board's placement varies a little from feeder to feeder.
+
+Photon feeders have an alignment fiducial. PicnicPlace starts from the design's offset,
+can measure it from the pick location once (on the sprocket-hole line, so the same for
+every tape width), and then finds every slot's pick location from its feeder's fiducial. At pick
 time it can also find the pocket from the tape's sprocket holes, since feeders do not
 step exactly and their errors add up (EIA-481 puts each pocket 2 mm along the tape from
 a hole, and a fixed distance across it).

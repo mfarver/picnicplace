@@ -227,7 +227,7 @@ def layout(job: Job, profile: MachineProfile) -> JobLayout:
                     copy_id=p.copy_id,
                 )
             )
-    for keep_out in profile.keep_outs:
+    for keep_out in profile.board_keep_outs():
         if overlaps(corners, keep_out.area):
             issues.append(
                 Issue(severity="error", message=f"the board covers the {keep_out.label.lower()}")
@@ -252,6 +252,7 @@ def find_location(
     if area is None:
         return None
     travel = camera_travel(profile)
+    keep_outs = profile.board_keep_outs()
     step = 1.0
     for turn in rotations:
         origin = MachineLocation(x=0.0, y=0.0, rotation=turn)
@@ -282,6 +283,6 @@ def find_location(
             for i in x_order:
                 dx, dy = x_lo + i * step, y_lo + j * step
                 moved = [Point(x=c.x + dx, y=c.y + dy) for c in corners]
-                if not any(overlaps(moved, k.area) for k in profile.keep_outs):
+                if not any(overlaps(moved, k.area) for k in keep_outs):
                     return MachineLocation(x=round(dx, 3), y=round(dy, 3), rotation=turn)
     return None

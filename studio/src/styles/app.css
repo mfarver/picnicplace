@@ -736,6 +736,21 @@ code,
   stroke-width: 1;
 }
 
+.mv-reach rect {
+  fill: none;
+  stroke: var(--accent);
+  stroke-opacity: 0.35;
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.mv-keepout rect {
+  fill: var(--danger-soft);
+  stroke: var(--danger);
+  stroke-opacity: 0.6;
+  stroke-width: 1;
+}
+
 .mv-travel {
   fill: none;
   stroke: var(--text-faint);

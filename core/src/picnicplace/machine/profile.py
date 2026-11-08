@@ -9,10 +9,10 @@ Profiles are TOML files. Built-in ones ship in ``picnicplace/profiles``; a confi
 point at a profile file by path.
 
 Coordinates are the machine's own, in millimeters, as its firmware reports them. Machines
-differ in where the origin is and which way the axes point; ``view_rotation`` says how
-to turn the X-right, Y-up layout so the front of the machine is at the bottom of the
-screen. Camera images are shown the same way, so the picture, the map, and the jog
-arrows all agree with what an operator facing the machine sees. The head position (the
+differ in where the origin is and which way the axes point; ``x_points`` and ``y_points``
+say which way +X and +Y point for an operator facing the machine. Clients draw the
+machine and its camera images that way (front at the bottom of the screen), so the
+picture, the map, and the jog arrows all agree with what the operator sees. The head position (the
 X and Y axis positions) is the center of the top camera; nozzles are offsets from it.
 """
 
@@ -213,6 +213,14 @@ class StagingPlate(ProfileModel):
         return out
 
 
+class KeepOut(ProfileModel):
+    """An area where boards cannot go, such as the bottom camera or a fiducial mount."""
+
+    id: str
+    label: str
+    area: Rect
+
+
 class Input(ProfileModel):
     id: str
     label: str
@@ -261,13 +269,13 @@ class MachineProfile(ProfileModel):
     safe_z: float = Field(
         description="A nozzle at or above this height (on its own Z scale) is safe for travel."
     )
-    view_rotation: Literal[0, 180] = Field(
-        default=0,
-        description=(
-            "0: +X points right and +Y toward the back, seen from the front. 180: +X points "
-            "left and +Y toward the front (the origin is at the right rear, as on the "
-            "LumenPnP). Clients draw the machine and its camera images turned this way."
-        ),
+    x_points: Literal["right", "left"] = Field(
+        default="right",
+        description="Which way +X points for an operator facing the machine.",
+    )
+    y_points: Literal["back", "front"] = Field(
+        default="back",
+        description="Which way +Y points for an operator facing the machine.",
     )
     visual_homing: bool = Field(
         default=False,
@@ -285,6 +293,10 @@ class MachineProfile(ProfileModel):
     locations: list[Location] = Field(default_factory=list[Location])
     feeder_banks: list[FeederBank] = Field(default_factory=list[FeederBank])
     staging_plates: list[StagingPlate] = Field(default_factory=list[StagingPlate])
+    keep_outs: list[KeepOut] = Field(
+        default_factory=list[KeepOut],
+        description="Areas inside the placement area where boards cannot be mounted.",
+    )
     inputs: list[Input] = Field(default_factory=list[Input])
     outputs: list[Output] = Field(default_factory=list[Output])
     marlin: MarlinSettings | None = Field(
@@ -342,11 +354,66 @@ class MachineProfile(ProfileModel):
                 raise ValueError("safe_z_input must name a digital input")
         return self
 
+    @property
+    def x_sign(self) -> int:
+        """+1 if +X points right (as the operator sees it), -1 if left."""
+        return 1 if self.x_points == "right" else -1
+
+    @property
+    def y_sign(self) -> int:
+        """+1 if +Y points toward the back, -1 if toward the front."""
+        return 1 if self.y_points == "back" else -1
+
     def image_to_machine(self, right: float, down: float) -> tuple[float, float]:
         """A displacement seen in a top camera image (mm right and mm down, as shown to
-        the operator) as a machine X/Y displacement."""
-        sign = -1.0 if self.view_rotation == 180 else 1.0
-        return sign * right, -sign * down
+        the operator, front at the bottom) as a machine X/Y displacement."""
+        return self.x_sign * right, -self.y_sign * down
+
+    @computed_field
+    @property
+    def nozzle_reach(self) -> dict[str, Rect]:
+        """Where each nozzle can reach: the head's X/Y travel shifted by its offset."""
+        x = next((a for a in self.axes if a.name == "X"), None)
+        y = next((a for a in self.axes if a.name == "Y"), None)
+        if x is None or y is None:
+            return {}
+        return {
+            n.id: Rect(
+                x_min=x.min + n.offset.x,
+                y_min=y.min + n.offset.y,
+                x_max=x.max + n.offset.x,
+                y_max=y.max + n.offset.y,
+            )
+            for n in self.nozzles
+        }
+
+    @computed_field
+    @property
+    def placement_area(self) -> Rect | None:
+        """Where boards can go so that every nozzle can place anywhere on them: the
+        nozzles' reach, all of them, within the staging plates (or the work area). Boards
+        must also stay clear of the keep-outs inside it."""
+        areas = list(self.nozzle_reach.values())
+        if self.staging_plates:
+            areas.append(
+                Rect(
+                    x_min=min(p.center.x - p.size.x / 2 for p in self.staging_plates),
+                    y_min=min(p.center.y - p.size.y / 2 for p in self.staging_plates),
+                    x_max=max(p.center.x + p.size.x / 2 for p in self.staging_plates),
+                    y_max=max(p.center.y + p.size.y / 2 for p in self.staging_plates),
+                )
+            )
+        elif self.work_area is not None:
+            areas.append(self.work_area)
+        if not areas:
+            return None
+        x_min = max(a.x_min for a in areas)
+        y_min = max(a.y_min for a in areas)
+        x_max = min(a.x_max for a in areas)
+        y_max = min(a.y_max for a in areas)
+        if x_min >= x_max or y_min >= y_max:
+            return None
+        return Rect(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
 
     def axis(self, name: str) -> Axis:
         return next(a for a in self.axes if a.name == name)

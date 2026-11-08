@@ -561,7 +561,7 @@ refusing to connect.
 | **M1 — Manual control** | Machine description API and I/O state; machine view with head inset (built first, against the simulator); connect to LumenPnP, home, jog, actuators, vacuum readings, safe-Z interlock, MJPEG camera streams in the GUI, control lease, E-stop. |
 | **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. Started: fiducial finder, visual homing (after `G28`, center the top camera on the homing fiducial and correct X/Y with `G92`), and a camera scale measurement, all tested against the simulator, whose homing has a realistic error for visual homing to find. |
 | **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. |
-| **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. |
+| **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. Boards must lie inside the profile's placement area (where every nozzle can reach, on the staging plates) and clear of its keep-outs; import warns about any placement a nozzle cannot reach. |
 | **M5 — 1.0 polish** | Strip and tray feeders, installer/packaging, docs, OpenPnP library import. |
 
 ## 12. Repository layout

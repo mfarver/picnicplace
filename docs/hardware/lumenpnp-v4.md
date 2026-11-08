@@ -49,11 +49,24 @@ What OpenPnP sends after opening the port (and waiting 3 s for the board to rese
 
 ## Coordinates
 
-The origin (0, 0) is the right rear corner. Facing the machine, +X points left and +Y
-toward the front. The profile sets `view_rotation = 180`, so the Studio draws the map,
-the jog arrows, and camera images as an operator facing the machine sees them (front at
-the bottom, +X to the left), and vision converts image offsets the same way. N1 is at
-−X from the top camera, so it is the right-hand nozzle; N2 is the left.
++Y points toward the front. The origin is believed to be the right rear corner, so +X
+points left as you face the machine. The profile says so (`x_points = "left"`,
+`y_points = "front"`), and the Studio draws the map, the jog arrows, and camera images
+as an operator facing the machine sees them; vision converts image offsets the same way.
+
+**To confirm:** this conflicts with N1 being the left nozzle. N1's offset from the top
+camera is −23.8 mm in X, so if +X points left, N1 is the right-hand nozzle. If jogging
++X moves the head to the right, the origin is the left rear: set `x_points = "right"`.
+
+## Where boards can go
+
+Each nozzle reaches the head's travel shifted by its offset, so with the nozzles 47 mm
+apart each reaches 47 mm farther on its own side (N1: X −23.8 … 409.2, N2: X 23.3 …
+456.3). The profile computes a placement area where every nozzle can reach, within the
+staging plates: X 23.3 … 409.2, Y −19.9 … 213.1. Boards also cannot cover the datum
+board, the camera knockout, or the aiming fiducial holder, which are keep-outs in the
+profile, so boards go mostly on the rear plate. The holder's size is estimated from a
+render (about 40 × 16 mm).
 
 ## Axes and geometry
 

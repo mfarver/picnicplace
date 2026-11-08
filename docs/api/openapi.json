@@ -552,6 +552,30 @@
         "title": "JogRequest",
         "type": "object"
       },
+      "KeepOut": {
+        "additionalProperties": false,
+        "description": "An area where boards cannot go, such as the bottom camera or a fiducial mount.",
+        "properties": {
+          "area": {
+            "$ref": "#/components/schemas/Rect"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "area"
+        ],
+        "title": "KeepOut",
+        "type": "object"
+      },
       "LeaseEvent": {
         "properties": {
           "lease": {
@@ -716,6 +740,14 @@
             "title": "Inputs",
             "type": "array"
           },
+          "keep_outs": {
+            "description": "Areas inside the placement area where boards cannot be mounted.",
+            "items": {
+              "$ref": "#/components/schemas/KeepOut"
+            },
+            "title": "Keep Outs",
+            "type": "array"
+          },
           "locations": {
             "items": {
               "$ref": "#/components/schemas/Location"
@@ -726,6 +758,15 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "nozzle_reach": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Rect"
+            },
+            "description": "Where each nozzle can reach: the head's X/Y travel shifted by its offset.",
+            "readOnly": true,
+            "title": "Nozzle Reach",
+            "type": "object"
           },
           "nozzles": {
             "items": {
@@ -740,6 +781,18 @@
             },
             "title": "Outputs",
             "type": "array"
+          },
+          "placement_area": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Rect"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where boards can go so that every nozzle can place anywhere on them: the\nnozzles' reach, all of them, within the staging plates (or the work area). Boards\nmust also stay clear of the keep-outs inside it.",
+            "readOnly": true
           },
           "provisional": {
             "default": false,
@@ -771,16 +824,6 @@
             "title": "Staging Plates",
             "type": "array"
           },
-          "view_rotation": {
-            "default": 0,
-            "description": "0: +X points right and +Y toward the back, seen from the front. 180: +X points left and +Y toward the front (the origin is at the right rear, as on the LumenPnP). Clients draw the machine and its camera images turned this way.",
-            "enum": [
-              0,
-              180
-            ],
-            "title": "View Rotation",
-            "type": "integer"
-          },
           "visual_homing": {
             "default": false,
             "description": "After homing, center the top camera on the homing fiducial and correct the X/Y coordinates to its known position.",
@@ -797,6 +840,26 @@
               }
             ],
             "description": "Where boards go."
+          },
+          "x_points": {
+            "default": "right",
+            "description": "Which way +X points for an operator facing the machine.",
+            "enum": [
+              "right",
+              "left"
+            ],
+            "title": "X Points",
+            "type": "string"
+          },
+          "y_points": {
+            "default": "back",
+            "description": "Which way +Y points for an operator facing the machine.",
+            "enum": [
+              "back",
+              "front"
+            ],
+            "title": "Y Points",
+            "type": "string"
           }
         },
         "required": [
@@ -807,7 +870,8 @@
           "work_area",
           "axes",
           "safe_z",
-          "view_rotation",
+          "x_points",
+          "y_points",
           "visual_homing",
           "safe_z_input",
           "nozzles",
@@ -815,8 +879,11 @@
           "locations",
           "feeder_banks",
           "staging_plates",
+          "keep_outs",
           "inputs",
-          "outputs"
+          "outputs",
+          "nozzle_reach",
+          "placement_area"
         ],
         "title": "MachineProfile",
         "type": "object"

@@ -66,10 +66,11 @@ class _Canvas:
         center: Point,
         fov_w: float,
         mirror_x: bool,
-        rotation: int = 0,
+        x_sign: int = 1,
+        y_sign: int = 1,
     ):
         self.w, self.h = size
-        self.sign = -1.0 if rotation == 180 else 1.0
+        self.x_sign, self.y_sign = x_sign, y_sign
         self.ppm = self.w / fov_w
         self.cx, self.cy = center.x, center.y
         self.mirror = mirror_x
@@ -77,9 +78,10 @@ class _Canvas:
         self.half_h = self.h / self.ppm / 2
 
     def px(self, x: float, y: float) -> tuple[int, int]:
-        # Images are shown turned like the machine view (see MachineProfile.view_rotation).
-        dx = (x - self.cx) * self.sign
-        dy = (y - self.cy) * self.sign
+        # Images are shown like the machine view, front at the bottom (see
+        # MachineProfile.x_points and y_points).
+        dx = (x - self.cx) * self.x_sign
+        dy = (y - self.cy) * self.y_sign
         if self.mirror:
             dx = -dx
         u = self.w / 2 + dx * self.ppm
@@ -174,7 +176,12 @@ class TopRenderer:
         head = Point(x=state.position.get("X", 0.0), y=state.position.get("Y", 0.0))
         center = Point(x=head.x + self.camera.position.x, y=head.y + self.camera.position.y)
         canvas = _Canvas(
-            self.size, center, self.camera.field_of_view.x, False, self.profile.view_rotation
+            self.size,
+            center,
+            self.camera.field_of_view.x,
+            False,
+            self.profile.x_sign,
+            self.profile.y_sign,
         )
         img = np.empty((h, w, 3), dtype=np.uint8)
         img[:] = BED
@@ -310,12 +317,10 @@ DATUM_HOLES = [(-15, 0), (-30, -15), (30, -15), (15, 0)]
 def _datum_board(c: _Canvas, img: Image, o: Point) -> None:
     # The offsets below have +X to the operator's right and +Y toward the back, with the
     # board's notched edge (ruler side) toward the front, facing the bottom camera.
-    # Turned into machine coordinates by the view rotation (on a LumenPnP, +X is left
-    # and +Y is the front).
-    sign = c.sign
-
+    # Turned into machine coordinates by which way the machine's axes point (on a
+    # LumenPnP, +Y is the front).
     def at(dx: float, dy: float) -> tuple[float, float]:
-        return o.x + sign * dx, o.y + sign * dy
+        return o.x + c.x_sign * dx, o.y + c.y_sign * dy
 
     pts = np.array([c.px(*at(dx, dy)) for dx, dy in DATUM_OUTLINE], dtype=np.int32)
     cv2.fillPoly(img, [pts], DATUM_MASK, cv2.LINE_AA, SHIFT)
@@ -377,7 +382,8 @@ class BottomRenderer:
             self.camera.position,
             self.camera.field_of_view.x,
             True,
-            self.profile.view_rotation,
+            self.profile.x_sign,
+            self.profile.y_sign,
         )
         img = np.empty((h, w, 3), dtype=np.uint8)
         img[:] = (12, 12, 14)

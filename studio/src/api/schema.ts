@@ -622,6 +622,17 @@ export interface components {
             /** Speed */
             speed?: number | null;
         };
+        /**
+         * KeepOut
+         * @description An area where boards cannot go, such as the bottom camera or a fiducial mount.
+         */
+        KeepOut: {
+            area: components["schemas"]["Rect"];
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+        };
         /** LeaseEvent */
         LeaseEvent: {
             lease: components["schemas"]["LeaseState"];
@@ -689,14 +700,32 @@ export interface components {
             id: string;
             /** Inputs */
             inputs: components["schemas"]["Input"][];
+            /**
+             * Keep Outs
+             * @description Areas inside the placement area where boards cannot be mounted.
+             */
+            keep_outs: components["schemas"]["KeepOut"][];
             /** Locations */
             locations: components["schemas"]["Location"][];
             /** Name */
             name: string;
+            /**
+             * Nozzle Reach
+             * @description Where each nozzle can reach: the head's X/Y travel shifted by its offset.
+             */
+            readonly nozzle_reach: {
+                [key: string]: components["schemas"]["Rect"];
+            };
             /** Nozzles */
             nozzles: components["schemas"]["Nozzle"][];
             /** Outputs */
             outputs: components["schemas"]["Output"][];
+            /**
+             * @description Where boards can go so that every nozzle can place anywhere on them: the
+             *     nozzles' reach, all of them, within the staging plates (or the work area). Boards
+             *     must also stay clear of the keep-outs inside it.
+             */
+            readonly placement_area: components["schemas"]["Rect"] | null;
             /**
              * Provisional
              * @description Dimensions are estimates that have not been measured on a real machine.
@@ -716,13 +745,6 @@ export interface components {
             /** Staging Plates */
             staging_plates: components["schemas"]["StagingPlate"][];
             /**
-             * View Rotation
-             * @description 0: +X points right and +Y toward the back, seen from the front. 180: +X points left and +Y toward the front (the origin is at the right rear, as on the LumenPnP). Clients draw the machine and its camera images turned this way.
-             * @default 0
-             * @enum {integer}
-             */
-            view_rotation: 0 | 180;
-            /**
              * Visual Homing
              * @description After homing, center the top camera on the homing fiducial and correct the X/Y coordinates to its known position.
              * @default false
@@ -730,6 +752,20 @@ export interface components {
             visual_homing: boolean;
             /** @description Where boards go. */
             work_area: components["schemas"]["Rect"] | null;
+            /**
+             * X Points
+             * @description Which way +X points for an operator facing the machine.
+             * @default right
+             * @enum {string}
+             */
+            x_points: "right" | "left";
+            /**
+             * Y Points
+             * @description Which way +Y points for an operator facing the machine.
+             * @default back
+             * @enum {string}
+             */
+            y_points: "back" | "front";
         };
         /** MachineState */
         MachineState: {

@@ -9,22 +9,24 @@
 # staging plate, so it is surely misplaced. The rear plate's exact position (assumed to
 # butt against the camera plate) is not measured either.
 #
-# Units: millimeters, degrees, seconds. The origin is at the right rear corner: facing
-# the machine, +X points left and +Y toward the front. view_rotation = 180 makes clients
-# draw it with the front at the bottom of the screen and +X to the left.
+# Units: millimeters, degrees, seconds. +Y points toward the front. +X is believed to
+# point left (origin at the right rear), but that conflicts with N1 being the left
+# nozzle: with N1's offset at -X, N1 is the right nozzle if +X points left. Check by
+# jogging: if +X moves the head right, set x_points = "right" (and the origin is the
+# left rear).
 # The head position is the center of the top camera; nozzle offsets are relative to it.
 
 id = "lumenpnp-v4"
 name = "LumenPnP v4"
 provisional = true
-view_rotation = 180
+x_points = "left"
+y_points = "front"
 
 # The outline is drawn to cover where the nozzles can reach (64 mm in front of the camera).
 bed = { x_min = -90, y_min = -75, x_max = 525, y_max = 500 }
-# Where boards can go: the two staging plates (Y -27 to 213), within the top camera's
-# reach (X 0 to 433, Y from 44.5) so their fiducials can be seen. Boards sit at about
-# Z = -27.5.
-work_area = { x_min = 0, y_min = 44.5, x_max = 433, y_max = 213 }
+# Where boards go is computed: the part of the staging plates every nozzle can reach
+# (the nozzles are 47 mm apart, so each reaches 47 mm farther on its own side).
+# Boards sit at about Z = -27.5.
 
 # Both nozzles share the Z motor: N1 goes down as Z decreases, N2 as Z increases.
 # Z = 0 has both nozzles up. OpenPnP's LumenPnP config treats -15..15 as safe for travel.
@@ -69,7 +71,8 @@ min = -360
 max = 360
 max_speed = 720
 
-# N1 is at -X from the camera; with +X to the left, that is the right-hand nozzle.
+# N1 is at -X from the camera: the right-hand nozzle if +X points left (see the note on
+# x_points at the top).
 [[nozzles]]
 id = "N1"
 label = "Right nozzle"
@@ -174,6 +177,25 @@ hole_diameter = 3.2
 hole_columns = 39
 hole_rows = 7
 corner_holes = [{ x = -290, y = -50 }, { x = 290, y = -50 }, { x = -290, y = 50 }, { x = 290, y = 50 }]
+
+# Boards cannot be mounted over the bottom camera or the fiducials around it, so they go
+# mostly on the rear plate. The datum board's outline is from its design (80 x 35 mm,
+# 25 mm in front of its fiducial and 10 mm behind); the aiming fiducial holder's size is
+# estimated from a render.
+[[keep_outs]]
+id = "datum"
+label = "Datum board"
+area = { x_min = 177, y_min = 96, x_max = 257, y_max = 131 }
+
+[[keep_outs]]
+id = "bottom_camera"
+label = "Bottom camera"
+area = { x_min = 195.7, y_min = 131, x_max = 239.8, y_max = 175.1 }
+
+[[keep_outs]]
+id = "aiming_fiducial"
+label = "Aiming fiducial holder"
+area = { x_min = 197.5, y_min = 188, x_max = 237.5, y_max = 204 }
 
 # Estimated: see the note at the top.
 [[feeder_banks]]

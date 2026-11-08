@@ -20,31 +20,44 @@ import type {
 /**
  * Scale overhead map of the machine (spec section 8.3).
  *
- * Drawn in machine millimeters with every Y negated (SVG's Y points down). The profile's
- * view_rotation then turns the drawing so the front of the machine is at the bottom of
- * the screen: on a LumenPnP (origin at the right rear) the whole drawing is rotated
- * 180°, and labels are turned back upright. Scroll to zoom, drag to pan.
+ * Drawn in machine millimeters with every Y negated (SVG's Y points down), then flipped
+ * as the profile says (x_points, y_points) so the front of the machine is at the bottom
+ * of the screen and X runs the way the operator sees it. Labels are flipped back so
+ * they stay readable. Scroll to zoom, drag to pan.
  */
 
-/** The profile's view rotation, for labels that must stay upright. */
-const Rotation = createContext(0);
+interface Orientation {
+  /** +1 if +X points right as the operator sees it, -1 if left. */
+  xs: number;
+  /** +1 if +Y points toward the back, -1 if toward the front. */
+  ys: number;
+}
 
-/** SVG text at a point in the drawing, kept upright whatever the view rotation. */
+function orientation(d: MachineProfile): Orientation {
+  return { xs: d.x_points === "left" ? -1 : 1, ys: d.y_points === "front" ? -1 : 1 };
+}
+
+const ViewOrientation = createContext<Orientation>({ xs: 1, ys: 1 });
+
+/** SVG text at a point in the drawing, kept readable however the view is flipped. */
 function Label({ x, y, ...rest }: SVGProps<SVGTextElement> & { x: number; y: number }) {
-  const rotation = useContext(Rotation);
+  const { xs, ys } = useContext(ViewOrientation);
+  const flipped = xs !== 1 || ys !== 1;
   return (
     <text
       x={x}
       y={y}
-      transform={rotation ? `rotate(${rotation} ${x} ${y})` : undefined}
+      transform={
+        flipped ? `translate(${x} ${y}) scale(${xs} ${ys}) translate(${-x} ${-y})` : undefined
+      }
       {...rest}
     />
   );
 }
 
-/** Drawing coordinates (after the view rotation) to machine coordinates. */
-function toMachine(p: { x: number; y: number }, rotation: number): Point {
-  return rotation === 180 ? { x: -p.x, y: p.y } : { x: p.x, y: -p.y };
+/** Drawing coordinates (after the view's flips) to machine coordinates. */
+function toMachine(p: { x: number; y: number }, o: Orientation): Point {
+  return { x: o.xs * p.x, y: -o.ys * p.y };
 }
 
 interface ViewBox {
@@ -72,10 +85,10 @@ function fitView(d: MachineProfile, size?: { width: number; height: number }): V
   const { bed } = d;
   const bw = bed.x_max - bed.x_min + 2 * MARGIN;
   const bh = bed.y_max - bed.y_min + 2 * MARGIN;
-  // The bed's corners in drawing coordinates: (x, -y), or (-x, y) when rotated 180°.
-  const rotated = d.view_rotation === 180;
-  const bx = (rotated ? -bed.x_max : bed.x_min) - MARGIN;
-  const by = (rotated ? bed.y_min : -bed.y_max) - MARGIN;
+  // The bed's corners in drawing coordinates: (xs * x, -ys * y).
+  const { xs, ys } = orientation(d);
+  const bx = Math.min(xs * bed.x_min, xs * bed.x_max) - MARGIN;
+  const by = Math.min(-ys * bed.y_min, -ys * bed.y_max) - MARGIN;
   if (!size || size.width <= 0 || size.height <= 0) return { x: bx, y: by, w: bw, h: bh };
 
   const reserve = size.width - INSET_RESERVE_PX > size.width * 0.5 ? INSET_RESERVE_PX : 0;
@@ -191,7 +204,7 @@ export function MachineView({ description, machine, canMove = false, onMoveTo }:
       return;
     }
     const p = svgPoint(svg, e.clientX, e.clientY);
-    if (p) setCursor(toMachine(p, description.view_rotation));
+    if (p) setCursor(toMachine(p, orientation(description)));
   };
 
   const onPointerUp = (e: PointerEvent<SVGSVGElement>) => {
@@ -201,7 +214,7 @@ export function MachineView({ description, machine, canMove = false, onMoveTo }:
     // A click, not a drag: pick a move target. Moving needs a second, explicit step.
     const svg = svgRef.current;
     const p = svg ? svgPoint(svg, e.clientX, e.clientY) : null;
-    if (p) setTarget(toMachine(p, description.view_rotation));
+    if (p) setTarget(toMachine(p, orientation(description)));
   };
 
   const endDrag = () => {
@@ -247,12 +260,8 @@ export function MachineView({ description, machine, canMove = false, onMoveTo }:
         role="img"
         aria-label={`Overhead view of the ${description.name}`}
       >
-        <Rotation.Provider value={description.view_rotation}>
-          <g
-            transform={
-              description.view_rotation ? `rotate(${description.view_rotation})` : undefined
-            }
-          >
+        <ViewOrientation.Provider value={orientation(description)}>
+          <g transform={`scale(${orientation(description).xs} ${orientation(description).ys})`}>
             <Grid description={description} />
             <rect
               className="mv-bed"
@@ -265,26 +274,7 @@ export function MachineView({ description, machine, canMove = false, onMoveTo }:
             {description.staging_plates.map((plate) => (
               <PlateShape key={plate.id} plate={plate} />
             ))}
-            {description.work_area && (
-              <g>
-                <rect
-                  className="mv-work"
-                  x={description.work_area.x_min}
-                  y={-description.work_area.y_max}
-                  width={description.work_area.x_max - description.work_area.x_min}
-                  height={description.work_area.y_max - description.work_area.y_min}
-                />
-                <Label
-                  className="mv-label mv-label-faint"
-                  x={(description.work_area.x_min + description.work_area.x_max) / 2}
-                  y={-(description.work_area.y_min + description.work_area.y_max) / 2}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                >
-                  Board area
-                </Label>
-              </g>
-            )}
+            <PlacementLayer description={description} />
             {xAxis && yAxis && (
               <rect
                 className="mv-travel"
@@ -342,7 +332,7 @@ export function MachineView({ description, machine, canMove = false, onMoveTo }:
             {head && <Head description={description} at={head} />}
             {target && <TargetMarker at={target} />}
           </g>
-        </Rotation.Provider>
+        </ViewOrientation.Provider>
       </svg>
 
       <div className="mv-overlay mv-overlay-top">
@@ -387,6 +377,60 @@ function Grid({ description }: { description: MachineProfile }) {
     lines.push(<line key={`y${y}`} x1={bed.x_min} x2={bed.x_max} y1={-y} y2={-y} />);
   }
   return <g className="mv-grid">{lines}</g>;
+}
+
+/**
+ * Where boards can go: the area every nozzle can reach, within the staging plates, minus
+ * the keep-outs (such as the bottom camera). Each nozzle's own reach is a dashed outline.
+ */
+function PlacementLayer({ description }: { description: MachineProfile }) {
+  const area = description.placement_area;
+  const reaches = Object.entries(description.nozzle_reach);
+  return (
+    <g>
+      {area && (
+        <g>
+          <rect
+            className="mv-work"
+            x={area.x_min}
+            y={-area.y_max}
+            width={area.x_max - area.x_min}
+            height={area.y_max - area.y_min}
+          >
+            <title>Placement area: every nozzle can reach here</title>
+          </rect>
+          <Label
+            className="mv-label mv-label-faint"
+            // Off center: the middle is usually a keep-out (the bottom camera).
+            x={(area.x_min + area.x_max) / 2}
+            y={-(area.y_min + (area.y_max - area.y_min) * 0.2)}
+            textAnchor="middle"
+            dominantBaseline="middle"
+          >
+            Placement area
+          </Label>
+        </g>
+      )}
+      {reaches.map(([id, r]) => (
+        <g key={id} className="mv-reach">
+          <rect x={r.x_min} y={-r.y_max} width={r.x_max - r.x_min} height={r.y_max - r.y_min}>
+            <title>{`${id} reach`}</title>
+          </rect>
+        </g>
+      ))}
+      {description.keep_outs.map((zone) => (
+        <g key={zone.id} className="mv-keepout">
+          <title>{`${zone.label}: no boards here`}</title>
+          <rect
+            x={zone.area.x_min}
+            y={-zone.area.y_max}
+            width={zone.area.x_max - zone.area.x_min}
+            height={zone.area.y_max - zone.area.y_min}
+          />
+        </g>
+      ))}
+    </g>
+  );
 }
 
 /** A staging plate: its outline, tapped holes, and camera knockout. */

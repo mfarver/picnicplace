@@ -41,7 +41,7 @@ export function JogPanel({ description, machine, canMove, onJog, onSafeZ }: Prop
       : undefined;
 
   // Arrows are screen directions, as the operator faces the machine (the map is drawn the
-  // same way). The profile says which way +X and +Y point: on a LumenPnP, "back" is -Y.
+  // same way). The profile says which way +X and +Y point.
   const xs = description.x_points === "left" ? -1 : 1;
   const ys = description.y_points === "front" ? -1 : 1;
 

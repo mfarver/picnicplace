@@ -202,11 +202,7 @@ export function FeedersWorkspace() {
                     {s.slot.label}
                   </span>
                   <span className="item-detail">
-                    {s.feeder
-                      ? (s.feeder.assignment?.part_id ?? "no part assigned")
-                      : s.slot.address !== null
-                        ? `address ${s.slot.address}`
-                        : ""}
+                    {s.feeder ? (s.feeder.assignment?.part_id ?? "no part assigned") : "empty"}
                     {s.error && <span className="chip chip-warn">error</span>}
                   </span>
                 </button>
@@ -342,8 +338,11 @@ function SlotDetail(p: DetailProps) {
     <section className="slot-detail" aria-label={slot.slot.label}>
       <header className="slot-detail-head">
         <h2>{slot.slot.label}</h2>
-        <span className="text-muted mono">
-          {slot.slot.address !== null ? `address ${slot.slot.address}` : ""}
+        <span className="text-muted">
+          {p.description.feeder_banks.find((b) => b.id === slot.slot.bank)?.label}
+          {slot.slot.address !== null && slot.slot.address !== slot.slot.number
+            ? `, address ${slot.slot.address}`
+            : ""}
         </span>
       </header>
 

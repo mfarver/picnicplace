@@ -3,6 +3,7 @@
 import asyncio
 import math
 from collections.abc import Iterator
+from itertools import pairwise
 from typing import Any
 
 import pytest
@@ -145,6 +146,22 @@ def test_pocket_ignores_other_round_things() -> None:
 # --- The service, with simulated feeders on the LumenPnP profile ------------------------
 
 
+def test_lumenpnp_slots_are_numbered_as_owners_number_them() -> None:
+    """1-25 along the front rail from left to right, 26-50 along the back rail from right
+    to left, each number also its Photon address. On the v4.1, +X is right and +Y back."""
+    from picnicplace.feeders.slots import machine_slots
+    from picnicplace.machine.profile import load_profile
+
+    slots = machine_slots(load_profile("lumenpnp-v4.1"))
+    assert [s.number for s in slots] == list(range(1, 51))
+    assert all(s.address == s.number and s.id == str(s.number) for s in slots)
+    front, back = slots[:25], slots[25:]
+    assert all(a.pick.x < b.pick.x for a, b in pairwise(front))
+    assert all(a.pick.x > b.pick.x for a, b in pairwise(back))
+    assert max(s.pick.y for s in front) < min(s.pick.y for s in back)
+    assert slots[0].label == "Slot 1"
+
+
 @pytest.fixture
 def lumen() -> Iterator[TestClient]:
     config = fast_config(machine={"profile": "lumenpnp-v4.1", "sim_home_error": (0.3, -0.2)})
@@ -163,8 +180,7 @@ def slot_state(s: Session, slot_id: str) -> dict[str, Any]:
 
 def true_pick(slot: dict[str, Any]) -> Point:
     """Where the simulator really put a slot's tape."""
-    number = slot["slot"]["number"] + 100 * ["back", "front"].index(slot["slot"]["bank"])
-    error = sim_slot_error(number)
+    error = sim_slot_error(slot["slot"]["number"])
     return Point(x=slot["slot"]["pick"]["x"] + error.x, y=slot["slot"]["pick"]["y"] + error.y)
 
 
@@ -200,31 +216,31 @@ def test_scan_assign_and_feed(lumen: TestClient) -> None:
     with connect(lumen) as s:
         op = succeeded(s.wait(s.post("/api/v1/feeders/scan")))
         assert op["message"].startswith("Found 6 feeders, 6 new")
-        slot = slot_state(s, "front:2")
+        slot = slot_state(s, "2")
         assert slot["slot"]["address"] == 2
         assert slot["feeder"]["initialized"]
         uuid = slot["feeder"]["uuid"]
-        assert slot_state(s, "back:1")["slot"]["address"] == 26
+        assert slot_state(s, "26")["slot"]["address"] == 26
 
         r = s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": "RC0603-10K"})
         assert r.status_code == 200, r.json()
-        assert slot_state(s, "front:2")["feeder"]["assignment"]["part_id"] == "RC0603-10K"
+        assert slot_state(s, "2")["feeder"]["assignment"]["part_id"] == "RC0603-10K"
 
-        assert succeeded(s.wait(s.post("/api/v1/feeders/slots/front:2/feed", {})))["message"] == (
-            "Front rail 2: fed 4 mm."
+        assert succeeded(s.wait(s.post("/api/v1/feeders/slots/2/feed", {})))["message"] == (
+            "Slot 2: fed 4 mm."
         )
         sim = lumen.app.state.ctx.feeders._sim  # type: ignore[attr-defined]
         assert sim.feeders[2].fed_mm == pytest.approx(4.04)
 
-        r = s.post("/api/v1/feeders/slots/front:9/feed", {})
+        r = s.post("/api/v1/feeders/slots/9/feed", {})
         assert r.status_code == 409
         assert "scan the feeders" in r.json()["detail"]
 
         sim.feeders[3].jammed = True
-        op = s.wait(s.post("/api/v1/feeders/slots/front:3/feed", {}))
+        op = s.wait(s.post("/api/v1/feeders/slots/3/feed", {}))
         assert op["status"] == "failed"
         assert "could not reach" in op["error"]
-        assert "could not reach" in slot_state(s, "front:3")["error"]
+        assert "could not reach" in slot_state(s, "3")["error"]
 
         # The assignment is saved, by feeder ID, and survives a restart.
         assert service(lumen).setup.setup.feeders[uuid].part_id == "RC0603-10K"
@@ -235,13 +251,13 @@ def test_teach_measure_fiducial_and_calibrate(lumen: TestClient) -> None:
         s.home()
         succeeded(s.wait(s.post("/api/v1/feeders/scan")))
 
-        # Teach front:1 by eye: center the camera over its pocket.
-        slot = slot_state(s, "front:1")
+        # Teach 1 by eye: center the camera over its pocket.
+        slot = slot_state(s, "1")
         pick = true_pick(slot)
         succeeded(s.move(X=pick.x, Y=pick.y))
-        r = s.put("/api/v1/feeders/slots/front:1/pick", {})
+        r = s.put("/api/v1/feeders/slots/1/pick", {})
         assert r.status_code == 200, r.json()
-        taught = slot_state(s, "front:1")
+        taught = slot_state(s, "1")
         assert taught["calibration"]["basis"] == "taught"
         assert (taught["pick"]["x"], taught["pick"]["y"]) == pytest.approx(
             (pick.x, pick.y), abs=0.02
@@ -250,7 +266,7 @@ def test_teach_measure_fiducial_and_calibrate(lumen: TestClient) -> None:
         # Then the fiducial: jog roughly onto it and let vision find its center.
         fid = rotate(SIM_FIDUCIAL_OFFSET, slot["slot"]["rotation"])
         succeeded(s.move(X=pick.x + fid.x + 0.6, Y=pick.y + fid.y - 0.4))
-        succeeded(s.wait(s.post("/api/v1/feeders/slots/front:1/fiducial")))
+        succeeded(s.wait(s.post("/api/v1/feeders/slots/1/fiducial")))
         offset = service(lumen).setup.setup.fiducial_offset
         assert offset is not None
         assert (offset.x, offset.y) == pytest.approx(
@@ -260,7 +276,7 @@ def test_teach_measure_fiducial_and_calibrate(lumen: TestClient) -> None:
         # Now every slot with a feeder is found from its fiducial.
         op = succeeded(s.wait(s.post("/api/v1/feeders/calibrate", {})))
         assert op["message"] == "Calibrated 6 slots."
-        for slot_id in ("front:2", "front:5", "back:1"):
+        for slot_id in ("2", "5", "26"):
             state = slot_state(s, slot_id)
             want = true_pick(state)
             assert state["calibration"]["basis"] == "fiducial"
@@ -273,14 +289,14 @@ def test_vision_finds_the_drifted_pocket(lumen: TestClient) -> None:
     with connect(lumen) as s:
         s.home()
         succeeded(s.wait(s.post("/api/v1/feeders/scan")))
-        slot = slot_state(s, "back:1")
+        slot = slot_state(s, "26")
         pick = true_pick(slot)
-        s.put("/api/v1/feeders/slots/back:1/pick", {"at": {"x": pick.x, "y": pick.y}})
+        s.put("/api/v1/feeders/slots/26/pick", {"at": {"x": pick.x, "y": pick.y}})
         # Simulated feeders step 1% long: ten 4 mm feeds leave the tape 0.4 mm ahead.
         for _ in range(10):
-            succeeded(s.wait(s.post("/api/v1/feeders/slots/back:1/feed", {})))
-        op = succeeded(s.wait(s.post("/api/v1/feeders/slots/back:1/pocket")))
-        pocket = slot_state(s, "back:1")["pocket"]
+            succeeded(s.wait(s.post("/api/v1/feeders/slots/26/feed", {})))
+        op = succeeded(s.wait(s.post("/api/v1/feeders/slots/26/pocket")))
+        pocket = slot_state(s, "26")["pocket"]
         assert pocket["along"] == pytest.approx(0.4, abs=0.05), op
         assert pocket["across"] == pytest.approx(0.0, abs=0.05)
         # The back rail feeds toward -Y: along the feed is -Y in machine coordinates.

@@ -21,8 +21,8 @@ heartbeat_timeout_s = 6.0  # Silent clients are disconnected after this long.
 driver = "simulator"
 profile = "lumenpnp-v4.1"    # Built-in profile ID, or a path to a profile TOML file.
 sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times faster.
-# Simulator and fake firmware: slots (bank ID and number) that hold a Photon feeder.
-# sim_feeders = ["front:1", "front:2", "front:3", "front:4", "front:5", "back:1"]
+# Simulator and fake firmware: the feeder slots (by number) that hold a Photon feeder.
+# sim_feeders = [1, 2, 3, 4, 5, 26]
 speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 when
                            # bringing up a machine. Homing speed is the firmware's.
 

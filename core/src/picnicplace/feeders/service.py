@@ -457,7 +457,7 @@ class FeederService:
         self._tapes = None
 
     def _sim_true_pick(self, slot: Slot) -> Point:
-        error = sim_slot_error(slot.number + 100 * sorted(self._banks).index(slot.bank))
+        error = sim_slot_error(slot.number)
         return Point(x=slot.pick.x + error.x, y=slot.pick.y + error.y)
 
     def _sim_picked(self, _nozzle: str, x: float, y: float) -> None:

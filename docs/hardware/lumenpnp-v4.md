@@ -127,7 +127,9 @@ From the reference machine (calibrated values vary slightly between machines):
 OpenPnP keeps each Photon slot's taught pick location in `machine.xml`. On the reference
 machine the front rail's slots (addresses 1–25) pick at Y ≈ 73.2 from X 28.6 every
 15.77 mm, and the back rail's (26–50) at Y ≈ 388.6 from X 405.1 every −15.76 mm; single
-slots scatter about 1 mm around those lines.
+slots scatter about 1 mm around those lines. LumenPnP owners number the slots the same way, 1–25 along
+the front rail from left to right and 26–50 along the back rail from right to left, and
+PicnicPlace names slots by those numbers.
 
 The reference machine's discard (157.75, 112.76) and park (389.29, 421.55) positions are
 its owner's choices, not part of the design. In PicnicPlace they go in each machine's

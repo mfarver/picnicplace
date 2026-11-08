@@ -196,9 +196,10 @@ id = "aiming_fiducial"
 label = "Aiming fiducial holder"
 area = { x_min = 197.5, y_min = 188, x_max = 237.5, y_max = 204 }
 
-# Photon feeders on two rails, 25 slots each. Each slot's address is programmed into the
-# rail (the "feeder floor"); these are the usual addresses, front rail 1-25 and back rail
-# 26-50, as on the reference machine. Both rails feed toward the middle of the bed. Pick positions are fitted to that machine's
+# Photon feeders on two rails, 25 slots each, numbered as LumenPnP owners number them:
+# 1-25 along the front rail from left to right, then 26-50 along the back rail from
+# right to left. Each slot's address is programmed into the rail (the "feeder floor")
+# and is the same number. Both rails feed toward the middle of the bed. Pick positions are fitted to that machine's
 # taught slot positions, which scatter about 1 mm around these lines: each slot's own
 # correction is taught in the Feeders workspace. Feeder outlines are estimated.
 [[feeder_banks]]

@@ -36,10 +36,10 @@ def simulated_feeders(config: MachineConfig) -> SimulatedPhotonBus | None:
     profile = config.machine_profile
     if profile.feeder_bus != "photon":
         return None
-    by_id = {s.id: s for s in machine_slots(profile)}
+    by_number = {s.number: s for s in machine_slots(profile)}
     addresses: list[int] = []
-    for slot_id in config.sim_feeders:
-        slot = by_id.get(slot_id)
+    for number in config.sim_feeders:
+        slot = by_number.get(number)
         if slot is not None and slot.address is not None:
             addresses.append(slot.address)
     return SimulatedPhotonBus.with_feeders(

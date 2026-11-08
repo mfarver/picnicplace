@@ -129,11 +129,11 @@ class MachineConfig(_Section):
             "says, as with real endstops. Visual homing finds and corrects it."
         ),
     )
-    sim_feeders: list[str] = Field(
-        default_factory=lambda: ["front:1", "front:2", "front:3", "front:4", "front:5", "back:1"],
+    sim_feeders: list[int] = Field(
+        default_factory=lambda: [1, 2, 3, 4, 5, 26],
         description=(
-            "Simulator and fake firmware: the feeder slots that hold a simulated Photon "
-            "feeder, such as 'front:3' (bank ID and slot number)."
+            "Simulator and fake firmware: the numbers of the feeder slots that hold a "
+            "simulated Photon feeder."
         ),
     )
     speed_scale: float = Field(

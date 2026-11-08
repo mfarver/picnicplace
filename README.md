@@ -34,8 +34,8 @@ run it against a fake LumenPnP firmware, or point it at a real one:
 
 ```sh
 cd core
-uv run picnicd --studio-dir ../studio/dist --driver fake-marlin --profile lumenpnp-v4
-uv run picnicd --studio-dir ../studio/dist --driver marlin --profile lumenpnp-v4 \
+uv run picnicd --studio-dir ../studio/dist --driver fake-marlin --profile lumenpnp-v4.1
+uv run picnicd --studio-dir ../studio/dist --driver marlin --profile lumenpnp-v4.1 \
     --serial-port /dev/ttyACM0 --speed-scale 0.25
 ```
 

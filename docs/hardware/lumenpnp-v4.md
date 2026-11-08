@@ -8,6 +8,30 @@ this repository; this page records the facts PicnicPlace relies on.
 Items marked **inferred** are reasoned from the config rather than observed directly and
 need checking on a machine.
 
+## Versions
+
+PicnicPlace's `lumenpnp-v4.1` profile is for **v4.1 and earlier v4** machines: PCB
+staging plates with the bottom camera in a knockout at the center of the front plate.
+The project lead's machine and the reference machine are both v4.1.
+
+**v4.2** switched to laser-cut metal staging plates (3 mm) and moved the camera. From
+Opulo's repository (OpenPnP configuration of October 2026 and the plate design), for a
+future `lumenpnp-v4.2` profile:
+
+- The camera plate is the same 600 × 120 mm size and position, but its knockout is
+  60 mm across and 120 mm from the plate's −X end. Bottom camera at (38.38, 154.63),
+  homing fiducial at (37.37, 110.04).
+- The second calibration fiducial (the separate cal-fid board in its own holder) is at
+  (63.74, 109.89), level with the datum.
+- Nozzle offsets N1 (−23.54, −65.19), N2 (23.92, −64.39).
+- The plates' hole pattern is a 30 mm grid (not fully extracted; FreeCAD source only).
+
+**Also confirmed by Opulo's configuration:** the stock firmware reads the vacuum sensors
+as one byte (`M261 A109 B1 S2`, "request one byte back via decimal"); the connect
+sequence, outputs, and lights match v4.1; and OpenPnP renumbers Z after homing so both
+nozzles up reads 31.5 (with N2 mapped to 63 − Z), where the firmware itself reports 0.
+PicnicPlace uses the firmware's numbers. The repository does not contain the firmware.
+
 ## Firmware
 
 - Marlin `bugfix-2.1.x`, built Sep 25 2026, `MACHINE_TYPE:LumenPnP`, `AXIS_COUNT:5`
@@ -139,7 +163,7 @@ protocol and is not described here yet.
 
 ## How PicnicPlace uses this
 
-- The `lumenpnp-v4` profile's `[marlin]` table holds the connect sequence, home command,
+- The `lumenpnp-v4.1` profile's `[marlin]` table holds the connect sequence, home command,
   output commands, and vacuum reads above. Its `stock` variant (the default) reads the
   vacuum sensors as one byte; `vacuum-24bit` reads three. Pick one with
   `machine.marlin.variant` in the config.
@@ -193,6 +217,8 @@ the board's notched edge, with the ruler, faces the front and the bottom camera.
 - **Around it:** a reticle (a copper ring about 5 mm across with four ticks pointing
   in), an 8 mm copper ring 0.15 mm wide, and a 5 mm grid of 0.15 mm copper lines
   spanning X −10 … +10 and Y −10 … +5.
+- **Not on this board:** the aiming fiducial in front of the camera is a separate
+  20 × 20 mm board (cal-fid) in its own holder, with the same 1.0 mm dot in a 2 mm opening.
 - **Other fiducials:** 1.0 mm dots in 3 mm openings at (±10, +5) and (±10, −10), the grid
   corners, and at (±35, −20).
 - **Also on the board:** a 30 mm ruler with 1 mm ticks along the front edge (Y −15), a

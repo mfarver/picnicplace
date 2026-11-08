@@ -450,7 +450,7 @@ def is_profile_path(ref: str) -> bool:
 
 
 def load_profile(ref: str) -> MachineProfile:
-    """Load a profile by built-in ID (such as ``lumenpnp-v4``) or by path to a TOML file."""
+    """Load a profile by built-in ID (such as ``lumenpnp-v4.1``) or by path to a TOML file."""
     if is_profile_path(ref):
         try:
             data = tomllib.loads(Path(ref).read_text(encoding="utf-8"))

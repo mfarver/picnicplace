@@ -545,8 +545,9 @@ assume LumenPnP-only behavior.
 PicnicPlace should ship a **LumenPnP machine profile** so a new user selects their machine
 version and goes straight to guided calibration.
 
-**Reference machine: LumenPnP v4.** The first machine profile targets v4. Other versions
-are community supported. The test machine was built by Opulo around October 2026, so it
+**Reference machine: LumenPnP v4.1.** The first machine profile targets v4.1 (PCB
+staging plates, bottom camera at the center). v4.2 (metal plates, camera near one end)
+needs its own profile. Other versions are community supported. The test machine was built by Opulo around October 2026, so it
 should have recent stock firmware.
 
 The Marlin driver reads the firmware name and version (`M115`) on connect, records it in

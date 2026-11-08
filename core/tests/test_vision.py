@@ -107,7 +107,7 @@ def test_finds_the_datum_board_center(dx: float, dy: float, light: bool) -> None
     from picnicplace.camera.synthetic import SceneState, TopRenderer, render_size
     from picnicplace.machine.profile import load_profile
 
-    profile = load_profile("lumenpnp-v4")
+    profile = load_profile("lumenpnp-v4.1")
     camera = next(c for c in profile.cameras if c.id == "top")
     size = render_size(camera)
     fiducial = next(loc for loc in profile.locations if loc.kind == "homing_fiducial")
@@ -156,7 +156,7 @@ def test_camera_scale(visual_client: TestClient) -> None:
 def test_visual_homing_on_the_lumenpnp_profile() -> None:
     """The real profile: origin at the right rear (+X left, +Y front), the datum board,
     and the staging plate. The homing error must come back with the right signs."""
-    config = fast_config(machine={"profile": "lumenpnp-v4", "sim_home_error": (0.4, -0.25)})
+    config = fast_config(machine={"profile": "lumenpnp-v4.1", "sim_home_error": (0.4, -0.25)})
     with TestClient(create_app(config)) as client, connect(client) as s:
         op = home(s)
         assert op["status"] == "succeeded", op
@@ -171,7 +171,7 @@ def test_rotated_view_puts_the_front_at_the_bottom() -> None:
     from picnicplace.camera.synthetic import SceneState, TopRenderer, render_size
     from picnicplace.machine.profile import load_profile
 
-    profile = load_profile("lumenpnp-v4")
+    profile = load_profile("lumenpnp-v4.1")
     camera = next(c for c in profile.cameras if c.id == "top")
     size = render_size(camera)
     fiducial = next(loc for loc in profile.locations if loc.kind == "homing_fiducial")

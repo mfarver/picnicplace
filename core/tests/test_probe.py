@@ -14,7 +14,7 @@ def probe(with_pumps: bool) -> tuple[ProbeReport, list[str]]:
         host = FakeMarlinMemory(FakeSettings(time_scale=50))
         transport = await host.open()
         report = await run_probe(
-            transport, load_profile("lumenpnp-v4"), connect_wait_s=0, with_pumps=with_pumps
+            transport, load_profile("lumenpnp-v4.1"), connect_wait_s=0, with_pumps=with_pumps
         )
         received = list(host.firmware.received)
         await host.stop()
@@ -36,7 +36,7 @@ def test_probe_reads_without_moving() -> None:
     # Nothing that moves the machine, and no outputs switched.
     words = {line.split()[0] for line in received}
     assert not words & {"G0", "G1", "G28", "M106"}
-    text = summarize(report, load_profile("lumenpnp-v4"))
+    text = summarize(report, load_profile("lumenpnp-v4.1"))
     assert "Emergency parser: yes" in text
 
 

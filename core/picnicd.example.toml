@@ -15,7 +15,7 @@ heartbeat_timeout_s = 6.0  # Silent clients are disconnected after this long.
 # "simulator": no hardware. "marlin": a real machine on marlin.port.
 # "fake-marlin": the real Marlin driver talking to a built-in fake LumenPnP firmware.
 driver = "simulator"
-profile = "lumenpnp-v4"    # Built-in profile ID, or a path to a profile TOML file.
+profile = "lumenpnp-v4.1"    # Built-in profile ID, or a path to a profile TOML file.
 sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times faster.
 speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 when
                            # bringing up a machine. Homing speed is the firmware's.

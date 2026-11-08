@@ -275,7 +275,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--serial-port", required=True, help="such as /dev/ttyACM0")
     parser.add_argument("--baud", type=int, default=115200)
-    parser.add_argument("--profile", default="lumenpnp-v4", help="machine profile ID or path")
+    parser.add_argument("--profile", default="lumenpnp-v4.1", help="machine profile ID or path")
     parser.add_argument("--connect-wait", type=float, default=3.0, help="seconds after opening")
     parser.add_argument(
         "--with-pumps",

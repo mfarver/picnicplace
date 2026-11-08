@@ -84,7 +84,7 @@ class MachineConfig(_Section):
         ),
     )
     profile: str = Field(
-        default="lumenpnp-v4",
+        default="lumenpnp-v4.1",
         description="Built-in machine profile ID, or a path to a profile TOML file.",
     )
     sim_time_scale: float = Field(

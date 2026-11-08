@@ -238,8 +238,8 @@ class TopRenderer:
                 c.circle(img, p.x, p.y, r * 3, (20, 20, 20))
                 c.circle(img, p.x, p.y, r, (235, 235, 235))
             elif loc.kind == "fiducial":
-                # A small green board with a copper dot in a mask opening.
-                c.rect(img, p.x, p.y, 10, 6, 0, (40, 110, 45))
+                # A 20 x 20 mm green board (cal-fid) with a copper dot in a mask opening.
+                c.rect(img, p.x, p.y, 20, 20, 0, (40, 110, 45))
                 r = (loc.diameter or 1.0) / 2
                 c.circle(img, p.x, p.y, r * 2, (95, 140, 150))
                 c.circle(img, p.x, p.y, r, DATUM_COPPER)

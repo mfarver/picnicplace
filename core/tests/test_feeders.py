@@ -19,7 +19,6 @@ from picnicplace.feeders.photon import (
 )
 from picnicplace.feeders.pocket import pocket_from_holes
 from picnicplace.feeders.service import (
-    SIM_FIDUCIAL_OFFSET,
     FeederService,
     rotate,
     sim_slot_error,
@@ -263,15 +262,16 @@ def test_teach_measure_fiducial_and_calibrate(lumen: TestClient) -> None:
             (pick.x, pick.y), abs=0.02
         )
 
-        # Then the fiducial: jog roughly onto it and let vision find its center.
-        fid = rotate(SIM_FIDUCIAL_OFFSET, slot["slot"]["rotation"])
+        # Then the fiducial: jog roughly onto it and let vision find its center. On a
+        # Photon feeder it is 19.15 mm along the feed from the pick location and 4.1 mm
+        # from the sprocket holes' line toward the pockets: 0.6 mm past the pocket line
+        # of 8 mm tape, whose pockets are 3.5 mm from the holes.
+        fid = rotate(Point(x=19.15, y=-0.6), slot["slot"]["rotation"])
         succeeded(s.move(X=pick.x + fid.x + 0.6, Y=pick.y + fid.y - 0.4))
         succeeded(s.wait(s.post("/api/v1/feeders/slots/1/fiducial")))
         offset = service(lumen).setup.setup.fiducial_offset
         assert offset is not None
-        assert (offset.x, offset.y) == pytest.approx(
-            (SIM_FIDUCIAL_OFFSET.x, SIM_FIDUCIAL_OFFSET.y), abs=0.05
-        )
+        assert (offset.x, offset.y) == pytest.approx((19.15, -4.1), abs=0.05)
 
         # Now every slot with a feeder is found from its fiducial.
         op = succeeded(s.wait(s.post("/api/v1/feeders/calibrate", {})))
@@ -283,6 +283,44 @@ def test_teach_measure_fiducial_and_calibrate(lumen: TestClient) -> None:
             assert (state["pick"]["x"], state["pick"]["y"]) == pytest.approx(
                 (want.x, want.y), abs=0.05
             ), slot_id
+
+
+def test_calibrating_a_12mm_feeder(lumen: TestClient) -> None:
+    """The fiducial is fixed relative to the sprocket holes, so on 12 mm tape (pockets
+    5.5 mm from the holes, not 3.5) it is 2 mm closer to the pocket line; calibration
+    must allow for that."""
+    library = lumen.app.state.ctx.library  # type: ignore[attr-defined]
+    add_part(lumen)
+    library.put_part(
+        Part(
+            id="BIG-12",
+            footprint_id="R0603",
+            tape=Tape(kind="embossed", width=12, pitch=8, rotation=0),
+        )
+    )
+    with connect(lumen) as s:
+        s.home()
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        uuid = slot_state(s, "4")["feeder"]["uuid"]
+        s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": "BIG-12"})
+        succeeded(s.wait(s.post("/api/v1/feeders/calibrate", {"slot_ids": ["4", "5"]})))
+        for slot_id in ("4", "5"):
+            state = slot_state(s, slot_id)
+            want = true_pick(state)
+            assert (state["pick"]["x"], state["pick"]["y"]) == pytest.approx(
+                (want.x, want.y), abs=0.05
+            ), slot_id
+
+
+def test_feeder_noses_keep_boards_off_the_plate_edge() -> None:
+    from picnicplace.machine.profile import load_profile
+
+    profile = load_profile("lumenpnp-v4.1")
+    feeders = {k.id: k.area for k in profile.board_keep_outs() if k.id.startswith("feeders")}
+    # Front rail picks at Y 73.24 and its feeders reach 27.3 mm past: over the camera
+    # plate's front edge (Y 93.07). The back rail's stop short of the rear plate.
+    assert feeders["feeders-front"].y_max == pytest.approx(73.24 + 27.3)
+    assert feeders["feeders-back"].y_min == pytest.approx(388.58 - 27.3)
 
 
 def test_vision_finds_the_drifted_pocket(lumen: TestClient) -> None:

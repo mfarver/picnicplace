@@ -722,7 +722,7 @@
                 "type": "null"
               }
             ],
-            "description": "Where each feeder's alignment fiducial is, from its pick location, in the tape's frame: x along the feed, y across it toward the sprocket holes."
+            "description": "Where each feeder's alignment fiducial is: x along the feed from the pick location, y across the tape from the sprocket holes' center line (positive toward the holes' side, so the pockets are at minus the tape's pocket line). Measured from the holes, the offset is the same for every tape width."
           },
           "first_address": {
             "anyOf": [
@@ -756,6 +756,13 @@
             "title": "Length",
             "type": "number"
           },
+          "pick_to_front": {
+            "default": 8.0,
+            "description": "How far a feeder reaches past its pick location, along the feed.",
+            "minimum": 0.0,
+            "title": "Pick To Front",
+            "type": "number"
+          },
           "pitch": {
             "$ref": "#/components/schemas/Point",
             "description": "Step from one slot's pick location to the next."
@@ -783,6 +790,7 @@
           "length",
           "rotation",
           "first_address",
+          "pick_to_front",
           "fiducial_offset",
           "fiducial_diameter"
         ],

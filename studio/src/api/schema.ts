@@ -1178,7 +1178,7 @@ export interface components {
             count: number;
             /** Fiducial Diameter */
             fiducial_diameter: number | null;
-            /** @description Where each feeder's alignment fiducial is, from its pick location, in the tape's frame: x along the feed, y across it toward the sprocket holes. */
+            /** @description Where each feeder's alignment fiducial is: x along the feed from the pick location, y across the tape from the sprocket holes' center line (positive toward the holes' side, so the pockets are at minus the tape's pocket line). Measured from the holes, the offset is the same for every tape width. */
             fiducial_offset: components["schemas"]["Point"] | null;
             /**
              * First Address
@@ -1196,6 +1196,12 @@ export interface components {
              * @description Feeder length along the tape, in mm.
              */
             length: number;
+            /**
+             * Pick To Front
+             * @description How far a feeder reaches past its pick location, along the feed.
+             * @default 8
+             */
+            pick_to_front: number;
             /** @description Step from one slot's pick location to the next. */
             pitch: components["schemas"]["Point"];
             /**

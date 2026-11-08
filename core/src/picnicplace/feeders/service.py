@@ -38,9 +38,21 @@ FIDUCIAL_SEARCH_MM = 3.0
 FIDUCIAL_DIAMETERS = (0.5, 2.5)
 """Diameter range searched when the profile does not give the fiducial's size."""
 
-SIM_FIDUCIAL_OFFSET = Point(x=6.0, y=-6.5)
-"""Where the simulator draws a feeder's fiducial when the profile gives none: the
-simulator's own choice, in the tape frame. Real feeders' offsets are measured."""
+SIM_FIDUCIAL_OFFSET = Point(x=19.15, y=-4.1)
+"""Where the simulator draws a feeder's fiducial when the profile gives none: as on
+Opulo's Photon feeders, along the feed from the pick location and across from the
+sprocket holes' line."""
+
+PHOTON_WINDOW = (-7.7, 4.8, -5.5, 1.75)
+"""A Photon feeder's pick window, from Opulo's design: along the feed from the pick
+location, and across from the sprocket holes' line (toward the holes positive)."""
+
+PHOTON_ACROSS = (-11.5, 3.5)
+"""A Photon feeder's sides, across from the sprocket holes' line."""
+
+SIM_FIDUCIAL_MARKS = 2.0
+"""The two small marks beside a Photon feeder's fiducial, this far to either side across
+the tape (on an 8 mm feeder)."""
 
 SIM_PICK_RADIUS = 1.5
 """A simulated pick this close to a pocket takes its part."""
@@ -313,6 +325,13 @@ class FeederService:
 
     # --- Fiducials -----------------------------------------------------------------------
 
+    def _fiducial_vector(self, slot: Slot, offset: Point) -> Point:
+        """From a slot's pick location to its feeder's fiducial, in machine coordinates.
+        The offset is measured across from the sprocket holes, so the tape's pocket line
+        is added to make it relative to the pocket."""
+        line, _ = self._pocket_line(slot)
+        return rotate(Point(x=offset.x, y=offset.y + line), slot.rotation)
+
     def _fiducial_size(self, bank: FeederBank) -> tuple[float, float]:
         if bank.fiducial_diameter is not None:
             return bank.fiducial_diameter * 0.6, bank.fiducial_diameter * 1.5
@@ -333,15 +352,16 @@ class FeederService:
                     f"{FIDUCIAL_SEARCH_MM:g} mm"
                 )
             pick = self.pick(slot)
-            offset = rotate(Point(x=found.x - pick.x, y=found.y - pick.y), -slot.rotation)
-            offset = Point(x=round(offset.x, 3), y=round(offset.y, 3))
+            seen = rotate(Point(x=found.x - pick.x, y=found.y - pick.y), -slot.rotation)
+            line, _ = self._pocket_line(slot)
+            offset = Point(x=round(seen.x, 3), y=round(seen.y - line, 3))
             self._store.setup.fiducial_offset = offset
             self._store.save()
             taught = slot.id in self._store.setup.slots
             note = "" if taught else " The slot's pick location was not taught: check it."
             return (
-                f"Feeder fiducial is {offset.x:+.2f} mm along the feed and {offset.y:+.2f} mm "
-                f"across it from the pick location.{note}"
+                f"Feeder fiducial is {offset.x:+.2f} mm along the feed from the pick location "
+                f"and {offset.y:+.2f} mm across from the sprocket holes.{note}"
             )
 
         return self._machine.start_task("feeder_fiducial", work)
@@ -370,7 +390,7 @@ class FeederService:
                 bank = self._banks[slot.bank]
                 offset, _ = self.fiducial_offset(bank)
                 assert offset is not None
-                turned = rotate(offset, slot.rotation)
+                turned = self._fiducial_vector(slot, offset)
                 guess = self.pick(slot)
                 await self._machine.move_camera_to(guess.x + turned.x, guess.y + turned.y)
                 low, high = self._fiducial_size(bank)
@@ -489,7 +509,6 @@ class FeederService:
                 continue
             bank = self._banks[slot.bank]
             pick = self._sim_true_pick(slot)
-            fid = rotate(bank.fiducial_offset or SIM_FIDUCIAL_OFFSET, slot.rotation)
             assignment = self._store.setup.feeders.get(feeder.uuid.hex().upper())
             part = self._part(assignment)
             footprint = (
@@ -498,6 +517,13 @@ class FeederService:
             tape = part.tape if part is not None else None
             width = tape.width if tape is not None and tape.width else 8.0
             pitch = tape.pitch if tape is not None and tape.pitch else DEFAULT_PITCH
+            offset = bank.fiducial_offset or SIM_FIDUCIAL_OFFSET
+            line = _pocket_line_for(width)
+            fid = rotate(Point(x=offset.x, y=offset.y + line), slot.rotation)
+            side = rotate(Point(x=0, y=SIM_FIDUCIAL_MARKS), slot.rotation)
+            marks = tuple(
+                (pick.x + fid.x + k * side.x, pick.y + fid.y + k * side.y) for k in (-1, 1)
+            )
             tapes.append(
                 TapeScene(
                     pick=(pick.x, pick.y),
@@ -516,6 +542,15 @@ class FeederService:
                     else (),
                     fiducial=(pick.x + fid.x, pick.y + fid.y),
                     fiducial_diameter=bank.fiducial_diameter or 1.0,
+                    fiducial_marks=marks,
+                    feeder_ahead=bank.pick_to_front,
+                    feeder_center=(PHOTON_ACROSS[0] + PHOTON_ACROSS[1]) / 2 + line,
+                    window=(
+                        PHOTON_WINDOW[0],
+                        PHOTON_WINDOW[1],
+                        PHOTON_WINDOW[2] + line,
+                        PHOTON_WINDOW[3] + line,
+                    ),
                     feeder_width=bank.width,
                     feeder_length=bank.length,
                 )

@@ -155,14 +155,36 @@ class FeederBank(ProfileModel):
         ),
     )
 
+    pick_to_front: float = Field(
+        default=8.0,
+        ge=0,
+        description="How far a feeder reaches past its pick location, along the feed.",
+    )
     fiducial_offset: Point | None = Field(
         default=None,
         description=(
-            "Where each feeder's alignment fiducial is, from its pick location, in the "
-            "tape's frame: x along the feed, y across it toward the sprocket holes."
+            "Where each feeder's alignment fiducial is: x along the feed from the pick "
+            "location, y across the tape from the sprocket holes' center line (positive "
+            "toward the holes' side, so the pockets are at minus the tape's pocket line). "
+            "Measured from the holes, the offset is the same for every tape width."
         ),
     )
     fiducial_diameter: float | None = Field(default=None, gt=0)
+
+    def footprint(self) -> "Rect":
+        """The area the bank's feeders cover, as a rectangle around all of them."""
+        a = math.radians(self.rotation)
+        ux, uy = math.cos(a), math.sin(a)
+        nx, ny = -uy, ux
+        xs: list[float] = []
+        ys: list[float] = []
+        for i in range(self.count):
+            p = self.pick(i)
+            for s in (self.pick_to_front - self.length, self.pick_to_front):
+                for d in (-self.width / 2, self.width / 2):
+                    xs.append(p.x + ux * s + nx * d)
+                    ys.append(p.y + uy * s + ny * d)
+        return Rect(x_min=min(xs), y_min=min(ys), x_max=max(xs), y_max=max(ys))
 
     def pick(self, index: int) -> Point:
         """Nominal pick location of a slot, counting from 0."""
@@ -450,6 +472,17 @@ class MachineProfile(ProfileModel):
         if x_min >= x_max or y_min >= y_max:
             return None
         return Rect(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
+
+    def board_keep_outs(self) -> list[KeepOut]:
+        """Everywhere a board cannot go: the profile's keep-outs and the feeders, whose
+        noses can reach over the staging plates."""
+        return [
+            *self.keep_outs,
+            *(
+                KeepOut(id=f"feeders-{b.id}", label=f"{b.label} feeders", area=b.footprint())
+                for b in self.feeder_banks
+            ),
+        ]
 
     def axis(self, name: str) -> Axis:
         return next(a for a in self.axes if a.name == name)

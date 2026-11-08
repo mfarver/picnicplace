@@ -495,7 +495,7 @@ function FrontMarker({ description }: { description: MachineProfile }) {
 
 /** Feeders in one bank: the body extends behind the pick location, against the feed. */
 function FeederBankShape({ bank }: { bank: FeederBank }) {
-  const ahead = 8;
+  const ahead = bank.pick_to_front;
   const slots = Array.from({ length: bank.count }, (_, i) => ({
     x: bank.first_pick.x + bank.pitch.x * i,
     y: bank.first_pick.y + bank.pitch.y * i,

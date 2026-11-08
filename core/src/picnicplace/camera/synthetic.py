@@ -82,6 +82,16 @@ class TapeScene:
     """Pads as (x, y, width, height, rotation) in the footprint's frame."""
     fiducial: tuple[float, float] | None = None
     fiducial_diameter: float = 1.0
+    fiducial_marks: tuple[tuple[float, float], ...] = ()
+    """Smaller marks beside the fiducial (a Photon feeder's width code)."""
+    feeder_ahead: float = 8.0
+    """How far the feeder reaches past the pick location."""
+    feeder_center: float = 0.0
+    """Where the middle of the feeder is across the tape, from the pocket line."""
+    window: tuple[float, float, float, float] | None = None
+    """The opening the tape shows through (along from, along to, across from, across
+    to), from the pick location and the pocket line. Elsewhere the feeder covers the
+    tape. None: the tape shows its whole length."""
     feeder_width: float = 15.0
     feeder_length: float = 100.0
 
@@ -318,8 +328,8 @@ class TopRenderer:
 
 
 FEEDER_BODY = (52, 52, 56)
-FEEDER_AHEAD = 8.0
-"""How far a feeder reaches past its pick location, along the feed."""
+FIDUCIAL_BOARD = (28, 28, 30)
+"""The small black board on a Photon feeder's nose."""
 SPROCKET_PITCH = 4.0
 SPROCKET_EDGE = 1.75
 
@@ -338,12 +348,9 @@ def _tape(c: _Canvas, img: Image, t: TapeScene) -> None:
     if not c.visible(px, py, t.feeder_length + 20):
         return
     # The feeder body, then the tape on it.
-    bx, by = at(FEEDER_AHEAD - t.feeder_length / 2, 0)
+    behind = t.feeder_length - t.feeder_ahead
+    bx, by = at(t.feeder_ahead - t.feeder_length / 2, t.feeder_center)
     c.rect(img, bx, by, t.feeder_length, t.feeder_width, t.rotation, FEEDER_BODY)
-    if t.fiducial is not None:
-        fx, fy = t.fiducial
-        c.circle(img, fx, fy, t.fiducial_diameter * 1.5, (25, 25, 25))
-        c.circle(img, fx, fy, t.fiducial_diameter / 2, DATUM_COPPER)
     holes_line = t.pocket_line
     edge = holes_line + SPROCKET_EDGE
     length = t.feeder_length * 0.8
@@ -378,6 +385,31 @@ def _tape(c: _Canvas, img: Image, t: TapeScene) -> None:
         if k < 0 or (k == 0 and not t.pick_full):
             continue
         _part(c, img, qx, qy, angle, t)
+
+    if t.window is not None:
+        # The top of the feeder covers the tape except at the pick window.
+        s0, s1, d0, d1 = t.window
+        lo, hi = t.feeder_center - t.feeder_width / 2, t.feeder_center + t.feeder_width / 2
+        for (a0, a1), (e0, e1) in (
+            ((-behind, s0), (lo, hi)),
+            ((s1, t.feeder_ahead), (lo, hi)),
+            ((s0, s1), (lo, d0)),
+            ((s0, s1), (d1, hi)),
+        ):
+            if a1 > a0 and e1 > e0:
+                cx, cy = at((a0 + a1) / 2, (e0 + e1) / 2)
+                c.rect(img, cx, cy, a1 - a0, e1 - e0, t.rotation, FEEDER_BODY)
+
+    if t.fiducial is not None:
+        # A 4 x 12 mm board, long across the feeder: the fiducial in a mask opening twice
+        # its size, and the smaller marks beside it.
+        fx, fy = t.fiducial
+        c.rect(img, fx, fy, 4.0, 12.0, t.rotation, FIDUCIAL_BOARD)
+        c.circle(img, fx, fy, t.fiducial_diameter, DATUM_FR4)
+        c.circle(img, fx, fy, t.fiducial_diameter / 2, DATUM_COPPER)
+        for mx, my in t.fiducial_marks:
+            c.circle(img, mx, my, 0.75, DATUM_FR4)
+            c.circle(img, mx, my, 0.25, DATUM_COPPER)
 
 
 def _extent(t: TapeScene) -> tuple[float, float]:

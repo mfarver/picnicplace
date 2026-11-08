@@ -175,9 +175,21 @@ shows Python cannot hold target throughput.
   - The core can only check the input before sending a move. A firmware-level interlock
     (firmware refuses or halts X/Y motion while the input is unsafe) is the stronger
     guarantee and is recommended where firmware supports it.
+- **Moves travel at safe Z.** A move that changes X or Y first raises every nozzle to
+  travel height (if any is below safe Z), then moves X, Y, and rotation, then lowers Z to
+  its target. Jogs never move Z on their own: an X or Y jog with a nozzle below safe Z is
+  refused, so the operator decides when Z moves.
 - **Control lease.** Many clients may observe; only one holds the **control lease** at a
-  time and can move the machine. Leases can be requested, handed over, or forcibly taken
-  with confirmation.
+  time and can move the machine or switch outputs. Leases can be requested, handed over,
+  or forcibly taken with confirmation.
+  - A client that commands motion while no one holds the lease takes it implicitly, so a
+    single operator never has to think about it.
+  - Taking the lease from another client needs an explicit `force`, which clients confirm
+    with the user first.
+  - Motion requests name the sending client (the ID from the event socket's `hello`,
+    in the `X-PicnicPlace-Client` header). The client must be connected; one-shot
+    requests from nowhere cannot move the machine.
+  - The emergency stop needs no lease: any client can stop the machine.
 
 ### 5.3 Client presence rules
 
@@ -315,6 +327,14 @@ Requirements:
 - **Frame timestamps** are attached to frames on both transports so clients can line up
   video with machine position and overlay data.
 - When no client is watching a stream, the core stops encoding it.
+- **Endpoints (built in M1):** `GET /api/v1/cameras`, `.../{id}/snapshot.jpg`, and
+  `.../{id}/stream.mjpg` with `width`, `fps`, `quality`, and `frames` parameters. Each
+  JPEG carries `X-Timestamp` and `X-Frame` headers. Media endpoints also accept the token
+  as a `token` query parameter, since `<img>` tags cannot send headers. Each camera
+  captures once however many clients watch, and stops a few seconds after the last
+  leaves. The simulator renders synthetic views from the machine state (bed, a demo board
+  with fiducials, feeder tape, nozzles and held parts) that match the machine geometry,
+  so vision can be tested against known truth.
 
 ## 7. Core subsystems
 
@@ -339,7 +359,7 @@ A `MotionDriver` interface with implementations:
 | Driver | Priority | Notes |
 |---|---|---|
 | **Simulator** | 1.0, first | Simulated motion and synthetic camera images. Required for CI and contributor development without hardware. |
-| **Marlin (LumenPnP)** | 1.0 | G-code over USB serial, `ok`-based flow control, position reports, vacuum sensor reads, RS-485 passthrough for Photon feeders. |
+| **Marlin (LumenPnP)** | 1.0 | G-code over USB serial, `ok`-based flow control, position reports, vacuum sensor reads, RS-485 passthrough for Photon feeders. The machine-specific G-code lives in the machine profile's `[marlin]` table, with named firmware variants. A fake LumenPnP firmware (`fake-marlin`) lets the real driver run without hardware. |
 | Klipper (via Moonraker API) | Post-1.0 | |
 | grblHAL / Smoothieware | Post-1.0 | |
 
@@ -548,9 +568,9 @@ refusing to connect.
 
 ```
 picnicplace/
-  core/            Python package: picnicd, drivers, vision, job engine, CLI
+  core/            Python package: picnicd, drivers, vision, job engine, CLI, and the
+                   built-in machine profiles (core/src/picnicplace/profiles/)
   studio/          TypeScript GUI
-  profiles/        Machine profiles (LumenPnP, …)
   docs/            Specs, ADRs, user docs, generated OpenAPI document (docs/api/)
   testdata/        Vision image corpus, sample boards
 ```

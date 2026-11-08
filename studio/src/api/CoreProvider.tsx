@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { reconnectDelayMs } from "./backoff";
-import { eventsUrl } from "./client";
+import { eventsUrl, setClientId } from "./client";
 import { CoreContext, coreReducer, initialCoreState } from "./core";
 import { loadToken, saveToken } from "./token";
 import type { ClientMessage, ServerEvent } from "./types";
@@ -31,10 +31,13 @@ export function CoreProvider({ children }: { children: ReactNode }) {
         heartbeat = window.setInterval(() => socket?.send(JSON.stringify(ping)), HEARTBEAT_MS);
       };
       socket.onmessage = (msg: MessageEvent<string>) => {
-        dispatch({ kind: "event", event: JSON.parse(msg.data) as ServerEvent });
+        const event = JSON.parse(msg.data) as ServerEvent;
+        if (event.type === "hello") setClientId(event.client_id);
+        dispatch({ kind: "event", event });
       };
       socket.onclose = (ev) => {
         window.clearInterval(heartbeat);
+        setClientId(null);
         if (stopped) return;
         if (ev.code === CLOSE_UNAUTHORIZED) {
           dispatch({ kind: "status", status: "unauthorized" });

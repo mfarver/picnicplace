@@ -1,5 +1,5 @@
-import { type ConnectionStatus, useCore } from "../api/core";
-import { formatAxis } from "../format";
+import { type ConnectionStatus, hasControl, useCore } from "../api/core";
+import { describeClient, formatAxis } from "../format";
 
 const CONNECTION_LABEL: Record<ConnectionStatus, string> = {
   connecting: "Connecting",
@@ -9,7 +9,13 @@ const CONNECTION_LABEL: Record<ConnectionStatus, string> = {
 };
 
 export function StatusBar() {
-  const { status, machine, presence, serverVersion } = useCore();
+  const core = useCore();
+  const { status, machine, presence, lease, serverVersion } = core;
+  const control = hasControl(core)
+    ? "you"
+    : lease?.holder
+      ? describeClient(lease.holder)
+      : "no one";
   const live = status === "open" && machine !== undefined;
 
   return (
@@ -27,7 +33,18 @@ export function StatusBar() {
             </strong>
           </span>
           <span className="status-item">{machine.homed ? "Homed" : "Not homed"}</span>
+          <span className="status-item">
+            Control <strong className={hasControl(core) ? "text-ok" : undefined}>{control}</strong>
+          </span>
           {machine.estop && <span className="status-item badge-danger">E-STOP LATCHED</span>}
+          {machine.speed_scale < 1 && (
+            <span
+              className="status-item badge-warn"
+              title="Bring-up mode: every move runs at this fraction of full speed"
+            >
+              Slow {Math.round(machine.speed_scale * 100)}%
+            </span>
+          )}
           <span className="status-item mono">
             {machine.axes.map((axis) => (
               <span key={axis} className="status-axis">
@@ -44,7 +61,8 @@ export function StatusBar() {
         </span>
       )}
       <span className="status-item text-muted">
-        {serverVersion ? `Core ${serverVersion}` : "Core —"} · {machine?.driver ?? "no driver"}
+        {serverVersion ? `Core ${serverVersion}` : "Core —"} ·{" "}
+        {machine?.firmware ?? machine?.driver ?? "no driver"}
       </span>
     </footer>
   );

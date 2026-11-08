@@ -20,6 +20,14 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--host", help="override server.host")
     p.add_argument("--port", type=int, help="override server.port")
     p.add_argument("--studio-dir", type=Path, help="override server.studio_dir")
+    p.add_argument("--profile", help="override machine.profile (built-in ID or TOML path)")
+    p.add_argument(
+        "--driver", choices=["simulator", "marlin", "fake-marlin"], help="override machine.driver"
+    )
+    p.add_argument("--serial-port", help="override machine.marlin.port")
+    p.add_argument(
+        "--speed-scale", type=float, help="override machine.speed_scale (0.25 = quarter speed)"
+    )
     p.add_argument(
         "--sim-time-scale", type=float, help="override machine.sim_time_scale (simulator)"
     )
@@ -39,11 +47,16 @@ def _build_config(args: argparse.Namespace) -> Config:
         ("server", "host"): args.host,
         ("server", "port"): args.port,
         ("server", "studio_dir"): args.studio_dir,
+        ("machine", "profile"): args.profile,
+        ("machine", "driver"): args.driver,
         ("machine", "sim_time_scale"): args.sim_time_scale,
+        ("machine", "speed_scale"): args.speed_scale,
     }
     for (section, key), value in overrides.items():
         if value is not None:
             data[section][key] = value
+    if args.serial_port is not None:
+        data["machine"]["marlin"]["port"] = args.serial_port
     return Config.model_validate(data)
 
 

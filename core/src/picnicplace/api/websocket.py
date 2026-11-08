@@ -20,6 +20,7 @@ from picnicplace.api.context import AppContext
 from picnicplace.events import Subscription, SubscriptionOverflowError
 from picnicplace.schemas import (
     PROTOCOL_VERSION,
+    ClientInfo,
     ClientMessage,
     ErrorEvent,
     HelloEvent,
@@ -34,11 +35,13 @@ CLOSE_UNAUTHORIZED = 4401
 CLOSE_HEARTBEAT_TIMEOUT = 4408
 CLOSE_TOO_SLOW = 4429
 
+MAX_NAME_LENGTH = 64
+
 _client_message: TypeAdapter[ClientMessage] = TypeAdapter(ClientMessage)
 
 
 @router.websocket("/events")
-async def events(ws: WebSocket, token: str | None = None) -> None:
+async def events(ws: WebSocket, token: str | None = None, name: str | None = None) -> None:
     ctx: AppContext = ws.app.state.ctx
     await ws.accept()
     # Browsers cannot set headers on WebSocket requests, so the token is a query parameter.
@@ -46,10 +49,15 @@ async def events(ws: WebSocket, token: str | None = None) -> None:
         await ws.close(CLOSE_UNAUTHORIZED, "missing or invalid token")
         return
 
-    client_id = uuid.uuid4().hex[:12]
+    client = ClientInfo(
+        id=uuid.uuid4().hex[:12],
+        name=(name or "Client").strip()[:MAX_NAME_LENGTH] or "Client",
+        address=ws.client.host if ws.client else None,
+    )
+    client_id = client.id
     sub = ctx.bus.subscribe()
-    ctx.presence.add(client_id)
-    log.info("client %s connected", client_id)
+    ctx.presence.add(client)
+    log.info("client %s (%s) connected from %s", client_id, client.name, client.address)
     try:
         hello = HelloEvent(
             protocol=PROTOCOL_VERSION,
@@ -57,6 +65,7 @@ async def events(ws: WebSocket, token: str | None = None) -> None:
             client_id=client_id,
             machine=ctx.machine.state,
             presence=ctx.presence.state,
+            lease=ctx.lease.state,
         )
         await ws.send_text(hello.model_dump_json())
         close_code = await _serve(ws, sub, ctx.config.presence.heartbeat_timeout_s)

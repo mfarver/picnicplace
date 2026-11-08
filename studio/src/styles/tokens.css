@@ -54,7 +54,13 @@
   --danger: #ef4d55;
   --danger-hover: #ff5f67;
   --danger-soft: rgb(239 77 85 / 14%);
+  --warn-soft: rgb(242 184 75 / 14%);
   --shadow: 0 8px 32px rgb(0 0 0 / 45%);
+  --mv-bed: #171a1f;
+  --mv-work: rgb(47 191 134 / 5%);
+  --mv-work-stroke: rgb(47 191 134 / 30%);
+  --mv-camera: #5aa7f0;
+  --mv-camera-soft: rgb(90 167 240 / 14%);
 }
 
 :root[data-theme="light"] {
@@ -77,5 +83,11 @@
   --danger: #d93a42;
   --danger-hover: #c22f37;
   --danger-soft: rgb(217 58 66 / 10%);
+  --warn-soft: rgb(201 138 18 / 12%);
   --shadow: 0 8px 32px rgb(20 24 30 / 16%);
+  --mv-bed: #ffffff;
+  --mv-work: rgb(31 157 107 / 6%);
+  --mv-work-stroke: rgb(31 157 107 / 35%);
+  --mv-camera: #2f7fd0;
+  --mv-camera-soft: rgb(47 127 208 / 12%);
 }

@@ -1,0 +1,275 @@
+# LumenPnP v4 machine profile.
+#
+# Geometry, speeds, and I/O come from a working LumenPnP v4 (its OpenPnP machine.xml and a
+# serial log, November 2026); see docs/hardware/lumenpnp-v4.md. Calibrated values such as
+# nozzle offsets differ a little between machines and are refined by calibration.
+#
+# Still PROVISIONAL: the feeder rails. Photon feeder positions are not stored in OpenPnP's
+# config, so the rails below are estimates.
+#
+# Units: millimeters, degrees, seconds. X increases to the right, Y toward the back.
+# The head position is the center of the top camera; nozzle offsets are relative to it.
+
+id = "lumenpnp-v4"
+name = "LumenPnP v4"
+provisional = true
+
+# The outline is drawn to cover where the nozzles can reach (64 mm in front of the camera).
+bed = { x_min = -40, y_min = -75, x_max = 475, y_max = 500 }
+# Where the staging plates hold trays and boards, from the tray feeders on the reference
+# machine. Boards sit at about Z = -27.5.
+work_area = { x_min = 60, y_min = 90, x_max = 440, y_max = 300 }
+
+# Both nozzles share the Z motor: N1 goes down as Z decreases, N2 as Z increases.
+# Z = 0 has both nozzles up. OpenPnP's LumenPnP config treats -15..15 as safe for travel.
+safe_z = -15.0
+
+[[axes]]
+name = "X"
+min = 0
+max = 433
+max_speed = 600
+
+# Y homes at 0, below its lower soft limit.
+[[axes]]
+name = "Y"
+min = 44.454
+max = 487
+max_speed = 500
+
+[[axes]]
+name = "Z"
+min = -28.5
+max = 28.5
+max_speed = 400
+
+# Rotation is not homed and turns without limit; positions like -6300 are normal.
+[[axes]]
+name = "A"
+kind = "rotary"
+continuous = true
+min = -360
+max = 360
+max_speed = 720
+
+[[axes]]
+name = "B"
+kind = "rotary"
+continuous = true
+min = -360
+max = 360
+max_speed = 720
+
+[[nozzles]]
+id = "N1"
+label = "Left nozzle"
+offset = { x = -23.836, y = -64.409 }
+z_axis = "Z"
+z_sign = 1
+rotation_axis = "A"
+vacuum_input = "vac_n1"
+pump_output = "pump_n1"
+valve_output = "valve_n1"
+
+[[nozzles]]
+id = "N2"
+label = "Right nozzle"
+offset = { x = 23.344, y = -64.384 }
+z_axis = "Z"
+z_sign = -1
+rotation_axis = "B"
+vacuum_input = "vac_n2"
+pump_output = "pump_n2"
+valve_output = "valve_n2"
+
+# 1920 x 1080 at 0.01075 mm/pixel at board height.
+[[cameras]]
+id = "top"
+label = "Top camera"
+mount = "head"
+position = { x = 0, y = 0 }
+looking = "down"
+field_of_view = { x = 20.6, y = 11.7 }
+light_output = "light_top"
+
+# 1920 x 1080 at 0.0206 mm/pixel.
+[[cameras]]
+id = "bottom"
+label = "Bottom camera"
+mount = "fixed"
+position = { x = 217.736, y = 153.071 }
+looking = "up"
+field_of_view = { x = 39.6, y = 22.3 }
+light_output = "light_bottom"
+
+[[locations]]
+id = "homing_fiducial"
+label = "Homing fiducial"
+kind = "homing_fiducial"
+position = { x = 217, y = 106 }
+
+[[locations]]
+id = "discard"
+label = "Discard"
+kind = "discard"
+position = { x = 157.751, y = 112.758 }
+
+[[locations]]
+id = "park"
+label = "Park"
+kind = "park"
+position = { x = 389.292, y = 421.551 }
+
+# Estimated: see the note at the top.
+[[feeder_banks]]
+id = "front"
+label = "Front rail"
+first_pick = { x = 40, y = 30 }
+pitch = { x = 15, y = 0 }
+count = 24
+width = 13
+length = 100
+rotation = 90
+
+[[feeder_banks]]
+id = "back"
+label = "Back rail"
+first_pick = { x = 40, y = 410 }
+pitch = { x = 15, y = 0 }
+count = 24
+width = 13
+length = 100
+rotation = -90
+
+[[inputs]]
+id = "home_x"
+label = "X home"
+kind = "digital"
+role = "home"
+axis = "X"
+
+[[inputs]]
+id = "home_y"
+label = "Y home"
+kind = "digital"
+role = "home"
+axis = "Y"
+
+[[inputs]]
+id = "home_z"
+label = "Z home"
+kind = "digital"
+role = "home"
+axis = "Z"
+
+# Vacuum sensors report signed 24-bit counts that grow more negative with more vacuum. At
+# rest they read near 0; an open nozzle settles near -1,500,000. OpenPnP's nozzle tip
+# settings treat -1,600,000 and below as a part held. Firmware that reports only the top
+# byte is scaled to the same counts by the driver.
+[[inputs]]
+id = "vac_n1"
+label = "N1 vacuum"
+kind = "analog"
+role = "vacuum"
+unit = "counts"
+range = { min = 0, max = -2500000 }
+threshold = -1600000
+
+[[inputs]]
+id = "vac_n2"
+label = "N2 vacuum"
+kind = "analog"
+role = "vacuum"
+unit = "counts"
+range = { min = 0, max = -2500000 }
+threshold = -1600000
+
+# Each nozzle has a pump and a valve on Marlin fan outputs. OpenPnP switches the pair
+# together; which output is the pump and which the valve is inferred (see the notes).
+[[outputs]]
+id = "pump_n1"
+label = "N1 pump"
+role = "pump"
+
+[[outputs]]
+id = "valve_n1"
+label = "N1 valve"
+role = "valve"
+
+[[outputs]]
+id = "pump_n2"
+label = "N2 pump"
+role = "pump"
+
+[[outputs]]
+id = "valve_n2"
+label = "N2 valve"
+role = "valve"
+
+[[outputs]]
+id = "light_top"
+label = "Top light"
+role = "light"
+
+[[outputs]]
+id = "light_bottom"
+label = "Bottom light"
+role = "light"
+
+# --- Marlin driver ---------------------------------------------------------------------
+# G-code as observed on a LumenPnP v4 (docs/hardware/lumenpnp-v4.md).
+
+[marlin]
+expected_machine_type = "LumenPnP"
+connect = [
+  "G90",
+  # Configure both vacuum sensors: select each through the I2C multiplexer (address 112),
+  # then write 0x1B to the sensor's command register (address 109, register 48).
+  "M260 A112 B1 S1", "M260 A109", "M260 B48", "M260 B27", "M260 S1",
+  "M260 A112 B2 S1", "M260 A109", "M260 B48", "M260 B27", "M260 S1",
+  "M113 S0",
+  "M203 X2000 Y2000 Z600 A60000 B60000",
+  "M201 X20000 Y20000 Z15000 A30000 B30000",
+  "M205 J0.02",
+]
+home = ["G28"]
+default_variant = "stock"
+
+# Inferred: the PWM 180 outputs are the pumps, the full-on ones the valves.
+[marlin.outputs]
+pump_n1 = { on = ["M106 P1 S180"], off = ["M107 P1"] }
+valve_n1 = { on = ["M106 P0 S255"], off = ["M107 P0"] }
+pump_n2 = { on = ["M106 P3 S180"], off = ["M107 P3"] }
+valve_n2 = { on = ["M106 P2 S255"], off = ["M107 P2"] }
+light_top = { on = ["M150 P255 R255 U255 B255 S1"], off = ["M150 P0 S1"] }
+light_bottom = { on = ["M150 P255 R255 U255 B255 S0"], off = ["M150 P0 S0"] }
+
+# Stock firmware reads one byte: the top byte of the sensor's 24-bit value, scaled here
+# to the same counts. Inferred; to be confirmed against stock firmware.
+[marlin.inputs.vac_n1]
+read = ["M260 A112 B1 S1", "M260 A109 B6 S1", "M261 A109 B1 S2"]
+pattern = 'data:\s*(?P<value>-?\d+)'
+sign_bits = 8
+scale = 65536
+
+[marlin.inputs.vac_n2]
+read = ["M260 A112 B2 S1", "M260 A109 B6 S1", "M261 A109 B1 S2"]
+pattern = 'data:\s*(?P<value>-?\d+)'
+sign_bits = 8
+scale = 65536
+
+[marlin.variants.stock]
+description = "Opulo's stock firmware: vacuum sensors read as 8 bits."
+
+[marlin.variants.vacuum-24bit]
+description = "Firmware patched to read the vacuum sensors as signed 24-bit values."
+
+[marlin.variants.vacuum-24bit.inputs.vac_n1]
+read = ["M260 A112 B1 S1", "M260 A109 B6 S1", "M261 A109 B3 S4"]
+clear_sign_bits = true
+scale = 1
+
+[marlin.variants.vacuum-24bit.inputs.vac_n2]
+read = ["M260 A112 B2 S1", "M260 A109 B6 S1", "M261 A109 B3 S4"]
+clear_sign_bits = true
+scale = 1

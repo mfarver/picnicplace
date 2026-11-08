@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { MachineState, Operation, PresenceState, ServerEvent } from "./types";
+import type { LeaseState, MachineState, Operation, PresenceState, ServerEvent } from "./types";
 
 export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "unauthorized";
 
@@ -9,6 +9,7 @@ export interface CoreState {
   serverVersion?: string;
   machine?: MachineState;
   presence?: PresenceState;
+  lease?: LeaseState;
   operations: Record<string, Operation>;
 }
 
@@ -33,11 +34,14 @@ export function coreReducer(state: CoreState, action: CoreAction): CoreState {
         serverVersion: event.server_version,
         machine: event.machine,
         presence: event.presence,
+        lease: event.lease,
       };
     case "machine.state":
       return { ...state, machine: event.machine };
     case "presence":
       return { ...state, presence: event.presence };
+    case "lease":
+      return { ...state, lease: event.lease };
     case "operation": {
       const operations = { ...state.operations, [event.operation.id]: event.operation };
       const ids = Object.keys(operations);
@@ -56,6 +60,11 @@ export interface CoreContextValue extends CoreState {
 }
 
 export const CoreContext = createContext<CoreContextValue | null>(null);
+
+/** Whether this client holds the control lease. */
+export function hasControl(state: CoreState): boolean {
+  return !!state.clientId && state.lease?.holder?.id === state.clientId;
+}
 
 export function useCore(): CoreContextValue {
   const ctx = useContext(CoreContext);

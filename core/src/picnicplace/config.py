@@ -3,9 +3,11 @@
 import ipaddress
 import tomllib
 from pathlib import Path
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+
+from picnicplace.machine.profile import MachineProfile, is_profile_path, load_profile
 
 
 class _Section(BaseModel):
@@ -50,45 +52,94 @@ class PresenceConfig(_Section):
     )
 
 
-class AxisConfig(_Section):
-    name: str = Field(min_length=1, max_length=8)
-    min: float
-    max: float
-    home: float = 0.0
-    max_speed: float = Field(gt=0, description="Units per second (mm/s or deg/s).")
-
-    @model_validator(mode="after")
-    def _check_range(self) -> Self:
-        if self.min >= self.max:
-            raise ValueError(f"axis {self.name}: min must be less than max")
-        if not self.min <= self.home <= self.max:
-            raise ValueError(f"axis {self.name}: home must be within min..max")
-        return self
-
-
-def _default_axes() -> list[AxisConfig]:
-    # Simulator defaults, roughly the size of a desktop machine. Not a real machine profile.
-    return [
-        AxisConfig(name="X", min=0, max=450, home=0, max_speed=500),
-        AxisConfig(name="Y", min=0, max=400, home=0, max_speed=500),
-        AxisConfig(name="Z", min=-30, max=30, home=0, max_speed=100),
-        AxisConfig(name="A", min=-360, max=360, home=0, max_speed=1000),
-        AxisConfig(name="B", min=-360, max=360, home=0, max_speed=1000),
-    ]
+class MarlinConfig(_Section):
+    port: str | None = Field(
+        default=None, description="Serial device, such as /dev/ttyACM0. Required for 'marlin'."
+    )
+    baud: int = 115200
+    variant: str | None = Field(
+        default=None,
+        description="Firmware variant from the machine profile, such as 'vacuum-24bit'.",
+    )
+    connect_wait_s: float = Field(
+        default=3.0, ge=0, description="Wait after opening the port, while the board boots."
+    )
+    command_timeout_s: float = Field(default=10.0, gt=0)
 
 
 class MachineConfig(_Section):
-    driver: Literal["simulator"] = "simulator"
-    axes: list[AxisConfig] = Field(default_factory=_default_axes, min_length=1)
+    driver: Literal["simulator", "marlin", "fake-marlin"] = Field(
+        default="simulator",
+        description=(
+            "'simulator': no hardware. 'marlin': a real machine on marlin.port. "
+            "'fake-marlin': the Marlin driver talking to a built-in fake firmware."
+        ),
+    )
+    marlin: MarlinConfig = Field(default_factory=MarlinConfig)
+    profile: str = Field(
+        default="lumenpnp-v4",
+        description="Built-in machine profile ID, or a path to a profile TOML file.",
+    )
     sim_time_scale: float = Field(
         default=1.0, gt=0, description="Simulator only: values above 1 run faster than real time."
     )
+    speed_scale: float = Field(
+        default=1.0,
+        gt=0,
+        le=1,
+        description=(
+            "Cap every move at this fraction of each axis's maximum speed. Use 0.25 or less "
+            "when bringing up a new machine. Homing speed is set by the firmware."
+        ),
+    )
+
+    _profile: MachineProfile | None = PrivateAttr(default=None)
 
     @model_validator(mode="after")
-    def _unique_axes(self) -> Self:
-        names = [a.name for a in self.axes]
-        if len(names) != len(set(names)):
-            raise ValueError("axis names must be unique")
+    def _load_profile(self) -> Self:
+        self._profile = load_profile(self.profile)
+        if self.driver in ("marlin", "fake-marlin"):
+            if self._profile.marlin is None:
+                raise ValueError(f"machine profile {self.profile!r} has no [marlin] settings")
+            self._profile.marlin.resolved(self.marlin.variant)  # check the variant exists
+            if self.driver == "marlin" and not self.marlin.port:
+                raise ValueError("machine.marlin.port is required for the marlin driver")
+        return self
+
+    @property
+    def machine_profile(self) -> MachineProfile:
+        assert self._profile is not None
+        return self._profile
+
+
+class CameraConfig(_Section):
+    source: Literal["synthetic", "device", "none"] = Field(
+        description=(
+            "'device': a real camera. 'synthetic': rendered by the simulator. 'none': off."
+        )
+    )
+    device: str | None = Field(
+        default=None,
+        description=(
+            "For 'device': a path such as /dev/v4l/by-id/usb-...-video-index0, or an index."
+        ),
+    )
+    width: int = Field(default=1920, gt=0)
+    height: int = Field(default=1080, gt=0)
+    fps: float = Field(default=30.0, gt=0)
+    flip_x: bool = Field(default=False, description="Mirror the image left to right.")
+    flip_y: bool = Field(default=False, description="Mirror the image top to bottom.")
+    rotation: float = Field(
+        default=0.0,
+        ge=-45,
+        le=45,
+        description="Rotate the image this many degrees counterclockwise (after flips).",
+    )
+
+    @model_validator(mode="after")
+    def _device_needs_path(self) -> Self:
+        if self.source == "device" and not self.device:
+            raise ValueError("a camera with source 'device' needs a device")
         return self
 
 
@@ -96,6 +147,32 @@ class Config(_Section):
     server: ServerConfig = Field(default_factory=ServerConfig)
     presence: PresenceConfig = Field(default_factory=PresenceConfig)
     machine: MachineConfig = Field(default_factory=MachineConfig)
+    cameras: dict[str, CameraConfig] = Field(
+        default_factory=dict[str, CameraConfig],
+        description=(
+            "Per camera ID from the machine profile. Cameras left out are synthetic with "
+            "the simulator and fake-marlin drivers, and off with a real machine."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _known_cameras(self) -> Self:
+        known = {c.id for c in self.machine.machine_profile.cameras}
+        for camera_id in self.cameras:
+            if camera_id not in known:
+                raise ValueError(
+                    f"cameras.{camera_id}: the machine profile has no such camera "
+                    f"(it has: {', '.join(sorted(known)) or 'none'})"
+                )
+        return self
+
+    def camera(self, camera_id: str) -> CameraConfig:
+        """Settings for a camera, with the default for the driver if not configured."""
+        configured = self.cameras.get(camera_id)
+        if configured is not None:
+            return configured
+        simulated = self.machine.driver in ("simulator", "fake-marlin")
+        return CameraConfig(source="synthetic" if simulated else "none")
 
     @model_validator(mode="after")
     def _require_token_off_loopback(self) -> Self:
@@ -112,4 +189,10 @@ def load_config(path: Path | None) -> Config:
     if path is None:
         return Config()
     with path.open("rb") as f:
-        return Config.model_validate(tomllib.load(f))
+        data = tomllib.load(f)
+    # A profile given as a relative path is relative to the config file.
+    machine: dict[str, Any] = data.get("machine", {})
+    profile = machine.get("profile")
+    if isinstance(profile, str) and is_profile_path(profile) and not Path(profile).is_absolute():
+        machine["profile"] = str(path.parent / profile)
+    return Config.model_validate(data)

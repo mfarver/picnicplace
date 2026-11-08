@@ -4,6 +4,63 @@
  */
 
 export interface paths {
+    "/api/v1/cameras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Cameras */
+        get: operations["list_cameras_api_v1_cameras_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/{camera_id}/snapshot.jpg": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Snapshot
+         * @description The latest frame as a JPEG. The ``X-Timestamp`` header says when it was captured.
+         */
+        get: operations["snapshot_api_v1_cameras__camera_id__snapshot_jpg_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/{camera_id}/stream.mjpg": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream
+         * @description MJPEG for ``<img>`` tags, scripts, and small displays (``?width=320&fps=5``).
+         */
+        get: operations["stream_api_v1_cameras__camera_id__stream_mjpg_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -24,6 +81,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lease": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lease */
+        get: operations["get_lease_api_v1_lease_get"];
+        put?: never;
+        /**
+         * Acquire Lease
+         * @description Take control of the machine. With ``force``, take it from another client.
+         */
+        post: operations["acquire_lease_api_v1_lease_post"];
+        /**
+         * Release Lease
+         * @description Give up control of the machine, if this client holds it.
+         */
+        delete: operations["release_lease_api_v1_lease_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine": {
         parameters: {
             query?: never;
@@ -33,6 +115,46 @@ export interface paths {
         };
         /** Get Machine */
         get: operations["get_machine_api_v1_machine_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/machine/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connect Machine
+         * @description Connect to the machine if it is not connected (for example, after it was off).
+         */
+        post: operations["connect_machine_api_v1_machine_connect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/machine/description": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Machine Description
+         * @description The machine profile: geometry, nozzles, cameras, feeders, and the list of I/O.
+         */
+        get: operations["get_machine_description_api_v1_machine_description_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -81,6 +203,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/jog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Jog
+         * @description Move one axis by a relative distance, clamped to its limits. X and Y jogs are
+         *     refused while a nozzle is below safe Z.
+         */
+        post: operations["jog_api_v1_machine_jog_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/move": {
         parameters: {
             query?: never;
@@ -95,6 +238,26 @@ export interface paths {
          * @description Start an absolute move. Returns an operation; follow it over the event socket.
          */
         post: operations["move_api_v1_machine_move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/machine/outputs/{output_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Output
+         * @description Switch an output on or off. Turning one on requires motion to be enabled.
+         */
+        put: operations["set_output_api_v1_machine_outputs__output_id__put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -159,6 +322,116 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Axis */
+        Axis: {
+            /**
+             * Continuous
+             * @description Rotary axes only: turns without limit, so min and max are not enforced.
+             * @default false
+             */
+            continuous: boolean;
+            /**
+             * Home
+             * @description Position after homing. May lie outside the soft limits: the firmware homes against a switch that moves can then not return to.
+             * @default 0
+             */
+            home: number;
+            /**
+             * Kind
+             * @default linear
+             * @enum {string}
+             */
+            kind: "linear" | "rotary";
+            /**
+             * Max
+             * @description Soft limit. Ignored for continuous axes.
+             */
+            max: number;
+            /**
+             * Max Speed
+             * @description Units per second (mm/s or deg/s).
+             */
+            max_speed: number;
+            /**
+             * Min
+             * @description Soft limit. Ignored for continuous axes.
+             */
+            min: number;
+            /** Name */
+            name: string;
+        };
+        /** Camera */
+        Camera: {
+            /** @description Width (x) and height (y) of the view in mm. */
+            field_of_view: components["schemas"]["Point"];
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Light Output */
+            light_output: string | null;
+            /**
+             * Looking
+             * @enum {string}
+             */
+            looking: "down" | "up";
+            /**
+             * Mount
+             * @enum {string}
+             */
+            mount: "head" | "fixed";
+            /** @description Head cameras: offset from the head. Fixed cameras: machine coordinates. */
+            position: components["schemas"]["Point"];
+        };
+        /** CameraInfo */
+        CameraInfo: {
+            /**
+             * Error
+             * @description Why the camera is not delivering frames, if so.
+             */
+            error: string | null;
+            /** Height */
+            height: number | null;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Looking
+             * @enum {string}
+             */
+            looking: "down" | "up";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "synthetic" | "device" | "none";
+            /**
+             * Streaming
+             * @description Frames are being captured for at least one viewer.
+             */
+            streaming: boolean;
+            /**
+             * Width
+             * @description Native frame width, when the camera is on.
+             */
+            width: number | null;
+        };
+        /** ClientInfo */
+        ClientInfo: {
+            /**
+             * Address
+             * @description Network address the client connected from.
+             */
+            address: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Name
+             * @description Name the client gave when connecting, such as 'Studio'.
+             */
+            name: string;
+        };
         /**
          * PingMessage
          * @description Heartbeat. Clients send one every couple of seconds; the server answers with pong.
@@ -188,6 +461,38 @@ export interface components {
             /** Detail */
             detail: string;
         };
+        /**
+         * FeederBank
+         * @description A row of evenly spaced feeder slots, such as one LumenPnP feeder rail.
+         */
+        FeederBank: {
+            /** Count */
+            count: number;
+            /** @description Pick location of the first slot. */
+            first_pick: components["schemas"]["Point"];
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Length
+             * @description Feeder length along the tape, in mm.
+             */
+            length: number;
+            /** @description Step from one slot's pick location to the next. */
+            pitch: components["schemas"]["Point"];
+            /**
+             * Rotation
+             * @description Tape direction in degrees; 90 means parts feed toward +Y.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * Width
+             * @description Feeder width across the tape, in mm.
+             */
+            width: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -213,6 +518,7 @@ export interface components {
         HelloEvent: {
             /** Client Id */
             client_id: string;
+            lease: components["schemas"]["LeaseState"];
             machine: components["schemas"]["MachineState"];
             presence: components["schemas"]["PresenceState"];
             /** Protocol */
@@ -225,6 +531,126 @@ export interface components {
              */
             type: "hello";
         };
+        /** Input */
+        Input: {
+            /**
+             * Axis
+             * @description Home sensors: the axis they home.
+             */
+            axis: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "digital" | "analog";
+            /** Label */
+            label: string;
+            /** @description Analog inputs: the display range. */
+            range: components["schemas"]["ValueRange"] | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "home" | "safe_z" | "vacuum" | "other";
+            /**
+             * Threshold
+             * @description Vacuum inputs: readings at or past this value, going toward range.max, mean a part is held.
+             */
+            threshold: number | null;
+            /** Unit */
+            unit: string | null;
+        };
+        /** JogRequest */
+        JogRequest: {
+            /** Axis */
+            axis: string;
+            /**
+             * Distance
+             * @description Relative distance, mm or degrees. Clamped to limits.
+             */
+            distance: number;
+            /** Speed */
+            speed?: number | null;
+        };
+        /** LeaseEvent */
+        LeaseEvent: {
+            lease: components["schemas"]["LeaseState"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "lease";
+        };
+        /** LeaseRequest */
+        LeaseRequest: {
+            /**
+             * Force
+             * @description Take the lease even if another client holds it. Ask the user first.
+             * @default false
+             */
+            force: boolean;
+        };
+        /** LeaseState */
+        LeaseState: {
+            /** @description The client allowed to move the machine, or null if no one holds it. */
+            holder: components["schemas"]["ClientInfo"] | null;
+        };
+        /** Location */
+        Location: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "homing_fiducial" | "tip_holder" | "discard" | "park";
+            /** Label */
+            label: string;
+            position: components["schemas"]["Point"];
+        };
+        /** MachineProfile */
+        MachineProfile: {
+            /** Axes */
+            axes: components["schemas"]["Axis"][];
+            /** @description Outline of the machine bed, for drawing. */
+            bed: components["schemas"]["Rect"];
+            /** Cameras */
+            cameras: components["schemas"]["Camera"][];
+            /** Feeder Banks */
+            feeder_banks: components["schemas"]["FeederBank"][];
+            /** Id */
+            id: string;
+            /** Inputs */
+            inputs: components["schemas"]["Input"][];
+            /** Locations */
+            locations: components["schemas"]["Location"][];
+            /** Name */
+            name: string;
+            /** Nozzles */
+            nozzles: components["schemas"]["Nozzle"][];
+            /** Outputs */
+            outputs: components["schemas"]["Output"][];
+            /**
+             * Provisional
+             * @description Dimensions are estimates that have not been measured on a real machine.
+             * @default false
+             */
+            provisional: boolean;
+            /**
+             * Safe Z
+             * @description A nozzle at or above this height (on its own Z scale) is safe for travel.
+             */
+            safe_z: number;
+            /**
+             * Safe Z Input
+             * @description A digital input that reads true when every nozzle is at safe height.
+             */
+            safe_z_input: string | null;
+            /** @description Where boards go. */
+            work_area: components["schemas"]["Rect"] | null;
+        };
         /** MachineState */
         MachineState: {
             /** Axes */
@@ -236,6 +662,11 @@ export interface components {
             busy: boolean;
             /** Connected */
             connected: boolean;
+            /**
+             * Connection Error
+             * @description Why the last attempt to connect to the machine failed, if it did.
+             */
+            connection_error: string | null;
             /** Driver */
             driver: string;
             /**
@@ -243,13 +674,32 @@ export interface components {
              * @description An emergency stop is latched; reset before moving.
              */
             estop: boolean;
+            /**
+             * Firmware
+             * @description Firmware name and version, when known.
+             */
+            firmware: string | null;
             /** Homed */
             homed: boolean;
+            /**
+             * Inputs
+             * @description Reading per profile input: bool for digital, number for analog.
+             */
+            inputs: {
+                [key: string]: boolean | number;
+            };
             /**
              * Motion Enabled
              * @description Motion commands are currently allowed (connected, client present, no E-stop).
              */
             motion_enabled: boolean;
+            /**
+             * Outputs
+             * @description State per profile output.
+             */
+            outputs: {
+                [key: string]: boolean;
+            };
             /**
              * Position
              * @description Current position per axis, mm or degrees.
@@ -257,6 +707,21 @@ export interface components {
             position: {
                 [key: string]: number;
             };
+            /**
+             * Speed Scale
+             * @description Moves run at no more than this fraction of full speed (bring-up mode).
+             */
+            speed_scale: number;
+            /**
+             * Warnings
+             * @description Problems worth showing the operator, such as a firmware mismatch.
+             */
+            warnings: string[];
+            /**
+             * Z Safe
+             * @description Every nozzle is at safe travel height. From the safe-Z input when the profile has one, otherwise computed from the Z position.
+             */
+            z_safe: boolean;
         };
         /** MachineStateEvent */
         MachineStateEvent: {
@@ -266,6 +731,104 @@ export interface components {
              * @enum {string}
              */
             type: "machine.state";
+        };
+        /** MarlinInput */
+        MarlinInput: {
+            /**
+             * Pattern
+             * @description Regular expression with a 'value' group, matched against the reply.
+             */
+            pattern: string;
+            /**
+             * Read
+             * @description Commands to send; the value is in the last one's reply.
+             */
+            read: string[];
+            /**
+             * Scale
+             * @description Multiply the (signed) value by this.
+             * @default 1
+             */
+            scale: number;
+            /**
+             * Sign Bits
+             * @description Treat the raw value as a two's-complement number of this many bits.
+             */
+            sign_bits?: number | null;
+        };
+        /** MarlinInputOverride */
+        MarlinInputOverride: {
+            /**
+             * Clear Sign Bits
+             * @description Remove the base input's sign_bits instead of setting it.
+             * @default false
+             */
+            clear_sign_bits: boolean;
+            /** Pattern */
+            pattern?: string | null;
+            /** Read */
+            read?: string[] | null;
+            /** Scale */
+            scale?: number | null;
+            /** Sign Bits */
+            sign_bits?: number | null;
+        };
+        /** MarlinOutput */
+        MarlinOutput: {
+            /** Off */
+            off: string[];
+            /** On */
+            on: string[];
+        };
+        /** MarlinSettings */
+        MarlinSettings: {
+            /**
+             * Connect
+             * @description Sent after the firmware answers M115.
+             */
+            connect?: string[];
+            /** Default Variant */
+            default_variant?: string | null;
+            /**
+             * Estop
+             * @description Immediate stop; firmware halts.
+             * @default M112
+             */
+            estop: string;
+            /**
+             * Expected Machine Type
+             * @description MACHINE_TYPE that M115 should report; others get a warning.
+             */
+            expected_machine_type?: string | null;
+            /** Home */
+            home?: string[];
+            /** Inputs */
+            inputs?: {
+                [key: string]: components["schemas"]["MarlinInput"];
+            };
+            /** Outputs */
+            outputs?: {
+                [key: string]: components["schemas"]["MarlinOutput"];
+            };
+            /**
+             * Stop
+             * @description Quick stop: end motion, stay running.
+             * @default M410
+             */
+            stop: string;
+            /** Variants */
+            variants?: {
+                [key: string]: components["schemas"]["MarlinVariant"];
+            };
+        };
+        /** MarlinVariant */
+        MarlinVariant: {
+            /** Description */
+            description: string;
+            /** Inputs */
+            inputs?: {
+                [key: string]: components["schemas"]["MarlinInputOverride"];
+            };
         };
         /** MoveRequest */
         MoveRequest: {
@@ -281,6 +844,32 @@ export interface components {
              * @description Speed limit in units per second. Defaults to axis max.
              */
             speed?: number | null;
+        };
+        /** Nozzle */
+        Nozzle: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** @description Position relative to the head (top camera center). */
+            offset: components["schemas"]["Point"];
+            /** Pump Output */
+            pump_output: string | null;
+            /** Rotation Axis */
+            rotation_axis: string;
+            /** Vacuum Input */
+            vacuum_input: string | null;
+            /** Valve Output */
+            valve_output: string | null;
+            /** Z Axis */
+            z_axis: string;
+            /**
+             * Z Sign
+             * @description Direction of this nozzle on its Z axis. Two nozzles sharing one Z motor move in opposite directions: one has 1, the other -1.
+             * @default 1
+             * @enum {integer}
+             */
+            z_sign: 1 | -1;
         };
         /** Operation */
         Operation: {
@@ -317,6 +906,30 @@ export interface components {
              * @enum {string}
              */
             type: "operation";
+        };
+        /** Output */
+        Output: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "pump" | "valve" | "light" | "other";
+        };
+        /** OutputRequest */
+        OutputRequest: {
+            /** On */
+            on: boolean;
+        };
+        /** Point */
+        Point: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
         };
         /** PongEvent */
         PongEvent: {
@@ -363,7 +976,18 @@ export interface components {
             /** Present */
             present: boolean;
         };
-        ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
+        /** Rect */
+        Rect: {
+            /** X Max */
+            x_max: number;
+            /** X Min */
+            x_min: number;
+            /** Y Max */
+            y_max: number;
+            /** Y Min */
+            y_min: number;
+        };
+        ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -377,6 +1001,17 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /**
+         * ValueRange
+         * @description A display range. ``max`` may be below ``min`` for readings that grow more negative,
+         *     such as raw vacuum sensor counts.
+         */
+        ValueRange: {
+            /** Max */
+            max: number;
+            /** Min */
+            min: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -386,6 +1021,154 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_cameras_api_v1_cameras_get: {
+        parameters: {
+            query?: {
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraInfo"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    snapshot_api_v1_cameras__camera_id__snapshot_jpg_get: {
+        parameters: {
+            query?: {
+                /** @description Scale frames down to this width. */
+                width?: number | null;
+                /** @description JPEG quality. */
+                quality?: number;
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One frame. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                };
+            };
+            /** @description No such camera. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The camera is off or failing. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    stream_api_v1_cameras__camera_id__stream_mjpg_get: {
+        parameters: {
+            query?: {
+                /** @description Scale frames down to this width. */
+                width?: number | null;
+                /** @description JPEG quality. */
+                quality?: number;
+                /** @description Maximum frame rate. */
+                fps?: number;
+                /** @description Stop after this many frames. */
+                frames?: number | null;
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description An endless MJPEG stream. Each part carries X-Timestamp (capture time, Unix seconds) and X-Frame (frame number) headers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "multipart/x-mixed-replace; boundary=picnicplace-frame": unknown;
+                };
+            };
+            /** @description No such camera. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The camera is off or failing. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     health_api_v1_health_get: {
         parameters: {
             query?: never;
@@ -406,6 +1189,112 @@ export interface operations {
             };
         };
     };
+    get_lease_api_v1_lease_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseState"];
+                };
+            };
+        };
+    };
+    acquire_lease_api_v1_lease_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_lease_api_v1_lease_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_machine_api_v1_machine_get: {
         parameters: {
             query?: never;
@@ -422,6 +1311,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MachineState"];
+                };
+            };
+        };
+    };
+    connect_machine_api_v1_machine_connect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_machine_description_api_v1_machine_description_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineProfile"];
                 };
             };
         };
@@ -449,7 +1387,10 @@ export interface operations {
     home_api_v1_machine_home_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -464,8 +1405,62 @@ export interface operations {
                     "application/json": components["schemas"]["Operation"];
                 };
             };
-            /** @description The machine cannot do this right now. */
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    jog_api_v1_machine_jog_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JogRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The axis is unknown. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -478,7 +1473,10 @@ export interface operations {
     move_api_v1_machine_move_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -497,7 +1495,7 @@ export interface operations {
                     "application/json": components["schemas"]["Operation"];
                 };
             };
-            /** @description The machine cannot do this right now. */
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -517,10 +1515,69 @@ export interface operations {
             };
         };
     };
+    set_output_api_v1_machine_outputs__output_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                output_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutputRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineState"];
+                };
+            };
+            /** @description No output with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     reset_api_v1_machine_reset_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -533,6 +1590,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MachineState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

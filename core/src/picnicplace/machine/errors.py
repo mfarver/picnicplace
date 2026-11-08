@@ -33,3 +33,38 @@ class InvalidTargetError(MachineError):
 
 class MotionInterruptedError(MachineError):
     code = "interrupted"
+
+
+class UnknownOutputError(MachineError):
+    code = "unknown_output"
+    http_status = 404
+
+
+class ClientRequiredError(MachineError):
+    """Motion commands must name the connected client sending them."""
+
+    code = "client_required"
+
+
+class LeaseHeldError(MachineError):
+    """Another client holds the control lease."""
+
+    code = "lease_held"
+
+
+class ZNotSafeError(MachineError):
+    """X/Y motion was requested while a nozzle is below safe Z."""
+
+    code = "z_not_safe"
+
+
+class SafeZFaultError(MachineError):
+    """The safe-Z sensor disagrees with the computed Z position: Z may have lost steps."""
+
+    code = "safe_z_fault"
+
+
+class ConnectFailedError(MachineError):
+    """The machine could not be reached."""
+
+    code = "connect_failed"

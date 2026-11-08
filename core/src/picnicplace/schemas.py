@@ -24,7 +24,11 @@ class WireModel(BaseModel):
 
 class MachineState(WireModel):
     driver: str
+    firmware: str | None = Field(description="Firmware name and version, when known.")
     connected: bool
+    connection_error: str | None = Field(
+        description="Why the last attempt to connect to the machine failed, if it did."
+    )
     homed: bool
     estop: bool = Field(description="An emergency stop is latched; reset before moving.")
     busy: bool = Field(description="A motion operation is in progress.")
@@ -33,6 +37,34 @@ class MachineState(WireModel):
     )
     axes: list[str]
     position: dict[str, float] = Field(description="Current position per axis, mm or degrees.")
+    inputs: dict[str, bool | float] = Field(
+        description="Reading per profile input: bool for digital, number for analog."
+    )
+    outputs: dict[str, bool] = Field(description="State per profile output.")
+    speed_scale: float = Field(
+        description="Moves run at no more than this fraction of full speed (bring-up mode)."
+    )
+    warnings: list[str] = Field(
+        description="Problems worth showing the operator, such as a firmware mismatch."
+    )
+    z_safe: bool = Field(
+        description=(
+            "Every nozzle is at safe travel height. From the safe-Z input when the profile "
+            "has one, otherwise computed from the Z position."
+        )
+    )
+
+
+class ClientInfo(WireModel):
+    id: str
+    name: str = Field(description="Name the client gave when connecting, such as 'Studio'.")
+    address: str | None = Field(description="Network address the client connected from.")
+
+
+class LeaseState(WireModel):
+    holder: ClientInfo | None = Field(
+        description="The client allowed to move the machine, or null if no one holds it."
+    )
 
 
 class PresenceState(WireModel):
@@ -50,6 +82,17 @@ class Operation(WireModel):
     error: str | None = None
     started_at: datetime
     finished_at: datetime | None = None
+
+
+class CameraInfo(WireModel):
+    id: str
+    label: str
+    looking: Literal["down", "up"]
+    source: Literal["synthetic", "device", "none"]
+    width: int | None = Field(description="Native frame width, when the camera is on.")
+    height: int | None
+    streaming: bool = Field(description="Frames are being captured for at least one viewer.")
+    error: str | None = Field(description="Why the camera is not delivering frames, if so.")
 
 
 # --- REST --------------------------------------------------------------------------------
@@ -70,6 +113,23 @@ class MoveRequest(WireModel):
     )
 
 
+class OutputRequest(WireModel):
+    on: bool
+
+
+class JogRequest(WireModel):
+    axis: str
+    distance: float = Field(description="Relative distance, mm or degrees. Clamped to limits.")
+    speed: float | None = Field(default=None, gt=0)
+
+
+class LeaseRequest(WireModel):
+    force: bool = Field(
+        default=False,
+        description="Take the lease even if another client holds it. Ask the user first.",
+    )
+
+
 class ErrorResponse(WireModel):
     detail: str
     code: str
@@ -87,6 +147,7 @@ class HelloEvent(WireModel):
     client_id: str
     machine: MachineState
     presence: PresenceState
+    lease: LeaseState
 
 
 class MachineStateEvent(WireModel):
@@ -104,6 +165,11 @@ class PresenceLostEvent(WireModel):
 
     type: Literal["presence.lost"] = "presence.lost"
     grace_period_s: float
+
+
+class LeaseEvent(WireModel):
+    type: Literal["lease"] = "lease"
+    lease: LeaseState
 
 
 class OperationEvent(WireModel):
@@ -126,6 +192,7 @@ Event = (
     | MachineStateEvent
     | PresenceEvent
     | PresenceLostEvent
+    | LeaseEvent
     | OperationEvent
     | PongEvent
     | ErrorEvent

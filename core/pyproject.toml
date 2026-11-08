@@ -13,6 +13,8 @@ classifiers = [
 dependencies = [
     "anyio>=4.4",
     "fastapi>=0.115",
+    "numpy>=2.1",
+    "opencv-python-headless>=4.10",
     "pydantic>=2.9",
     "uvicorn>=0.32",
     "websockets>=13",
@@ -20,6 +22,8 @@ dependencies = [
 
 [project.scripts]
 picnicd = "picnicplace.cli:main"
+picnicplace-fake-marlin = "picnicplace.machine.marlin.fake:main"
+picnicplace-probe = "picnicplace.probe:main"
 
 [dependency-groups]
 dev = [

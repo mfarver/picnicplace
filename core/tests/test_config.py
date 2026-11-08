@@ -25,16 +25,23 @@ def test_unknown_keys_rejected() -> None:
         Config.model_validate({"server": {"prot": 1}})
 
 
-def test_axis_validation() -> None:
-    with pytest.raises(ValidationError, match="min must be less than max"):
-        Config.model_validate(
-            {"machine": {"axes": [{"name": "X", "min": 5, "max": 0, "max_speed": 1}]}}
-        )
-    axis = {"name": "X", "min": 0, "max": 1, "max_speed": 1}
-    with pytest.raises(ValidationError, match="unique"):
-        Config.model_validate({"machine": {"axes": [axis, axis]}})
+def test_unknown_profile_rejected() -> None:
+    with pytest.raises(ValidationError, match="unknown machine profile"):
+        Config.model_validate({"machine": {"profile": "no-such-machine"}})
+
+
+def test_profile_path_is_relative_to_config(tmp_path: Path) -> None:
+    (tmp_path / "profiles").mkdir()
+    builtin = Path(__file__).parents[1] / "src/picnicplace/profiles/lumenpnp-v4.toml"
+    (tmp_path / "profiles/mine.toml").write_text(
+        builtin.read_text().replace('name = "LumenPnP v4"', 'name = "My machine"')
+    )
+    (tmp_path / "picnicd.toml").write_text('[machine]\nprofile = "profiles/mine.toml"\n')
+    config = load_config(tmp_path / "picnicd.toml")
+    assert config.machine.machine_profile.name == "My machine"
 
 
 def test_example_config_loads() -> None:
     config = load_config(EXAMPLE)
     assert config.machine.driver == "simulator"
+    assert config.machine.machine_profile.id == "lumenpnp-v4"

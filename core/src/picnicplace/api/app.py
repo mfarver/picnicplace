@@ -12,14 +12,17 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import TypeAdapter
 
 from picnicplace import __version__
+from picnicplace.api import cameras as camera_routes
 from picnicplace.api import routes, websocket
 from picnicplace.api.context import AppContext
 from picnicplace.auth import Authenticator
+from picnicplace.camera.manager import CameraManager
 from picnicplace.config import Config
 from picnicplace.events import EventBus
+from picnicplace.lease import LeaseManager
 from picnicplace.machine.errors import MachineError
+from picnicplace.machine.factory import build_driver
 from picnicplace.machine.service import MachineService
-from picnicplace.machine.simulator import SimulatorDriver
 from picnicplace.operations import OperationManager
 from picnicplace.presence import PresenceTracker
 from picnicplace.schemas import ClientMessage, ErrorResponse, ServerEvent
@@ -32,8 +35,15 @@ def create_app(config: Config | None = None) -> FastAPI:
     bus = EventBus()
     presence = PresenceTracker(bus, config.presence.grace_period_s)
     operations = OperationManager(bus)
-    driver = SimulatorDriver(config.machine)
-    machine = MachineService(config.machine, driver, bus, presence, operations)
+    profile = config.machine.machine_profile
+    bundle = build_driver(config.machine)
+    driver = bundle.driver
+    machine = MachineService(
+        profile, driver, bus, presence, operations, speed_scale=config.machine.speed_scale
+    )
+    lease = LeaseManager(bus, presence)
+    cameras = CameraManager(config, profile, machine.scene)
+    lease.on_holder_left.append(machine.stop_manual_motion)
     ctx = AppContext(
         config=config,
         auth=Authenticator(config.server.token),
@@ -41,6 +51,8 @@ def create_app(config: Config | None = None) -> FastAPI:
         presence=presence,
         operations=operations,
         machine=machine,
+        lease=lease,
+        cameras=cameras,
     )
 
     @asynccontextmanager
@@ -49,14 +61,17 @@ def create_app(config: Config | None = None) -> FastAPI:
         try:
             yield
         finally:
+            await cameras.shutdown()
             await operations.shutdown()
             await presence.shutdown()
             await machine.shutdown()
+            await bundle.shutdown()
 
     app = FastAPI(title=TITLE, version=__version__, lifespan=lifespan)
     app.state.ctx = ctx
     app.include_router(routes.public)
     app.include_router(routes.router)
+    app.include_router(camera_routes.router)
     app.include_router(websocket.router)
 
     @app.exception_handler(MachineError)

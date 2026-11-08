@@ -1,24 +1,34 @@
 """REST endpoints under /api/v1."""
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from picnicplace import __version__
-from picnicplace.api.context import Context, require
+from picnicplace.api.context import Context, get_client_id, require, require_control
 from picnicplace.auth import Permission
+from picnicplace.machine.profile import MachineProfile
 from picnicplace.schemas import (
     PROTOCOL_VERSION,
     ErrorResponse,
     HealthResponse,
+    JogRequest,
+    LeaseRequest,
+    LeaseState,
     MachineState,
     MoveRequest,
     Operation,
+    OutputRequest,
     PresenceState,
 )
 
 MACHINE_ERRORS: dict[int | str, dict[str, Any]] = {
-    409: {"model": ErrorResponse, "description": "The machine cannot do this right now."},
+    409: {
+        "model": ErrorResponse,
+        "description": (
+            "The machine cannot do this right now, or this client does not hold the control lease."
+        ),
+    },
 }
 
 public = APIRouter(prefix="/api/v1")
@@ -41,12 +51,45 @@ async def get_machine(ctx: Context) -> MachineState:
     return ctx.machine.state
 
 
+@router.get("/machine/description", tags=["machine"])
+async def get_machine_description(ctx: Context) -> MachineProfile:
+    """The machine profile: geometry, nozzles, cameras, feeders, and the list of I/O."""
+    return ctx.machine.profile
+
+
+@router.put(
+    "/machine/outputs/{output_id}",
+    tags=["machine"],
+    responses={
+        **MACHINE_ERRORS,
+        404: {"model": ErrorResponse, "description": "No output with this ID."},
+    },
+    dependencies=[Depends(require_control)],
+)
+async def set_output(ctx: Context, output_id: str, body: OutputRequest) -> MachineState:
+    """Switch an output on or off. Turning one on requires motion to be enabled."""
+    await ctx.machine.set_output(output_id, body.on)
+    return ctx.machine.state
+
+
+@router.post(
+    "/machine/connect",
+    tags=["machine"],
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require(Permission.MOTION))],
+)
+async def connect_machine(ctx: Context) -> MachineState:
+    """Connect to the machine if it is not connected (for example, after it was off)."""
+    await ctx.machine.connect()
+    return ctx.machine.state
+
+
 @router.post(
     "/machine/home",
     tags=["machine"],
     status_code=status.HTTP_202_ACCEPTED,
     responses=MACHINE_ERRORS,
-    dependencies=[Depends(require(Permission.MOTION))],
+    dependencies=[Depends(require_control)],
 )
 async def home(ctx: Context) -> Operation:
     """Start homing. Returns an operation; follow it over the event socket."""
@@ -61,11 +104,27 @@ async def home(ctx: Context) -> Operation:
         **MACHINE_ERRORS,
         422: {"model": ErrorResponse, "description": "The target is invalid or out of limits."},
     },
-    dependencies=[Depends(require(Permission.MOTION))],
+    dependencies=[Depends(require_control)],
 )
 async def move(ctx: Context, body: MoveRequest) -> Operation:
     """Start an absolute move. Returns an operation; follow it over the event socket."""
     return ctx.machine.start_move(body.position, body.speed)
+
+
+@router.post(
+    "/machine/jog",
+    tags=["machine"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        **MACHINE_ERRORS,
+        422: {"model": ErrorResponse, "description": "The axis is unknown."},
+    },
+    dependencies=[Depends(require_control)],
+)
+async def jog(ctx: Context, body: JogRequest) -> Operation:
+    """Move one axis by a relative distance, clamped to its limits. X and Y jogs are
+    refused while a nozzle is below safe Z."""
+    return ctx.machine.start_jog(body.axis, body.distance, body.speed)
 
 
 @router.post("/machine/estop", tags=["machine"])
@@ -78,12 +137,40 @@ async def estop(ctx: Context) -> MachineState:
 @router.post(
     "/machine/reset",
     tags=["machine"],
-    dependencies=[Depends(require(Permission.MOTION))],
+    dependencies=[Depends(require_control)],
 )
 async def reset(ctx: Context) -> MachineState:
     """Clear a latched emergency stop. The machine must be homed again afterward."""
     await ctx.machine.reset()
     return ctx.machine.state
+
+
+@router.get("/lease", tags=["lease"])
+async def get_lease(ctx: Context) -> LeaseState:
+    return ctx.lease.state
+
+
+@router.post(
+    "/lease",
+    tags=["lease"],
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require(Permission.MOTION))],
+)
+async def acquire_lease(
+    ctx: Context,
+    body: LeaseRequest,
+    client_id: Annotated[str | None, Depends(get_client_id)],
+) -> LeaseState:
+    """Take control of the machine. With ``force``, take it from another client."""
+    return ctx.lease.acquire(client_id, force=body.force)
+
+
+@router.delete("/lease", tags=["lease"], responses=MACHINE_ERRORS)
+async def release_lease(
+    ctx: Context, client_id: Annotated[str | None, Depends(get_client_id)]
+) -> LeaseState:
+    """Give up control of the machine, if this client holds it."""
+    return ctx.lease.release(client_id)
 
 
 @router.get(

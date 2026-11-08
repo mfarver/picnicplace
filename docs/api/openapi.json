@@ -1,6 +1,237 @@
 {
   "components": {
     "schemas": {
+      "Axis": {
+        "additionalProperties": false,
+        "properties": {
+          "continuous": {
+            "default": false,
+            "description": "Rotary axes only: turns without limit, so min and max are not enforced.",
+            "title": "Continuous",
+            "type": "boolean"
+          },
+          "home": {
+            "default": 0.0,
+            "description": "Position after homing. May lie outside the soft limits: the firmware homes against a switch that moves can then not return to.",
+            "title": "Home",
+            "type": "number"
+          },
+          "kind": {
+            "default": "linear",
+            "enum": [
+              "linear",
+              "rotary"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max": {
+            "description": "Soft limit. Ignored for continuous axes.",
+            "title": "Max",
+            "type": "number"
+          },
+          "max_speed": {
+            "description": "Units per second (mm/s or deg/s).",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Speed",
+            "type": "number"
+          },
+          "min": {
+            "description": "Soft limit. Ignored for continuous axes.",
+            "title": "Min",
+            "type": "number"
+          },
+          "name": {
+            "maxLength": 8,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "min",
+          "max",
+          "home",
+          "max_speed",
+          "continuous"
+        ],
+        "title": "Axis",
+        "type": "object"
+      },
+      "Camera": {
+        "additionalProperties": false,
+        "properties": {
+          "field_of_view": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Width (x) and height (y) of the view in mm."
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "light_output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Light Output"
+          },
+          "looking": {
+            "enum": [
+              "down",
+              "up"
+            ],
+            "title": "Looking",
+            "type": "string"
+          },
+          "mount": {
+            "enum": [
+              "head",
+              "fixed"
+            ],
+            "title": "Mount",
+            "type": "string"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Head cameras: offset from the head. Fixed cameras: machine coordinates."
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "mount",
+          "position",
+          "looking",
+          "field_of_view",
+          "light_output"
+        ],
+        "title": "Camera",
+        "type": "object"
+      },
+      "CameraInfo": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the camera is not delivering frames, if so.",
+            "title": "Error"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "looking": {
+            "enum": [
+              "down",
+              "up"
+            ],
+            "title": "Looking",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "synthetic",
+              "device",
+              "none"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "streaming": {
+            "description": "Frames are being captured for at least one viewer.",
+            "title": "Streaming",
+            "type": "boolean"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Native frame width, when the camera is on.",
+            "title": "Width"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "looking",
+          "source",
+          "width",
+          "height",
+          "streaming",
+          "error"
+        ],
+        "title": "CameraInfo",
+        "type": "object"
+      },
+      "ClientInfo": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Network address the client connected from.",
+            "title": "Address"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name the client gave when connecting, such as 'Studio'.",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "address"
+        ],
+        "title": "ClientInfo",
+        "type": "object"
+      },
       "ClientMessage": {
         "description": "Heartbeat. Clients send one every couple of seconds; the server answers with pong.",
         "properties": {
@@ -55,6 +286,63 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "FeederBank": {
+        "additionalProperties": false,
+        "description": "A row of evenly spaced feeder slots, such as one LumenPnP feeder rail.",
+        "properties": {
+          "count": {
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "first_pick": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Pick location of the first slot."
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "length": {
+            "description": "Feeder length along the tape, in mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Length",
+            "type": "number"
+          },
+          "pitch": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Step from one slot's pick location to the next."
+          },
+          "rotation": {
+            "default": 0,
+            "description": "Tape direction in degrees; 90 means parts feed toward +Y.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "width": {
+            "description": "Feeder width across the tape, in mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Width",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "first_pick",
+          "pitch",
+          "count",
+          "width",
+          "length",
+          "rotation"
+        ],
+        "title": "FeederBank",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -100,6 +388,9 @@
             "title": "Client Id",
             "type": "string"
           },
+          "lease": {
+            "$ref": "#/components/schemas/LeaseState"
+          },
           "machine": {
             "$ref": "#/components/schemas/MachineState"
           },
@@ -127,9 +418,334 @@
           "server_version",
           "client_id",
           "machine",
-          "presence"
+          "presence",
+          "lease"
         ],
         "title": "HelloEvent",
+        "type": "object"
+      },
+      "Input": {
+        "additionalProperties": false,
+        "properties": {
+          "axis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Home sensors: the axis they home.",
+            "title": "Axis"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "digital",
+              "analog"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ValueRange"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Analog inputs: the display range."
+          },
+          "role": {
+            "enum": [
+              "home",
+              "safe_z",
+              "vacuum",
+              "other"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Vacuum inputs: readings at or past this value, going toward range.max, mean a part is held.",
+            "title": "Threshold"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "role",
+          "axis",
+          "unit",
+          "range",
+          "threshold"
+        ],
+        "title": "Input",
+        "type": "object"
+      },
+      "JogRequest": {
+        "properties": {
+          "axis": {
+            "title": "Axis",
+            "type": "string"
+          },
+          "distance": {
+            "description": "Relative distance, mm or degrees. Clamped to limits.",
+            "title": "Distance",
+            "type": "number"
+          },
+          "speed": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed"
+          }
+        },
+        "required": [
+          "axis",
+          "distance"
+        ],
+        "title": "JogRequest",
+        "type": "object"
+      },
+      "LeaseEvent": {
+        "properties": {
+          "lease": {
+            "$ref": "#/components/schemas/LeaseState"
+          },
+          "type": {
+            "const": "lease",
+            "default": "lease",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "lease"
+        ],
+        "title": "LeaseEvent",
+        "type": "object"
+      },
+      "LeaseRequest": {
+        "properties": {
+          "force": {
+            "default": false,
+            "description": "Take the lease even if another client holds it. Ask the user first.",
+            "title": "Force",
+            "type": "boolean"
+          }
+        },
+        "title": "LeaseRequest",
+        "type": "object"
+      },
+      "LeaseState": {
+        "properties": {
+          "holder": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The client allowed to move the machine, or null if no one holds it."
+          }
+        },
+        "required": [
+          "holder"
+        ],
+        "title": "LeaseState",
+        "type": "object"
+      },
+      "Location": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "homing_fiducial",
+              "tip_holder",
+              "discard",
+              "park"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Point"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "position"
+        ],
+        "title": "Location",
+        "type": "object"
+      },
+      "MachineProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "axes": {
+            "items": {
+              "$ref": "#/components/schemas/Axis"
+            },
+            "minItems": 1,
+            "title": "Axes",
+            "type": "array"
+          },
+          "bed": {
+            "$ref": "#/components/schemas/Rect",
+            "description": "Outline of the machine bed, for drawing."
+          },
+          "cameras": {
+            "items": {
+              "$ref": "#/components/schemas/Camera"
+            },
+            "title": "Cameras",
+            "type": "array"
+          },
+          "feeder_banks": {
+            "items": {
+              "$ref": "#/components/schemas/FeederBank"
+            },
+            "title": "Feeder Banks",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/Input"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "locations": {
+            "items": {
+              "$ref": "#/components/schemas/Location"
+            },
+            "title": "Locations",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nozzles": {
+            "items": {
+              "$ref": "#/components/schemas/Nozzle"
+            },
+            "title": "Nozzles",
+            "type": "array"
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/Output"
+            },
+            "title": "Outputs",
+            "type": "array"
+          },
+          "provisional": {
+            "default": false,
+            "description": "Dimensions are estimates that have not been measured on a real machine.",
+            "title": "Provisional",
+            "type": "boolean"
+          },
+          "safe_z": {
+            "description": "A nozzle at or above this height (on its own Z scale) is safe for travel.",
+            "title": "Safe Z",
+            "type": "number"
+          },
+          "safe_z_input": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A digital input that reads true when every nozzle is at safe height.",
+            "title": "Safe Z Input"
+          },
+          "work_area": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Rect"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where boards go."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "provisional",
+          "bed",
+          "work_area",
+          "axes",
+          "safe_z",
+          "safe_z_input",
+          "nozzles",
+          "cameras",
+          "locations",
+          "feeder_banks",
+          "inputs",
+          "outputs"
+        ],
+        "title": "MachineProfile",
         "type": "object"
       },
       "MachineState": {
@@ -150,6 +766,18 @@
             "title": "Connected",
             "type": "boolean"
           },
+          "connection_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the last attempt to connect to the machine failed, if it did.",
+            "title": "Connection Error"
+          },
           "driver": {
             "title": "Driver",
             "type": "string"
@@ -159,14 +787,49 @@
             "title": "Estop",
             "type": "boolean"
           },
+          "firmware": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Firmware name and version, when known.",
+            "title": "Firmware"
+          },
           "homed": {
             "title": "Homed",
             "type": "boolean"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "description": "Reading per profile input: bool for digital, number for analog.",
+            "title": "Inputs",
+            "type": "object"
           },
           "motion_enabled": {
             "description": "Motion commands are currently allowed (connected, client present, no E-stop).",
             "title": "Motion Enabled",
             "type": "boolean"
+          },
+          "outputs": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "description": "State per profile output.",
+            "title": "Outputs",
+            "type": "object"
           },
           "position": {
             "additionalProperties": {
@@ -175,17 +838,42 @@
             "description": "Current position per axis, mm or degrees.",
             "title": "Position",
             "type": "object"
+          },
+          "speed_scale": {
+            "description": "Moves run at no more than this fraction of full speed (bring-up mode).",
+            "title": "Speed Scale",
+            "type": "number"
+          },
+          "warnings": {
+            "description": "Problems worth showing the operator, such as a firmware mismatch.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "z_safe": {
+            "description": "Every nozzle is at safe travel height. From the safe-Z input when the profile has one, otherwise computed from the Z position.",
+            "title": "Z Safe",
+            "type": "boolean"
           }
         },
         "required": [
           "driver",
+          "firmware",
           "connected",
+          "connection_error",
           "homed",
           "estop",
           "busy",
           "motion_enabled",
           "axes",
-          "position"
+          "position",
+          "inputs",
+          "outputs",
+          "speed_scale",
+          "warnings",
+          "z_safe"
         ],
         "title": "MachineState",
         "type": "object"
@@ -207,6 +895,239 @@
           "machine"
         ],
         "title": "MachineStateEvent",
+        "type": "object"
+      },
+      "MarlinInput": {
+        "additionalProperties": false,
+        "properties": {
+          "pattern": {
+            "description": "Regular expression with a 'value' group, matched against the reply.",
+            "title": "Pattern",
+            "type": "string"
+          },
+          "read": {
+            "description": "Commands to send; the value is in the last one's reply.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Read",
+            "type": "array"
+          },
+          "scale": {
+            "default": 1.0,
+            "description": "Multiply the (signed) value by this.",
+            "title": "Scale",
+            "type": "number"
+          },
+          "sign_bits": {
+            "anyOf": [
+              {
+                "maximum": 64.0,
+                "minimum": 2.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Treat the raw value as a two's-complement number of this many bits.",
+            "title": "Sign Bits"
+          }
+        },
+        "required": [
+          "read",
+          "pattern"
+        ],
+        "title": "MarlinInput",
+        "type": "object"
+      },
+      "MarlinInputOverride": {
+        "additionalProperties": false,
+        "properties": {
+          "clear_sign_bits": {
+            "default": false,
+            "description": "Remove the base input's sign_bits instead of setting it.",
+            "title": "Clear Sign Bits",
+            "type": "boolean"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern"
+          },
+          "read": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read"
+          },
+          "scale": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scale"
+          },
+          "sign_bits": {
+            "anyOf": [
+              {
+                "maximum": 64.0,
+                "minimum": 2.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sign Bits"
+          }
+        },
+        "title": "MarlinInputOverride",
+        "type": "object"
+      },
+      "MarlinOutput": {
+        "additionalProperties": false,
+        "properties": {
+          "off": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Off",
+            "type": "array"
+          },
+          "on": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "On",
+            "type": "array"
+          }
+        },
+        "required": [
+          "on",
+          "off"
+        ],
+        "title": "MarlinOutput",
+        "type": "object"
+      },
+      "MarlinSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "connect": {
+            "description": "Sent after the firmware answers M115.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Connect",
+            "type": "array"
+          },
+          "default_variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Variant"
+          },
+          "estop": {
+            "default": "M112",
+            "description": "Immediate stop; firmware halts.",
+            "title": "Estop",
+            "type": "string"
+          },
+          "expected_machine_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "MACHINE_TYPE that M115 should report; others get a warning.",
+            "title": "Expected Machine Type"
+          },
+          "home": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Home",
+            "type": "array"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MarlinInput"
+            },
+            "title": "Inputs",
+            "type": "object"
+          },
+          "outputs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MarlinOutput"
+            },
+            "title": "Outputs",
+            "type": "object"
+          },
+          "stop": {
+            "default": "M410",
+            "description": "Quick stop: end motion, stay running.",
+            "title": "Stop",
+            "type": "string"
+          },
+          "variants": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MarlinVariant"
+            },
+            "title": "Variants",
+            "type": "object"
+          }
+        },
+        "title": "MarlinSettings",
+        "type": "object"
+      },
+      "MarlinVariant": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MarlinInputOverride"
+            },
+            "title": "Inputs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "MarlinVariant",
         "type": "object"
       },
       "MoveRequest": {
@@ -238,6 +1159,87 @@
           "position"
         ],
         "title": "MoveRequest",
+        "type": "object"
+      },
+      "Nozzle": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "offset": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Position relative to the head (top camera center)."
+          },
+          "pump_output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pump Output"
+          },
+          "rotation_axis": {
+            "title": "Rotation Axis",
+            "type": "string"
+          },
+          "vacuum_input": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vacuum Input"
+          },
+          "valve_output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valve Output"
+          },
+          "z_axis": {
+            "title": "Z Axis",
+            "type": "string"
+          },
+          "z_sign": {
+            "default": 1,
+            "description": "Direction of this nozzle on its Z axis. Two nozzles sharing one Z motor move in opposite directions: one has 1, the other -1.",
+            "enum": [
+              1,
+              -1
+            ],
+            "title": "Z Sign",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "offset",
+          "z_axis",
+          "z_sign",
+          "rotation_axis",
+          "vacuum_input",
+          "pump_output",
+          "valve_output"
+        ],
+        "title": "Nozzle",
         "type": "object"
       },
       "Operation": {
@@ -321,6 +1323,68 @@
         "title": "OperationEvent",
         "type": "object"
       },
+      "Output": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "pump",
+              "valve",
+              "light",
+              "other"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "role"
+        ],
+        "title": "Output",
+        "type": "object"
+      },
+      "OutputRequest": {
+        "properties": {
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "title": "OutputRequest",
+        "type": "object"
+      },
+      "Point": {
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "Point",
+        "type": "object"
+      },
       "PongEvent": {
         "properties": {
           "server_time": {
@@ -401,11 +1465,41 @@
         "title": "PresenceState",
         "type": "object"
       },
+      "Rect": {
+        "additionalProperties": false,
+        "properties": {
+          "x_max": {
+            "title": "X Max",
+            "type": "number"
+          },
+          "x_min": {
+            "title": "X Min",
+            "type": "number"
+          },
+          "y_max": {
+            "title": "Y Max",
+            "type": "number"
+          },
+          "y_min": {
+            "title": "Y Min",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x_min",
+          "y_min",
+          "x_max",
+          "y_max"
+        ],
+        "title": "Rect",
+        "type": "object"
+      },
       "ServerEvent": {
         "discriminator": {
           "mapping": {
             "error": "#/components/schemas/ErrorEvent",
             "hello": "#/components/schemas/HelloEvent",
+            "lease": "#/components/schemas/LeaseEvent",
             "machine.state": "#/components/schemas/MachineStateEvent",
             "operation": "#/components/schemas/OperationEvent",
             "pong": "#/components/schemas/PongEvent",
@@ -426,6 +1520,9 @@
           },
           {
             "$ref": "#/components/schemas/PresenceLostEvent"
+          },
+          {
+            "$ref": "#/components/schemas/LeaseEvent"
           },
           {
             "$ref": "#/components/schemas/OperationEvent"
@@ -477,6 +1574,26 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "ValueRange": {
+        "additionalProperties": false,
+        "description": "A display range. ``max`` may be below ``min`` for readings that grow more negative,\nsuch as raw vacuum sensor counts.",
+        "properties": {
+          "max": {
+            "title": "Max",
+            "type": "number"
+          },
+          "min": {
+            "title": "Min",
+            "type": "number"
+          }
+        },
+        "required": [
+          "min",
+          "max"
+        ],
+        "title": "ValueRange",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -493,6 +1610,331 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/cameras": {
+      "get": {
+        "operationId": "list_cameras_api_v1_cameras_get",
+        "parameters": [
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CameraInfo"
+                  },
+                  "title": "Response List Cameras Api V1 Cameras Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Cameras",
+        "tags": [
+          "cameras"
+        ]
+      }
+    },
+    "/api/v1/cameras/{camera_id}/snapshot.jpg": {
+      "get": {
+        "description": "The latest frame as a JPEG. The ``X-Timestamp`` header says when it was captured.",
+        "operationId": "snapshot_api_v1_cameras__camera_id__snapshot_jpg_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "camera_id",
+            "required": true,
+            "schema": {
+              "title": "Camera Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Scale frames down to this width.",
+            "in": "query",
+            "name": "width",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 3840,
+                  "minimum": 16,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Scale frames down to this width.",
+              "title": "Width"
+            }
+          },
+          {
+            "description": "JPEG quality.",
+            "in": "query",
+            "name": "quality",
+            "required": false,
+            "schema": {
+              "default": 85,
+              "description": "JPEG quality.",
+              "maximum": 95,
+              "minimum": 10,
+              "title": "Quality",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {}
+            },
+            "description": "One frame."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such camera."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The camera is off or failing."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Snapshot",
+        "tags": [
+          "cameras"
+        ]
+      }
+    },
+    "/api/v1/cameras/{camera_id}/stream.mjpg": {
+      "get": {
+        "description": "MJPEG for ``<img>`` tags, scripts, and small displays (``?width=320&fps=5``).",
+        "operationId": "stream_api_v1_cameras__camera_id__stream_mjpg_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "camera_id",
+            "required": true,
+            "schema": {
+              "title": "Camera Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Scale frames down to this width.",
+            "in": "query",
+            "name": "width",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 3840,
+                  "minimum": 16,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Scale frames down to this width.",
+              "title": "Width"
+            }
+          },
+          {
+            "description": "JPEG quality.",
+            "in": "query",
+            "name": "quality",
+            "required": false,
+            "schema": {
+              "default": 75,
+              "description": "JPEG quality.",
+              "maximum": 95,
+              "minimum": 10,
+              "title": "Quality",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Maximum frame rate.",
+            "in": "query",
+            "name": "fps",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "description": "Maximum frame rate.",
+              "exclusiveMinimum": 0,
+              "maximum": 60,
+              "title": "Fps",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Stop after this many frames.",
+            "in": "query",
+            "name": "frames",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Stop after this many frames.",
+              "title": "Frames"
+            }
+          },
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "multipart/x-mixed-replace; boundary=picnicplace-frame": {}
+            },
+            "description": "An endless MJPEG stream. Each part carries X-Timestamp (capture time, Unix seconds) and X-Frame (frame number) headers."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such camera."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The camera is off or failing."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stream",
+        "tags": [
+          "cameras"
+        ]
+      }
+    },
     "/api/v1/health": {
       "get": {
         "description": "Liveness check. Does not require authentication.",
@@ -512,6 +1954,172 @@
         "summary": "Health",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/v1/lease": {
+      "delete": {
+        "description": "Give up control of the machine, if this client holds it.",
+        "operationId": "release_lease_api_v1_lease_delete",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Release Lease",
+        "tags": [
+          "lease"
+        ]
+      },
+      "get": {
+        "operationId": "get_lease_api_v1_lease_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Lease",
+        "tags": [
+          "lease"
+        ]
+      },
+      "post": {
+        "description": "Take control of the machine. With ``force``, take it from another client.",
+        "operationId": "acquire_lease_api_v1_lease_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Acquire Lease",
+        "tags": [
+          "lease"
         ]
       }
     },
@@ -536,6 +2144,70 @@
           }
         ],
         "summary": "Get Machine",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/connect": {
+      "post": {
+        "description": "Connect to the machine if it is not connected (for example, after it was off).",
+        "operationId": "connect_machine_api_v1_machine_connect_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Connect Machine",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/description": {
+      "get": {
+        "description": "The machine profile: geometry, nozzles, cameras, feeders, and the list of I/O.",
+        "operationId": "get_machine_description_api_v1_machine_description_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Machine Description",
         "tags": [
           "machine"
         ]
@@ -572,6 +2244,26 @@
       "post": {
         "description": "Start homing. Returns an operation; follow it over the event socket.",
         "operationId": "home_api_v1_machine_home_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
         "responses": {
           "202": {
             "content": {
@@ -591,7 +2283,17 @@
                 }
               }
             },
-            "description": "The machine cannot do this right now."
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -605,10 +2307,107 @@
         ]
       }
     },
+    "/api/v1/machine/jog": {
+      "post": {
+        "description": "Move one axis by a relative distance, clamped to its limits. X and Y jogs are\nrefused while a nozzle is below safe Z.",
+        "operationId": "jog_api_v1_machine_jog_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The axis is unknown."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Jog",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
     "/api/v1/machine/move": {
       "post": {
         "description": "Start an absolute move. Returns an operation; follow it over the event socket.",
         "operationId": "move_api_v1_machine_move_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -638,7 +2437,7 @@
                 }
               }
             },
-            "description": "The machine cannot do this right now."
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
           },
           "422": {
             "content": {
@@ -662,10 +2461,49 @@
         ]
       }
     },
-    "/api/v1/machine/reset": {
-      "post": {
-        "description": "Clear a latched emergency stop. The machine must be homed again afterward.",
-        "operationId": "reset_api_v1_machine_reset_post",
+    "/api/v1/machine/outputs/{output_id}": {
+      "put": {
+        "description": "Switch an output on or off. Turning one on requires motion to be enabled.",
+        "operationId": "set_output_api_v1_machine_outputs__output_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "output_id",
+            "required": true,
+            "schema": {
+              "title": "Output Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutputRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -676,6 +2514,93 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No output with this ID."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Output",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/reset": {
+      "post": {
+        "description": "Clear a latched emergency stop. The machine must be homed again afterward.",
+        "operationId": "reset_api_v1_machine_reset_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [

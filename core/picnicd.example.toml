@@ -12,36 +12,41 @@ grace_period_s = 5.0       # Last client gone this long: running jobs pause.
 heartbeat_timeout_s = 6.0  # Silent clients are disconnected after this long.
 
 [machine]
+# "simulator": no hardware. "marlin": a real machine on marlin.port.
+# "fake-marlin": the real Marlin driver talking to a built-in fake LumenPnP firmware.
 driver = "simulator"
-sim_time_scale = 1.0       # Simulator only. 10 runs ten times faster than real time.
+profile = "lumenpnp-v4"    # Built-in profile ID, or a path to a profile TOML file.
+sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times faster.
+speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 when
+                           # bringing up a machine. Homing speed is the firmware's.
 
-# Simulator axes. Real machines will use machine profiles (see profiles/).
-[[machine.axes]]
-name = "X"
-min = 0
-max = 450
-max_speed = 500
+[machine.marlin]
+# port = "/dev/ttyACM0"    # Required for driver = "marlin".
+baud = 115200
+# variant = "vacuum-24bit" # Firmware variant from the profile. LumenPnP: "stock" (default)
+                           # or "vacuum-24bit" for firmware patched to read 24-bit vacuum.
+connect_wait_s = 3.0       # Wait after opening the port while the board boots.
+command_timeout_s = 10.0
 
-[[machine.axes]]
-name = "Y"
-min = 0
-max = 400
-max_speed = 500
-
-[[machine.axes]]
-name = "Z"
-min = -30
-max = 30
-max_speed = 100
-
-[[machine.axes]]
-name = "A"
-min = -360
-max = 360
-max_speed = 1000
-
-[[machine.axes]]
-name = "B"
-min = -360
-max = 360
-max_speed = 1000
+# Cameras, by ID from the machine profile ("top" and "bottom" on the LumenPnP). Cameras
+# left out are simulated with the simulator and fake-marlin drivers, and off otherwise.
+# Find stable device paths with: ls /dev/v4l/by-id/ (or run picnicplace-probe).
+#
+# The flips and rotations below are what OpenPnP used on a LumenPnP v4. Check yours: jog
+# +X and the picture should move left (the head moves right over a still bed).
+#
+# [cameras.top]
+# source = "device"          # "device", "synthetic", or "none"
+# device = "/dev/v4l/by-id/usb-..._LumenPnP_Top-video-index0"
+# width = 1920
+# height = 1080
+# fps = 30
+# flip_x = true
+# flip_y = true
+# rotation = 0.37            # degrees counterclockwise, after flips
+#
+# [cameras.bottom]
+# source = "device"
+# device = "/dev/v4l/by-id/usb-..._LumenPnP_Bottom-video-index0"
+# flip_x = true
+# rotation = 0.09

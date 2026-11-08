@@ -62,6 +62,10 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/feeders/slots/{id}/fiducial`, `POST /api/v1/feeders/calibrate` | Measure the feeder fiducial's offset; calibrate slots from their fiducials |
 | `PUT`, `DELETE /api/v1/feeders/assignments/{feeder_id}` | Which part a feeder holds |
 | `GET`, `PUT /api/v1/bring-up` | The bring-up checklist's progress and findings |
+| `GET /api/v1/placement` | What each nozzle holds, and how it sits once aligned |
+| `POST /api/v1/placement/pick`, `…/align`, `…/place` | Pick from a feeder slot; find the part on the bottom camera; place it at a location and angle |
+| `POST /api/v1/placement/pick-and-place`, `…/discard` | All three steps at once; drop a held part in the discard bin |
+| `POST`, `GET /api/v1/cameras/captures`; `GET …/captures/{id}.png` | Save full-resolution frames with the machine's state; list and fetch them |
 
 ## Rules worth knowing
 

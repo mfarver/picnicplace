@@ -89,14 +89,30 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
 - [ ] Feed a few times, then **Find pocket**. It finds the sprocket holes and centers the
       camera on the next part's pocket.
 
-## 6. Measure what the profile only estimates
+## 6. One part
+
+- [ ] Give a feeder's part a height in the Parts workspace, and put a scrap board on the
+      staging plate.
+- [ ] In the Machine workspace's **Single placement** panel, choose the nozzle and the
+      feeder, then **Pick**. It feeds, finds the pocket, picks at the tape's part height,
+      lifts, and checks the vacuum says a part is held.
+- [ ] **Align**: the part is shown to the bottom camera with its underside in focus, and
+      the panel reports how far off center and how turned it sits on the nozzle.
+- [ ] Center the top camera on a spot on the board, click the crosshair button to use
+      its position, and **Place**. The part is let go there, and the nozzle is checked
+      to be empty after lifting.
+- [ ] Use the **Capture** panel on the way: the pocket from above, the part on the
+      nozzle from below, and the placed part. Captured frames are saved losslessly in the
+      data directory's `captures/` folder, for tuning vision on real images.
+
+## 7. Measure what the profile only estimates
 
 With the camera centered on each point, record it in the checklist's last steps: the
 corners of the datum board, the camera opening, the aiming fiducial's holder, and the
 rear staging plate. Points that share a first word become a keep-out rectangle in the
 suggested changes.
 
-## 7. Full speed
+## 8. Full speed
 
 When everything above checks out, remove `speed_scale` (or set it to 1.0) and restart
 the core.

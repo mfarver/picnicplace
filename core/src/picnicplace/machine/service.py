@@ -18,8 +18,11 @@ axes, then lower Z to its target (if one was given).
 import asyncio
 import contextlib
 import logging
+import math
+import time
 from collections.abc import Awaitable, Callable, Mapping
 
+from picnicplace.camera.source import Frame
 from picnicplace.camera.synthetic import SceneState
 from picnicplace.events import EventBus
 from picnicplace.machine.driver import MotionDriver
@@ -34,16 +37,31 @@ from picnicplace.machine.errors import (
     NotHomedError,
     SafeZFaultError,
     UnknownOutputError,
+    VisionError,
     ZNotSafeError,
 )
-from picnicplace.machine.profile import MachineProfile, nozzle_height
+from picnicplace.machine.profile import Camera, Location, MachineProfile, nozzle_height
 from picnicplace.operations import OperationManager
 from picnicplace.presence import PresenceTracker
 from picnicplace.schemas import MachineState, MachineStateEvent, Operation
+from picnicplace.vision.fiducial import find_circle
 
 log = logging.getLogger(__name__)
 
-_Work = Callable[[], Awaitable[None]]
+_Work = Callable[[], Awaitable[str | None]]
+
+Grab = Callable[[str, float, float], Awaitable[Frame | None]]
+"""Get a frame from a camera captured at or after a time: (camera ID, after, wait_s)."""
+
+VISUAL_TOLERANCE_MM = 0.02
+"""Visual homing is done when the fiducial is this close to the camera center."""
+
+VISUAL_PASSES = 4
+
+FRAME_WAIT_S = 5.0
+
+CAMERA_SCALE_STEP_MM = 1.0
+"""How far the camera scale check moves each way from the fiducial."""
 
 EPSILON = 1e-6
 """Axis positions closer than this count as equal."""
@@ -80,6 +98,7 @@ class MachineService:
         self._busy = False
         self._connection_error: str | None = None
         self._connect_lock = asyncio.Lock()
+        self._grab: Grab | None = None
 
         driver.on_change = self._on_driver_change
         presence.on_change.append(self._publish_state)
@@ -131,7 +150,7 @@ class MachineService:
                 and sensor.past_threshold(float(value))
             )
         return SceneState(
-            position={a: round(v, 2) for a, v in self._driver.position.items()},
+            position={a: round(v, 3) for a, v in self._driver.scene_position.items()},
             outputs=dict(self._driver.outputs),
             held=held,
         )
@@ -189,6 +208,16 @@ class MachineService:
     def start_home(self) -> Operation:
         self._check_can_move()
         return self._start_operation("home", self._home)
+
+    def attach_cameras(self, grab: Grab) -> None:
+        """Give the service a way to get camera frames, for visual homing."""
+        self._grab = grab
+
+    def start_visual_home(self) -> Operation:
+        """Run visual homing again on a homed machine (to check repeatability)."""
+        self._check_can_move()
+        self._check_homed()
+        return self._start_operation("visual_home", self._visual_home)
 
     def start_move(self, target: Mapping[str, float], speed: float | None) -> Operation:
         """Move to an absolute position, at safe Z if X or Y change."""
@@ -355,22 +384,127 @@ class MachineService:
         cap = min(self._axes[a].max_speed for a in step) * self._speed_scale
         return cap if speed is None else min(speed, cap)
 
-    async def _home(self) -> None:
+    async def _home(self) -> str | None:
         await self._driver.home()
         if self._profile.safe_z_input is not None and not self.z_safe:
             raise SafeZFaultError(
                 "after homing, the safe-Z sensor reads not safe; check the sensor and the "
                 "Z mechanism"
             )
+        message = None
+        if self._profile.visual_homing:
+            message = await self._visual_home()
         self._homed = True
+        return message
+
+    def start_measure_camera_scale(self) -> Operation:
+        """Measure the top camera's millimeters per pixel using the homing fiducial."""
+        self._check_can_move()
+        self._check_homed()
+        return self._start_operation("camera_scale", self._measure_camera_scale)
+
+    def _homing_target(self) -> tuple[Location, Camera, dict[str, float]]:
+        fiducial = next(
+            (loc for loc in self._profile.locations if loc.kind == "homing_fiducial"), None
+        )
+        camera = next(
+            (c for c in self._profile.cameras if c.mount == "head" and c.looking == "down"),
+            None,
+        )
+        if fiducial is None or camera is None:
+            raise VisionError(
+                "this needs a homing fiducial and a down-looking head camera in the machine profile"
+            )
+        if self._grab is None:
+            raise VisionError("the cameras are not available")
+        target = {
+            "X": fiducial.position.x - camera.position.x,
+            "Y": fiducial.position.y - camera.position.y,
+        }
+        return fiducial, camera, target
+
+    async def _locate_fiducial(
+        self, fiducial: Location, camera: Camera
+    ) -> tuple[float, float, int, int]:
+        """Find the fiducial in a fresh frame: its center in pixels, and the frame size."""
+        assert self._grab is not None
+        await asyncio.sleep(camera.settle_s)
+        frame = await self._grab(camera.id, time.time(), FRAME_WAIT_S)
+        if frame is None:
+            raise VisionError(f"the {camera.label.lower()} sent no frame")
+        h, w = frame.image.shape[:2]
+        mm_per_px = camera.field_of_view.x / w
+        expected = fiducial.diameter
+        low, high = (expected * 0.6, expected * 1.5) if expected else (0.5, 4.0)
+        circle = await asyncio.get_running_loop().run_in_executor(
+            None, find_circle, frame.image, low / mm_per_px, high / mm_per_px
+        )
+        if circle is None:
+            raise VisionError(
+                f"the homing fiducial was not found near ({fiducial.position.x:g}, "
+                f"{fiducial.position.y:g}); check the light and the fiducial location"
+            )
+        return circle.x, circle.y, w, h
+
+    async def _measure_camera_scale(self) -> str:
+        fiducial, camera, target = self._homing_target()
+        step = CAMERA_SCALE_STEP_MM
+        await self._run_steps(self._plan_move(target), None)
+        scales: dict[str, float] = {}
+        for axis, index in (("X", 0), ("Y", 1)):
+            seen: list[float] = []
+            for sign in (-1, 1):
+                await self._run_steps([{**target, axis: target[axis] + sign * step}], None)
+                found = await self._locate_fiducial(fiducial, camera)
+                seen.append(found[index])
+            # The fiducial moves the opposite way to the head, by 2 * step in total.
+            pixels = abs(seen[1] - seen[0])
+            if pixels < 1:
+                raise VisionError(f"the fiducial did not move in the image when moving {axis}")
+            scales[axis] = 2 * step / pixels
+        await self._run_steps([target], None)
+        width = (await self._locate_fiducial(fiducial, camera))[2]
+        assumed = camera.field_of_view.x / width
+        return (
+            f"{camera.label}: {scales['X']:.5f} mm/pixel in X and {scales['Y']:.5f} in Y "
+            f"(the profile's field of view implies {assumed:.5f})."
+        )
+
+    async def _visual_home(self) -> str:
+        """Center the top camera on the homing fiducial, then make the coordinates agree
+        with the fiducial's known position. Returns what it corrected."""
+        fiducial, camera, target = self._homing_target()
+        await self._run_steps(self._plan_move(target), None)
+        for _ in range(VISUAL_PASSES):
+            u, v, w, h = await self._locate_fiducial(fiducial, camera)
+            mm_per_px = camera.field_of_view.x / w  # until the camera is calibrated
+            dx = (u - w / 2) * mm_per_px
+            dy = -(v - h / 2) * mm_per_px  # image rows grow toward the front
+            if math.hypot(dx, dy) <= VISUAL_TOLERANCE_MM:
+                break
+            here = self._driver.position
+            await self._run_steps([{"X": here["X"] + dx, "Y": here["Y"] + dy}], None)
+        else:
+            raise VisionError(f"could not center on the homing fiducial in {VISUAL_PASSES} passes")
+
+        # The head is centered on the fiducial, whose true position is the target. How
+        # far the reported position is from that is how far off homing left the machine.
+        here = self._driver.position
+        off_x, off_y = target["X"] - here["X"], target["Y"] - here["Y"]
+        await self._driver.set_position(target)
+        log.info("visual homing: machine was off by X %+.3f mm, Y %+.3f mm", off_x, off_y)
+        return (
+            f"Visual homing found the machine {math.hypot(off_x, off_y):.3f} mm off after "
+            f"homing (X {off_x:+.3f}, Y {off_y:+.3f}) and corrected the coordinates."
+        )
 
     def _start_operation(self, kind: str, work: _Work) -> Operation:
         self._busy = True
         self._publish_state()
 
-        async def run() -> None:
+        async def run() -> str | None:
             try:
-                await work()
+                return await work()
             finally:
                 self._busy = False
                 self._publish_state()

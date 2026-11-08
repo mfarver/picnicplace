@@ -23,6 +23,16 @@ class MotionDriver(ABC):
         """The firmware stopped itself (or after an emergency stop) and needs a reset."""
         return False
 
+    async def set_position(self, position: Mapping[str, float]) -> None:
+        """Redefine where the axes are, without moving (G92). Used by visual homing."""
+        raise NotImplementedError(f"the {self.name} driver cannot set positions")
+
+    @property
+    def scene_position(self) -> Mapping[str, float]:
+        """Where the machine physically is, for synthetic cameras. Real drivers report
+        their position; the simulator adds its simulated homing error."""
+        return self.position
+
     async def refresh_input(self, input_id: str) -> None:
         """Read an input now rather than waiting for the next poll (for safety checks)."""
         return None

@@ -17,6 +17,7 @@ from picnicplace.api import routes, websocket
 from picnicplace.api.context import AppContext
 from picnicplace.auth import Authenticator
 from picnicplace.camera.manager import CameraManager
+from picnicplace.camera.source import Frame
 from picnicplace.config import Config
 from picnicplace.events import EventBus
 from picnicplace.lease import LeaseManager
@@ -43,6 +44,15 @@ def create_app(config: Config | None = None) -> FastAPI:
     )
     lease = LeaseManager(bus, presence)
     cameras = CameraManager(config, profile, machine.scene)
+
+    async def grab(camera_id: str, after: float, wait_s: float) -> Frame | None:
+        hub = cameras.hub(camera_id)
+        if hub is None:
+            return None
+        async with hub.viewer() as source:
+            return await source.fresh_frame(after, wait_s)
+
+    machine.attach_cameras(grab)
     lease.on_holder_left.append(machine.stop_manual_motion)
     ctx = AppContext(
         config=config,

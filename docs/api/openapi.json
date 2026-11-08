@@ -105,6 +105,13 @@
           "position": {
             "$ref": "#/components/schemas/Point",
             "description": "Head cameras: offset from the head. Fixed cameras: machine coordinates."
+          },
+          "settle_s": {
+            "default": 0.25,
+            "description": "Wait this long after a move before using a frame (vibration, latency).",
+            "minimum": 0.0,
+            "title": "Settle S",
+            "type": "number"
           }
         },
         "required": [
@@ -114,7 +121,8 @@
           "position",
           "looking",
           "field_of_view",
-          "light_output"
+          "light_output",
+          "settle_s"
         ],
         "title": "Camera",
         "type": "object"
@@ -598,6 +606,19 @@
       "Location": {
         "additionalProperties": false,
         "properties": {
+          "diameter": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Fiducials: the round mark's diameter in mm.",
+            "title": "Diameter"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -624,7 +645,8 @@
           "id",
           "label",
           "kind",
-          "position"
+          "position",
+          "diameter"
         ],
         "title": "Location",
         "type": "object"
@@ -717,6 +739,12 @@
             "description": "A digital input that reads true when every nozzle is at safe height.",
             "title": "Safe Z Input"
           },
+          "visual_homing": {
+            "default": false,
+            "description": "After homing, center the top camera on the homing fiducial and correct the X/Y coordinates to its known position.",
+            "title": "Visual Homing",
+            "type": "boolean"
+          },
           "work_area": {
             "anyOf": [
               {
@@ -737,6 +765,7 @@
           "work_area",
           "axes",
           "safe_z",
+          "visual_homing",
           "safe_z_input",
           "nozzles",
           "cameras",
@@ -1277,6 +1306,19 @@
             "title": "Kind",
             "type": "string"
           },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "What the operation found or did, for people.",
+            "title": "Message"
+          },
           "started_at": {
             "format": "date-time",
             "title": "Started At",
@@ -1298,6 +1340,7 @@
           "kind",
           "status",
           "error",
+          "message",
           "started_at",
           "finished_at"
         ],
@@ -2149,6 +2192,73 @@
         ]
       }
     },
+    "/api/v1/machine/camera-scale": {
+      "post": {
+        "description": "Measure the top camera's millimeters per pixel by moving over the homing fiducial.\nThe result is reported in the operation's message; it is not saved yet.",
+        "operationId": "measure_camera_scale_api_v1_machine_camera_scale_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Measure Camera Scale",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
     "/api/v1/machine/connect": {
       "post": {
         "description": "Connect to the machine if it is not connected (for example, after it was off).",
@@ -2609,6 +2719,73 @@
           }
         ],
         "summary": "Reset",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/visual-home": {
+      "post": {
+        "description": "Find the homing fiducial with the top camera and correct X and Y. Homing does\nthis by itself when the profile enables visual homing; this runs it again.",
+        "operationId": "visual_home_api_v1_machine_visual_home_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Visual Home",
         "tags": [
           "machine"
         ]

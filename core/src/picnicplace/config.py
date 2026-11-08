@@ -83,6 +83,13 @@ class MachineConfig(_Section):
     sim_time_scale: float = Field(
         default=1.0, gt=0, description="Simulator only: values above 1 run faster than real time."
     )
+    sim_home_error: tuple[float, float] = Field(
+        default=(0.3, -0.2),
+        description=(
+            "Simulator only: how far (X, Y in mm) the head really is from where homing "
+            "says, as with real endstops. Visual homing finds and corrects it."
+        ),
+    )
     speed_scale: float = Field(
         default=1.0,
         gt=0,

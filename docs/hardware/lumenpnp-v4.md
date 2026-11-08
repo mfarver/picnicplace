@@ -130,6 +130,11 @@ protocol and is not described here yet.
 - `core/src/picnicplace/machine/marlin/fake.py` is a fake firmware that answers like the
   log above. Run `uv run picnicplace-fake-marlin` for one on a pseudo-terminal.
 - Home sensors are not read yet (`M119` replies have not been captured).
+- Visual homing is on in the profile: after `G28` the top camera is centered on the
+  homing fiducial at (217, 106) and X/Y are corrected with `G92`, as OpenPnP does. The
+  fiducial's diameter is not in the profile yet, so the finder accepts round marks from
+  0.5 to 4 mm. Until the camera is calibrated, the scale comes from the profile's field
+  of view; the Calibration panel's Camera scale button measures the real one.
 
 ## Cameras
 

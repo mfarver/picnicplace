@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from picnicplace.camera.source import CameraSource, Image
+from picnicplace.camera.source import CameraSource, Frame, Image
 from picnicplace.machine.profile import Camera, MachineProfile, Point
 
 # Colors, BGR.
@@ -195,8 +195,9 @@ class TopRenderer:
             if not c.visible(p.x, p.y, 10):
                 continue
             if loc.kind == "homing_fiducial":
-                c.circle(img, p.x, p.y, 3.0, (20, 20, 20))
-                c.circle(img, p.x, p.y, 1.0, (235, 235, 235))
+                r = (loc.diameter or 2.0) / 2
+                c.circle(img, p.x, p.y, r * 3, (20, 20, 20))
+                c.circle(img, p.x, p.y, r, (235, 235, 235))
             elif loc.kind == "discard":
                 c.rect(img, p.x, p.y, 14, 14, 0, (30, 30, 30))
                 c.rect(img, p.x, p.y, 12, 12, 0, (15, 15, 15))
@@ -315,6 +316,12 @@ class SyntheticCamera(CameraSource):
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
+
+    async def fresh_frame(self, after: float, wait_s: float) -> Frame | None:
+        """Render the present right away rather than waiting for the next tick."""
+        image = await asyncio.to_thread(self._renderer.render, self._scene())
+        await self._publish(image)
+        return self.latest
 
     async def _run(self) -> None:
         last: SceneState | None = None

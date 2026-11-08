@@ -322,6 +322,11 @@ class MarlinDriver(MotionDriver):
         self._stopping = False
         self._poller = asyncio.create_task(self._poll_inputs())
 
+    async def set_position(self, position: Mapping[str, float]) -> None:
+        words = " ".join(f"{axis}{value:.4f}" for axis, value in position.items())
+        await self._command(f"G92 {words}")
+        await self._sync_position()
+
     async def _sync_position(self) -> None:
         reply = await self._command("M114")
         report = next((line for line in reply if "X:" in line), "")

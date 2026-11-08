@@ -24,6 +24,9 @@ work_area = { x_min = 60, y_min = 90, x_max = 440, y_max = 300 }
 # Z = 0 has both nozzles up. OpenPnP's LumenPnP config treats -15..15 as safe for travel.
 safe_z = -15.0
 
+# After G28, center the top camera on the homing fiducial and correct X/Y (as OpenPnP does).
+visual_homing = true
+
 [[axes]]
 name = "X"
 min = 0

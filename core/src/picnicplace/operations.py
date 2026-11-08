@@ -25,7 +25,7 @@ class OperationManager:
         self._operations: OrderedDict[str, Operation] = OrderedDict()
         self._tasks: set[asyncio.Task[None]] = set()
 
-    def start(self, kind: str, work: Callable[[], Awaitable[None]]) -> Operation:
+    def start(self, kind: str, work: Callable[[], Awaitable[str | None]]) -> Operation:
         op = Operation(
             id=uuid.uuid4().hex, kind=kind, status="running", started_at=datetime.now(UTC)
         )
@@ -43,11 +43,12 @@ class OperationManager:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
 
-    async def _run(self, op_id: str, work: Callable[[], Awaitable[None]]) -> None:
+    async def _run(self, op_id: str, work: Callable[[], Awaitable[str | None]]) -> None:
         status: OperationStatus = "failed"
         error: str | None = None
+        message: str | None = None
         try:
-            await work()
+            message = await work()
             status = "succeeded"
         except asyncio.CancelledError:
             status, error = "cancelled", "cancelled"
@@ -65,6 +66,7 @@ class OperationManager:
                         update={
                             "status": status,
                             "error": error,
+                            "message": message,
                             "finished_at": datetime.now(UTC),
                         }
                     )

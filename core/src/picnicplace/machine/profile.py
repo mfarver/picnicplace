@@ -102,6 +102,11 @@ class Camera(ProfileModel):
     looking: Literal["down", "up"]
     field_of_view: Point = Field(description="Width (x) and height (y) of the view in mm.")
     light_output: str | None = None
+    settle_s: float = Field(
+        default=0.25,
+        ge=0,
+        description="Wait this long after a move before using a frame (vibration, latency).",
+    )
 
 
 class Location(ProfileModel):
@@ -109,6 +114,9 @@ class Location(ProfileModel):
     label: str
     kind: Literal["homing_fiducial", "tip_holder", "discard", "park"]
     position: Point
+    diameter: float | None = Field(
+        default=None, gt=0, description="Fiducials: the round mark's diameter in mm."
+    )
 
 
 class FeederBank(ProfileModel):
@@ -191,6 +199,13 @@ class MachineProfile(ProfileModel):
     axes: list[Axis] = Field(min_length=1)
     safe_z: float = Field(
         description="A nozzle at or above this height (on its own Z scale) is safe for travel."
+    )
+    visual_homing: bool = Field(
+        default=False,
+        description=(
+            "After homing, center the top camera on the homing fiducial and correct the "
+            "X/Y coordinates to its known position."
+        ),
     )
     safe_z_input: str | None = Field(
         default=None,

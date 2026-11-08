@@ -66,6 +66,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connect Machine
+         * @description Connect to the machine if it is not connected (for example, after it was off).
+         */
+        post: operations["connect_machine_api_v1_machine_connect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/description": {
         parameters: {
             query?: never;
@@ -551,6 +571,11 @@ export interface components {
             busy: boolean;
             /** Connected */
             connected: boolean;
+            /**
+             * Connection Error
+             * @description Why the last attempt to connect to the machine failed, if it did.
+             */
+            connection_error: string | null;
             /** Driver */
             driver: string;
             /**
@@ -558,6 +583,11 @@ export interface components {
              * @description An emergency stop is latched; reset before moving.
              */
             estop: boolean;
+            /**
+             * Firmware
+             * @description Firmware name and version, when known.
+             */
+            firmware: string | null;
             /** Homed */
             homed: boolean;
             /**
@@ -600,6 +630,104 @@ export interface components {
              * @enum {string}
              */
             type: "machine.state";
+        };
+        /** MarlinInput */
+        MarlinInput: {
+            /**
+             * Pattern
+             * @description Regular expression with a 'value' group, matched against the reply.
+             */
+            pattern: string;
+            /**
+             * Read
+             * @description Commands to send; the value is in the last one's reply.
+             */
+            read: string[];
+            /**
+             * Scale
+             * @description Multiply the (signed) value by this.
+             * @default 1
+             */
+            scale: number;
+            /**
+             * Sign Bits
+             * @description Treat the raw value as a two's-complement number of this many bits.
+             */
+            sign_bits?: number | null;
+        };
+        /** MarlinInputOverride */
+        MarlinInputOverride: {
+            /**
+             * Clear Sign Bits
+             * @description Remove the base input's sign_bits instead of setting it.
+             * @default false
+             */
+            clear_sign_bits: boolean;
+            /** Pattern */
+            pattern?: string | null;
+            /** Read */
+            read?: string[] | null;
+            /** Scale */
+            scale?: number | null;
+            /** Sign Bits */
+            sign_bits?: number | null;
+        };
+        /** MarlinOutput */
+        MarlinOutput: {
+            /** Off */
+            off: string[];
+            /** On */
+            on: string[];
+        };
+        /** MarlinSettings */
+        MarlinSettings: {
+            /**
+             * Connect
+             * @description Sent after the firmware answers M115.
+             */
+            connect?: string[];
+            /** Default Variant */
+            default_variant?: string | null;
+            /**
+             * Estop
+             * @description Immediate stop; firmware halts.
+             * @default M112
+             */
+            estop: string;
+            /**
+             * Expected Machine Type
+             * @description MACHINE_TYPE that M115 should report; others get a warning.
+             */
+            expected_machine_type?: string | null;
+            /** Home */
+            home?: string[];
+            /** Inputs */
+            inputs?: {
+                [key: string]: components["schemas"]["MarlinInput"];
+            };
+            /** Outputs */
+            outputs?: {
+                [key: string]: components["schemas"]["MarlinOutput"];
+            };
+            /**
+             * Stop
+             * @description Quick stop: end motion, stay running.
+             * @default M410
+             */
+            stop: string;
+            /** Variants */
+            variants?: {
+                [key: string]: components["schemas"]["MarlinVariant"];
+            };
+        };
+        /** MarlinVariant */
+        MarlinVariant: {
+            /** Description */
+            description: string;
+            /** Inputs */
+            inputs?: {
+                [key: string]: components["schemas"]["MarlinInputOverride"];
+            };
         };
         /** MoveRequest */
         MoveRequest: {
@@ -934,6 +1062,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MachineState"];
+                };
+            };
+        };
+    };
+    connect_machine_api_v1_machine_connect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

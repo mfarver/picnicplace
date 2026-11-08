@@ -215,3 +215,61 @@ role = "light"
 id = "light_bottom"
 label = "Bottom light"
 role = "light"
+
+# --- Marlin driver ---------------------------------------------------------------------
+# G-code as observed on a LumenPnP v4 (docs/hardware/lumenpnp-v4.md).
+
+[marlin]
+expected_machine_type = "LumenPnP"
+connect = [
+  "G90",
+  # Configure both vacuum sensors: select each through the I2C multiplexer (address 112),
+  # then write 0x1B to the sensor's command register (address 109, register 48).
+  "M260 A112 B1 S1", "M260 A109", "M260 B48", "M260 B27", "M260 S1",
+  "M260 A112 B2 S1", "M260 A109", "M260 B48", "M260 B27", "M260 S1",
+  "M113 S0",
+  "M203 X2000 Y2000 Z600 A60000 B60000",
+  "M201 X20000 Y20000 Z15000 A30000 B30000",
+  "M205 J0.02",
+]
+home = ["G28"]
+default_variant = "stock"
+
+# Inferred: the PWM 180 outputs are the pumps, the full-on ones the valves.
+[marlin.outputs]
+pump_n1 = { on = ["M106 P1 S180"], off = ["M107 P1"] }
+valve_n1 = { on = ["M106 P0 S255"], off = ["M107 P0"] }
+pump_n2 = { on = ["M106 P3 S180"], off = ["M107 P3"] }
+valve_n2 = { on = ["M106 P2 S255"], off = ["M107 P2"] }
+light_top = { on = ["M150 P255 R255 U255 B255 S1"], off = ["M150 P0 S1"] }
+light_bottom = { on = ["M150 P255 R255 U255 B255 S0"], off = ["M150 P0 S0"] }
+
+# Stock firmware reads one byte: the top byte of the sensor's 24-bit value, scaled here
+# to the same counts. Inferred; to be confirmed against stock firmware.
+[marlin.inputs.vac_n1]
+read = ["M260 A112 B1 S1", "M260 A109 B6 S1", "M261 A109 B1 S2"]
+pattern = 'data:\s*(?P<value>-?\d+)'
+sign_bits = 8
+scale = 65536
+
+[marlin.inputs.vac_n2]
+read = ["M260 A112 B2 S1", "M260 A109 B6 S1", "M261 A109 B1 S2"]
+pattern = 'data:\s*(?P<value>-?\d+)'
+sign_bits = 8
+scale = 65536
+
+[marlin.variants.stock]
+description = "Opulo's stock firmware: vacuum sensors read as 8 bits."
+
+[marlin.variants.vacuum-24bit]
+description = "Firmware patched to read the vacuum sensors as signed 24-bit values."
+
+[marlin.variants.vacuum-24bit.inputs.vac_n1]
+read = ["M260 A112 B1 S1", "M260 A109 B6 S1", "M261 A109 B3 S4"]
+clear_sign_bits = true
+scale = 1
+
+[marlin.variants.vacuum-24bit.inputs.vac_n2]
+read = ["M260 A112 B2 S1", "M260 A109 B6 S1", "M261 A109 B3 S4"]
+clear_sign_bits = true
+scale = 1

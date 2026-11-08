@@ -685,6 +685,18 @@
             "title": "Connected",
             "type": "boolean"
           },
+          "connection_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the last attempt to connect to the machine failed, if it did.",
+            "title": "Connection Error"
+          },
           "driver": {
             "title": "Driver",
             "type": "string"
@@ -693,6 +705,18 @@
             "description": "An emergency stop is latched; reset before moving.",
             "title": "Estop",
             "type": "boolean"
+          },
+          "firmware": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Firmware name and version, when known.",
+            "title": "Firmware"
           },
           "homed": {
             "title": "Homed",
@@ -742,7 +766,9 @@
         },
         "required": [
           "driver",
+          "firmware",
           "connected",
+          "connection_error",
           "homed",
           "estop",
           "busy",
@@ -773,6 +799,239 @@
           "machine"
         ],
         "title": "MachineStateEvent",
+        "type": "object"
+      },
+      "MarlinInput": {
+        "additionalProperties": false,
+        "properties": {
+          "pattern": {
+            "description": "Regular expression with a 'value' group, matched against the reply.",
+            "title": "Pattern",
+            "type": "string"
+          },
+          "read": {
+            "description": "Commands to send; the value is in the last one's reply.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Read",
+            "type": "array"
+          },
+          "scale": {
+            "default": 1.0,
+            "description": "Multiply the (signed) value by this.",
+            "title": "Scale",
+            "type": "number"
+          },
+          "sign_bits": {
+            "anyOf": [
+              {
+                "maximum": 64.0,
+                "minimum": 2.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Treat the raw value as a two's-complement number of this many bits.",
+            "title": "Sign Bits"
+          }
+        },
+        "required": [
+          "read",
+          "pattern"
+        ],
+        "title": "MarlinInput",
+        "type": "object"
+      },
+      "MarlinInputOverride": {
+        "additionalProperties": false,
+        "properties": {
+          "clear_sign_bits": {
+            "default": false,
+            "description": "Remove the base input's sign_bits instead of setting it.",
+            "title": "Clear Sign Bits",
+            "type": "boolean"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern"
+          },
+          "read": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read"
+          },
+          "scale": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scale"
+          },
+          "sign_bits": {
+            "anyOf": [
+              {
+                "maximum": 64.0,
+                "minimum": 2.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sign Bits"
+          }
+        },
+        "title": "MarlinInputOverride",
+        "type": "object"
+      },
+      "MarlinOutput": {
+        "additionalProperties": false,
+        "properties": {
+          "off": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Off",
+            "type": "array"
+          },
+          "on": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "On",
+            "type": "array"
+          }
+        },
+        "required": [
+          "on",
+          "off"
+        ],
+        "title": "MarlinOutput",
+        "type": "object"
+      },
+      "MarlinSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "connect": {
+            "description": "Sent after the firmware answers M115.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Connect",
+            "type": "array"
+          },
+          "default_variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Variant"
+          },
+          "estop": {
+            "default": "M112",
+            "description": "Immediate stop; firmware halts.",
+            "title": "Estop",
+            "type": "string"
+          },
+          "expected_machine_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "MACHINE_TYPE that M115 should report; others get a warning.",
+            "title": "Expected Machine Type"
+          },
+          "home": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Home",
+            "type": "array"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MarlinInput"
+            },
+            "title": "Inputs",
+            "type": "object"
+          },
+          "outputs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MarlinOutput"
+            },
+            "title": "Outputs",
+            "type": "object"
+          },
+          "stop": {
+            "default": "M410",
+            "description": "Quick stop: end motion, stay running.",
+            "title": "Stop",
+            "type": "string"
+          },
+          "variants": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MarlinVariant"
+            },
+            "title": "Variants",
+            "type": "object"
+          }
+        },
+        "title": "MarlinSettings",
+        "type": "object"
+      },
+      "MarlinVariant": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MarlinInputOverride"
+            },
+            "title": "Inputs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "MarlinVariant",
         "type": "object"
       },
       "MoveRequest": {
@@ -1464,6 +1723,43 @@
           }
         ],
         "summary": "Get Machine",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/connect": {
+      "post": {
+        "description": "Connect to the machine if it is not connected (for example, after it was off).",
+        "operationId": "connect_machine_api_v1_machine_connect_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Connect Machine",
         "tags": [
           "machine"
         ]

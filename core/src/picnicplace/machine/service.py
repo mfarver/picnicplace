@@ -15,15 +15,18 @@ run in up to three steps: raise Z to travel height (if needed), move the travel 
 axes, then lower Z to its target (if one was given).
 """
 
+import contextlib
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 
 from picnicplace.events import EventBus
 from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.errors import (
+    ConnectFailedError,
     EmergencyStopActiveError,
     InvalidTargetError,
     MachineBusyError,
+    MachineError,
     NoClientPresentError,
     NotConnectedError,
     NotHomedError,
@@ -69,8 +72,9 @@ class MachineService:
         self._homed = False
         self._estop = False
         self._busy = False
+        self._connection_error: str | None = None
 
-        driver.on_change = self._publish_state
+        driver.on_change = self._on_driver_change
         presence.on_change.append(self._publish_state)
         presence.on_empty.append(self.stop_manual_motion)
 
@@ -108,7 +112,9 @@ class MachineService:
     def state(self) -> MachineState:
         return MachineState(
             driver=self._driver.name,
+            firmware=self._driver.firmware,
             connected=self._driver.connected,
+            connection_error=self._connection_error,
             homed=self._homed,
             estop=self._estop,
             busy=self._busy,
@@ -121,8 +127,25 @@ class MachineService:
         )
 
     async def start(self) -> None:
-        await self._driver.connect()
+        """Connect at startup. A machine that is off or unplugged is not fatal: the core
+        runs, reports the error, and clients can try again with ``connect``."""
+        with contextlib.suppress(MachineError):
+            await self.connect()
+
+    async def connect(self) -> None:
+        if self._driver.connected:
+            return
+        self._homed = False
+        try:
+            await self._driver.connect()
+        except Exception as e:
+            self._connection_error = _describe_error(e)
+            log.error("cannot connect to the machine: %s", self._connection_error)
+            self._publish_state()
+            raise ConnectFailedError(self._connection_error) from e
+        self._connection_error = None
         log.info("connected to %s driver", self._driver.name)
+        self._publish_state()
 
     async def shutdown(self) -> None:
         await self._driver.disconnect()
@@ -182,6 +205,12 @@ class MachineService:
             return
         await self._driver.reset()
         self._estop = False
+        self._publish_state()
+
+    def _on_driver_change(self) -> None:
+        # A machine that drops off (unplugged, powered off) must be homed again.
+        if not self._driver.connected:
+            self._homed = False
         self._publish_state()
 
     async def stop_manual_motion(self) -> None:
@@ -288,3 +317,13 @@ class MachineService:
 
     def _publish_state(self) -> None:
         self._bus.publish(MachineStateEvent(machine=self.state))
+
+
+def _describe_error(e: Exception) -> str:
+    if isinstance(e, FileNotFoundError):
+        return f"no such serial port: {e.filename}"
+    if isinstance(e, PermissionError):
+        return f"no permission to open {e.filename}; add your user to the dialout group"
+    if isinstance(e, OSError) and e.strerror:
+        return e.strerror
+    return str(e) or type(e).__name__

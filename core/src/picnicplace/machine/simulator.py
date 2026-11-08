@@ -49,6 +49,7 @@ VACUUM_TAU_S = 0.15
 
 class SimulatorDriver(MotionDriver):
     name = "simulator"
+    firmware = "PicnicPlace simulator"
 
     def __init__(self, profile: MachineProfile, time_scale: float = 1.0) -> None:
         super().__init__()

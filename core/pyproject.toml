@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 picnicd = "picnicplace.cli:main"
+picnicplace-fake-marlin = "picnicplace.machine.marlin.fake:main"
 
 [dependency-groups]
 dev = [

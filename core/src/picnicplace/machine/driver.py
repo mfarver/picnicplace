@@ -15,6 +15,9 @@ class MotionDriver(ABC):
         self.on_change: Callable[[], None] | None = None
         """Called whenever position, connection, or I/O state changes."""
 
+    firmware: str | None = None
+    """Firmware name and version, once connected, if the driver knows it."""
+
     @property
     @abstractmethod
     def axes(self) -> Sequence[str]: ...

@@ -12,6 +12,16 @@ grace_period_s = 5.0       # Last client gone this long: running jobs pause.
 heartbeat_timeout_s = 6.0  # Silent clients are disconnected after this long.
 
 [machine]
+# "simulator": no hardware. "marlin": a real machine on marlin.port.
+# "fake-marlin": the real Marlin driver talking to a built-in fake LumenPnP firmware.
 driver = "simulator"
 profile = "lumenpnp-v4"    # Built-in profile ID, or a path to a profile TOML file.
-sim_time_scale = 1.0       # Simulator only. 10 runs ten times faster than real time.
+sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times faster.
+
+[machine.marlin]
+# port = "/dev/ttyACM0"    # Required for driver = "marlin".
+baud = 115200
+# variant = "vacuum-24bit" # Firmware variant from the profile. LumenPnP: "stock" (default)
+                           # or "vacuum-24bit" for firmware patched to read 24-bit vacuum.
+connect_wait_s = 3.0       # Wait after opening the port while the board boots.
+command_timeout_s = 10.0

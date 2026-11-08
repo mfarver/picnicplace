@@ -73,6 +73,18 @@ async def set_output(ctx: Context, output_id: str, body: OutputRequest) -> Machi
 
 
 @router.post(
+    "/machine/connect",
+    tags=["machine"],
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require(Permission.MOTION))],
+)
+async def connect_machine(ctx: Context) -> MachineState:
+    """Connect to the machine if it is not connected (for example, after it was off)."""
+    await ctx.machine.connect()
+    return ctx.machine.state
+
+
+@router.post(
     "/machine/home",
     tags=["machine"],
     status_code=status.HTTP_202_ACCEPTED,

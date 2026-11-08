@@ -24,7 +24,11 @@ class WireModel(BaseModel):
 
 class MachineState(WireModel):
     driver: str
+    firmware: str | None = Field(description="Firmware name and version, when known.")
     connected: bool
+    connection_error: str | None = Field(
+        description="Why the last attempt to connect to the machine failed, if it did."
+    )
     homed: bool
     estop: bool = Field(description="An emergency stop is latched; reset before moving.")
     busy: bool = Field(description="A motion operation is in progress.")

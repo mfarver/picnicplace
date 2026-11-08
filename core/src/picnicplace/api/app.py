@@ -19,8 +19,8 @@ from picnicplace.config import Config
 from picnicplace.events import EventBus
 from picnicplace.lease import LeaseManager
 from picnicplace.machine.errors import MachineError
+from picnicplace.machine.factory import build_driver
 from picnicplace.machine.service import MachineService
-from picnicplace.machine.simulator import SimulatorDriver
 from picnicplace.operations import OperationManager
 from picnicplace.presence import PresenceTracker
 from picnicplace.schemas import ClientMessage, ErrorResponse, ServerEvent
@@ -34,7 +34,8 @@ def create_app(config: Config | None = None) -> FastAPI:
     presence = PresenceTracker(bus, config.presence.grace_period_s)
     operations = OperationManager(bus)
     profile = config.machine.machine_profile
-    driver = SimulatorDriver(profile, config.machine.sim_time_scale)
+    bundle = build_driver(config.machine)
+    driver = bundle.driver
     machine = MachineService(profile, driver, bus, presence, operations)
     lease = LeaseManager(bus, presence)
     lease.on_holder_left.append(machine.stop_manual_motion)
@@ -57,6 +58,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             await operations.shutdown()
             await presence.shutdown()
             await machine.shutdown()
+            await bundle.shutdown()
 
     app = FastAPI(title=TITLE, version=__version__, lifespan=lifespan)
     app.state.ctx = ctx

@@ -29,6 +29,16 @@ make setup
 make core      # then open http://127.0.0.1:7420
 ```
 
+That runs the built-in simulator. To exercise the real Marlin driver without a machine,
+run it against a fake LumenPnP firmware, or point it at a real one:
+
+```sh
+cd core
+uv run picnicd --studio-dir ../studio/dist --driver fake-marlin --profile lumenpnp-v4
+uv run picnicd --studio-dir ../studio/dist --driver marlin --profile lumenpnp-v4 \
+    --serial-port /dev/ttyACM0
+```
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow.
 
 ## Planned stack

@@ -351,7 +351,7 @@ A `MotionDriver` interface with implementations:
 | Driver | Priority | Notes |
 |---|---|---|
 | **Simulator** | 1.0, first | Simulated motion and synthetic camera images. Required for CI and contributor development without hardware. |
-| **Marlin (LumenPnP)** | 1.0 | G-code over USB serial, `ok`-based flow control, position reports, vacuum sensor reads, RS-485 passthrough for Photon feeders. |
+| **Marlin (LumenPnP)** | 1.0 | G-code over USB serial, `ok`-based flow control, position reports, vacuum sensor reads, RS-485 passthrough for Photon feeders. The machine-specific G-code lives in the machine profile's `[marlin]` table, with named firmware variants. A fake LumenPnP firmware (`fake-marlin`) lets the real driver run without hardware. |
 | Klipper (via Moonraker API) | Post-1.0 | |
 | grblHAL / Smoothieware | Post-1.0 | |
 

@@ -20,6 +20,8 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from picnicplace.machine.marlin.settings import MarlinSettings
+
 
 class ProfileModel(BaseModel):
     # Profiles are strict when loaded, and their models also appear on the wire in the
@@ -200,6 +202,11 @@ class MachineProfile(ProfileModel):
     feeder_banks: list[FeederBank] = Field(default_factory=list[FeederBank])
     inputs: list[Input] = Field(default_factory=list[Input])
     outputs: list[Output] = Field(default_factory=list[Output])
+    marlin: MarlinSettings | None = Field(
+        default=None,
+        exclude=True,
+        description="How the Marlin driver talks to this machine. Not sent to clients.",
+    )
 
     @model_validator(mode="after")
     def _check_references(self) -> Self:
@@ -228,6 +235,13 @@ class MachineProfile(ProfileModel):
         for i in self.inputs:
             if i.axis is not None and i.axis not in axes:
                 raise ValueError(f"input {i.id}: unknown axis {i.axis!r}")
+        if self.marlin is not None:
+            for out in self.marlin.outputs:
+                if out not in outputs:
+                    raise ValueError(f"marlin: unknown output {out!r}")
+            for inp in self.marlin.inputs:
+                if inp not in inputs:
+                    raise ValueError(f"marlin: unknown input {inp!r}")
         if self.safe_z_input is not None:
             safe = inputs.get(self.safe_z_input)
             if safe is None or safe.kind != "digital":

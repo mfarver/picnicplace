@@ -53,7 +53,8 @@ export function StatusBar() {
         </span>
       )}
       <span className="status-item text-muted">
-        {serverVersion ? `Core ${serverVersion}` : "Core —"} · {machine?.driver ?? "no driver"}
+        {serverVersion ? `Core ${serverVersion}` : "Core —"} ·{" "}
+        {machine?.firmware ?? machine?.driver ?? "no driver"}
       </span>
     </footer>
   );

@@ -52,8 +52,30 @@ class PresenceConfig(_Section):
     )
 
 
+class MarlinConfig(_Section):
+    port: str | None = Field(
+        default=None, description="Serial device, such as /dev/ttyACM0. Required for 'marlin'."
+    )
+    baud: int = 115200
+    variant: str | None = Field(
+        default=None,
+        description="Firmware variant from the machine profile, such as 'vacuum-24bit'.",
+    )
+    connect_wait_s: float = Field(
+        default=3.0, ge=0, description="Wait after opening the port, while the board boots."
+    )
+    command_timeout_s: float = Field(default=10.0, gt=0)
+
+
 class MachineConfig(_Section):
-    driver: Literal["simulator"] = "simulator"
+    driver: Literal["simulator", "marlin", "fake-marlin"] = Field(
+        default="simulator",
+        description=(
+            "'simulator': no hardware. 'marlin': a real machine on marlin.port. "
+            "'fake-marlin': the Marlin driver talking to a built-in fake firmware."
+        ),
+    )
+    marlin: MarlinConfig = Field(default_factory=MarlinConfig)
     profile: str = Field(
         default="lumenpnp-v4",
         description="Built-in machine profile ID, or a path to a profile TOML file.",
@@ -67,6 +89,12 @@ class MachineConfig(_Section):
     @model_validator(mode="after")
     def _load_profile(self) -> Self:
         self._profile = load_profile(self.profile)
+        if self.driver in ("marlin", "fake-marlin"):
+            if self._profile.marlin is None:
+                raise ValueError(f"machine profile {self.profile!r} has no [marlin] settings")
+            self._profile.marlin.resolved(self.marlin.variant)  # check the variant exists
+            if self.driver == "marlin" and not self.marlin.port:
+                raise ValueError("machine.marlin.port is required for the marlin driver")
         return self
 
     @property

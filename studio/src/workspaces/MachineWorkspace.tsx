@@ -1,4 +1,4 @@
-import { House, Map as MapIcon, RotateCcw } from "lucide-react";
+import { House, Map as MapIcon, Plug, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { api } from "../api/client";
 import { hasControl, useCore } from "../api/core";
@@ -56,6 +56,7 @@ export function MachineWorkspace() {
   const takeControl = () => void run(() => api.POST("/api/v1/lease", { body: { force: true } }));
   const releaseControl = () => void run(() => api.DELETE("/api/v1/lease"));
   const reset = () => run(() => api.POST("/api/v1/machine/reset"));
+  const connectMachine = () => void run(() => api.POST("/api/v1/machine/connect"));
   const setOutput = (id: string, on: boolean) =>
     void run(() =>
       api.PUT("/api/v1/machine/outputs/{output_id}", {
@@ -72,6 +73,23 @@ export function MachineWorkspace() {
 
         <Panel title="Control">
           <LeaseStatus busy={pending} onTake={takeControl} onRelease={releaseControl} />
+          {machine && !machine.connected && (
+            <div className="machine-offline">
+              <p className="note note-danger">
+                The machine is not connected
+                {machine.connection_error ? `: ${machine.connection_error}` : "."}
+              </p>
+              <button
+                type="button"
+                className="button"
+                disabled={pending || status !== "open"}
+                onClick={connectMachine}
+              >
+                <Plug size={16} aria-hidden />
+                Connect
+              </button>
+            </div>
+          )}
           <div className="button-row">
             <button type="button" className="button primary" disabled={!canMove} onClick={home}>
               <House size={16} aria-hidden />

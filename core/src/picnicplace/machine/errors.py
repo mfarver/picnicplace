@@ -62,3 +62,9 @@ class SafeZFaultError(MachineError):
     """The safe-Z sensor disagrees with the computed Z position: Z may have lost steps."""
 
     code = "safe_z_fault"
+
+
+class ConnectFailedError(MachineError):
+    """The machine could not be reached."""
+
+    code = "connect_failed"

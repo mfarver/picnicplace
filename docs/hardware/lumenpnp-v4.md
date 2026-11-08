@@ -114,6 +114,23 @@ RS-485 through the motherboard: `M485 <hex packet>`, answered with
 `rs485-reply: <hex packet>` or `rs485-reply: TIMEOUT`. The packet format is Opulo's Photon
 protocol and is not described here yet.
 
+## How PicnicPlace uses this
+
+- The `lumenpnp-v4` profile's `[marlin]` table holds the connect sequence, home command,
+  output commands, and vacuum reads above. Its `stock` variant (the default) reads the
+  vacuum sensors as one byte; `vacuum-24bit` reads three. Pick one with
+  `machine.marlin.variant` in the config.
+- The Marlin driver sends one command at a time and waits for its `ok`. For the software
+  STOP it sends `M112` immediately, outside the queue; for a quick stop (a controlling
+  client went away) `M410`. Both rely on Marlin's emergency parser to act while a move or
+  `M400` is in progress; without it they would wait their turn. Whether the LumenPnP
+  firmware has it enabled is not known yet.
+- After `M112`, resetting the E-stop reconnects and waits up to 30 s for the firmware to
+  answer again, asking for the board's reset button if it does not.
+- `core/src/picnicplace/machine/marlin/fake.py` is a fake firmware that answers like the
+  log above. Run `uv run picnicplace-fake-marlin` for one on a pseudo-terminal.
+- Home sensors are not read yet (`M119` replies have not been captured).
+
 ## Not seen in the log
 
 - `M112` (emergency stop) and how the board recovers from it.

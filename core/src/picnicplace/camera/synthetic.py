@@ -22,7 +22,8 @@ from picnicplace.camera.source import CameraSource, Frame, Image
 from picnicplace.machine.profile import Camera, MachineProfile, Point
 
 # Colors, BGR.
-BED = (58, 62, 64)
+BED = (30, 30, 32)
+"""The LumenPnP's staging plates: black PCBs."""
 PCB = (40, 92, 30)
 COPPER = (70, 150, 200)
 SILK = (225, 230, 230)
@@ -245,9 +246,12 @@ class TopRenderer:
 # fiducial, in machine millimeters (+Y toward the back). Bare copper shows through the
 # solder mask wherever the design opens the mask over the ground pour.
 
-DATUM_MASK = (40, 110, 45)  # green mask over copper
-DATUM_COPPER = (120, 190, 225)  # exposed copper (gold finish)
+# LumenPnP boards are black with white silkscreen. The copper finish is not known; gold
+# (ENIG) is assumed.
+DATUM_MASK = (34, 33, 32)  # black mask over copper
+DATUM_COPPER = (120, 190, 225)  # exposed copper
 DATUM_FR4 = (95, 140, 150)  # bare board, where neither mask nor copper covers it
+DATUM_SILK = (225, 228, 230)
 
 DATUM_OUTLINE = [
     (-40, -10),
@@ -307,6 +311,7 @@ def _datum_board(c: _Canvas, img: Image, o: Point) -> None:
 
     # A 5 mm exposed copper disc, mounting holes, and a 30 mm ruler along the front edge.
     c.circle(img, *at(-22.5, -7.5), 2.5, DATUM_COPPER)
+    c.ring(img, *at(22.5, -7.5), 1.25, 0.15, DATUM_SILK)  # the one front silkscreen mark
     for dx, dy in DATUM_HOLES:
         c.circle(img, *at(dx, dy), 3.2, DATUM_COPPER)
         c.circle(img, *at(dx, dy), 1.6, (15, 15, 15))

@@ -142,6 +142,8 @@ From the board's KiCad design (PCB-0004 rev 00, 80 × 35 mm, 1.6 mm). Positions 
 relative to the center fiducial, with +Y toward the back if the board is mounted with
 its ruler toward the front (the mounting orientation is not confirmed).
 
+- **Colors:** LumenPnP boards are black with white silkscreen (the staging plates too).
+  The copper finish is not recorded in the design; the simulator assumes gold (ENIG).
 - **Homing fiducial (FID1):** a 1.0 mm copper dot. The solder mask opening is 2.0 mm and
   the ground pour is cleared 0.5 mm around the dot, so the dot sits in a ring of bare
   board (no mask, no copper) inside the mask. OpenPnP's calibration measured it as

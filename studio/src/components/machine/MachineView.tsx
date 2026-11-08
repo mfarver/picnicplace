@@ -274,6 +274,7 @@ export function MachineView({ description, machine, canMove = false, onMoveTo, o
               height={description.bed.y_max - description.bed.y_min}
               rx={4}
             />
+            <FrontMarker description={description} />
             {description.staging_plates.map((plate) => (
               <PlateShape key={plate.id} plate={plate} />
             ))}
@@ -333,7 +334,7 @@ export function MachineView({ description, machine, canMove = false, onMoveTo, o
             ))}
 
             {overlay}
-            {head && <Head description={description} at={head} />}
+            {head && <Head description={description} at={head} homed={!!machine?.homed} />}
             {target && <TargetMarker at={target} />}
           </g>
         </ViewOrientation.Provider>
@@ -474,6 +475,24 @@ function PlateShape({ plate }: { plate: StagingPlate }) {
   );
 }
 
+/** The machine's front edge (where the operator stands), marked along the bed. */
+function FrontMarker({ description }: { description: MachineProfile }) {
+  const { bed } = description;
+  // Map coordinates are machine Y negated; outward is toward the front.
+  const frontIsMax = description.y_points === "front";
+  const edge = -(frontIsMax ? bed.y_max : bed.y_min);
+  const out = frontIsMax ? -1 : 1;
+  const cx = (bed.x_min + bed.x_max) / 2;
+  return (
+    <g className="mv-front">
+      <line x1={bed.x_min + 4} y1={edge} x2={bed.x_max - 4} y2={edge} />
+      <Label x={cx} y={edge + out * 15} textAnchor="middle" dominantBaseline="middle">
+        FRONT
+      </Label>
+    </g>
+  );
+}
+
 /** Feeders in one bank: the body extends behind the pick location, against the feed. */
 function FeederBankShape({ bank }: { bank: FeederBank }) {
   const ahead = 8;
@@ -541,11 +560,24 @@ function LocationMarker({ kind, at }: { kind: string; at: Point }) {
   }
 }
 
-function Head({ description, at }: { description: MachineProfile; at: Point }) {
+/**
+ * The head: top camera view, nozzles, and crosshair. Until the machine is homed the
+ * reported position means nothing (firmware starts at zero wherever the head is), so the
+ * head is drawn faded and labeled as unknown.
+ */
+function Head({ description, at, homed }: { description: MachineProfile; at: Point; homed: boolean }) {
   const camera = description.cameras.find((c) => c.mount === "head");
   const reach = 12;
   return (
-    <g className="mv-head" transform={`translate(${at.x} ${-at.y})`}>
+    <g
+      className={homed ? "mv-head" : "mv-head mv-head-unknown"}
+      transform={`translate(${at.x} ${-at.y})`}
+    >
+      {!homed && (
+        <Label className="mv-label mv-label-head" x={0} y={-reach - 6} textAnchor="middle">
+          Position unknown until homed
+        </Label>
+      )}
       {camera && (
         <rect
           className="mv-head-fov"

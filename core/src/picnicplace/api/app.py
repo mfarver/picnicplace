@@ -1,6 +1,5 @@
 """Application factory."""
 
-import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -16,15 +15,20 @@ from starlette.types import Scope
 from picnicplace import __version__
 from picnicplace.api import boards as board_routes
 from picnicplace.api import cameras as camera_routes
+from picnicplace.api import feeders as feeder_routes
 from picnicplace.api import jobs as job_routes
 from picnicplace.api import library as library_routes
 from picnicplace.api import routes, websocket
 from picnicplace.api.context import AppContext
+from picnicplace.api.fingerprint import openapi_text
 from picnicplace.auth import Authenticator
+from picnicplace.bringup import BringUpStore
 from picnicplace.camera.manager import CameraManager
 from picnicplace.camera.source import Frame
 from picnicplace.config import Config
 from picnicplace.events import EventBus
+from picnicplace.feeders.service import FeederService
+from picnicplace.feeders.setup import FeederSetupStore
 from picnicplace.lease import LeaseManager
 from picnicplace.library import Library
 from picnicplace.machine.errors import MachineError
@@ -69,17 +73,26 @@ def create_app(config: Config | None = None) -> FastAPI:
         machine=machine,
         lease=lease,
         cameras=cameras,
+        bring_up=BringUpStore(config.data.bringup_path),
     )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         ctx.library = Library(config.data.library_path)
+        ctx.feeders = FeederService(
+            machine,
+            operations,
+            FeederSetupStore(config.data.feeders_path),
+            lambda: ctx.library,
+            bundle.photon_sim,
+        )
         await machine.start()
         try:
             yield
         finally:
             ctx.library.close()
             ctx.library = None
+            ctx.feeders = None
             await cameras.shutdown()
             await operations.shutdown()
             await presence.shutdown()
@@ -94,6 +107,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(library_routes.router)
     app.include_router(board_routes.router)
     app.include_router(job_routes.router)
+    app.include_router(feeder_routes.router)
     app.include_router(websocket.router)
 
     @app.exception_handler(MachineError)
@@ -155,4 +169,4 @@ def build_openapi(app: FastAPI) -> dict[str, Any]:
 
 
 def openapi_json(app: FastAPI | None = None) -> str:
-    return json.dumps((app or create_app()).openapi(), indent=2, sort_keys=True) + "\n"
+    return openapi_text((app or create_app()).openapi())

@@ -146,6 +146,29 @@ class FeederBank(ProfileModel):
     rotation: float = Field(
         default=0, description="Tape direction in degrees; 90 means parts feed toward +Y."
     )
+    first_address: int | None = Field(
+        default=None,
+        ge=1,
+        le=254,
+        description=(
+            "Photon feeders: the bus address of the first slot. The others count up from it."
+        ),
+    )
+
+    fiducial_offset: Point | None = Field(
+        default=None,
+        description=(
+            "Where each feeder's alignment fiducial is, from its pick location, in the "
+            "tape's frame: x along the feed, y across it toward the sprocket holes."
+        ),
+    )
+    fiducial_diameter: float | None = Field(default=None, gt=0)
+
+    def pick(self, index: int) -> Point:
+        """Nominal pick location of a slot, counting from 0."""
+        return Point(
+            x=self.first_pick.x + self.pitch.x * index, y=self.first_pick.y + self.pitch.y * index
+        )
 
 
 class ValueRange(ProfileModel):
@@ -288,6 +311,10 @@ class MachineProfile(ProfileModel):
         default=None,
         description="A digital input that reads true when every nozzle is at safe height.",
     )
+    feeder_bus: Literal["photon"] | None = Field(
+        default=None,
+        description="The feeders' bus: 'photon' for Opulo's Photon feeders over RS-485.",
+    )
     nozzles: list[Nozzle] = Field(default_factory=list[Nozzle])
     cameras: list[Camera] = Field(default_factory=list[Camera])
     locations: list[Location] = Field(default_factory=list[Location])
@@ -348,6 +375,15 @@ class MachineProfile(ProfileModel):
                 f"marlin: the safe-Z input {self.safe_z_input!r} needs read commands in "
                 "[marlin.inputs] so the driver can check it before every X/Y move"
             )
+        addresses = [
+            b.first_address + i
+            for b in self.feeder_banks
+            if b.first_address is not None
+            for i in range(b.count)
+        ]
+        _unique("feeder slot address", [str(a) for a in addresses])
+        if any(a > 254 for a in addresses):
+            raise ValueError("feeder slot addresses must be 254 or less")
         if self.safe_z_input is not None:
             safe = inputs.get(self.safe_z_input)
             if safe is None or safe.kind != "digital":

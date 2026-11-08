@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from picnicplace.api import create_app
+from picnicplace.api.fingerprint import fingerprint
 from picnicplace.api.websocket import CLOSE_HEARTBEAT_TIMEOUT, CLOSE_UNAUTHORIZED
 
 from .conftest import connect, fast_config, receive_until, wait_for
@@ -16,6 +17,10 @@ def test_health(client: TestClient) -> None:
     body = client.get("/api/v1/health").json()
     assert body["status"] == "ok"
     assert body["protocol"] == 1
+    # The Studio is built with the fingerprint of the committed OpenAPI document; a core
+    # of the same version reports the same one.
+    committed = Path(__file__).parents[2] / "docs" / "api" / "openapi.json"
+    assert body["api"] == fingerprint(committed.read_text())
 
 
 def test_hello_and_presence(client: TestClient) -> None:

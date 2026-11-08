@@ -54,6 +54,14 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/jobs`; `GET`, `PUT`, `DELETE /api/v1/jobs/{id}` | Saved jobs |
 | `POST /api/v1/jobs/layout` | Where a job's placements land on the machine, and what stops it |
 | `POST /api/v1/jobs/find-location` | A place on the bed where a job fits |
+| `GET /api/v1/feeders` | Feeder slots, the feeder found in each, and where to pick |
+| `POST /api/v1/feeders/scan` | Find and initialize the feeders on the bus |
+| `POST /api/v1/feeders/slots/{id}/feed`, `…/identify` | Feed a feeder, or flash its light |
+| `PUT`, `DELETE /api/v1/feeders/slots/{id}/pick` | Teach a slot's pick location (at the camera), or forget it |
+| `POST /api/v1/feeders/slots/{id}/pocket` | Find the pick pocket from the tape's sprocket holes |
+| `POST /api/v1/feeders/slots/{id}/fiducial`, `POST /api/v1/feeders/calibrate` | Measure the feeder fiducial's offset; calibrate slots from their fiducials |
+| `PUT`, `DELETE /api/v1/feeders/assignments/{feeder_id}` | Which part a feeder holds |
+| `GET`, `PUT /api/v1/bring-up` | The bring-up checklist's progress and findings |
 
 ## Rules worth knowing
 

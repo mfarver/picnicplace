@@ -1,12 +1,15 @@
-import { CircuitBoard, Cog, Eye, Layers, Play } from "lucide-react";
+import { CircuitBoard, Cog, Eye, Film, Layers, Play } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useCore } from "./api/core";
+import { useCoreCompatibility } from "./api/version";
+import { VersionBanner } from "./components/ErrorScreen";
 import { Placeholder } from "./components/Placeholder";
 import { Splash } from "./components/Splash";
 import { StatusBar } from "./components/StatusBar";
 import { TokenPrompt } from "./components/TokenPrompt";
 import { TopBar, type WorkspaceTab } from "./components/TopBar";
 import { useTheme } from "./theme";
+import { FeedersWorkspace } from "./workspaces/FeedersWorkspace";
 import { LibraryWorkspace } from "./workspaces/LibraryWorkspace";
 import { MachineWorkspace } from "./workspaces/MachineWorkspace";
 import { PrepareWorkspace } from "./workspaces/PrepareWorkspace";
@@ -27,6 +30,12 @@ const WORKSPACES: Workspace[] = [
     label: "Parts",
     icon: Layers,
     render: () => <LibraryWorkspace />,
+  },
+  {
+    id: "feeders",
+    label: "Feeders",
+    icon: Film,
+    render: () => <FeedersWorkspace />,
   },
   {
     id: "run",
@@ -61,10 +70,11 @@ export function App() {
   const [active, setActive] = useState("machine");
   const [theme, toggleTheme] = useTheme();
   const { status } = useCore();
+  const compatibility = useCoreCompatibility();
   const workspace = WORKSPACES.find((w) => w.id === active) ?? WORKSPACES[0]!;
 
   return (
-    <div className="app">
+    <div className={compatibility === "different" ? "app app-with-banner" : "app"}>
       <TopBar
         tabs={WORKSPACES}
         active={workspace.id}
@@ -72,6 +82,7 @@ export function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
       />
+      {compatibility === "different" && <VersionBanner />}
       <main className="main">{workspace.render()}</main>
       <StatusBar />
       {status === "unauthorized" && <TokenPrompt />}

@@ -74,7 +74,7 @@ jobs:
           npm run gen:api
       - name: Check for differences
         run: |
-          git diff --exit-code -- docs/api studio/src/api/schema.ts || {
+          git diff --exit-code -- docs/api studio/src/api/schema.ts studio/src/api/fingerprint.ts || {
             echo "::error::The API schema is out of date. Run 'make api' and commit the result."
             exit 1
           }

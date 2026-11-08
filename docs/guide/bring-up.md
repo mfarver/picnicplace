@@ -50,13 +50,18 @@ If the probe showed vacuum readings only in the `vacuum-24bit` variant, also set
 
 ## 3. First motion
 
-Start the core with your config and open the Studio, then work through this checklist:
+Start the core with your config and open the Studio. The **Bring-up** panel in the
+Machine workspace walks through the steps below and the camera and feeder checks after
+them. It keeps your progress, notes, and findings in the core's data directory, and
+turns findings that differ from the machine profile (which way an axis points, measured
+keep-outs) into TOML you can copy into a profile. The same steps:
 
 - [ ] Keep a hand on the machine's physical E-stop.
 - [ ] Check the Studio shows the "Slow 25%" badge.
 - [ ] Home, and watch that every axis reaches its switch. After homing, Z should read 0.
-- [ ] Jog X and Y by 1 mm, then 10 mm. Check the head moves the way the arrows point.
-- [ ] Jog each nozzle down 1 mm and back up. Check N1 and N2 move the right way.
+- [ ] Jog X and Y by 1 mm, then 10 mm. Check the head moves the way the arrows point:
+      +X to the right and +Y toward the back on a LumenPnP v4.1.
+- [ ] Jog Z down 1 mm and back up. The left nozzle (N1) should go down.
 - [ ] Turn each light, pump, and valve on and off from the Head inset.
 - [ ] Press STOP during a slow 50 mm move. Note whether it stops at once, and what it
       takes to recover: Reset in the Studio, the board's reset button, or a power cycle.
@@ -72,7 +77,26 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       correction of well under a millimeter.
 - [ ] **Camera scale** reports a size close to the profile's field of view.
 
-## 5. Full speed
+## 5. Feeders
+
+- [ ] **Scan feeders** in the Feeders workspace. Each feeder found is initialized and
+      listed under its slot.
+- [ ] Give each feeder its part, and feed one. Check it moves one part's pitch.
+- [ ] On one slot, center the camera over the pocket and click **Pick is here**. Then
+      center it on the feeder's alignment fiducial and click **Measure fiducial here**.
+- [ ] **Calibrate all slots**: the camera visits every feeder's fiducial and corrects
+      each slot's pick location.
+- [ ] Feed a few times, then **Find pocket**. It finds the sprocket holes and centers the
+      camera on the next part's pocket.
+
+## 6. Measure what the profile only estimates
+
+With the camera centered on each point, record it in the checklist's last steps: the
+corners of the datum board, the camera opening, the aiming fiducial's holder, and the
+rear staging plate. Points that share a first word become a keep-out rectangle in the
+suggested changes.
+
+## 7. Full speed
 
 When everything above checks out, remove `speed_scale` (or set it to 1.0) and restart
 the core.

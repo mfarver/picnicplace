@@ -74,3 +74,15 @@ class VisionError(MachineError):
     """A vision step could not find what it was looking for."""
 
     code = "vision_failed"
+
+
+class FeederError(MachineError):
+    """A feeder did not answer, or answered with a failure."""
+
+    code = "feeder_failed"
+
+
+class NotSupportedError(MachineError):
+    """The machine or its driver cannot do this."""
+
+    code = "not_supported"

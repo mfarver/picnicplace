@@ -6,6 +6,7 @@ import { useAction } from "../api/useAction";
 import { useCameras } from "../api/useCameras";
 import { useDescription } from "../api/useDescription";
 import type { Operation } from "../api/types";
+import { BringUpPanel } from "../components/BringUpPanel";
 import { CalibrationPanel } from "../components/CalibrationPanel";
 import { CameraView } from "../components/CameraView";
 import { JogPanel } from "../components/JogPanel";
@@ -29,13 +30,18 @@ export function MachineWorkspace() {
   // Successful jogs and moves are visible on the map; only report how homing went, and
   // anything that failed.
   const showLastOp =
-    !!lastOp && !machine?.estop && (lastOp.kind === "home" || lastOp.status === "failed");
+    !!lastOp &&
+    !machine?.estop &&
+    (["home", "feeder_scan"].includes(lastOp.kind) || lastOp.status === "failed");
   // One fixed-height line for results, so buttons below it never shift under the cursor.
   const statusLine = error
     ? { text: error, danger: true }
     : showLastOp
       ? {
-          text: `${lastOp.kind}: ${lastOp.status}${lastOp.error ? ` (${lastOp.error})` : ""}`,
+          text:
+            lastOp.kind === "feeder_scan" && lastOp.message
+              ? lastOp.message
+              : `${lastOp.kind}: ${lastOp.status}${lastOp.error ? ` (${lastOp.error})` : ""}`,
           danger: lastOp.status === "failed",
         }
       : { text: machine?.homed ? "Ready." : "Home the machine to begin.", danger: false };
@@ -131,6 +137,19 @@ export function MachineWorkspace() {
             canMove={canMove}
             onJog={jog}
             onSafeZ={safeZ}
+          />
+        )}
+
+        {description && (
+          <BringUpPanel
+            description={description}
+            machine={machine}
+            canMove={canMove}
+            onHome={home}
+            onJog={jog}
+            onVisualHome={() => void track(() => api.POST("/api/v1/machine/visual-home"))}
+            onCameraScale={() => void track(() => api.POST("/api/v1/machine/camera-scale"))}
+            onScanFeeders={() => void track(() => api.POST("/api/v1/feeders/scan"))}
           />
         )}
 

@@ -33,6 +33,7 @@ import tty
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from picnicplace.feeders.sim import SimulatedPhotonBus
 from picnicplace.machine.marlin.transport import LineTransport, TransportClosedError
 
 log = logging.getLogger(__name__)
@@ -84,6 +85,8 @@ class FakeSettings:
     vacuum_open: float = -1_500_000.0
     vacuum_held: float = -2_200_000.0
     vacuum_tau_s: float = 0.15
+    photon: SimulatedPhotonBus | None = None
+    """Feeders on the RS-485 bus, answered through M485."""
     channels: dict[int, VacuumChannel] = field(
         default_factory=lambda: {
             1: VacuumChannel(pump_fan=1, valve_fan=0, z_sign=1),
@@ -318,8 +321,17 @@ class FakeMarlin:
         self.leds[int(args.get("S", "0"))] = int(args.get("P", "255"))
         return []
 
-    async def _cmd_m485(self, _line: str, _args: dict[str, str]) -> list[str]:
-        return ["rs485-reply: TIMEOUT"]
+    async def _cmd_m485(self, line: str, _args: dict[str, str]) -> list[str]:
+        parts = line.split(";")[0].split()
+        bus = self.settings.photon
+        try:
+            packet = bytes.fromhex(parts[1]) if len(parts) > 1 else b""
+        except ValueError:
+            return ["rs485-reply: TIMEOUT"]
+        reply = bus.handle(packet) if bus is not None else None
+        # A real bus takes a while to answer, or to give up.
+        await self._sleep(0.01 if reply is not None else 0.1)
+        return [f"rs485-reply: {reply.hex().upper() if reply is not None else 'TIMEOUT'}"]
 
     async def _cmd_m260(self, _line: str, args: dict[str, str]) -> list[str]:
         # Arguments apply in order: A sets the address, B queues a byte, S1 sends.

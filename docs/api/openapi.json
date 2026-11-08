@@ -223,6 +223,94 @@
         "title": "BoardCopy",
         "type": "object"
       },
+      "BringUpRecord-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "const": "picnicplace-bring-up",
+            "default": "picnicplace-bring-up",
+            "title": "Format",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/RecordedPoint"
+            },
+            "maxItems": 500,
+            "title": "Points",
+            "type": "array"
+          },
+          "steps": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StepRecord-Input"
+            },
+            "title": "Steps",
+            "type": "object"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "title": "BringUpRecord",
+        "type": "object"
+      },
+      "BringUpRecord-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "const": "picnicplace-bring-up",
+            "default": "picnicplace-bring-up",
+            "title": "Format",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/RecordedPoint"
+            },
+            "maxItems": 500,
+            "title": "Points",
+            "type": "array"
+          },
+          "steps": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StepRecord-Output"
+            },
+            "title": "Steps",
+            "type": "object"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "steps",
+          "points"
+        ],
+        "title": "BringUpRecord",
+        "type": "object"
+      },
+      "CalibrateRequest": {
+        "properties": {
+          "slot_ids": {
+            "description": "Slots to calibrate. Empty: every slot with a feeder found.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Slot Ids",
+            "type": "array"
+          }
+        },
+        "title": "CalibrateRequest",
+        "type": "object"
+      },
       "Camera": {
         "additionalProperties": false,
         "properties": {
@@ -494,6 +582,116 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "FeedRequest": {
+        "properties": {
+          "distance": {
+            "anyOf": [
+              {
+                "maximum": 50.0,
+                "minimum": -50.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Millimeters; negative feeds backward. Empty: one part's pitch.",
+            "title": "Distance"
+          }
+        },
+        "title": "FeedRequest",
+        "type": "object"
+      },
+      "FeederAssignment-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Library part in this feeder.",
+            "title": "Part Id"
+          },
+          "part_pitch": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Distance from one part to the next. Empty: the part's tape pitch.",
+            "title": "Part Pitch"
+          }
+        },
+        "title": "FeederAssignment",
+        "type": "object"
+      },
+      "FeederAssignment-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Library part in this feeder.",
+            "title": "Part Id"
+          },
+          "part_pitch": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Distance from one part to the next. Empty: the part's tape pitch.",
+            "title": "Part Pitch"
+          }
+        },
+        "required": [
+          "part_id",
+          "part_pitch",
+          "enabled",
+          "note"
+        ],
+        "title": "FeederAssignment",
+        "type": "object"
+      },
       "FeederBank": {
         "additionalProperties": false,
         "description": "A row of evenly spaced feeder slots, such as one LumenPnP feeder rail.",
@@ -502,6 +700,43 @@
             "minimum": 1.0,
             "title": "Count",
             "type": "integer"
+          },
+          "fiducial_diameter": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiducial Diameter"
+          },
+          "fiducial_offset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where each feeder's alignment fiducial is, from its pick location, in the tape's frame: x along the feed, y across it toward the sprocket holes."
+          },
+          "first_address": {
+            "anyOf": [
+              {
+                "maximum": 254.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Photon feeders: the bus address of the first slot. The others count up from it.",
+            "title": "First Address"
           },
           "first_pick": {
             "$ref": "#/components/schemas/Point",
@@ -546,9 +781,110 @@
           "count",
           "width",
           "length",
-          "rotation"
+          "rotation",
+          "first_address",
+          "fiducial_offset",
+          "fiducial_diameter"
         ],
         "title": "FeederBank",
+        "type": "object"
+      },
+      "FeederState": {
+        "properties": {
+          "assignment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeederAssignment-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "initialized": {
+            "title": "Initialized",
+            "type": "boolean"
+          },
+          "uuid": {
+            "title": "Uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uuid",
+          "initialized",
+          "assignment"
+        ],
+        "title": "FeederState",
+        "type": "object"
+      },
+      "FeedersState": {
+        "properties": {
+          "assignments": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FeederAssignment-Output"
+            },
+            "title": "Assignments",
+            "type": "object"
+          },
+          "bus": {
+            "anyOf": [
+              {
+                "const": "photon",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bus"
+          },
+          "fiducial_offset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fiducial_offset_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "measured",
+                  "profile"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiducial Offset Source"
+          },
+          "scanned": {
+            "title": "Scanned",
+            "type": "boolean"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/SlotState"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "bus",
+          "scanned",
+          "slots",
+          "fiducial_offset",
+          "fiducial_offset_source",
+          "assignments"
+        ],
+        "title": "FeedersState",
         "type": "object"
       },
       "Filled": {
@@ -720,6 +1056,11 @@
       },
       "HealthResponse": {
         "properties": {
+          "api": {
+            "description": "Fingerprint of the core's OpenAPI document. A Studio built from a different document comes from a different version of PicnicPlace.",
+            "title": "Api",
+            "type": "string"
+          },
           "protocol": {
             "title": "Protocol",
             "type": "integer"
@@ -738,7 +1079,8 @@
         "required": [
           "status",
           "version",
-          "protocol"
+          "protocol",
+          "api"
         ],
         "title": "HealthResponse",
         "type": "object"
@@ -784,6 +1126,19 @@
           "lease"
         ],
         "title": "HelloEvent",
+        "type": "object"
+      },
+      "IdentifyResult": {
+        "properties": {
+          "answered": {
+            "title": "Answered",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "answered"
+        ],
+        "title": "IdentifyResult",
         "type": "object"
       },
       "ImportReport": {
@@ -1748,6 +2103,19 @@
             "title": "Feeder Banks",
             "type": "array"
           },
+          "feeder_bus": {
+            "anyOf": [
+              {
+                "const": "photon",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The feeders' bus: 'photon' for Opulo's Photon feeders over RS-485.",
+            "title": "Feeder Bus"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1893,6 +2261,7 @@
           "y_points",
           "visual_homing",
           "safe_z_input",
+          "feeder_bus",
           "nozzles",
           "cameras",
           "locations",
@@ -2250,6 +2619,18 @@
             },
             "title": "Outputs",
             "type": "object"
+          },
+          "rs485": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Command that sends a hex packet on the feeder bus, such as M485. The reply is a line 'rs485-reply: <hex>', or 'rs485-reply: TIMEOUT'.",
+            "title": "Rs485"
           },
           "stop": {
             "default": "M410",
@@ -2931,6 +3312,23 @@
         "title": "Part",
         "type": "object"
       },
+      "PickRequest": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The pick location. Empty: where the top camera is now."
+          }
+        },
+        "title": "PickRequest",
+        "type": "object"
+      },
       "Placement-Input": {
         "additionalProperties": false,
         "properties": {
@@ -3103,6 +3501,34 @@
         "title": "Placement",
         "type": "object"
       },
+      "PocketCheck": {
+        "description": "Where vision last found the pick pocket, from the tape's sprocket holes.",
+        "properties": {
+          "across": {
+            "title": "Across",
+            "type": "number"
+          },
+          "along": {
+            "title": "Along",
+            "type": "number"
+          },
+          "at": {
+            "$ref": "#/components/schemas/Point"
+          },
+          "holes": {
+            "title": "Holes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "at",
+          "along",
+          "across",
+          "holes"
+        ],
+        "title": "PocketCheck",
+        "type": "object"
+      },
       "Point": {
         "additionalProperties": false,
         "properties": {
@@ -3202,6 +3628,33 @@
         "title": "PresenceState",
         "type": "object"
       },
+      "RecordedPoint": {
+        "additionalProperties": false,
+        "description": "A place on the machine, recorded by centering the top camera on it.",
+        "properties": {
+          "label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "x",
+          "y"
+        ],
+        "title": "RecordedPoint",
+        "type": "object"
+      },
       "Rect": {
         "additionalProperties": false,
         "properties": {
@@ -3293,6 +3746,140 @@
           "y"
         ],
         "title": "Size",
+        "type": "object"
+      },
+      "Slot": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "bank": {
+            "title": "Bank",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "pick": {
+            "$ref": "#/components/schemas/Point"
+          },
+          "rotation": {
+            "title": "Rotation",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "bank",
+          "number",
+          "label",
+          "address",
+          "pick",
+          "rotation"
+        ],
+        "title": "Slot",
+        "type": "object"
+      },
+      "SlotCalibration": {
+        "additionalProperties": false,
+        "properties": {
+          "basis": {
+            "description": "Taught by eye over the pocket, or found from the feeder's fiducial.",
+            "enum": [
+              "taught",
+              "fiducial"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "correction": {
+            "$ref": "#/components/schemas/Point",
+            "description": "True pick location minus the nominal one."
+          }
+        },
+        "required": [
+          "correction",
+          "basis"
+        ],
+        "title": "SlotCalibration",
+        "type": "object"
+      },
+      "SlotState": {
+        "properties": {
+          "calibration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SlotCalibration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "feeder": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeederState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pick": {
+            "$ref": "#/components/schemas/Point"
+          },
+          "pocket": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PocketCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slot": {
+            "$ref": "#/components/schemas/Slot"
+          }
+        },
+        "required": [
+          "slot",
+          "pick",
+          "calibration",
+          "feeder",
+          "error",
+          "pocket"
+        ],
+        "title": "SlotState",
         "type": "object"
       },
       "StagingPlate": {
@@ -3392,6 +3979,120 @@
           "holes"
         ],
         "title": "StagingPlate",
+        "type": "object"
+      },
+      "StepRecord-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Note",
+            "type": "string"
+          },
+          "status": {
+            "default": "todo",
+            "enum": [
+              "todo",
+              "done",
+              "problem",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated"
+          },
+          "values": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "description": "What the step found, such as which way +X moved the head.",
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "title": "StepRecord",
+        "type": "object"
+      },
+      "StepRecord-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Note",
+            "type": "string"
+          },
+          "status": {
+            "default": "todo",
+            "enum": [
+              "todo",
+              "done",
+              "problem",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated"
+          },
+          "values": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "description": "What the step found, such as which way +X moved the head.",
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "status",
+          "note",
+          "values",
+          "updated"
+        ],
+        "title": "StepRecord",
         "type": "object"
       },
       "Tape-Input": {
@@ -3704,6 +4405,77 @@
         "summary": "Import Kicad",
         "tags": [
           "boards"
+        ]
+      }
+    },
+    "/api/v1/bring-up": {
+      "get": {
+        "description": "Progress through the bring-up checklist, and what it found.",
+        "operationId": "get_bring_up_api_v1_bring_up_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BringUpRecord-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Bring Up",
+        "tags": [
+          "bring-up"
+        ]
+      },
+      "put": {
+        "operationId": "put_bring_up_api_v1_bring_up_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BringUpRecord-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BringUpRecord-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Bring Up",
+        "tags": [
+          "bring-up"
         ]
       }
     },
@@ -4029,6 +4801,719 @@
         "summary": "Stream",
         "tags": [
           "cameras"
+        ]
+      }
+    },
+    "/api/v1/feeders": {
+      "get": {
+        "description": "Every feeder slot, the feeder found in it, and where to pick from it.",
+        "operationId": "feeders_state_api_v1_feeders_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedersState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Feeders State",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/assignments/{feeder_id}": {
+      "delete": {
+        "operationId": "forget_api_v1_feeders_assignments__feeder_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feeder_id",
+            "required": true,
+            "schema": {
+              "title": "Feeder Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedersState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Forget",
+        "tags": [
+          "feeders"
+        ]
+      },
+      "put": {
+        "description": "Say which part a feeder holds. The part follows the feeder from slot to slot.",
+        "operationId": "assign_api_v1_feeders_assignments__feeder_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feeder_id",
+            "required": true,
+            "schema": {
+              "title": "Feeder Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeederAssignment-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedersState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Not a feeder ID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Assign",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/calibrate": {
+      "post": {
+        "description": "Find each slot's feeder fiducial and correct the slot's pick location.",
+        "operationId": "calibrate_api_v1_feeders_calibrate_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalibrateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Calibrate",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/scan": {
+      "post": {
+        "description": "Ask every slot on the feeder bus for its feeder, and initialize the ones found.",
+        "operationId": "scan_api_v1_feeders_scan_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Scan",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/slots/{slot_id}/feed": {
+      "post": {
+        "description": "Advance a feeder's tape.",
+        "operationId": "feed_api_v1_feeders_slots__slot_id__feed_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "title": "Slot Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Feed",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/slots/{slot_id}/fiducial": {
+      "post": {
+        "description": "With the top camera over this slot's feeder fiducial, record where the fiducial is\nrelative to the pick location. Teach the slot's pick location first.",
+        "operationId": "measure_fiducial_api_v1_feeders_slots__slot_id__fiducial_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "title": "Slot Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Measure Fiducial",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/slots/{slot_id}/identify": {
+      "post": {
+        "description": "Ask the feeder in a slot to flash its light.",
+        "operationId": "identify_api_v1_feeders_slots__slot_id__identify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "title": "Slot Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentifyResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Identify",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/slots/{slot_id}/pick": {
+      "delete": {
+        "description": "Go back to the profile's nominal pick location for a slot.",
+        "operationId": "forget_pick_api_v1_feeders_slots__slot_id__pick_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "title": "Slot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedersState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Forget Pick",
+        "tags": [
+          "feeders"
+        ]
+      },
+      "put": {
+        "description": "Teach a slot's pick location: by default, where the top camera is centered now.",
+        "operationId": "teach_pick_api_v1_feeders_slots__slot_id__pick_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "title": "Slot Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PickRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedersState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Teach Pick",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/slots/{slot_id}/pocket": {
+      "post": {
+        "description": "Find the pick pocket from the tape's sprocket holes, and center the camera on it.",
+        "operationId": "locate_pocket_api_v1_feeders_slots__slot_id__pocket_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "title": "Slot Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Locate Pocket",
+        "tags": [
+          "feeders"
         ]
       }
     },

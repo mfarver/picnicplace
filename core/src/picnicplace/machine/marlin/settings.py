@@ -74,6 +74,13 @@ class MarlinSettings(_Model):
     inputs: dict[str, MarlinInput] = Field(default_factory=dict[str, MarlinInput])
     default_variant: str | None = None
     variants: dict[str, MarlinVariant] = Field(default_factory=dict[str, MarlinVariant])
+    rs485: str | None = Field(
+        default=None,
+        description=(
+            "Command that sends a hex packet on the feeder bus, such as M485. The reply is "
+            "a line 'rs485-reply: <hex>', or 'rs485-reply: TIMEOUT'."
+        ),
+    )
     expected_machine_type: str | None = Field(
         default=None, description="MACHINE_TYPE that M115 should report; others get a warning."
     )

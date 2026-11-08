@@ -8,9 +8,11 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from picnicplace.auth import Authenticator, Permission, Principal
+from picnicplace.bringup import BringUpStore
 from picnicplace.camera.manager import CameraManager
 from picnicplace.config import Config
 from picnicplace.events import EventBus
+from picnicplace.feeders.service import FeederService
 from picnicplace.lease import LeaseManager
 from picnicplace.library import Library
 from picnicplace.machine.service import MachineService
@@ -29,9 +31,12 @@ class AppContext:
     machine: MachineService
     lease: LeaseManager
     cameras: CameraManager
+    bring_up: BringUpStore
     library: Library | None = None
     """Opened when the app starts, so building the app (as for the OpenAPI document)
     touches no files."""
+    feeders: FeederService | None = None
+    """Also made when the app starts: it loads the feeder setup."""
 
 
 def get_context(request: Request) -> AppContext:

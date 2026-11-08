@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run",
-    "gen:api": "openapi-typescript ../docs/api/openapi.json -o src/api/schema.ts"
+    "gen:api": "openapi-typescript ../docs/api/openapi.json -o src/api/schema.ts && node scripts/api-fingerprint.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.70.0",

@@ -24,6 +24,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bring-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Bring Up
+         * @description Progress through the bring-up checklist, and what it found.
+         */
+        get: operations["get_bring_up_api_v1_bring_up_get"];
+        /** Put Bring Up */
+        put: operations["put_bring_up_api_v1_bring_up_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cameras": {
         parameters: {
             query?: never;
@@ -75,6 +96,192 @@ export interface paths {
         get: operations["stream_api_v1_cameras__camera_id__stream_mjpg_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Feeders State
+         * @description Every feeder slot, the feeder found in it, and where to pick from it.
+         */
+        get: operations["feeders_state_api_v1_feeders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/assignments/{feeder_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Assign
+         * @description Say which part a feeder holds. The part follows the feeder from slot to slot.
+         */
+        put: operations["assign_api_v1_feeders_assignments__feeder_id__put"];
+        post?: never;
+        /** Forget */
+        delete: operations["forget_api_v1_feeders_assignments__feeder_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/calibrate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Calibrate
+         * @description Find each slot's feeder fiducial and correct the slot's pick location.
+         */
+        post: operations["calibrate_api_v1_feeders_calibrate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Scan
+         * @description Ask every slot on the feeder bus for its feeder, and initialize the ones found.
+         */
+        post: operations["scan_api_v1_feeders_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/slots/{slot_id}/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Feed
+         * @description Advance a feeder's tape.
+         */
+        post: operations["feed_api_v1_feeders_slots__slot_id__feed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/slots/{slot_id}/fiducial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Measure Fiducial
+         * @description With the top camera over this slot's feeder fiducial, record where the fiducial is
+         *     relative to the pick location. Teach the slot's pick location first.
+         */
+        post: operations["measure_fiducial_api_v1_feeders_slots__slot_id__fiducial_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/slots/{slot_id}/identify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Identify
+         * @description Ask the feeder in a slot to flash its light.
+         */
+        post: operations["identify_api_v1_feeders_slots__slot_id__identify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/slots/{slot_id}/pick": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Teach Pick
+         * @description Teach a slot's pick location: by default, where the top camera is centered now.
+         */
+        put: operations["teach_pick_api_v1_feeders_slots__slot_id__pick_put"];
+        post?: never;
+        /**
+         * Forget Pick
+         * @description Go back to the profile's nominal pick location for a slot.
+         */
+        delete: operations["forget_pick_api_v1_feeders_slots__slot_id__pick_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/slots/{slot_id}/pocket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Locate Pocket
+         * @description Find the pick pocket from the tape's sprocket holes, and center the camera on it.
+         */
+        post: operations["locate_pocket_api_v1_feeders_slots__slot_id__pocket_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -729,6 +936,56 @@ export interface components {
             /** Y */
             y: number;
         };
+        /** BringUpRecord */
+        "BringUpRecord-Input": {
+            /**
+             * Format
+             * @default picnicplace-bring-up
+             * @constant
+             */
+            format: "picnicplace-bring-up";
+            /** Points */
+            points?: components["schemas"]["RecordedPoint"][];
+            /** Steps */
+            steps?: {
+                [key: string]: components["schemas"]["StepRecord-Input"];
+            };
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
+        /** BringUpRecord */
+        "BringUpRecord-Output": {
+            /**
+             * Format
+             * @default picnicplace-bring-up
+             * @constant
+             */
+            format: "picnicplace-bring-up";
+            /** Points */
+            points: components["schemas"]["RecordedPoint"][];
+            /** Steps */
+            steps: {
+                [key: string]: components["schemas"]["StepRecord-Output"];
+            };
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
+        /** CalibrateRequest */
+        CalibrateRequest: {
+            /**
+             * Slot Ids
+             * @description Slots to calibrate. Empty: every slot with a feeder found.
+             */
+            slot_ids?: string[];
+        };
         /** Camera */
         Camera: {
             /** @description Width (x) and height (y) of the view in mm. */
@@ -858,6 +1115,60 @@ export interface components {
             /** Detail */
             detail: string;
         };
+        /** FeedRequest */
+        FeedRequest: {
+            /**
+             * Distance
+             * @description Millimeters; negative feeds backward. Empty: one part's pitch.
+             */
+            distance?: number | null;
+        };
+        /** FeederAssignment */
+        "FeederAssignment-Input": {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /**
+             * Part Id
+             * @description Library part in this feeder.
+             */
+            part_id?: string | null;
+            /**
+             * Part Pitch
+             * @description Distance from one part to the next. Empty: the part's tape pitch.
+             */
+            part_pitch?: number | null;
+        };
+        /** FeederAssignment */
+        "FeederAssignment-Output": {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /**
+             * Part Id
+             * @description Library part in this feeder.
+             */
+            part_id: string | null;
+            /**
+             * Part Pitch
+             * @description Distance from one part to the next. Empty: the part's tape pitch.
+             */
+            part_pitch: number | null;
+        };
         /**
          * FeederBank
          * @description A row of evenly spaced feeder slots, such as one LumenPnP feeder rail.
@@ -865,6 +1176,15 @@ export interface components {
         FeederBank: {
             /** Count */
             count: number;
+            /** Fiducial Diameter */
+            fiducial_diameter: number | null;
+            /** @description Where each feeder's alignment fiducial is, from its pick location, in the tape's frame: x along the feed, y across it toward the sprocket holes. */
+            fiducial_offset: components["schemas"]["Point"] | null;
+            /**
+             * First Address
+             * @description Photon feeders: the bus address of the first slot. The others count up from it.
+             */
+            first_address: number | null;
             /** @description Pick location of the first slot. */
             first_pick: components["schemas"]["Point"];
             /** Id */
@@ -889,6 +1209,30 @@ export interface components {
              * @description Feeder width across the tape, in mm.
              */
             width: number;
+        };
+        /** FeederState */
+        FeederState: {
+            assignment: components["schemas"]["FeederAssignment-Output"] | null;
+            /** Initialized */
+            initialized: boolean;
+            /** Uuid */
+            uuid: string;
+        };
+        /** FeedersState */
+        FeedersState: {
+            /** Assignments */
+            assignments: {
+                [key: string]: components["schemas"]["FeederAssignment-Output"];
+            };
+            /** Bus */
+            bus: "photon" | null;
+            fiducial_offset: components["schemas"]["Point"] | null;
+            /** Fiducial Offset Source */
+            fiducial_offset_source: ("measured" | "profile") | null;
+            /** Scanned */
+            scanned: boolean;
+            /** Slots */
+            slots: components["schemas"]["SlotState"][];
         };
         /** Filled */
         Filled: {
@@ -970,6 +1314,11 @@ export interface components {
         };
         /** HealthResponse */
         HealthResponse: {
+            /**
+             * Api
+             * @description Fingerprint of the core's OpenAPI document. A Studio built from a different document comes from a different version of PicnicPlace.
+             */
+            api: string;
             /** Protocol */
             protocol: number;
             /**
@@ -1000,6 +1349,11 @@ export interface components {
              * @enum {string}
              */
             type: "hello";
+        };
+        /** IdentifyResult */
+        IdentifyResult: {
+            /** Answered */
+            answered: boolean;
         };
         /** ImportReport */
         ImportReport: {
@@ -1439,6 +1793,11 @@ export interface components {
             cameras: components["schemas"]["Camera"][];
             /** Feeder Banks */
             feeder_banks: components["schemas"]["FeederBank"][];
+            /**
+             * Feeder Bus
+             * @description The feeders' bus: 'photon' for Opulo's Photon feeders over RS-485.
+             */
+            feeder_bus: "photon" | null;
             /** Id */
             id: string;
             /** Inputs */
@@ -1669,6 +2028,11 @@ export interface components {
             outputs?: {
                 [key: string]: components["schemas"]["MarlinOutput"];
             };
+            /**
+             * Rs485
+             * @description Command that sends a hex packet on the feeder bus, such as M485. The reply is a line 'rs485-reply: <hex>', or 'rs485-reply: TIMEOUT'.
+             */
+            rs485?: string | null;
             /**
              * Stop
              * @description Quick stop: end motion, stay running.
@@ -2007,6 +2371,11 @@ export interface components {
             speed: number;
             tape: components["schemas"]["Tape-Output"] | null;
         };
+        /** PickRequest */
+        PickRequest: {
+            /** @description The pick location. Empty: where the top camera is now. */
+            at?: components["schemas"]["Point"] | null;
+        };
         /** Placement */
         "Placement-Input": {
             /**
@@ -2115,6 +2484,19 @@ export interface components {
             /** Y */
             y: number;
         };
+        /**
+         * PocketCheck
+         * @description Where vision last found the pick pocket, from the tape's sprocket holes.
+         */
+        PocketCheck: {
+            /** Across */
+            across: number;
+            /** Along */
+            along: number;
+            at: components["schemas"]["Point"];
+            /** Holes */
+            holes: number;
+        };
         /** Point */
         Point: {
             /** X */
@@ -2167,6 +2549,18 @@ export interface components {
             /** Present */
             present: boolean;
         };
+        /**
+         * RecordedPoint
+         * @description A place on the machine, recorded by centering the top camera on it.
+         */
+        RecordedPoint: {
+            /** Label */
+            label: string;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
         /** Rect */
         Rect: {
             /** X Max */
@@ -2191,6 +2585,43 @@ export interface components {
              * @description Along the footprint's Y axis, mm.
              */
             y: number;
+        };
+        /** Slot */
+        Slot: {
+            /** Address */
+            address: number | null;
+            /** Bank */
+            bank: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Number */
+            number: number;
+            pick: components["schemas"]["Point"];
+            /** Rotation */
+            rotation: number;
+        };
+        /** SlotCalibration */
+        SlotCalibration: {
+            /**
+             * Basis
+             * @description Taught by eye over the pocket, or found from the feeder's fiducial.
+             * @enum {string}
+             */
+            basis: "taught" | "fiducial";
+            /** @description True pick location minus the nominal one. */
+            correction: components["schemas"]["Point"];
+        };
+        /** SlotState */
+        SlotState: {
+            calibration: components["schemas"]["SlotCalibration"] | null;
+            /** Error */
+            error: string | null;
+            feeder: components["schemas"]["FeederState"] | null;
+            pick: components["schemas"]["Point"];
+            pocket: components["schemas"]["PocketCheck"] | null;
+            slot: components["schemas"]["Slot"];
         };
         /**
          * StagingPlate
@@ -2243,6 +2674,52 @@ export interface components {
             /** Label */
             label: string;
             size: components["schemas"]["Point"];
+        };
+        /** StepRecord */
+        "StepRecord-Input": {
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /**
+             * Status
+             * @default todo
+             * @enum {string}
+             */
+            status: "todo" | "done" | "problem" | "skipped";
+            /** Updated */
+            updated?: string | null;
+            /**
+             * Values
+             * @description What the step found, such as which way +X moved the head.
+             */
+            values?: {
+                [key: string]: number | string | boolean;
+            };
+        };
+        /** StepRecord */
+        "StepRecord-Output": {
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /**
+             * Status
+             * @default todo
+             * @enum {string}
+             */
+            status: "todo" | "done" | "problem" | "skipped";
+            /** Updated */
+            updated: string | null;
+            /**
+             * Values
+             * @description What the step found, such as which way +X moved the head.
+             */
+            values: {
+                [key: string]: number | string | boolean;
+            };
         };
         /**
          * Tape
@@ -2407,6 +2884,59 @@ export interface operations {
             };
         };
     };
+    get_bring_up_api_v1_bring_up_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BringUpRecord-Output"];
+                };
+            };
+        };
+    };
+    put_bring_up_api_v1_bring_up_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BringUpRecord-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BringUpRecord-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_cameras_api_v1_cameras_get: {
         parameters: {
             query?: {
@@ -2551,6 +3081,430 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    feeders_state_api_v1_feeders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedersState"];
+                };
+            };
+        };
+    };
+    assign_api_v1_feeders_assignments__feeder_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feeder_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeederAssignment-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedersState"];
+                };
+            };
+            /** @description Not a feeder ID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    forget_api_v1_feeders_assignments__feeder_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feeder_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedersState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calibrate_api_v1_feeders_calibrate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalibrateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scan_api_v1_feeders_scan_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    feed_api_v1_feeders_slots__slot_id__feed_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    measure_fiducial_api_v1_feeders_slots__slot_id__fiducial_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    identify_api_v1_feeders_slots__slot_id__identify_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentifyResult"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    teach_pick_api_v1_feeders_slots__slot_id__pick_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PickRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedersState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forget_pick_api_v1_feeders_slots__slot_id__pick_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedersState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    locate_pocket_api_v1_feeders_slots__slot_id__pocket_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

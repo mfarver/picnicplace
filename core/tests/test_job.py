@@ -179,6 +179,33 @@ def test_too_big_to_fit_anywhere() -> None:
     assert find_location(big, LUMEN) is None
 
 
+def test_rails_may_lie_outside_the_nozzles_reach() -> None:
+    """A panel wider than where both nozzles reach still fits if its parts are inside:
+    its empty rails may lie where only one nozzle (or none) reaches."""
+    job, _ = demo()
+    area = LUMEN.placement_area
+    assert area is not None
+    width = area.x_max - area.x_min + 30
+    copy = job.panel.copies[0].model_copy(update={"x": (width - job.board.size.x) / 2})
+    wide = job.model_copy(
+        update={
+            "panel": job.panel.model_copy(
+                update={
+                    "size": job.panel.size.model_copy(update={"x": width}),
+                    "copies": [copy],
+                }
+            )
+        }
+    )
+    location = find_location(wide, LUMEN)
+    assert location is not None
+    result = layout(wide.model_copy(update={"location": location}), LUMEN)
+    assert result.ok
+    assert [i.message for i in result.issues] == [
+        "the board extends beyond the area every nozzle can reach"
+    ]
+
+
 def test_overlaps() -> None:
     square = [Point(x=0, y=0), Point(x=2, y=0), Point(x=2, y=2), Point(x=0, y=2)]
     assert overlaps(square, Rect(x_min=1, y_min=1, x_max=3, y_max=3))

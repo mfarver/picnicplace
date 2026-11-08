@@ -62,6 +62,20 @@ class SceneState:
     """Nozzle ID and the part it holds, where the simulation knows the part."""
     placed: tuple[PlacedPart, ...] = ()
     """Parts put down on the bed."""
+    boards: tuple["BoardScene", ...] = ()
+    """Boards loaded for a job. Without any, the demo board is drawn."""
+
+
+@dataclass(frozen=True)
+class BoardScene:
+    """A job's board (or panel) on the bed, where it really is, which may differ a
+    little from where the job says: fiducial alignment finds the difference."""
+
+    outline: tuple[tuple[float, float], ...]
+    fiducials: tuple[tuple[float, float, float], ...] = ()
+    """(x, y, diameter): copper dots in a solder mask opening twice as wide."""
+    pads: tuple[tuple[float, float, float, float, float], ...] = ()
+    """(x, y, width, height, angle) in machine coordinates."""
 
 
 @dataclass(frozen=True)
@@ -164,6 +178,27 @@ class _Canvas:
         )
         cv2.fillPoly(img, [pts], color, cv2.LINE_AA, SHIFT)
 
+    def polygon(
+        self, img: Image, points: tuple[tuple[float, float], ...], color: tuple[int, int, int]
+    ) -> None:
+        pts = np.array([self.px(x, y) for x, y in points], dtype=np.int32)
+        cv2.fillPoly(img, [pts], color, cv2.LINE_AA, SHIFT)
+
+
+def _job_board(c: _Canvas, img: Image, b: BoardScene) -> None:
+    xs, ys = [x for x, _ in b.outline], [y for _, y in b.outline]
+    cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+    if not c.visible(cx, cy, max(max(xs) - min(xs), max(ys) - min(ys)) / 2):
+        return
+    c.polygon(img, b.outline, PCB)
+    for x, y, w, h, angle in b.pads:
+        if c.visible(x, y, max(w, h)):
+            c.rect(img, x, y, w, h, angle, COPPER)
+    for x, y, d in b.fiducials:
+        if c.visible(x, y, 2 * d):
+            c.circle(img, x, y, d, FIDUCIAL_MASK)
+            c.circle(img, x, y, d / 2, COPPER)
+
 
 def _chip(canvas: _Canvas, img: Image, x: float, y: float, angle: float) -> None:
     """A 0603 resistor seen from above or below: dark body, metal ends."""
@@ -230,7 +265,11 @@ class TopRenderer:
         img = np.empty((h, w, 3), dtype=np.uint8)
         img[:] = BED
         self._plates(canvas, img)
-        self._board(canvas, img)
+        if state.boards:
+            for board in state.boards:
+                _job_board(canvas, img, board)
+        else:
+            self._board(canvas, img)
         for part in state.placed:
             if canvas.visible(part.x, part.y, 10):
                 _shape(canvas, img, part.x, part.y, part.angle, part.shape)

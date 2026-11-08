@@ -20,6 +20,7 @@ from picnicplace.api import jobs as job_routes
 from picnicplace.api import library as library_routes
 from picnicplace.api import placement as placement_routes
 from picnicplace.api import routes, websocket
+from picnicplace.api import run as run_routes
 from picnicplace.api.context import AppContext
 from picnicplace.api.fingerprint import openapi_text
 from picnicplace.auth import Authenticator
@@ -31,6 +32,8 @@ from picnicplace.config import Config
 from picnicplace.events import EventBus
 from picnicplace.feeders.service import FeederService
 from picnicplace.feeders.setup import FeederSetupStore
+from picnicplace.job.run import JobRunner
+from picnicplace.job.store import JobStore
 from picnicplace.lease import LeaseManager
 from picnicplace.library import Library
 from picnicplace.machine.errors import MachineError
@@ -91,6 +94,14 @@ def create_app(config: Config | None = None) -> FastAPI:
             bundle.photon_sim,
         )
         ctx.placement = PlacementService(machine, ctx.feeders, lambda: ctx.library)
+        ctx.runner = JobRunner(
+            machine,
+            ctx.feeders,
+            ctx.placement,
+            lambda: ctx.library,
+            JobStore(config.data.jobs_dir),
+            config.machine.sim_board_error,
+        )
         await machine.start()
         try:
             yield
@@ -99,6 +110,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             ctx.library = None
             ctx.feeders = None
             ctx.placement = None
+            ctx.runner = None
             await cameras.shutdown()
             await operations.shutdown()
             await presence.shutdown()
@@ -115,6 +127,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(job_routes.router)
     app.include_router(feeder_routes.router)
     app.include_router(placement_routes.router)
+    app.include_router(run_routes.router)
     app.include_router(websocket.router)
 
     @app.exception_handler(MachineError)

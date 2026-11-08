@@ -246,6 +246,48 @@
         "title": "BoardCopy",
         "type": "object"
       },
+      "BoardFix": {
+        "description": "How the board really sits, from its fiducials: machine positions from the job\nare turned by ``angle`` about ``about`` and then shifted by (dx, dy).",
+        "properties": {
+          "about": {
+            "$ref": "#/components/schemas/Point"
+          },
+          "angle": {
+            "title": "Angle",
+            "type": "number"
+          },
+          "dx": {
+            "title": "Dx",
+            "type": "number"
+          },
+          "dy": {
+            "title": "Dy",
+            "type": "number"
+          },
+          "fiducials": {
+            "items": {
+              "$ref": "#/components/schemas/FiducialCheck"
+            },
+            "title": "Fiducials",
+            "type": "array"
+          },
+          "residual": {
+            "description": "Largest distance of a fiducial from the fit, mm.",
+            "title": "Residual",
+            "type": "number"
+          }
+        },
+        "required": [
+          "dx",
+          "dy",
+          "angle",
+          "about",
+          "residual",
+          "fiducials"
+        ],
+        "title": "BoardFix",
+        "type": "object"
+      },
       "BringUpRecord-Input": {
         "additionalProperties": false,
         "properties": {
@@ -902,6 +944,14 @@
             "title": "Rotation",
             "type": "number"
           },
+          "tape_widths": {
+            "description": "The tape widths, in mm, that feeders in this bank take. Empty if any.",
+            "items": {
+              "type": "number"
+            },
+            "title": "Tape Widths",
+            "type": "array"
+          },
           "width": {
             "description": "Feeder width across the tape, in mm.",
             "exclusiveMinimum": 0.0,
@@ -922,7 +972,8 @@
           "pick_height",
           "pick_to_front",
           "fiducial_offset",
-          "fiducial_diameter"
+          "fiducial_diameter",
+          "tape_widths"
         ],
         "title": "FeederBank",
         "type": "object"
@@ -1023,6 +1074,39 @@
           "assignments"
         ],
         "title": "FeedersState",
+        "type": "object"
+      },
+      "FiducialCheck": {
+        "properties": {
+          "copy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Copy Id"
+          },
+          "expected": {
+            "$ref": "#/components/schemas/Point"
+          },
+          "found": {
+            "$ref": "#/components/schemas/Point"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "copy_id",
+          "expected",
+          "found"
+        ],
+        "title": "FiducialCheck",
         "type": "object"
       },
       "Filled": {
@@ -1668,6 +1752,68 @@
           "ok"
         ],
         "title": "JobLayout",
+        "type": "object"
+      },
+      "JobPlan": {
+        "properties": {
+          "fiducials": {
+            "description": "Fiducials the run will look for.",
+            "title": "Fiducials",
+            "type": "integer"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "description": "Nothing stops the run, and every placement can be done.",
+            "readOnly": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/PartNeed"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "runnable": {
+            "description": "The run can start, placing what it can and skipping what is blocked.",
+            "readOnly": true,
+            "title": "Runnable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job_id",
+          "name",
+          "items",
+          "parts",
+          "fiducials",
+          "issues",
+          "ok",
+          "runnable"
+        ],
+        "title": "JobPlan",
         "type": "object"
       },
       "JobSummary": {
@@ -3522,6 +3668,52 @@
         "title": "Part",
         "type": "object"
       },
+      "PartNeed": {
+        "description": "One part number the job uses, and the feeders loaded with it.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Id"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "slot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Slot Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "part_id",
+          "count",
+          "slot_ids",
+          "problem"
+        ],
+        "title": "PartNeed",
+        "type": "object"
+      },
       "PickAndPlaceRequest": {
         "properties": {
           "feed": {
@@ -3784,6 +3976,19 @@
         "title": "PlacementState",
         "type": "object"
       },
+      "PlanRequest": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "PlanRequest",
+        "type": "object"
+      },
       "PocketCheck": {
         "description": "Where vision last found the pick pocket, from the tape's sprocket holes.",
         "properties": {
@@ -3967,6 +4172,258 @@
         "title": "Rect",
         "type": "object"
       },
+      "RunItem": {
+        "properties": {
+          "copy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Copy Id"
+          },
+          "discards": {
+            "default": 0,
+            "description": "Parts discarded after bottom vision failed.",
+            "title": "Discards",
+            "type": "integer"
+          },
+          "footprint_id": {
+            "title": "Footprint Id",
+            "type": "string"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "note": {
+            "default": "",
+            "description": "Why it is blocked, skipped, or failed.",
+            "title": "Note",
+            "type": "string"
+          },
+          "nozzle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The nozzle that placed it.",
+            "title": "Nozzle"
+          },
+          "nozzles": {
+            "description": "Nozzles that reach both the slot and the place.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Nozzles",
+            "type": "array"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Id"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "rotation": {
+            "description": "The part's machine angle, degrees.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "slot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The feeder slot to pick from.",
+            "title": "Slot Id"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "placed",
+              "skipped",
+              "failed",
+              "blocked"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "x": {
+            "description": "Machine X from the job's location, before fiducial alignment.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "index",
+          "copy_id",
+          "ref",
+          "part_id",
+          "footprint_id",
+          "x",
+          "y",
+          "rotation",
+          "slot_id",
+          "nozzles",
+          "status",
+          "note",
+          "nozzle",
+          "discards"
+        ],
+        "title": "RunItem",
+        "type": "object"
+      },
+      "RunState": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the run paused, if it did.",
+            "title": "Error"
+          },
+          "find_pockets": {
+            "default": true,
+            "title": "Find Pockets",
+            "type": "boolean"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "fix": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BoardFix"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "held": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Nozzle ID to the item whose part it holds.",
+            "title": "Held",
+            "type": "object"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pause_requested": {
+            "default": false,
+            "title": "Pause Requested",
+            "type": "boolean"
+          },
+          "placed": {
+            "readOnly": true,
+            "title": "Placed",
+            "type": "integer"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/JobPlan"
+          },
+          "remaining": {
+            "readOnly": true,
+            "title": "Remaining",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "paused",
+              "finished",
+              "stopped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_requested": {
+            "default": false,
+            "title": "Stop Requested",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job_id",
+          "name",
+          "status",
+          "plan",
+          "fix",
+          "message",
+          "error",
+          "pause_requested",
+          "stop_requested",
+          "find_pockets",
+          "held",
+          "started_at",
+          "finished_at",
+          "placed",
+          "remaining"
+        ],
+        "title": "RunState",
+        "type": "object"
+      },
       "ServerEvent": {
         "discriminator": {
           "mapping": {
@@ -4029,6 +4486,20 @@
           "y"
         ],
         "title": "Size",
+        "type": "object"
+      },
+      "SkipRequest": {
+        "properties": {
+          "skip": {
+            "description": "True to skip the placement, false to do it after all.",
+            "title": "Skip",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "skip"
+        ],
+        "title": "SkipRequest",
         "type": "object"
       },
       "Slot": {
@@ -4262,6 +4733,31 @@
           "holes"
         ],
         "title": "StagingPlate",
+        "type": "object"
+      },
+      "StartRequest": {
+        "properties": {
+          "find_pockets": {
+            "default": true,
+            "description": "Find each pocket from the sprocket holes before picking.",
+            "title": "Find Pockets",
+            "type": "boolean"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "skip_blocked": {
+            "default": false,
+            "description": "Start even if some placements are blocked, skipping them.",
+            "title": "Skip Blocked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "StartRequest",
         "type": "object"
       },
       "StepRecord-Input": {
@@ -8197,6 +8693,528 @@
         "summary": "Get Presence",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/v1/run": {
+      "get": {
+        "description": "The current (or last) run, with every placement's status. None before any run.",
+        "operationId": "run_state_api_v1_run_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RunState"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Run State Api V1 Run Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Run State",
+        "tags": [
+          "run"
+        ]
+      }
+    },
+    "/api/v1/run/items/{index}": {
+      "put": {
+        "description": "Skip a placement, or take back a skip (or retry a failed placement).",
+        "operationId": "skip_api_v1_run_items__index__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "title": "Index",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Skip",
+        "tags": [
+          "run"
+        ]
+      }
+    },
+    "/api/v1/run/pause": {
+      "post": {
+        "description": "Pause once the parts on the nozzles are placed.",
+        "operationId": "pause_api_v1_run_pause_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pause",
+        "tags": [
+          "run"
+        ]
+      }
+    },
+    "/api/v1/run/plan": {
+      "post": {
+        "description": "What a run of a saved job would do, without moving anything: each placement's\nfeeder and nozzles, and what stops any of them (no part number, part, height, or\nfeeder, or out of reach). A dry run against the loaded feeders.",
+        "operationId": "plan_api_v1_run_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Plan",
+        "tags": [
+          "run"
+        ]
+      }
+    },
+    "/api/v1/run/resume": {
+      "post": {
+        "operationId": "resume_api_v1_run_resume_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resume",
+        "tags": [
+          "run"
+        ]
+      }
+    },
+    "/api/v1/run/start": {
+      "post": {
+        "description": "Run a saved job: find the board's fiducials, then pick, align, and place every part.",
+        "operationId": "start_api_v1_run_start_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start",
+        "tags": [
+          "run"
+        ]
+      }
+    },
+    "/api/v1/run/step": {
+      "post": {
+        "description": "Resume a paused run for one batch (a part on each nozzle that can take one).",
+        "operationId": "step_api_v1_run_step_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Step",
+        "tags": [
+          "run"
+        ]
+      }
+    },
+    "/api/v1/run/stop": {
+      "post": {
+        "description": "End the run, once the parts on the nozzles are placed if it is running.",
+        "operationId": "stop_api_v1_run_stop_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stop",
+        "tags": [
+          "run"
         ]
       }
     }

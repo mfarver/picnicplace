@@ -24,7 +24,7 @@ from collections.abc import Callable
 from picnicplace.feeders.service import FeederService, rotate
 from picnicplace.library import Library, Part
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
-from picnicplace.machine.profile import Camera, Nozzle, Point
+from picnicplace.machine.profile import Camera, Location, Nozzle, Point
 from picnicplace.machine.service import MachineService
 from picnicplace.schemas import Operation, WireModel
 from picnicplace.vision.part import find_part, nearest_angle, wrap
@@ -44,6 +44,10 @@ SIZE_TOLERANCE = 0.35
 
 class PlacementError(MachineError):
     code = "placement_failed"
+
+
+class MispickError(PlacementError):
+    """The nozzle came up from a pocket without a part."""
 
 
 class Alignment(WireModel):
@@ -109,14 +113,14 @@ class PlacementService:
         if feed:
             self._feeders.check_can_feed(slot)
         return self._machine.start_task(
-            "pick", lambda: self._pick(slot_id, nozzle, feed, find_pocket)
+            "pick", lambda: self.pick(slot_id, nozzle, feed, find_pocket)
         )
 
     def start_align(self, nozzle_id: str) -> Operation:
         nozzle = self._machine.nozzle(nozzle_id)
         self._load(nozzle)
         self._bottom_camera()
-        return self._machine.start_task("align", lambda: self._align(nozzle))
+        return self._machine.start_task("align", lambda: self.align(nozzle))
 
     def start_place(self, nozzle_id: str, x: float, y: float, rotation: float) -> Operation:
         nozzle = self._machine.nozzle(nozzle_id)
@@ -125,7 +129,7 @@ class PlacementService:
             raise PlacementError(f"align the part on {nozzle.id} before placing it")
         self._place_height(load)
         return self._machine.start_task(
-            "place", lambda: self._place(nozzle, Point(x=x, y=y), rotation)
+            "place", lambda: self.place(nozzle, Point(x=x, y=y), rotation)
         )
 
     def start_pick_and_place(
@@ -148,33 +152,41 @@ class PlacementService:
             self._feeders.check_can_feed(slot)
 
         async def work() -> str:
-            steps = [await self._pick(slot_id, nozzle, feed, find_pocket)]
-            steps.append(await self._align(nozzle))
-            steps.append(await self._place(nozzle, Point(x=x, y=y), rotation))
+            steps = [await self.pick(slot_id, nozzle, feed, find_pocket)]
+            steps.append(await self.align(nozzle))
+            steps.append(await self.place(nozzle, Point(x=x, y=y), rotation))
             return " ".join(steps)
 
         return self._machine.start_task("pick_and_place", work)
 
     def start_discard(self, nozzle_id: str) -> Operation:
         nozzle = self._machine.nozzle(nozzle_id)
+        self._discard_location()
+        return self._machine.start_task("discard", lambda: self.discard(nozzle))
+
+    def can_discard(self) -> bool:
+        return any(loc.kind == "discard" for loc in self._machine.profile.locations)
+
+    def _discard_location(self) -> Location:
         bin_ = next((loc for loc in self._machine.profile.locations if loc.kind == "discard"), None)
         if bin_ is None:
             raise PlacementError(
                 "no discard location: add one under [[machine.locations]] in the config"
             )
+        return bin_
 
-        async def work() -> str:
-            await self._machine.move_nozzle_over(nozzle, bin_.position.x, bin_.position.y)
-            await self._machine.suction(nozzle, False)
-            await asyncio.sleep(PLACE_DWELL_S)
-            self._loads.pop(nozzle.id, None)
-            return f"{nozzle.id}: dropped its part in the {bin_.label.lower()}."
-
-        return self._machine.start_task("discard", work)
+    async def discard(self, nozzle: Nozzle) -> str:
+        """Drop whatever ``nozzle`` holds in the discard bin."""
+        bin_ = self._discard_location()
+        await self._machine.move_nozzle_over(nozzle, bin_.position.x, bin_.position.y)
+        await self._machine.suction(nozzle, False)
+        await asyncio.sleep(PLACE_DWELL_S)
+        self._loads.pop(nozzle.id, None)
+        return f"{nozzle.id}: dropped its part in the {bin_.label.lower()}."
 
     # --- Steps ---------------------------------------------------------------------------
 
-    async def _pick(self, slot_id: str, nozzle: Nozzle, feed: bool, find_pocket: bool) -> str:
+    async def pick(self, slot_id: str, nozzle: Nozzle, feed: bool, find_pocket: bool) -> str:
         slot = self._feeders.slot(slot_id)
         bank = self._feeders.bank(slot)
         if bank.pick_height is None:
@@ -197,7 +209,7 @@ class PlacementService:
         if held is False:
             await self._machine.suction(nozzle, False)
             reading = self._machine.vacuum_reading(nozzle)
-            raise PlacementError(
+            raise MispickError(
                 f"{nozzle.id} picked nothing from {slot.label}: the vacuum reads "
                 f"{reading:g}, not a part. Check the pocket and the pick height."
                 if reading is not None
@@ -214,7 +226,7 @@ class PlacementService:
         what = part.id if part else "a part"
         return f"{nozzle.id} picked {what} from {slot.label}{found}."
 
-    async def _align(self, nozzle: Nozzle) -> str:
+    async def align(self, nozzle: Nozzle) -> str:
         load = self._load(nozzle)
         camera = self._bottom_camera()
         assert camera.focus_height is not None
@@ -276,12 +288,16 @@ class PlacementService:
             f"and turned {wrap(angle - expected):+.1f} degrees from the tape's angle.{note}"
         )
 
-    async def _place(self, nozzle: Nozzle, target: Point, rotation: float) -> str:
+    async def place(
+        self, nozzle: Nozzle, target: Point, rotation: float, board_height: float | None = None
+    ) -> str:
+        """Place the aligned part on ``nozzle`` with its center at ``target``, turned to
+        ``rotation``, on a board whose top is at ``board_height`` (the profile's if None)."""
         load = self._load(nozzle)
         alignment = load.alignment
         if alignment is None:
             raise PlacementError(f"align the part on {nozzle.id} before placing it")
-        height = self._place_height(load)
+        height = self._place_height(load, board_height)
         # Turn the nozzle so the part has the angle asked for, by the shortest way.
         current = self._machine.nozzle_angle(nozzle)
         turn = current + wrap(rotation - alignment.angle - current)
@@ -308,6 +324,16 @@ class PlacementService:
         )
 
     # --- Checks --------------------------------------------------------------------------
+
+    def holds(self, nozzle_id: str) -> NozzleLoad | None:
+        return self._loads.get(nozzle_id)
+
+    def check_part(self, part: Part | None, where: str) -> float:
+        """The part's height; raise if it cannot be placed (no part, or no height)."""
+        return self._part_height(part, where)
+
+    def bottom_camera(self) -> Camera:
+        return self._bottom_camera()
 
     def _check_empty(self, nozzle: Nozzle) -> None:
         if nozzle.id in self._loads:
@@ -336,8 +362,9 @@ class PlacementService:
             raise PlacementError(f"{part.id} has no height in the parts library")
         return part.height
 
-    def _place_height(self, load: NozzleLoad) -> float:
-        board = self._machine.profile.board_height
+    def _place_height(self, load: NozzleLoad, board: float | None = None) -> float:
+        if board is None:
+            board = self._machine.profile.board_height
         if board is None:
             raise PlacementError("the machine profile gives no board height")
         library = self._library()

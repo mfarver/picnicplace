@@ -14,6 +14,7 @@ from picnicplace.capture import CaptureStore
 from picnicplace.config import Config
 from picnicplace.events import EventBus
 from picnicplace.feeders.service import FeederService
+from picnicplace.job.run import JobRunner
 from picnicplace.lease import LeaseManager
 from picnicplace.library import Library
 from picnicplace.machine.service import MachineService
@@ -41,6 +42,7 @@ class AppContext:
     feeders: FeederService | None = None
     """Also made when the app starts: it loads the feeder setup."""
     placement: PlacementService | None = None
+    runner: JobRunner | None = None
 
 
 def get_context(request: Request) -> AppContext:

@@ -839,6 +839,19 @@
             "title": "Position",
             "type": "object"
           },
+          "speed_scale": {
+            "description": "Moves run at no more than this fraction of full speed (bring-up mode).",
+            "title": "Speed Scale",
+            "type": "number"
+          },
+          "warnings": {
+            "description": "Problems worth showing the operator, such as a firmware mismatch.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
           "z_safe": {
             "description": "Every nozzle is at safe travel height. From the safe-Z input when the profile has one, otherwise computed from the Z position.",
             "title": "Z Safe",
@@ -858,6 +871,8 @@
           "position",
           "inputs",
           "outputs",
+          "speed_scale",
+          "warnings",
           "z_safe"
         ],
         "title": "MachineState",

@@ -36,7 +36,15 @@ run it against a fake LumenPnP firmware, or point it at a real one:
 cd core
 uv run picnicd --studio-dir ../studio/dist --driver fake-marlin --profile lumenpnp-v4
 uv run picnicd --studio-dir ../studio/dist --driver marlin --profile lumenpnp-v4 \
-    --serial-port /dev/ttyACM0
+    --serial-port /dev/ttyACM0 --speed-scale 0.25
+```
+
+Bringing up a machine for the first time? Run the probe first. It never moves the
+machine; it records the firmware's identity, endstops, settings, vacuum readings, and
+cameras into a transcript, and prints a checklist for the first motion test:
+
+```sh
+uv run picnicplace-probe --serial-port /dev/ttyACM0 --with-pumps
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow.

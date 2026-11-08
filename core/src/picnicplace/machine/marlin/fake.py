@@ -286,6 +286,22 @@ class FakeMarlin:
     async def _cmd_m114(self, _line: str, _args: dict[str, str]) -> list[str]:
         return [self._position_report()]
 
+    async def _cmd_m119(self, _line: str, _args: dict[str, str]) -> list[str]:
+        # Marlin's format. Which switches a LumenPnP reports is not known yet.
+        at_home = {a: abs(self.target[a]) < 1e-6 for a in HOMED_AXES}
+        return ["Reporting endstop status"] + [
+            f"{a.lower()}_min: {'TRIGGERED' if at_home[a] else 'open'}" for a in HOMED_AXES
+        ]
+
+    async def _cmd_m503(self, _line: str, _args: dict[str, str]) -> list[str]:
+        steps = " ".join(f"{a}{STEPS_PER_UNIT[a]:.2f}" for a in AXES)
+        return [
+            "echo:; Steps per unit:",
+            f"echo:  M92 {steps}",
+            "echo:; Max feedrates (units/s):",
+            "echo:  M203 X2000.00 Y2000.00 Z600.00 A60000.00 B60000.00",
+        ]
+
     async def _cmd_m106(self, _line: str, args: dict[str, str]) -> list[str]:
         self._update_vacuum()
         self.fans[int(args.get("P", "0"))] = int(float(args.get("S", "255")))

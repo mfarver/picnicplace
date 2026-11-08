@@ -140,6 +140,13 @@ for MJPEG first, since USB 2 cannot carry uncompressed 1080p quickly; whether th
 cameras offer MJPEG is not known yet (`v4l2-ctl --list-formats-ext -d /dev/videoN` shows
 it). Image flips are not applied yet.
 
+## Bringing up a machine
+
+`picnicplace-probe --serial-port /dev/ttyACM0 --with-pumps` collects what is missing
+below without moving the machine: `M115` with capabilities (including the emergency
+parser), `M119`, `M503`, `M114`, vacuum reads in both firmware variants at rest and with
+suction on, and the cameras with their formats. It saves everything to a transcript.
+
 ## Not seen in the log
 
 - `M112` (emergency stop) and how the board recovers from it.

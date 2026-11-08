@@ -210,3 +210,15 @@ def test_bottom_camera_is_mirrored_and_shows_held_parts() -> None:
 
     held = renderer.render(SceneState({**head, "A": 0.0}, {}, {"N1": True}))
     assert not np.array_equal(empty, held)
+
+
+def test_orientation() -> None:
+    from picnicplace.camera.device import Orientation
+
+    image = np.zeros((10, 20, 3), np.uint8)
+    image[0, 0] = 255  # top left
+    assert Orientation(True, False, 0).apply(image)[0, 19].max() == 255
+    assert Orientation(False, True, 0).apply(image)[9, 0].max() == 255
+    assert Orientation(True, True, 0).apply(image)[9, 19].max() == 255
+    assert Orientation(False, False, 0).apply(image) is image
+    assert Orientation(False, False, 5).apply(image).shape == image.shape

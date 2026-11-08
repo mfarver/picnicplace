@@ -45,8 +45,12 @@ class CameraHub:
                 self._idle_task = None
             if not self._running:
                 log.info("camera %s: starting", self.camera_id)
+                try:
+                    await self.source.start()
+                except BaseException:
+                    self._viewers -= 1
+                    raise
                 self._running = True
-                await self.source.start()
         try:
             yield self.source
         finally:
@@ -63,6 +67,7 @@ class CameraHub:
                 self._running = False
                 self._idle_task = None
                 await self.source.stop()
+                self.source.forget()
 
     async def shutdown(self) -> None:
         self.closed = True

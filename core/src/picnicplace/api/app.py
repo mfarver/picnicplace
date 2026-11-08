@@ -38,7 +38,9 @@ def create_app(config: Config | None = None) -> FastAPI:
     profile = config.machine.machine_profile
     bundle = build_driver(config.machine)
     driver = bundle.driver
-    machine = MachineService(profile, driver, bus, presence, operations)
+    machine = MachineService(
+        profile, driver, bus, presence, operations, speed_scale=config.machine.speed_scale
+    )
     lease = LeaseManager(bus, presence)
     cameras = CameraManager(config, profile, machine.scene)
     lease.on_holder_left.append(machine.stop_manual_motion)

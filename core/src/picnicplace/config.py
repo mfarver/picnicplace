@@ -83,6 +83,15 @@ class MachineConfig(_Section):
     sim_time_scale: float = Field(
         default=1.0, gt=0, description="Simulator only: values above 1 run faster than real time."
     )
+    speed_scale: float = Field(
+        default=1.0,
+        gt=0,
+        le=1,
+        description=(
+            "Cap every move at this fraction of each axis's maximum speed. Use 0.25 or less "
+            "when bringing up a new machine. Homing speed is set by the firmware."
+        ),
+    )
 
     _profile: MachineProfile | None = PrivateAttr(default=None)
 
@@ -118,6 +127,14 @@ class CameraConfig(_Section):
     width: int = Field(default=1920, gt=0)
     height: int = Field(default=1080, gt=0)
     fps: float = Field(default=30.0, gt=0)
+    flip_x: bool = Field(default=False, description="Mirror the image left to right.")
+    flip_y: bool = Field(default=False, description="Mirror the image top to bottom.")
+    rotation: float = Field(
+        default=0.0,
+        ge=-45,
+        le=45,
+        description="Rotate the image this many degrees counterclockwise (after flips).",
+    )
 
     @model_validator(mode="after")
     def _device_needs_path(self) -> Self:

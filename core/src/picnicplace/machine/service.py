@@ -15,6 +15,7 @@ run in up to three steps: raise Z to travel height (if needed), move the travel 
 axes, then lower Z to its target (if one was given).
 """
 
+import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable, Mapping
@@ -59,7 +60,10 @@ class MachineService:
         bus: EventBus,
         presence: PresenceTracker,
         operations: OperationManager,
+        *,
+        speed_scale: float = 1.0,
     ) -> None:
+        self._speed_scale = speed_scale
         self._profile = profile
         self._axes = {a.name: a for a in profile.axes}
         self._inputs = {i.id: i for i in profile.inputs}
@@ -75,6 +79,7 @@ class MachineService:
         self._estop = False
         self._busy = False
         self._connection_error: str | None = None
+        self._connect_lock = asyncio.Lock()
 
         driver.on_change = self._on_driver_change
         presence.on_change.append(self._publish_state)
@@ -107,7 +112,7 @@ class MachineService:
         Otherwise this is computed from the Z positions.
         """
         if self._profile.safe_z_input is not None:
-            return self._driver.inputs.get(self._profile.safe_z_input) is True
+            return bool(self._driver.inputs.get(self._profile.safe_z_input, False))
         return self.z_safe_computed
 
     def scene(self) -> SceneState:
@@ -147,6 +152,8 @@ class MachineService:
             inputs=dict(self._driver.inputs),
             outputs=dict(self._driver.outputs),
             z_safe=self.z_safe,
+            speed_scale=self._speed_scale,
+            warnings=list(self._driver.warnings),
         )
 
     async def start(self) -> None:
@@ -156,6 +163,10 @@ class MachineService:
             await self.connect()
 
     async def connect(self) -> None:
+        async with self._connect_lock:  # startup and a client may both ask at once
+            await self._connect_once()
+
+    async def _connect_once(self) -> None:
         if self._driver.connected:
             return
         self._homed = False
@@ -200,9 +211,16 @@ class MachineService:
             raise InvalidTargetError(f"unknown axis {axis!r}")
         if axis in self._travel_axes:
             self._check_travel_allowed()
-        target = self._driver.position[axis] + distance
+        current = self._driver.position[axis]
+        target = current + distance
         if not limits.continuous:
-            target = min(limits.max, max(limits.min, target))
+            # Clamp to the limits, but never move against the jog's direction: after
+            # homing outside the limits (LumenPnP Y homes at 0, below its 44.45 minimum),
+            # a jog away from the range does nothing, and one toward it is allowed.
+            if distance < 0:
+                target = max(target, min(limits.min, current))
+            else:
+                target = min(target, max(limits.max, current))
         return self._start_operation("jog", lambda: self._run_steps([{axis: target}], speed))
 
     async def set_output(self, output_id: str, on: bool) -> None:
@@ -233,6 +251,12 @@ class MachineService:
     def _on_driver_change(self) -> None:
         # A machine that drops off (unplugged, powered off) must be homed again.
         if not self._driver.connected:
+            self._homed = False
+        # Firmware that halts by itself (a kill() for an endstop or thermal fault) is
+        # treated as a latched emergency stop, so Reset can recover it.
+        if self._driver.halted and not self._estop:
+            log.warning("the controller halted; latching the emergency stop")
+            self._estop = True
             self._homed = False
         self._publish_state()
 
@@ -312,9 +336,24 @@ class MachineService:
 
     async def _run_steps(self, steps: list[dict[str, float]], speed: float | None) -> None:
         for step in steps:
-            if any(axis in self._travel_axes for axis in step):
+            position = self._driver.position
+            travels = any(
+                abs(value - position[axis]) > EPSILON
+                for axis, value in step.items()
+                if axis in self._travel_axes
+            )
+            if travels:
+                if self._profile.safe_z_input is not None:
+                    await self._driver.refresh_input(self._profile.safe_z_input)
                 self._check_travel_allowed()
-            await self._driver.move_to(step, speed)
+            await self._driver.move_to(step, self._limit_speed(step, speed))
+
+    def _limit_speed(self, step: Mapping[str, float], speed: float | None) -> float | None:
+        """Apply the speed scale: no faster than that fraction of the slowest moving axis."""
+        if self._speed_scale >= 1:
+            return speed
+        cap = min(self._axes[a].max_speed for a in step) * self._speed_scale
+        return cap if speed is None else min(speed, cap)
 
     async def _home(self) -> None:
         await self._driver.home()

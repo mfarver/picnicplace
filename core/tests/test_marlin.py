@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 import pytest
 
-from picnicplace.machine.errors import MotionInterruptedError
+from picnicplace.machine.errors import MachineError, MotionInterruptedError
 from picnicplace.machine.marlin.driver import MarlinDriver
 from picnicplace.machine.marlin.fake import (
     FakeMarlin,
@@ -287,3 +287,59 @@ def test_core_starts_without_the_machine() -> None:
         assert r.status_code == 409
         assert r.json()["code"] == "connect_failed"
         assert s.post("/api/v1/machine/home").json()["code"] == "not_connected"
+
+
+def test_wrong_variant_warns() -> None:
+    """Stock firmware that does not know the 24-bit read: the driver says so."""
+
+    async def scenario() -> None:
+        async with lumenpnp("vacuum-24bit") as (driver, fake):
+            original = fake._cmd_m261  # pyright: ignore[reportPrivateUsage]
+
+            async def stock_m261(line: str, args: dict[str, str]) -> list[str]:
+                if args.get("S") == "4":
+                    return [f'echo:Unknown command: "{line}"']
+                return await original(line, args)
+
+            fake._cmd_m261 = stock_m261  # type: ignore[method-assign]
+            await wait_until(lambda: len(driver.warnings) == 2)
+            assert "does not understand 'M261 A109 B3 S4'" in driver.warnings[0]
+            assert "machine.marlin.variant" in driver.warnings[0]
+
+    run(scenario)
+
+
+def test_unanswered_command_drops_the_link() -> None:
+    async def scenario() -> None:
+        profile = load_profile("lumenpnp-v4")
+        assert profile.marlin is not None
+        host = FakeMarlinMemory(FakeSettings(time_scale=FAST))
+        driver = MarlinDriver(
+            profile,
+            profile.marlin.resolved(None),
+            host.open,
+            connect_wait_s=0,
+            command_timeout_s=0.3,
+        )
+        await driver.connect()
+
+        stuck = asyncio.Event()
+
+        async def hang(_line: str, _args: dict[str, str]) -> list[str]:
+            await stuck.wait()
+            return []
+
+        host.firmware._cmd_m114 = hang  # type: ignore[method-assign]
+        with pytest.raises(MachineError, match="no answer to 'M114'"):
+            await driver.move_to({"X": 1.0}, speed=None)
+        assert not driver.connected
+        assert any("did not answer" in w for w in driver.warnings)
+        # The firmware recovers; reconnecting starts clean.
+        del host.firmware._cmd_m114
+        stuck.set()
+        await driver.connect()
+        assert driver.connected and not driver.warnings
+        await driver.disconnect()
+        await host.stop()
+
+    run(scenario)

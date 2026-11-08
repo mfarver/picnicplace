@@ -341,6 +341,13 @@ code,
   font-size: var(--text-sm);
 }
 
+.note-warn {
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
 .note-danger {
   padding: var(--space-2);
   border-radius: var(--radius-sm);
@@ -540,6 +547,14 @@ code,
 
 .dot-warn {
   background: var(--warn);
+}
+
+.badge-warn {
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-weight: 600;
 }
 
 .badge-danger {

@@ -62,6 +62,10 @@ class CameraSource(ABC):
                 return None
             return self._frame
 
+    def forget(self) -> None:
+        """Drop the last frame (the source stopped, so it no longer shows the present)."""
+        self._frame = None
+
     async def _publish(self, image: Image, timestamp: float | None = None) -> None:
         self._seq += 1
         self._frame = Frame(image, timestamp if timestamp is not None else time.time(), self._seq)

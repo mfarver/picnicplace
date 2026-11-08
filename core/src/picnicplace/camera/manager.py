@@ -25,7 +25,13 @@ class CameraManager:
             elif settings.source == "device":
                 assert settings.device is not None
                 source = DeviceCamera(
-                    settings.device, settings.width, settings.height, settings.fps
+                    settings.device,
+                    settings.width,
+                    settings.height,
+                    settings.fps,
+                    flip_x=settings.flip_x,
+                    flip_y=settings.flip_y,
+                    rotation=settings.rotation,
                 )
                 self._hubs[camera.id] = CameraHub(camera.id, source)
 

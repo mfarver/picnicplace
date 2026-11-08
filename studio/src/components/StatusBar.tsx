@@ -37,6 +37,14 @@ export function StatusBar() {
             Control <strong className={hasControl(core) ? "text-ok" : undefined}>{control}</strong>
           </span>
           {machine.estop && <span className="status-item badge-danger">E-STOP LATCHED</span>}
+          {machine.speed_scale < 1 && (
+            <span
+              className="status-item badge-warn"
+              title="Bring-up mode: every move runs at this fraction of full speed"
+            >
+              Slow {Math.round(machine.speed_scale * 100)}%
+            </span>
+          )}
           <span className="status-item mono">
             {machine.axes.map((axis) => (
               <span key={axis} className="status-axis">

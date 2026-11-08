@@ -40,6 +40,29 @@ def open_capture(device: str) -> Capture:
     return cv2.VideoCapture(target)  # type: ignore[return-value]
 
 
+class Orientation:
+    """Flips and a small rotation, so the image matches the machine's axes."""
+
+    def __init__(self, flip_x: bool, flip_y: bool, rotation: float) -> None:
+        self.flip_code: int | None = {
+            (True, False): 1,
+            (False, True): 0,
+            (True, True): -1,
+        }.get((flip_x, flip_y))
+        self.rotation = rotation
+
+    def apply(self, image: Image) -> Image:
+        if self.flip_code is not None:
+            image = cv2.flip(image, self.flip_code)  # type: ignore[assignment]
+        if self.rotation:
+            h, w = image.shape[:2]
+            matrix = cv2.getRotationMatrix2D((w / 2, h / 2), self.rotation, 1.0)
+            image = cv2.warpAffine(  # type: ignore[assignment]
+                image, matrix, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE
+            )
+        return image
+
+
 class DeviceCamera(CameraSource):
     kind = "device"
 
@@ -50,8 +73,13 @@ class DeviceCamera(CameraSource):
         height: int,
         fps: float,
         opener: Callable[[str], Capture] = open_capture,
+        *,
+        flip_x: bool = False,
+        flip_y: bool = False,
+        rotation: float = 0.0,
     ) -> None:
         super().__init__()
+        self._orient = Orientation(flip_x, flip_y, rotation)
         self._device = device
         self._requested = (width, height)
         self._fps = fps
@@ -129,7 +157,7 @@ class DeviceCamera(CameraSource):
                 time.sleep(0.05)
                 continue
             failures = 0
-            self._deliver(image, time.time())
+            self._deliver(self._orient.apply(image), time.time())
 
     def _deliver(self, image: Image, timestamp: float) -> None:
         loop = self._loop

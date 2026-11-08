@@ -41,6 +41,12 @@ class MachineState(WireModel):
         description="Reading per profile input: bool for digital, number for analog."
     )
     outputs: dict[str, bool] = Field(description="State per profile output.")
+    speed_scale: float = Field(
+        description="Moves run at no more than this fraction of full speed (bring-up mode)."
+    )
+    warnings: list[str] = Field(
+        description="Problems worth showing the operator, such as a firmware mismatch."
+    )
     z_safe: bool = Field(
         description=(
             "Every nozzle is at safe travel height. From the safe-Z input when the profile "

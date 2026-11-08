@@ -26,6 +26,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--serial-port", help="override machine.marlin.port")
     p.add_argument(
+        "--speed-scale", type=float, help="override machine.speed_scale (0.25 = quarter speed)"
+    )
+    p.add_argument(
         "--sim-time-scale", type=float, help="override machine.sim_time_scale (simulator)"
     )
     p.add_argument(
@@ -47,6 +50,7 @@ def _build_config(args: argparse.Namespace) -> Config:
         ("machine", "profile"): args.profile,
         ("machine", "driver"): args.driver,
         ("machine", "sim_time_scale"): args.sim_time_scale,
+        ("machine", "speed_scale"): args.speed_scale,
     }
     for (section, key), value in overrides.items():
         if value is not None:

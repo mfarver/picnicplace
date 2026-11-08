@@ -19,6 +19,20 @@ class MotionDriver(ABC):
     """Firmware name and version, once connected, if the driver knows it."""
 
     @property
+    def halted(self) -> bool:
+        """The firmware stopped itself (or after an emergency stop) and needs a reset."""
+        return False
+
+    async def refresh_input(self, input_id: str) -> None:
+        """Read an input now rather than waiting for the next poll (for safety checks)."""
+        return None
+
+    @property
+    def warnings(self) -> Sequence[str]:
+        """Problems the operator should know about, such as a firmware mismatch."""
+        return ()
+
+    @property
     @abstractmethod
     def axes(self) -> Sequence[str]: ...
 

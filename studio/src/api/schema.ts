@@ -708,6 +708,16 @@ export interface components {
                 [key: string]: number;
             };
             /**
+             * Speed Scale
+             * @description Moves run at no more than this fraction of full speed (bring-up mode).
+             */
+            speed_scale: number;
+            /**
+             * Warnings
+             * @description Problems worth showing the operator, such as a firmware mismatch.
+             */
+            warnings: string[];
+            /**
              * Z Safe
              * @description Every nozzle is at safe travel height. From the safe-Z input when the profile has one, otherwise computed from the Z position.
              */

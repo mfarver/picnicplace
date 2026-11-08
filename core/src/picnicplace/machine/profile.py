@@ -242,6 +242,15 @@ class MachineProfile(ProfileModel):
             for inp in self.marlin.inputs:
                 if inp not in inputs:
                     raise ValueError(f"marlin: unknown input {inp!r}")
+        if (
+            self.marlin is not None
+            and self.safe_z_input is not None
+            and self.safe_z_input not in self.marlin.inputs
+        ):
+            raise ValueError(
+                f"marlin: the safe-Z input {self.safe_z_input!r} needs read commands in "
+                "[marlin.inputs] so the driver can check it before every X/Y move"
+            )
         if self.safe_z_input is not None:
             safe = inputs.get(self.safe_z_input)
             if safe is None or safe.kind != "digital":

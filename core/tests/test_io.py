@@ -204,3 +204,71 @@ def test_lease_released_when_holder_leaves(client: TestClient) -> None:
         wait_for(lambda: client.get("/api/v1/lease").json() == {"holder": None})
         wait_for(lambda: client.get(f"/api/v1/operations/{op_id}").json()["status"] == "failed")
         assert watcher.state()["busy"] is False
+
+
+def test_speed_scale_caps_moves(monkeypatch: pytest.MonkeyPatch) -> None:
+    from picnicplace.machine.simulator import SimulatorDriver
+
+    speeds: list[float | None] = []
+    original = SimulatorDriver.move_to
+
+    async def recording(self: SimulatorDriver, target: dict[str, float], speed: float | None):
+        speeds.append(speed)
+        await original(self, target, speed)
+
+    monkeypatch.setattr(SimulatorDriver, "move_to", recording)
+    config = fast_config(machine={"speed_scale": 0.25})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert s.state()["speed_scale"] == 0.25
+        s.home()
+        s.move(X=100)  # test machine: X max 500 mm/s
+        s.wait(s.post("/api/v1/machine/jog", {"axis": "Z", "distance": -2}))  # Z max 100
+        r = s.post("/api/v1/machine/move", {"position": {"X": 10}, "speed": 50})
+        s.wait(r)
+    # X at a quarter of 500; Z at a quarter of 100; the last move first raises Z (N1 was
+    # below safe Z), then moves X at the requested 50, under its 125 cap.
+    assert speeds == [125, 25, 25, 50]
+
+
+def test_jog_from_outside_the_soft_limits(tmp_path: Path) -> None:
+    """Like a LumenPnP's Y, which homes at 0 below its 44.45 mm minimum."""
+    text = TEST_PROFILE.read_text().replace(
+        'name = "Y"\nmin = 0\nmax = 400', 'name = "Y"\nmin = 40\nmax = 400'
+    )
+    profile = tmp_path / "low-home.toml"
+    profile.write_text(text)
+    with (
+        TestClient(create_app(fast_config(machine={"profile": str(profile)}))) as client,
+        connect(client) as s,
+    ):
+        s.home()
+        jog = "/api/v1/machine/jog"
+        # Away from the range: no move at all (not a jump to the limit).
+        s.wait(s.post(jog, {"axis": "Y", "distance": -1}))
+        assert s.state()["position"]["Y"] == pytest.approx(0)
+        # Toward it: the jog happens as asked.
+        s.wait(s.post(jog, {"axis": "Y", "distance": 5}))
+        assert s.state()["position"]["Y"] == pytest.approx(5)
+
+
+def test_raising_z_with_unchanged_xy_is_allowed(client: TestClient) -> None:
+    with connect(client) as s:
+        s.home()
+        s.move(X=50, Y=50)
+        s.move(Z=-10)  # N1 below safe Z
+        # A full-position move that only raises Z must not be refused as X/Y travel.
+        assert s.move(X=50, Y=50, Z=0)["status"] == "succeeded"
+
+
+def test_firmware_halt_latches_estop() -> None:
+    config = fast_config(machine={"driver": "fake-marlin", "profile": "lumenpnp-v4"})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        s.home()
+        driver = client.app.state.ctx.machine.driver  # type: ignore[attr-defined]
+        # A kill() the firmware reports by itself, not one the core asked for.
+        driver._on_line("Error:Printer halted. kill() called!")  # pyright: ignore[reportPrivateUsage]
+        wait_for(lambda: s.state()["estop"] is True)
+        state = s.state()
+        assert state["homed"] is False
+        assert s.post("/api/v1/machine/reset").status_code == 200
+        assert s.state()["estop"] is False

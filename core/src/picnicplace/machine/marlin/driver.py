@@ -94,6 +94,7 @@ class MarlinDriver(MotionDriver):
             i.id: (0.0 if i.kind == "analog" else False) for i in profile.inputs
         }
         self._input_patterns = {k: re.compile(v.pattern) for k, v in settings.inputs.items()}
+        self._digital = {i.id for i in profile.inputs if i.kind == "digital"}
 
         self._transport: LineTransport | None = None
         self._reader: asyncio.Task[None] | None = None
@@ -105,6 +106,7 @@ class MarlinDriver(MotionDriver):
         self._stopping = False
         self.firmware: str | None = None
         self.machine_type: str | None = None
+        self._warnings: dict[str, str] = {}
 
     # --- State ---------------------------------------------------------------------------
 
@@ -128,9 +130,30 @@ class MarlinDriver(MotionDriver):
     def outputs(self) -> Mapping[str, bool]:
         return dict(self._outputs)
 
+    @property
+    def halted(self) -> bool:
+        return self._halted
+
+    @property
+    def warnings(self) -> Sequence[str]:
+        return list(self._warnings.values())
+
+    def _warn(self, key: str, message: str | None) -> None:
+        """Set (or with None, clear) a warning for the operator."""
+        if message is None:
+            if self._warnings.pop(key, None) is not None:
+                self._notify()
+            return
+        if self._warnings.get(key) != message:
+            log.warning("%s", message)
+            self._warnings[key] = message
+            self._notify()
+
     # --- Connection ----------------------------------------------------------------------
 
     async def connect(self) -> None:
+        await self._stop_poller()
+        await self._close()
         await self._open()
         try:
             if self._connect_wait_s > 0:
@@ -143,12 +166,15 @@ class MarlinDriver(MotionDriver):
         self._poller = asyncio.create_task(self._poll_inputs())
 
     async def disconnect(self) -> None:
-        if self._poller is not None:
-            self._poller.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._poller
-            self._poller = None
+        await self._stop_poller()
         await self._close()
+
+    async def _stop_poller(self) -> None:
+        poller, self._poller = self._poller, None
+        if poller is not None and poller is not asyncio.current_task():
+            poller.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await poller
 
     async def _open(self) -> None:
         self._transport = await self._open_transport()
@@ -177,10 +203,21 @@ class MarlinDriver(MotionDriver):
         self.firmware = name.group(1).strip() if name else None
         self.machine_type = machine.group(1) if machine else None
         expected = self._settings.expected_machine_type
-        if expected and self.machine_type != expected:
-            log.warning(
-                "firmware reports machine type %r, expected %r", self.machine_type, expected
-            )
+        self._warn(
+            "machine_type",
+            f"the firmware reports machine type {self.machine_type!r}, but the machine "
+            f"profile expects {expected!r}"
+            if expected and self.machine_type != expected
+            else None,
+        )
+        no_parser = any("Cap:EMERGENCY_PARSER:0" in line for line in reply)
+        self._warn(
+            "emergency_parser",
+            "the firmware has no emergency parser: STOP takes effect only after the current "
+            "move finishes. Keep a hand on the machine's E-stop."
+            if no_parser
+            else None,
+        )
         log.info("connected to %s (%s)", self.firmware, self.machine_type)
         for line in self._settings.connect:
             await self._command(line)
@@ -190,6 +227,7 @@ class MarlinDriver(MotionDriver):
             self._outputs[output_id] = False
         self._halted = False
         self._connected = True
+        self._warn("link", None)
         await self._sync_position()
         self._notify()
 
@@ -264,11 +302,7 @@ class MarlinDriver(MotionDriver):
 
     async def reset(self) -> None:
         """Reconnect after an emergency stop, waiting for the firmware to answer again."""
-        if self._poller is not None:
-            self._poller.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._poller
-            self._poller = None
+        await self._stop_poller()
         await self._close()
         loop = asyncio.get_running_loop()
         deadline = loop.time() + RESET_TIMEOUT_S
@@ -314,7 +348,7 @@ class MarlinDriver(MotionDriver):
     async def _poll_inputs(self) -> None:
         if not self._settings.inputs:
             return
-        while True:
+        while self._connected:
             for input_id, spec in self._settings.inputs.items():
                 try:
                     value = await self._read_input(input_id, spec)
@@ -326,7 +360,16 @@ class MarlinDriver(MotionDriver):
                     self._notify()
             await asyncio.sleep(POLL_ACTIVE_S if any(self._outputs.values()) else POLL_IDLE_S)
 
-    async def _read_input(self, input_id: str, spec: MarlinInput) -> float | None:
+    async def refresh_input(self, input_id: str) -> None:
+        spec = self._settings.inputs.get(input_id)
+        if spec is None:
+            return
+        value = await self._read_input(input_id, spec)
+        if value is not None and value != self._inputs.get(input_id):
+            self._inputs[input_id] = value
+            self._notify()
+
+    async def _read_input(self, input_id: str, spec: MarlinInput) -> float | bool | None:
         if not self._connected or self._halted:
             return None
         async with self._lock:
@@ -337,11 +380,22 @@ class MarlinDriver(MotionDriver):
         for line in reply:
             m = pattern.search(line)
             if m:
+                self._warn(f"input:{input_id}", None)
                 raw = int(m.group("value"))
                 if spec.sign_bits is not None and raw >= 1 << (spec.sign_bits - 1):
                     raw -= 1 << spec.sign_bits
+                if input_id in self._digital:
+                    return bool(raw)
                 return raw * spec.scale
-        log.debug("no %s value in reply %r", input_id, reply)
+        command = spec.read[-1].split(";")[0].strip()
+        if any("Unknown command" in line for line in reply):
+            problem = f"the firmware does not understand {command!r}"
+        else:
+            problem = f"unexpected reply to {command!r}: {' '.join(reply) or '(none)'}"
+        self._warn(
+            f"input:{input_id}",
+            f"{input_id}: {problem}. Check machine.marlin.variant in the config.",
+        )
         return None
 
     # --- Serial protocol -----------------------------------------------------------------
@@ -363,13 +417,16 @@ class MarlinDriver(MotionDriver):
             await self._transport.write_line(line)
             return await asyncio.wait_for(asyncio.shield(entry.future), timeout_s)
         except TimeoutError:
-            # Give up on this ok. If it arrives later it will be credited to the wrong
-            # command, so the connection is no longer trustworthy: say so plainly.
+            # If this ok arrives later it would be credited to the wrong command, and
+            # positions and readings would be off by one from then on. Drop the link
+            # instead; reconnecting starts clean.
+            command = line.split(";")[0].strip()
             with contextlib.suppress(ValueError):
                 self._pending.remove(entry)
-            raise FirmwareError(
-                f"no answer to {line.split(';')[0].strip()!r}; reconnect the machine"
-            ) from None
+            entry.future.cancel()  # nobody waits for it now
+            self._warn("link", f"the controller did not answer {command!r}; reconnect it")
+            await self._close()
+            raise FirmwareError(f"no answer to {command!r}; the machine was disconnected") from None
         except TransportClosedError as e:
             raise NotConnectedError("the machine disconnected") from e
 
@@ -392,6 +449,7 @@ class MarlinDriver(MotionDriver):
             if self._transport is transport:
                 log.warning("serial connection lost")
                 self._transport = None
+                await transport.close()
                 self._fail_pending(NotConnectedError("the machine disconnected"))
                 self._connected = False
                 self._notify()
@@ -401,6 +459,7 @@ class MarlinDriver(MotionDriver):
         if "kill() called" in line or line.startswith("Error:Printer halted"):
             self._halted = True
             self._fail_pending(MotionInterruptedError("the controller halted"))
+            self._notify()
             return
         if not self._pending:
             log.debug("unsolicited: %s", line)

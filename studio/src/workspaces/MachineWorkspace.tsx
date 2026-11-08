@@ -81,6 +81,11 @@ export function MachineWorkspace() {
 
         <Panel title="Control">
           <LeaseStatus busy={pending} onTake={takeControl} onRelease={releaseControl} />
+          {machine?.warnings.map((warning) => (
+            <p key={warning} className="note note-warn">
+              {warning}
+            </p>
+          ))}
           {machine && !machine.connected && (
             <div className="machine-offline">
               <p className="note note-danger">

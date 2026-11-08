@@ -80,6 +80,10 @@ class DataConfig(_Section):
         return self.dir.expanduser() / "feeders.json"
 
     @property
+    def captures_dir(self) -> Path:
+        return self.dir.expanduser() / "captures"
+
+    @property
     def bringup_path(self) -> Path:
         return self.dir.expanduser() / "bring-up.json"
 

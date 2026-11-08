@@ -20,6 +20,7 @@ import numpy as np
 
 from picnicplace.camera.source import CameraSource, Frame, Image
 from picnicplace.machine.profile import Camera, MachineProfile, Point
+from picnicplace.simparts import HeldPart, PartShape, PlacedPart
 
 # Colors, BGR.
 BED = (30, 30, 32)
@@ -57,6 +58,10 @@ class SceneState:
     """Nozzle ID to whether it holds a part."""
     tapes: tuple["TapeScene", ...] | None = None
     """Simulated feeders: their tape and parts. None draws generic tape in every slot."""
+    held_parts: tuple[tuple[str, HeldPart], ...] = ()
+    """Nozzle ID and the part it holds, where the simulation knows the part."""
+    placed: tuple[PlacedPart, ...] = ()
+    """Parts put down on the bed."""
 
 
 @dataclass(frozen=True)
@@ -226,6 +231,9 @@ class TopRenderer:
         img[:] = BED
         self._plates(canvas, img)
         self._board(canvas, img)
+        for part in state.placed:
+            if canvas.visible(part.x, part.y, 10):
+                _shape(canvas, img, part.x, part.y, part.angle, part.shape)
         self._locations(canvas, img)
         if state.tapes is None:
             self._feeders(canvas, img)
@@ -424,14 +432,20 @@ def _extent(t: TapeScene) -> tuple[float, float]:
 
 
 def _part(c: _Canvas, img: Image, x: float, y: float, angle: float, t: TapeScene) -> None:
-    if t.body is None and not t.pads:
+    _shape(c, img, x, y, angle, PartShape(body=t.body, pads=t.pads))
+
+
+def _shape(c: _Canvas, img: Image, x: float, y: float, angle: float, s: PartShape) -> None:
+    """A part seen from above or below: its body, and metal where its pads are. Without
+    a footprint, a 0603 chip."""
+    if s.body is None and not s.pads:
         _chip(c, img, x, y, angle)
         return
     a = math.radians(angle)
     ca, sa = math.cos(a), math.sin(a)
-    if t.body is not None:
-        c.rect(img, x, y, t.body[0], t.body[1], angle, PART_BODY)
-    for px, py, w, h, r in t.pads:
+    if s.body is not None:
+        c.rect(img, x, y, s.body[0], s.body[1], angle, PART_BODY)
+    for px, py, w, h, r in s.pads:
         cx, cy = x + px * ca - py * sa, y + px * sa + py * ca
         c.rect(img, cx, cy, w * 0.8, h * 0.8, angle + r, PART_END)
 
@@ -551,8 +565,15 @@ class BottomRenderer:
                 continue
             canvas.circle(img, x, y, 2.6, NOZZLE)
             canvas.circle(img, x, y, 0.35, NOZZLE_BORE)
-            if state.held.get(nozzle.id):
-                angle = state.position.get(nozzle.rotation_axis, 0.0)
+            angle = state.position.get(nozzle.rotation_axis, 0.0)
+            known = dict(state.held_parts).get(nozzle.id)
+            if known is not None:
+                # Where the part really sits on the nozzle, turned with it.
+                a = math.radians(angle)
+                ox = known.dx * math.cos(a) - known.dy * math.sin(a)
+                oy = known.dx * math.sin(a) + known.dy * math.cos(a)
+                _shape(canvas, img, x + ox, y + oy, angle + known.angle, known.shape)
+            elif state.held.get(nozzle.id):
                 # Parts never sit exactly centered: a small, fixed pick error.
                 _chip(canvas, img, x + 0.12, y - 0.07, angle + 3.0)
         return _finish(img, self._grain, self.camera, state)

@@ -1,7 +1,6 @@
 """Photon feeders: the protocol, simulated feeders, and the feeder service end to end."""
 
 import asyncio
-import math
 from collections.abc import Iterator
 from itertools import pairwise
 from typing import Any
@@ -342,15 +341,26 @@ def test_vision_finds_the_drifted_pocket(lumen: TestClient) -> None:
         assert pocket["at"]["x"] == pytest.approx(pick.x, abs=0.05)
 
 
-def test_a_simulated_pick_empties_the_pocket(lumen: TestClient) -> None:
+def test_a_simulated_pick_takes_the_part_from_its_pocket(lumen: TestClient) -> None:
     feeders = service(lumen)
+    parts = feeders.sim_parts
+    assert parts is not None
     tapes = feeders._scene_tapes()  # pyright: ignore[reportPrivateUsage]
     assert len(tapes) == 6
     first = tapes[0]
     assert first.pick_full
-    feeders._sim_picked("N1", first.pick[0] + 0.3, first.pick[1])  # pyright: ignore[reportPrivateUsage]
-    assert not feeders._scene_tapes()[0].pick_full  # pyright: ignore[reportPrivateUsage]
-    assert math.isclose(feeders._scene_tapes()[1].pick[0], tapes[1].pick[0])  # pyright: ignore[reportPrivateUsage]
+    # Nowhere near a pocket: nothing to pick.
+    assert not parts.pick("N1", first.pick[0] + 5, first.pick[1] + 5, 0.0)
+    # 0.3 mm off the pocket: the part is held 0.3 mm off the nozzle, at its tape angle.
+    assert parts.pick("N1", first.pick[0] + 0.3, first.pick[1], 0.0)
+    held = parts.held["N1"]
+    assert (held.dx, held.dy) == pytest.approx((-0.3, 0.0))
+    assert held.angle == pytest.approx(first.rotation + first.part_rotation)
+    after = feeders._scene_tapes()  # pyright: ignore[reportPrivateUsage]
+    assert not after[0].pick_full
+    assert after[1].pick_full
+    # The pocket is empty now: a second pick there gets nothing.
+    assert not parts.pick("N2", first.pick[0], first.pick[1], 0.0)
 
 
 def test_bring_up_record_round_trips(lumen: TestClient) -> None:

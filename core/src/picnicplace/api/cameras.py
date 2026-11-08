@@ -10,14 +10,17 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import Field
 
-from picnicplace.api.context import Context
+from picnicplace.api.context import Context, require
 from picnicplace.auth import Permission, Principal
 from picnicplace.camera.hub import CameraHub
 from picnicplace.camera.source import Frame
-from picnicplace.schemas import CameraInfo, ErrorResponse
+from picnicplace.capture import CaptureInfo
+from picnicplace.machine.errors import MachineError
+from picnicplace.schemas import CameraInfo, ErrorResponse, WireModel
 
 BOUNDARY = "picnicplace-frame"
 FIRST_FRAME_TIMEOUT_S = 5.0
@@ -66,6 +69,66 @@ def _hub(ctx: Context, camera_id: str) -> CameraHub:
 @router.get("")
 async def list_cameras(ctx: Context) -> list[CameraInfo]:
     return ctx.cameras.info()
+
+
+class CaptureRequest(WireModel):
+    cameras: list[str] = Field(
+        default_factory=list[str], description="Cameras to capture. Empty: every camera on."
+    )
+    label: str = Field(default="", max_length=200, description="What the frame shows.")
+
+
+@router.get("/captures")
+async def list_captures(ctx: Context) -> list[CaptureInfo]:
+    """Recent captures, newest first."""
+    return ctx.captures.list()
+
+
+@router.post(
+    "/captures",
+    responses={**NOT_FOUND, **UNAVAILABLE},
+    dependencies=[Depends(require(Permission.MOTION))],
+)
+async def capture(ctx: Context, body: CaptureRequest) -> list[CaptureInfo]:
+    """Save a full-resolution frame from each camera, losslessly, with the machine's
+    position and outputs, to the data directory's captures folder."""
+    ids = body.cameras or [c.id for c in ctx.machine.profile.cameras if ctx.cameras.hub(c.id)]
+    for camera_id in ids:
+        _hub(ctx, camera_id)
+    state = ctx.machine.state
+    saved: list[CaptureInfo] = []
+    for camera_id in ids:
+        try:
+            frame = await ctx.machine.frame(camera_id, settle=False)
+        except MachineError as e:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e
+        saved.append(
+            await asyncio.to_thread(
+                ctx.captures.save,
+                frame,
+                camera_id,
+                body.label.strip(),
+                dict(state.position),
+                dict(state.outputs),
+                state.homed,
+            )
+        )
+    return saved
+
+
+@router.get(
+    "/captures/{capture_id:path}.png",
+    response_class=FileResponse,
+    responses={200: {"content": {"image/png": {}}}, 404: {"model": ErrorResponse}},
+)
+async def capture_image(ctx: Context, capture_id: str) -> FileResponse:
+    try:
+        png, _ = ctx.captures.paths(capture_id)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    if not png.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="no such capture")
+    return FileResponse(png, media_type="image/png")
 
 
 @router.get(

@@ -33,6 +33,18 @@ export function eventsUrl(token: string | null): string {
   return url.toString();
 }
 
+/**
+ * URL for a media endpoint used by an <img> tag, which cannot send headers: the token
+ * goes in the query string.
+ */
+export function mediaUrl(path: string, params: Record<string, string | number> = {}): string {
+  const url = new URL(path, window.location.origin);
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
+  const token = loadToken();
+  if (token) url.searchParams.set("token", token);
+  return url.toString();
+}
+
 /** Pull a readable message out of an API error body. */
 export function errorMessage(error: unknown): string {
   if (error && typeof error === "object" && "detail" in error) {

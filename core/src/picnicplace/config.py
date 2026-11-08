@@ -103,10 +103,59 @@ class MachineConfig(_Section):
         return self._profile
 
 
+class CameraConfig(_Section):
+    source: Literal["synthetic", "device", "none"] = Field(
+        description=(
+            "'device': a real camera. 'synthetic': rendered by the simulator. 'none': off."
+        )
+    )
+    device: str | None = Field(
+        default=None,
+        description=(
+            "For 'device': a path such as /dev/v4l/by-id/usb-...-video-index0, or an index."
+        ),
+    )
+    width: int = Field(default=1920, gt=0)
+    height: int = Field(default=1080, gt=0)
+    fps: float = Field(default=30.0, gt=0)
+
+    @model_validator(mode="after")
+    def _device_needs_path(self) -> Self:
+        if self.source == "device" and not self.device:
+            raise ValueError("a camera with source 'device' needs a device")
+        return self
+
+
 class Config(_Section):
     server: ServerConfig = Field(default_factory=ServerConfig)
     presence: PresenceConfig = Field(default_factory=PresenceConfig)
     machine: MachineConfig = Field(default_factory=MachineConfig)
+    cameras: dict[str, CameraConfig] = Field(
+        default_factory=dict[str, CameraConfig],
+        description=(
+            "Per camera ID from the machine profile. Cameras left out are synthetic with "
+            "the simulator and fake-marlin drivers, and off with a real machine."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _known_cameras(self) -> Self:
+        known = {c.id for c in self.machine.machine_profile.cameras}
+        for camera_id in self.cameras:
+            if camera_id not in known:
+                raise ValueError(
+                    f"cameras.{camera_id}: the machine profile has no such camera "
+                    f"(it has: {', '.join(sorted(known)) or 'none'})"
+                )
+        return self
+
+    def camera(self, camera_id: str) -> CameraConfig:
+        """Settings for a camera, with the default for the driver if not configured."""
+        configured = self.cameras.get(camera_id)
+        if configured is not None:
+            return configured
+        simulated = self.machine.driver in ("simulator", "fake-marlin")
+        return CameraConfig(source="synthetic" if simulated else "none")
 
     @model_validator(mode="after")
     def _require_token_off_loopback(self) -> Self:

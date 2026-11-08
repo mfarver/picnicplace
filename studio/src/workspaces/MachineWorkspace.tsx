@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api } from "../api/client";
 import { hasControl, useCore } from "../api/core";
 import { useAction } from "../api/useAction";
+import { useCameras } from "../api/useCameras";
 import { useDescription } from "../api/useDescription";
 import type { Operation } from "../api/types";
 import { CameraView } from "../components/CameraView";
@@ -20,6 +21,7 @@ export function MachineWorkspace() {
   const controlledElsewhere = !!core.lease?.holder && !hasControl(core);
   const { run, pending, error } = useAction();
   const description = useDescription();
+  const cameras = useCameras();
   const [lastOpId, setLastOpId] = useState<string | null>(null);
 
   const lastOp = lastOpId ? operations[lastOpId] : undefined;
@@ -68,8 +70,14 @@ export function MachineWorkspace() {
   return (
     <div className="workspace">
       <aside className="sidebar">
-        <CameraView id="top" title="Top camera" />
-        <CameraView id="bottom" title="Bottom camera" />
+        {(description?.cameras ?? []).map((camera) => (
+          <CameraView
+            key={camera.id}
+            id={camera.id}
+            title={camera.label}
+            info={cameras?.find((c) => c.id === camera.id)}
+          />
+        ))}
 
         <Panel title="Control">
           <LeaseStatus busy={pending} onTake={takeControl} onRelease={releaseControl} />

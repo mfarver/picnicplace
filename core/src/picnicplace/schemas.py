@@ -78,6 +78,17 @@ class Operation(WireModel):
     finished_at: datetime | None = None
 
 
+class CameraInfo(WireModel):
+    id: str
+    label: str
+    looking: Literal["down", "up"]
+    source: Literal["synthetic", "device", "none"]
+    width: int | None = Field(description="Native frame width, when the camera is on.")
+    height: int | None
+    streaming: bool = Field(description="Frames are being captured for at least one viewer.")
+    error: str | None = Field(description="Why the camera is not delivering frames, if so.")
+
+
 # --- REST --------------------------------------------------------------------------------
 
 

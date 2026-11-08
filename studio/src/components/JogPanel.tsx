@@ -80,51 +80,57 @@ export function JogPanel({ description, machine, canMove, onJog, onSafeZ }: Prop
         </div>
 
         <div className="jog-nozzles">
-          {description.nozzles.map((n) => (
-            <div key={n.id} className="jog-nozzle">
-              <span className="jog-nozzle-label">{n.id}</span>
-              <button
-                type="button"
-                className="button jog-button-sm"
-                disabled={!enabled}
-                onClick={() => onJog(n.z_axis, n.z_sign * step)}
-                title={`${n.label} up`}
-                aria-label={`${n.id} up`}
-              >
-                <ArrowUp size={14} />
-              </button>
-              <button
-                type="button"
-                className="button jog-button-sm"
-                disabled={!enabled}
-                onClick={() => onJog(n.z_axis, -n.z_sign * step)}
-                title={`${n.label} down`}
-                aria-label={`${n.id} down`}
-              >
-                <ArrowDown size={14} />
-              </button>
-              <button
-                type="button"
-                className="button jog-button-sm"
-                disabled={!enabled}
-                onClick={() => onJog(n.rotation_axis, -turn)}
-                title={`${n.label}: rotate ${turn}° clockwise`}
-                aria-label={`${n.id} rotate clockwise`}
-              >
-                <RotateCw size={14} />
-              </button>
-              <button
-                type="button"
-                className="button jog-button-sm"
-                disabled={!enabled}
-                onClick={() => onJog(n.rotation_axis, turn)}
-                title={`${n.label}: rotate ${turn}° counterclockwise`}
-                aria-label={`${n.id} rotate counterclockwise`}
-              >
-                <RotateCcw size={14} />
-              </button>
-            </div>
-          ))}
+          {description.nozzles.map((n) => {
+            // Height on the nozzle's own scale: 0 at the top of its travel. With a shared Z
+            // motor, "up" stops at the top rather than going on to lower the other nozzle.
+            const height = Math.min(0, n.z_sign * (machine?.position[n.z_axis] ?? 0));
+            const rise = Math.min(step, -height);
+            return (
+              <div key={n.id} className="jog-nozzle">
+                <span className="jog-nozzle-label">{n.id}</span>
+                <button
+                  type="button"
+                  className="button jog-button-sm"
+                  disabled={!enabled || rise <= 0}
+                  onClick={() => onJog(n.z_axis, n.z_sign * rise)}
+                  title={`${n.label} up`}
+                  aria-label={`${n.id} up`}
+                >
+                  <ArrowUp size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="button jog-button-sm"
+                  disabled={!enabled}
+                  onClick={() => onJog(n.z_axis, -n.z_sign * step)}
+                  title={`${n.label} down`}
+                  aria-label={`${n.id} down`}
+                >
+                  <ArrowDown size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="button jog-button-sm"
+                  disabled={!enabled}
+                  onClick={() => onJog(n.rotation_axis, -turn)}
+                  title={`${n.label}: rotate ${turn}° clockwise`}
+                  aria-label={`${n.id} rotate clockwise`}
+                >
+                  <RotateCw size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="button jog-button-sm"
+                  disabled={!enabled}
+                  onClick={() => onJog(n.rotation_axis, turn)}
+                  title={`${n.label}: rotate ${turn}° counterclockwise`}
+                  aria-label={`${n.id} rotate counterclockwise`}
+                >
+                  <RotateCcw size={14} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
 

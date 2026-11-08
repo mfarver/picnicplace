@@ -327,6 +327,14 @@ Requirements:
 - **Frame timestamps** are attached to frames on both transports so clients can line up
   video with machine position and overlay data.
 - When no client is watching a stream, the core stops encoding it.
+- **Endpoints (built in M1):** `GET /api/v1/cameras`, `.../{id}/snapshot.jpg`, and
+  `.../{id}/stream.mjpg` with `width`, `fps`, `quality`, and `frames` parameters. Each
+  JPEG carries `X-Timestamp` and `X-Frame` headers. Media endpoints also accept the token
+  as a `token` query parameter, since `<img>` tags cannot send headers. Each camera
+  captures once however many clients watch, and stops a few seconds after the last
+  leaves. The simulator renders synthetic views from the machine state (bed, a demo board
+  with fiducials, feeder tape, nozzles and held parts) that match the machine geometry,
+  so vision can be tested against known truth.
 
 ## 7. Core subsystems
 

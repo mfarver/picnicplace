@@ -19,6 +19,7 @@ import contextlib
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 
+from picnicplace.camera.synthetic import SceneState
 from picnicplace.events import EventBus
 from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.errors import (
@@ -61,6 +62,7 @@ class MachineService:
     ) -> None:
         self._profile = profile
         self._axes = {a.name: a for a in profile.axes}
+        self._inputs = {i.id: i for i in profile.inputs}
         self._z_axes = {n.z_axis for n in profile.nozzles}
         self._travel_axes = {
             a.name for a in profile.axes if a.kind == "linear" and a.name not in self._z_axes
@@ -107,6 +109,27 @@ class MachineService:
         if self._profile.safe_z_input is not None:
             return self._driver.inputs.get(self._profile.safe_z_input) is True
         return self.z_safe_computed
+
+    def scene(self) -> SceneState:
+        """What the synthetic cameras draw: position, outputs, and which nozzles hold a
+        part (vacuum past the pick threshold). Positions are rounded so tiny changes do
+        not cause new frames."""
+        inputs = self._driver.inputs
+        held: dict[str, bool] = {}
+        for nozzle in self._profile.nozzles:
+            sensor = self._inputs.get(nozzle.vacuum_input or "")
+            value = inputs.get(sensor.id) if sensor else None
+            held[nozzle.id] = (
+                sensor is not None
+                and isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and sensor.past_threshold(float(value))
+            )
+        return SceneState(
+            position={a: round(v, 2) for a, v in self._driver.position.items()},
+            outputs=dict(self._driver.outputs),
+            held=held,
+        )
 
     @property
     def state(self) -> MachineState:

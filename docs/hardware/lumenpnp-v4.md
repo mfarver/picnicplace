@@ -131,6 +131,15 @@ protocol and is not described here yet.
   log above. Run `uv run picnicplace-fake-marlin` for one on a pseudo-terminal.
 - Home sensors are not read yet (`M119` replies have not been captured).
 
+## Cameras
+
+Two USB (UVC) cameras named "LumenPnP Top" and "LumenPnP Bottom", 1920 × 1080. OpenPnP
+on the reference machine read them as uncompressed YUYV through V4L2, ran the top camera at
+5 frames per second, and flipped both images (top: X and Y, bottom: X). PicnicPlace asks
+for MJPEG first, since USB 2 cannot carry uncompressed 1080p quickly; whether these
+cameras offer MJPEG is not known yet (`v4l2-ctl --list-formats-ext -d /dev/videoN` shows
+it). Image flips are not applied yet.
+
 ## Not seen in the log
 
 - `M112` (emergency stop) and how the board recovers from it.

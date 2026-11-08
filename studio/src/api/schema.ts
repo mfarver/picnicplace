@@ -4,6 +4,63 @@
  */
 
 export interface paths {
+    "/api/v1/cameras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Cameras */
+        get: operations["list_cameras_api_v1_cameras_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/{camera_id}/snapshot.jpg": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Snapshot
+         * @description The latest frame as a JPEG. The ``X-Timestamp`` header says when it was captured.
+         */
+        get: operations["snapshot_api_v1_cameras__camera_id__snapshot_jpg_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/{camera_id}/stream.mjpg": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream
+         * @description MJPEG for ``<img>`` tags, scripts, and small displays (``?width=320&fps=5``).
+         */
+        get: operations["stream_api_v1_cameras__camera_id__stream_mjpg_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -325,6 +382,40 @@ export interface components {
             mount: "head" | "fixed";
             /** @description Head cameras: offset from the head. Fixed cameras: machine coordinates. */
             position: components["schemas"]["Point"];
+        };
+        /** CameraInfo */
+        CameraInfo: {
+            /**
+             * Error
+             * @description Why the camera is not delivering frames, if so.
+             */
+            error: string | null;
+            /** Height */
+            height: number | null;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Looking
+             * @enum {string}
+             */
+            looking: "down" | "up";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "synthetic" | "device" | "none";
+            /**
+             * Streaming
+             * @description Frames are being captured for at least one viewer.
+             */
+            streaming: boolean;
+            /**
+             * Width
+             * @description Native frame width, when the camera is on.
+             */
+            width: number | null;
         };
         /** ClientInfo */
         ClientInfo: {
@@ -920,6 +1011,154 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_cameras_api_v1_cameras_get: {
+        parameters: {
+            query?: {
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraInfo"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    snapshot_api_v1_cameras__camera_id__snapshot_jpg_get: {
+        parameters: {
+            query?: {
+                /** @description Scale frames down to this width. */
+                width?: number | null;
+                /** @description JPEG quality. */
+                quality?: number;
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One frame. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                };
+            };
+            /** @description No such camera. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The camera is off or failing. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    stream_api_v1_cameras__camera_id__stream_mjpg_get: {
+        parameters: {
+            query?: {
+                /** @description Scale frames down to this width. */
+                width?: number | null;
+                /** @description JPEG quality. */
+                quality?: number;
+                /** @description Maximum frame rate. */
+                fps?: number;
+                /** @description Stop after this many frames. */
+                frames?: number | null;
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description An endless MJPEG stream. Each part carries X-Timestamp (capture time, Unix seconds) and X-Frame (frame number) headers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "multipart/x-mixed-replace; boundary=picnicplace-frame": unknown;
+                };
+            };
+            /** @description No such camera. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The camera is off or failing. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     health_api_v1_health_get: {
         parameters: {
             query?: never;

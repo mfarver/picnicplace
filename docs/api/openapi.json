@@ -119,6 +119,87 @@
         "title": "Camera",
         "type": "object"
       },
+      "CameraInfo": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the camera is not delivering frames, if so.",
+            "title": "Error"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "looking": {
+            "enum": [
+              "down",
+              "up"
+            ],
+            "title": "Looking",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "synthetic",
+              "device",
+              "none"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "streaming": {
+            "description": "Frames are being captured for at least one viewer.",
+            "title": "Streaming",
+            "type": "boolean"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Native frame width, when the camera is on.",
+            "title": "Width"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "looking",
+          "source",
+          "width",
+          "height",
+          "streaming",
+          "error"
+        ],
+        "title": "CameraInfo",
+        "type": "object"
+      },
       "ClientInfo": {
         "properties": {
           "address": {
@@ -1514,6 +1595,331 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/cameras": {
+      "get": {
+        "operationId": "list_cameras_api_v1_cameras_get",
+        "parameters": [
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CameraInfo"
+                  },
+                  "title": "Response List Cameras Api V1 Cameras Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Cameras",
+        "tags": [
+          "cameras"
+        ]
+      }
+    },
+    "/api/v1/cameras/{camera_id}/snapshot.jpg": {
+      "get": {
+        "description": "The latest frame as a JPEG. The ``X-Timestamp`` header says when it was captured.",
+        "operationId": "snapshot_api_v1_cameras__camera_id__snapshot_jpg_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "camera_id",
+            "required": true,
+            "schema": {
+              "title": "Camera Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Scale frames down to this width.",
+            "in": "query",
+            "name": "width",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 3840,
+                  "minimum": 16,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Scale frames down to this width.",
+              "title": "Width"
+            }
+          },
+          {
+            "description": "JPEG quality.",
+            "in": "query",
+            "name": "quality",
+            "required": false,
+            "schema": {
+              "default": 85,
+              "description": "JPEG quality.",
+              "maximum": 95,
+              "minimum": 10,
+              "title": "Quality",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {}
+            },
+            "description": "One frame."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such camera."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The camera is off or failing."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Snapshot",
+        "tags": [
+          "cameras"
+        ]
+      }
+    },
+    "/api/v1/cameras/{camera_id}/stream.mjpg": {
+      "get": {
+        "description": "MJPEG for ``<img>`` tags, scripts, and small displays (``?width=320&fps=5``).",
+        "operationId": "stream_api_v1_cameras__camera_id__stream_mjpg_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "camera_id",
+            "required": true,
+            "schema": {
+              "title": "Camera Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Scale frames down to this width.",
+            "in": "query",
+            "name": "width",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 3840,
+                  "minimum": 16,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Scale frames down to this width.",
+              "title": "Width"
+            }
+          },
+          {
+            "description": "JPEG quality.",
+            "in": "query",
+            "name": "quality",
+            "required": false,
+            "schema": {
+              "default": 75,
+              "description": "JPEG quality.",
+              "maximum": 95,
+              "minimum": 10,
+              "title": "Quality",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Maximum frame rate.",
+            "in": "query",
+            "name": "fps",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "description": "Maximum frame rate.",
+              "exclusiveMinimum": 0,
+              "maximum": 60,
+              "title": "Fps",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Stop after this many frames.",
+            "in": "query",
+            "name": "frames",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Stop after this many frames.",
+              "title": "Frames"
+            }
+          },
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "multipart/x-mixed-replace; boundary=picnicplace-frame": {}
+            },
+            "description": "An endless MJPEG stream. Each part carries X-Timestamp (capture time, Unix seconds) and X-Frame (frame number) headers."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such camera."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The camera is off or failing."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stream",
+        "tags": [
+          "cameras"
+        ]
+      }
+    },
     "/api/v1/health": {
       "get": {
         "description": "Liveness check. Does not require authentication.",

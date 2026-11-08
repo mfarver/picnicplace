@@ -12,9 +12,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import TypeAdapter
 
 from picnicplace import __version__
+from picnicplace.api import cameras as camera_routes
 from picnicplace.api import routes, websocket
 from picnicplace.api.context import AppContext
 from picnicplace.auth import Authenticator
+from picnicplace.camera.manager import CameraManager
 from picnicplace.config import Config
 from picnicplace.events import EventBus
 from picnicplace.lease import LeaseManager
@@ -38,6 +40,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     driver = bundle.driver
     machine = MachineService(profile, driver, bus, presence, operations)
     lease = LeaseManager(bus, presence)
+    cameras = CameraManager(config, profile, machine.scene)
     lease.on_holder_left.append(machine.stop_manual_motion)
     ctx = AppContext(
         config=config,
@@ -47,6 +50,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         operations=operations,
         machine=machine,
         lease=lease,
+        cameras=cameras,
     )
 
     @asynccontextmanager
@@ -55,6 +59,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         try:
             yield
         finally:
+            await cameras.shutdown()
             await operations.shutdown()
             await presence.shutdown()
             await machine.shutdown()
@@ -64,6 +69,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.ctx = ctx
     app.include_router(routes.public)
     app.include_router(routes.router)
+    app.include_router(camera_routes.router)
     app.include_router(websocket.router)
 
     @app.exception_handler(MachineError)

@@ -18,3 +18,4 @@ export type Point = Schemas["Point"];
 export type Rect = Schemas["Rect"];
 export type LeaseState = Schemas["LeaseState"];
 export type ClientInfo = Schemas["ClientInfo"];
+export type CameraInfo = Schemas["CameraInfo"];

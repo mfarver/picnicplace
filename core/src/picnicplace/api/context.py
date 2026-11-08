@@ -8,6 +8,7 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from picnicplace.auth import Authenticator, Permission, Principal
+from picnicplace.camera.manager import CameraManager
 from picnicplace.config import Config
 from picnicplace.events import EventBus
 from picnicplace.lease import LeaseManager
@@ -26,6 +27,7 @@ class AppContext:
     operations: OperationManager
     machine: MachineService
     lease: LeaseManager
+    cameras: CameraManager
 
 
 def get_context(request: Request) -> AppContext:

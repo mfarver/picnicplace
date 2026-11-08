@@ -957,6 +957,165 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run State
+         * @description The current (or last) run, with every placement's status. None before any run.
+         */
+        get: operations["run_state_api_v1_run_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/run/items/{index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Skip
+         * @description Skip a placement, or take back a skip (or retry a failed placement).
+         */
+        put: operations["skip_api_v1_run_items__index__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/run/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause
+         * @description Pause once the parts on the nozzles are placed.
+         */
+        post: operations["pause_api_v1_run_pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/run/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan
+         * @description What a run of a saved job would do, without moving anything: each placement's
+         *     feeder and nozzles, and what stops any of them (no part number, part, height, or
+         *     feeder, or out of reach). A dry run against the loaded feeders.
+         */
+        post: operations["plan_api_v1_run_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/run/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume */
+        post: operations["resume_api_v1_run_resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/run/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start
+         * @description Run a saved job: find the board's fiducials, then pick, align, and place every part.
+         */
+        post: operations["start_api_v1_run_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/run/step": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Step
+         * @description Resume a paused run for one batch (a part on each nozzle that can take one).
+         */
+        post: operations["step_api_v1_run_step_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/run/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop
+         * @description End the run, once the parts on the nozzles are placed if it is running.
+         */
+        post: operations["stop_api_v1_run_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1091,6 +1250,27 @@ export interface components {
             x: number;
             /** Y */
             y: number;
+        };
+        /**
+         * BoardFix
+         * @description How the board really sits, from its fiducials: machine positions from the job
+         *     are turned by ``angle`` about ``about`` and then shifted by (dx, dy).
+         */
+        BoardFix: {
+            about: components["schemas"]["Point"];
+            /** Angle */
+            angle: number;
+            /** Dx */
+            dx: number;
+            /** Dy */
+            dy: number;
+            /** Fiducials */
+            fiducials: components["schemas"]["FiducialCheck"][];
+            /**
+             * Residual
+             * @description Largest distance of a fiducial from the fit, mm.
+             */
+            residual: number;
         };
         /** BringUpRecord */
         "BringUpRecord-Input": {
@@ -1419,6 +1599,11 @@ export interface components {
              */
             rotation: number;
             /**
+             * Tape Widths
+             * @description The tape widths, in mm, that feeders in this bank take. Empty if any.
+             */
+            tape_widths: number[];
+            /**
              * Width
              * @description Feeder width across the tape, in mm.
              */
@@ -1447,6 +1632,15 @@ export interface components {
             scanned: boolean;
             /** Slots */
             slots: components["schemas"]["SlotState"][];
+        };
+        /** FiducialCheck */
+        FiducialCheck: {
+            /** Copy Id */
+            copy_id: string | null;
+            expected: components["schemas"]["Point"];
+            found: components["schemas"]["Point"];
+            /** Ref */
+            ref: string;
         };
         /** Filled */
         Filled: {
@@ -1728,6 +1922,34 @@ export interface components {
             outline: components["schemas"]["Point"][];
             /** Placements */
             placements: components["schemas"]["MachinePlacement"][];
+        };
+        /** JobPlan */
+        JobPlan: {
+            /**
+             * Fiducials
+             * @description Fiducials the run will look for.
+             */
+            fiducials: number;
+            /** Issues */
+            issues: components["schemas"]["Issue"][];
+            /** Items */
+            items: components["schemas"]["RunItem"][];
+            /** Job Id */
+            job_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Ok
+             * @description Nothing stops the run, and every placement can be done.
+             */
+            readonly ok: boolean;
+            /** Parts */
+            parts: components["schemas"]["PartNeed"][];
+            /**
+             * Runnable
+             * @description The run can start, placing what it can and skipping what is blocked.
+             */
+            readonly runnable: boolean;
         };
         /** JobSummary */
         JobSummary: {
@@ -2607,6 +2829,20 @@ export interface components {
             speed: number;
             tape: components["schemas"]["Tape-Output"] | null;
         };
+        /**
+         * PartNeed
+         * @description One part number the job uses, and the feeders loaded with it.
+         */
+        PartNeed: {
+            /** Count */
+            count: number;
+            /** Part Id */
+            part_id: string | null;
+            /** Problem */
+            problem: string | null;
+            /** Slot Ids */
+            slot_ids: string[];
+        };
         /** PickAndPlaceRequest */
         PickAndPlaceRequest: {
             /**
@@ -2763,6 +2999,11 @@ export interface components {
             /** Loads */
             loads: components["schemas"]["NozzleLoad"][];
         };
+        /** PlanRequest */
+        PlanRequest: {
+            /** Job Id */
+            job_id: string;
+        };
         /**
          * PocketCheck
          * @description Where vision last found the pick pocket, from the tape's sprocket holes.
@@ -2851,6 +3092,117 @@ export interface components {
             /** Y Min */
             y_min: number;
         };
+        /** RunItem */
+        RunItem: {
+            /** Copy Id */
+            copy_id: string | null;
+            /**
+             * Discards
+             * @description Parts discarded after bottom vision failed.
+             * @default 0
+             */
+            discards: number;
+            /** Footprint Id */
+            footprint_id: string;
+            /** Index */
+            index: number;
+            /**
+             * Note
+             * @description Why it is blocked, skipped, or failed.
+             * @default
+             */
+            note: string;
+            /**
+             * Nozzle
+             * @description The nozzle that placed it.
+             */
+            nozzle: string | null;
+            /**
+             * Nozzles
+             * @description Nozzles that reach both the slot and the place.
+             */
+            nozzles: string[];
+            /** Part Id */
+            part_id: string | null;
+            /** Ref */
+            ref: string;
+            /**
+             * Rotation
+             * @description The part's machine angle, degrees.
+             */
+            rotation: number;
+            /**
+             * Slot Id
+             * @description The feeder slot to pick from.
+             */
+            slot_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "placed" | "skipped" | "failed" | "blocked";
+            /**
+             * X
+             * @description Machine X from the job's location, before fiducial alignment.
+             */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** RunState */
+        RunState: {
+            /**
+             * Error
+             * @description Why the run paused, if it did.
+             */
+            error: string | null;
+            /**
+             * Find Pockets
+             * @default true
+             */
+            find_pockets: boolean;
+            /** Finished At */
+            finished_at: string | null;
+            fix: components["schemas"]["BoardFix"] | null;
+            /**
+             * Held
+             * @description Nozzle ID to the item whose part it holds.
+             */
+            held: {
+                [key: string]: number;
+            };
+            /** Job Id */
+            job_id: string;
+            /** Message */
+            message: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Pause Requested
+             * @default false
+             */
+            pause_requested: boolean;
+            /** Placed */
+            readonly placed: number;
+            plan: components["schemas"]["JobPlan"];
+            /** Remaining */
+            readonly remaining: number;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "paused" | "finished" | "stopped";
+            /**
+             * Stop Requested
+             * @default false
+             */
+            stop_requested: boolean;
+        };
         ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
         /** Size */
         Size: {
@@ -2864,6 +3216,14 @@ export interface components {
              * @description Along the footprint's Y axis, mm.
              */
             y: number;
+        };
+        /** SkipRequest */
+        SkipRequest: {
+            /**
+             * Skip
+             * @description True to skip the placement, false to do it after all.
+             */
+            skip: boolean;
         };
         /** Slot */
         Slot: {
@@ -2953,6 +3313,23 @@ export interface components {
             /** Label */
             label: string;
             size: components["schemas"]["Point"];
+        };
+        /** StartRequest */
+        StartRequest: {
+            /**
+             * Find Pockets
+             * @description Find each pocket from the sprocket holes before picking.
+             * @default true
+             */
+            find_pockets: boolean;
+            /** Job Id */
+            job_id: string;
+            /**
+             * Skip Blocked
+             * @description Start even if some placements are blocked, skipping them.
+             * @default false
+             */
+            skip_blocked: boolean;
         };
         /** StepRecord */
         "StepRecord-Input": {
@@ -5345,6 +5722,324 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PresenceState"];
+                };
+            };
+        };
+    };
+    run_state_api_v1_run_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunState"] | null;
+                };
+            };
+        };
+    };
+    skip_api_v1_run_items__index__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkipRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_api_v1_run_pause_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_api_v1_run_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobPlan"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_api_v1_run_resume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_api_v1_run_start_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    step_api_v1_run_step_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_api_v1_run_stop_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

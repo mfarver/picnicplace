@@ -13,6 +13,7 @@ import { FeedersWorkspace } from "./workspaces/FeedersWorkspace";
 import { LibraryWorkspace } from "./workspaces/LibraryWorkspace";
 import { MachineWorkspace } from "./workspaces/MachineWorkspace";
 import { PrepareWorkspace } from "./workspaces/PrepareWorkspace";
+import { RunWorkspace } from "./workspaces/RunWorkspace";
 
 interface Workspace extends WorkspaceTab {
   render: () => ReactNode;
@@ -41,14 +42,7 @@ const WORKSPACES: Workspace[] = [
     id: "run",
     label: "Run",
     icon: Play,
-    render: () => (
-      <Placeholder
-        icon={Play}
-        title="Run"
-        description="Job progress, live cameras, and placement status."
-        milestone="M4"
-      />
-    ),
+    render: () => <RunWorkspace />,
   },
   { id: "machine", label: "Machine", icon: Cog, render: () => <MachineWorkspace /> },
   {

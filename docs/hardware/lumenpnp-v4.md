@@ -73,21 +73,24 @@ What OpenPnP sends after opening the port (and waiting 3 s for the board to rese
 
 ## Coordinates
 
-+Y points toward the front. The origin is believed to be the right rear corner, so +X
-points left as you face the machine. The profile says so (`x_points = "left"`,
-`y_points = "front"`), and the Studio draws the map, the jog arrows, and camera images
-as an operator facing the machine sees them; vision converts image offsets the same way.
++X points right and +Y toward the back, as you face the machine; the origin is the front
+left corner. The profile says so (`x_points = "right"`, `y_points = "back"`), and the
+Studio draws the map (with the front marked), the jog arrows, and camera images as an
+operator facing the machine sees them; vision converts image offsets the same way.
 
-**To confirm:** this conflicts with N1 being the left nozzle. N1's offset from the top
-camera is −23.8 mm in X, so if +X points left, N1 is the right-hand nozzle. If jogging
-+X moves the head to the right, the origin is the left rear: set `x_points = "right"`.
+Earlier versions of the profile had both axes the other way (+X left, +Y front). Three
+things say this way is right: the bottom camera (Y 153 of 0 … 487) is near the front of
+the machine, N1 (at −23.8 mm X from the camera) is then the left nozzle as OpenPnP names
+it, and the front feeder rail (pick Y ≈ 73) no longer lands on a staging plate.
+**To confirm** by jogging: +X should move the head right, +Y toward the back. The
+bring-up checklist in the Studio asks.
 
 ## Where boards can go
 
 Each nozzle reaches the head's travel shifted by its offset, so with the nozzles 47 mm
 apart each reaches 47 mm farther on its own side (N1: X −23.8 … 409.2, N2: X 23.3 …
 456.3). The profile computes a placement area where every nozzle can reach, within the
-staging plates: X 23.3 … 409.2, Y −19.9 … 213.1. Boards also cannot cover the datum
+staging plates: X 23.3 … 409.2, Y 93.1 … 333.1. Boards also cannot cover the datum
 board, the camera knockout, or the aiming fiducial holder, which are keep-outs in the
 profile, so boards go mostly on the rear plate. The holder's size is estimated from a
 render (about 40 × 16 mm).
@@ -109,7 +112,10 @@ From the reference machine (calibrated values vary slightly between machines):
 | Bottom camera | At (217.74, 153.07), 1920 × 1080, 0.0206 mm/pixel (about 39.6 × 22.3 mm) |
 | Homing fiducial | (217, 106) |
 
-Photon feeder positions are not stored in the config; OpenPnP finds them at run time.
+OpenPnP keeps each Photon slot's taught pick location in `machine.xml`. On the reference
+machine the front rail's slots (addresses 1–25) pick at Y ≈ 73.2 from X 28.6 every
+15.77 mm, and the back rail's (26–50) at Y ≈ 388.6 from X 405.1 every −15.76 mm; single
+slots scatter about 1 mm around those lines.
 
 The reference machine's discard (157.75, 112.76) and park (389.29, 421.55) positions are
 its owner's choices, not part of the design. In PicnicPlace they go in each machine's
@@ -158,8 +164,31 @@ bottom ring; `M150 P0 S1` / `M150 P0 S0` turn them off.
 ## Photon feeders
 
 RS-485 through the motherboard: `M485 <hex packet>`, answered with
-`rs485-reply: <hex packet>` or `rs485-reply: TIMEOUT`. The packet format is Opulo's Photon
-protocol and is not described here yet.
+`rs485-reply: <hex packet>` or `rs485-reply: TIMEOUT` (about 100 ms). The packets are
+Opulo's Photon protocol, described at docs.opulo.io. PicnicPlace's implementation
+(`core/src/picnicplace/feeders/photon.py`) was written from that description and decodes
+every packet in the reference machine's log with a valid checksum.
+
+- **Header:** to, from, packet ID, payload length, then a CRC-8 (polynomial 0x07,
+  initial 0) of those four bytes and the payload. The host is address 0, broadcast 255.
+  A reply repeats the request's packet ID.
+- **Addresses** belong to slots, not feeders: each slot's address is programmed into
+  the rail (the "feeder floor"). Every feeder also has a fixed 12-byte ID.
+- **Commands:** get feeder ID (0x01), initialize (0x02, with the ID; a feeder only feeds
+  once initialized), version (0x03), feed forward and back (0x04, 0x05, in tenths of a
+  millimeter, at most 25.5 mm per command), feed status (0x06), and broadcasts to find
+  (0xC0), identify (0xC1, flashes its light), and program a slot's address (0xC2).
+- **Feeding blocks:** the feeder answers the feed command with the time it expects to
+  take, ignores the bus until done, and then answers a status poll.
+- The reference machine runs modified feeder firmware and a modified OpenPnP that feed
+  with commands 0x0A and 0x0B and report extra diagnostics. Stock OpenPnP and stock
+  feeders use 0x04 and 0x06, which is what PicnicPlace sends.
+
+Photon feeders have an alignment fiducial. PicnicPlace measures its offset from the pick
+location once, then finds every slot's pick location from its feeder's fiducial. At pick
+time it can also find the pocket from the tape's sprocket holes, since feeders do not
+step exactly and their errors add up (EIA-481 puts each pocket 2 mm along the tape from
+a hole, and a fixed distance across it).
 
 ## How PicnicPlace uses this
 
@@ -195,18 +224,18 @@ From the plate's KiCad design (LumenPnP Staging Plate rev 00): 600 × 120 mm, bl
   one over the camera has its knockout removed.
 - On the reference machine the camera plate is centered on the bottom camera at
   (217.74, 153.07), so it spans X −82 … 518 and Y 93 … 213.
-- The second plate is toward the back (−Y) of the camera plate, knockout left in. The
-  profile assumes the two butt together (second plate Y −27 … 93); not measured.
-- The datum board stands on a raised spacer just behind the knockout (Y 106) with its
-  notched edge toward the camera. A small green board in a clear holder just in front of
+- The second plate is behind (+Y) the camera plate, knockout left in. The profile
+  assumes the two butt together (second plate Y 213 … 333); not measured.
+- The datum board stands on a raised spacer just in front of the knockout (Y 106) with
+  its notched edge toward the camera. A small green board in a clear holder just behind
   the knockout carries the aiming fiducial, at (217.46, 196.03), Z −31.5, 1.2 mm across.
   With the datum (Z −27.5) it gives the top camera's scale at two heights.
 
 ## Datum board (homing fiducial)
 
 From the board's KiCad design (PCB-0004 rev 00, 80 × 35 mm, 1.6 mm). Positions are
-relative to the center fiducial, as seen from the front of the machine (+ right, + back);
-the board's notched edge, with the ruler, faces the front and the bottom camera.
+relative to the center fiducial, in the board's own frame with the notched edge (the
+ruler side) at −Y; the board is mounted with that edge facing the bottom camera.
 
 - **Colors:** LumenPnP boards are black with white silkscreen (the staging plates too).
   The copper finish is not recorded in the design; the simulator assumes gold (ENIG).
@@ -217,11 +246,11 @@ the board's notched edge, with the ruler, faces the front and the bottom camera.
 - **Around it:** a reticle (a copper ring about 5 mm across with four ticks pointing
   in), an 8 mm copper ring 0.15 mm wide, and a 5 mm grid of 0.15 mm copper lines
   spanning X −10 … +10 and Y −10 … +5.
-- **Not on this board:** the aiming fiducial in front of the camera is a separate
+- **Not on this board:** the aiming fiducial beyond the camera is a separate
   20 × 20 mm board (cal-fid) in its own holder, with the same 1.0 mm dot in a 2 mm opening.
 - **Other fiducials:** 1.0 mm dots in 3 mm openings at (±10, +5) and (±10, −10), the grid
   corners, and at (±35, −20).
-- **Also on the board:** a 30 mm ruler with 1 mm ticks along the front edge (Y −15), a
+- **Also on the board:** a 30 mm ruler with 1 mm ticks along the notched edge (Y −15), a
   5 mm exposed copper disc at (−22.5, −7.5), four plated M3 mounting holes, and on the
   back a mask-defined dot grid (likely for bottom camera calibration).
 - **For detection:** the board has three brightness levels around the dot (copper, bare

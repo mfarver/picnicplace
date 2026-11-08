@@ -385,7 +385,21 @@ A `Feeder` interface: `prepare()`, `feed()`, `pick_location()`, plus optional vi
 correction. Implementations:
 
 - **Photon feeders (LumenPnP)**: addressed over RS-485 through the motherboard. Support
-  discovery, address assignment, feed, and status. 1.0.
+  discovery, address assignment, feed, and status. 1.0. Done so far:
+  - Slots come from the profile's feeder banks (pick location, pitch, tape direction,
+    and each slot's bus address). The owner's feeder setup (`feeders.json` in the data
+    directory) holds which part each feeder holds, by feeder ID, so the part follows the
+    feeder and its reel to another slot, and each slot's pick correction.
+  - Pick corrections are taught by eye, or found from the feeder's alignment fiducial:
+    its offset from the pick location is measured once, then every slot is calibrated
+    by finding its feeder's fiducial with the top camera.
+  - Feeders do not step exactly and their errors add up, so the pick pocket can be found
+    at pick time from the tape's sprocket holes: EIA-481 fixes each pocket's place
+    relative to them (2 mm along the tape, F across). Errors over 2 mm along the tape
+    cannot be told from the next pocket.
+  - The simulator has Photon feeders on its bus (and the fake firmware answers `M485`),
+    with tape, parts from the library, a fiducial, a fixed error per slot, and feeders
+    that step 1% long, so all of the above runs without hardware.
 - **Strip feeders** (cut tape on a fixture) with vision-located sprocket holes. 1.0.
 - **Tray feeders** (grid of parts). 1.0.
 - Push-pull/drag feeders and tube feeders. Post-1.0.
@@ -565,7 +579,7 @@ refusing to connect.
 | **M0 — Skeleton** | Repo layout, tooling, CI, `picnicd` with health endpoint, simulator driver, event socket, GUI shell with theme and status bar. |
 | **M1 — Manual control** | Machine description API and I/O state; machine view with head inset (built first, against the simulator); connect to LumenPnP, home, jog, actuators, vacuum readings, safe-Z interlock, MJPEG camera streams in the GUI, control lease, E-stop. |
 | **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. Started: fiducial finder, visual homing (after `G28`, center the top camera on the homing fiducial and correct X/Y with `G92`), and a camera scale measurement, all tested against the simulator, whose homing has a realistic error for visual homing to find. |
-| **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. Started: the parts library (footprints, parts with height and its source, tape packaging after EIA-481 with rotation in tape and pin-1 quadrant), merge-only imports, OpenPnP library import, and a library editor in the Studio. |
+| **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. Started: the parts library (footprints, parts with height and its source, tape packaging after EIA-481 with rotation in tape and pin-1 quadrant), merge-only imports, OpenPnP library import, and a library editor in the Studio. Photon feeders: discovery and initialization, part assignment by feeder ID, feeding, simulated feeders with drawn tape, slot pick locations taught by eye or found from each feeder's fiducial, and pockets found from the tape's sprocket holes; a Feeders workspace and a bring-up checklist in the Studio. |
 | **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. Boards must lie inside the profile's placement area (where every nozzle can reach, on the staging plates) and clear of its keep-outs; import warns about any placement a nozzle cannot reach. Started: KiCad board import (footprints with pads, part numbers from the board or the schematic's BOM), panels recovered from a KiKit panel file, jobs placed on the bed with reach, camera, and keep-out checks and a search for a place that fits, saved as job files, and a Prepare workspace. |
 | **M5 — 1.0 polish** | Strip and tray feeders, installer/packaging, docs, OpenPnP library import. |
 

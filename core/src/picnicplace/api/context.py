@@ -12,6 +12,7 @@ from picnicplace.camera.manager import CameraManager
 from picnicplace.config import Config
 from picnicplace.events import EventBus
 from picnicplace.lease import LeaseManager
+from picnicplace.library import Library
 from picnicplace.machine.service import MachineService
 from picnicplace.operations import OperationManager
 from picnicplace.presence import PresenceTracker
@@ -28,6 +29,9 @@ class AppContext:
     machine: MachineService
     lease: LeaseManager
     cameras: CameraManager
+    library: Library | None = None
+    """Opened when the app starts, so building the app (as for the OpenAPI document)
+    touches no files."""
 
 
 def get_context(request: Request) -> AppContext:

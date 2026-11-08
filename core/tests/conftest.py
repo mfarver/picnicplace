@@ -1,3 +1,4 @@
+import tempfile
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -21,6 +22,7 @@ def fast_config(**overrides: Any) -> Config:
     data: dict[str, Any] = {
         "machine": {"sim_time_scale": 100.0, "profile": str(TEST_PROFILE)},
         "presence": {"grace_period_s": 0.2, "heartbeat_timeout_s": 5.0},
+        "data": {"dir": tempfile.mkdtemp(prefix="picnicplace-test-")},
     }
     for section, values in overrides.items():
         data.setdefault(section, {}).update(values)

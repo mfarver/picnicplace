@@ -11,6 +11,10 @@ port = 7420
 grace_period_s = 5.0       # Last client gone this long: running jobs pause.
 heartbeat_timeout_s = 6.0  # Silent clients are disconnected after this long.
 
+[data]
+# dir = "~/.local/share/picnicplace"   # The parts library and other data. Default:
+                                       # $XDG_DATA_HOME/picnicplace, else this.
+
 [machine]
 # "simulator": no hardware. "marlin": a real machine on marlin.port.
 # "fake-marlin": the real Marlin driver talking to a built-in fake LumenPnP firmware.

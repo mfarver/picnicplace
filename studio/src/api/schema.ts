@@ -106,6 +106,147 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/library/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Library
+         * @description The whole library as one JSON document, for backup or sharing.
+         */
+        get: operations["export_library_api_v1_library_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/footprints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Footprints */
+        get: operations["list_footprints_api_v1_library_footprints_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/footprints/{footprint_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Footprint */
+        get: operations["get_footprint_api_v1_library_footprints__footprint_id__get"];
+        /**
+         * Put Footprint
+         * @description Create or replace a footprint.
+         */
+        put: operations["put_footprint_api_v1_library_footprints__footprint_id__put"];
+        post?: never;
+        /**
+         * Delete Footprint
+         * @description Delete a footprint. Refused while any part uses it.
+         */
+        delete: operations["delete_footprint_api_v1_library_footprints__footprint_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Library
+         * @description Merge a library document (as exported) into the library.
+         */
+        post: operations["import_library_api_v1_library_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/import/openpnp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Openpnp
+         * @description Merge OpenPnP packages (as footprints) and parts into the library.
+         */
+        post: operations["import_openpnp_api_v1_library_import_openpnp_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Parts */
+        get: operations["list_parts_api_v1_library_parts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/parts/{part_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Part */
+        get: operations["get_part_api_v1_library_parts__part_id__get"];
+        /**
+         * Put Part
+         * @description Create or replace a part. Its footprint must already be in the library.
+         */
+        put: operations["put_part_api_v1_library_parts__part_id__put"];
+        post?: never;
+        /** Delete Part */
+        delete: operations["delete_part_api_v1_library_parts__part_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine": {
         parameters: {
             query?: never;
@@ -492,6 +633,28 @@ export interface components {
              */
             type: "ping";
         };
+        /** Conflict */
+        Conflict: {
+            /**
+             * Current
+             * @description The library's value, which was kept.
+             */
+            current: unknown;
+            /** Field */
+            field: string;
+            /** Id */
+            id: string;
+            /**
+             * Incoming
+             * @description The imported value, which was not used.
+             */
+            incoming: unknown;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "footprint" | "part";
+        };
         /** ErrorEvent */
         ErrorEvent: {
             /** Message */
@@ -541,6 +704,79 @@ export interface components {
              */
             width: number;
         };
+        /** Filled */
+        Filled: {
+            /**
+             * Fields
+             * @description Fields that were empty and now have a value.
+             */
+            fields: string[];
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "footprint" | "part";
+        };
+        /**
+         * Footprint
+         * @description The shape of a part as seen from above: its pads and body.
+         */
+        "Footprint-Input": {
+            /** @description Body outline, centered on the origin, if known. */
+            body?: components["schemas"]["Size"] | null;
+            /**
+             * Body Basis
+             * @default unknown
+             * @enum {string}
+             */
+            body_basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
+            /** Pads */
+            pads?: components["schemas"]["Pad-Input"][];
+            /**
+             * Source
+             * @description Where this footprint came from.
+             * @default
+             */
+            source: string;
+        };
+        /**
+         * Footprint
+         * @description The shape of a part as seen from above: its pads and body.
+         */
+        "Footprint-Output": {
+            /** @description Body outline, centered on the origin, if known. */
+            body: components["schemas"]["Size"] | null;
+            /**
+             * Body Basis
+             * @default unknown
+             * @enum {string}
+             */
+            body_basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
+            /** Pads */
+            pads: components["schemas"]["Pad-Output"][];
+            /**
+             * Source
+             * @description Where this footprint came from.
+             * @default
+             */
+            source: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -578,6 +814,40 @@ export interface components {
              * @enum {string}
              */
             type: "hello";
+        };
+        /** ImportReport */
+        ImportReport: {
+            /**
+             * Added
+             * @description 'footprint:ID' or 'part:ID' for new entries.
+             */
+            added?: string[];
+            /** Conflicts */
+            conflicts?: components["schemas"]["Conflict"][];
+            /** Errors */
+            errors?: string[];
+            /** Filled */
+            filled?: components["schemas"]["Filled"][];
+            /**
+             * Replaced
+             * @description Entries overwritten (overwrite mode only).
+             */
+            replaced?: string[];
+            /**
+             * Unchanged
+             * @default 0
+             */
+            unchanged: number;
+        };
+        /** ImportRequest */
+        ImportRequest: {
+            document: components["schemas"]["LibraryDocument-Input"];
+            /**
+             * Overwrite
+             * @description Replace entries that already exist. By default existing entries keep their values: only empty values are filled in, and differences are reported.
+             * @default false
+             */
+            overwrite: boolean;
         };
         /** Input */
         Input: {
@@ -655,6 +925,50 @@ export interface components {
         LeaseState: {
             /** @description The client allowed to move the machine, or null if no one holds it. */
             holder: components["schemas"]["ClientInfo"] | null;
+        };
+        /**
+         * LibraryDocument
+         * @description The whole library, or part of it, as one document: the text export format.
+         */
+        "LibraryDocument-Input": {
+            /** Footprints */
+            footprints?: components["schemas"]["Footprint-Input"][];
+            /**
+             * Format
+             * @default picnicplace-library
+             * @constant
+             */
+            format: "picnicplace-library";
+            /** Parts */
+            parts?: components["schemas"]["Part-Input"][];
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
+        /**
+         * LibraryDocument
+         * @description The whole library, or part of it, as one document: the text export format.
+         */
+        "LibraryDocument-Output": {
+            /** Footprints */
+            footprints: components["schemas"]["Footprint-Output"][];
+            /**
+             * Format
+             * @default picnicplace-library
+             * @constant
+             */
+            format: "picnicplace-library";
+            /** Parts */
+            parts: components["schemas"]["Part-Output"][];
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
         };
         /** Location */
         Location: {
@@ -987,6 +1301,24 @@ export interface components {
              */
             z_sign: 1 | -1;
         };
+        /** OpenPnpImportRequest */
+        OpenPnpImportRequest: {
+            /**
+             * Overwrite
+             * @default false
+             */
+            overwrite: boolean;
+            /**
+             * Packages Xml
+             * @description Contents of packages.xml.
+             */
+            packages_xml?: string | null;
+            /**
+             * Parts Xml
+             * @description Contents of parts.xml.
+             */
+            parts_xml?: string | null;
+        };
         /** Operation */
         Operation: {
             /**
@@ -1045,6 +1377,184 @@ export interface components {
         OutputRequest: {
             /** On */
             on: boolean;
+        };
+        /** Pad */
+        "Pad-Input": {
+            /**
+             * Height
+             * @description Size along Y before rotation, mm.
+             */
+            height: number;
+            /**
+             * Name
+             * @description Pad number or name, such as '1' or 'EP'.
+             */
+            name: string;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * Roundness
+             * @description Corner rounding as a percentage of the shorter side: 0 is a rectangle, 100 a circle or oval.
+             * @default 0
+             */
+            roundness: number;
+            /**
+             * Width
+             * @description Size along X before rotation, mm.
+             */
+            width: number;
+            /**
+             * X
+             * @description Pad center in the footprint frame, mm.
+             */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** Pad */
+        "Pad-Output": {
+            /**
+             * Height
+             * @description Size along Y before rotation, mm.
+             */
+            height: number;
+            /**
+             * Name
+             * @description Pad number or name, such as '1' or 'EP'.
+             */
+            name: string;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * Roundness
+             * @description Corner rounding as a percentage of the shorter side: 0 is a rectangle, 100 a circle or oval.
+             * @default 0
+             */
+            roundness: number;
+            /**
+             * Width
+             * @description Size along X before rotation, mm.
+             */
+            width: number;
+            /**
+             * X
+             * @description Pad center in the footprint frame, mm.
+             */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /**
+         * Part
+         * @description A part number: what it is, its footprint, its height, and its tape.
+         */
+        "Part-Input": {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Footprint Id */
+            footprint_id: string;
+            /**
+             * Height
+             * @description Height above the board, mm. None if not known.
+             */
+            height?: number | null;
+            /**
+             * Height Basis
+             * @default unknown
+             * @enum {string}
+             */
+            height_basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /**
+             * Height Source
+             * @default
+             */
+            height_source: string;
+            /**
+             * Id
+             * @description Usually the manufacturer part number, as in the board's BOM.
+             */
+            id: string;
+            /**
+             * Manufacturer
+             * @default
+             */
+            manufacturer: string;
+            /**
+             * Name
+             * @description Short name or value, such as '100nF'.
+             * @default
+             */
+            name: string;
+            /**
+             * Speed
+             * @description Fraction of full speed when carrying this part.
+             * @default 1
+             */
+            speed: number;
+            tape?: components["schemas"]["Tape-Input"] | null;
+        };
+        /**
+         * Part
+         * @description A part number: what it is, its footprint, its height, and its tape.
+         */
+        "Part-Output": {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Footprint Id */
+            footprint_id: string;
+            /**
+             * Height
+             * @description Height above the board, mm. None if not known.
+             */
+            height: number | null;
+            /**
+             * Height Basis
+             * @default unknown
+             * @enum {string}
+             */
+            height_basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /**
+             * Height Source
+             * @default
+             */
+            height_source: string;
+            /**
+             * Id
+             * @description Usually the manufacturer part number, as in the board's BOM.
+             */
+            id: string;
+            /**
+             * Manufacturer
+             * @default
+             */
+            manufacturer: string;
+            /**
+             * Name
+             * @description Short name or value, such as '100nF'.
+             * @default
+             */
+            name: string;
+            /**
+             * Speed
+             * @description Fraction of full speed when carrying this part.
+             * @default 1
+             */
+            speed: number;
+            tape: components["schemas"]["Tape-Output"] | null;
         };
         /** Point */
         Point: {
@@ -1110,6 +1620,19 @@ export interface components {
             y_min: number;
         };
         ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
+        /** Size */
+        Size: {
+            /**
+             * X
+             * @description Along the footprint's X axis, mm.
+             */
+            x: number;
+            /**
+             * Y
+             * @description Along the footprint's Y axis, mm.
+             */
+            y: number;
+        };
         /**
          * StagingPlate
          * @description A plate that boards and trays mount on, with a grid of tapped holes.
@@ -1161,6 +1684,94 @@ export interface components {
             /** Label */
             label: string;
             size: components["schemas"]["Point"];
+        };
+        /**
+         * Tape
+         * @description How a part is packaged in carrier tape (EIA-481).
+         */
+        "Tape-Input": {
+            /**
+             * Basis
+             * @default unknown
+             * @enum {string}
+             */
+            basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /**
+             * Kind
+             * @default unknown
+             * @enum {string}
+             */
+            kind: "paper" | "embossed" | "unknown";
+            /**
+             * Pin1 Quadrant
+             * @description Pin 1's quadrant in the tape frame, as in tape-and-reel datasheets: Q1 top left, Q2 top right, Q3 bottom left, Q4 bottom right.
+             */
+            pin1_quadrant?: ("Q1" | "Q2" | "Q3" | "Q4") | null;
+            /**
+             * Pitch
+             * @description Pocket pitch (P1), mm: 2, 4, 8, ... None if not known.
+             */
+            pitch?: number | null;
+            /**
+             * Rotation
+             * @description The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right).
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Width
+             * @description Tape width, mm: 8, 12, 16, 24, ... None if not known.
+             */
+            width?: number | null;
+        };
+        /**
+         * Tape
+         * @description How a part is packaged in carrier tape (EIA-481).
+         */
+        "Tape-Output": {
+            /**
+             * Basis
+             * @default unknown
+             * @enum {string}
+             */
+            basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /**
+             * Kind
+             * @default unknown
+             * @enum {string}
+             */
+            kind: "paper" | "embossed" | "unknown";
+            /**
+             * Pin1 Quadrant
+             * @description Pin 1's quadrant in the tape frame, as in tape-and-reel datasheets: Q1 top left, Q2 top right, Q3 bottom left, Q4 bottom right.
+             */
+            pin1_quadrant: ("Q1" | "Q2" | "Q3" | "Q4") | null;
+            /**
+             * Pitch
+             * @description Pocket pitch (P1), mm: 2, 4, 8, ... None if not known.
+             */
+            pitch: number | null;
+            /**
+             * Rotation
+             * @description The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right).
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Width
+             * @description Tape width, mm: 8, 12, 16, 24, ... None if not known.
+             */
+            width: number | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -1451,6 +2062,385 @@ export interface operations {
             };
             /** @description The machine cannot do this right now, or this client does not hold the control lease. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_library_api_v1_library_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryDocument-Output"];
+                };
+            };
+        };
+    };
+    list_footprints_api_v1_library_footprints_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Footprint-Output"][];
+                };
+            };
+        };
+    };
+    get_footprint_api_v1_library_footprints__footprint_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                footprint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Footprint-Output"];
+                };
+            };
+            /** @description No entry with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_footprint_api_v1_library_footprints__footprint_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                footprint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Footprint-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Footprint-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_footprint_api_v1_library_footprints__footprint_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                footprint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No entry with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The change would break the library. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_library_api_v1_library_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_openpnp_api_v1_library_import_openpnp_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenPnpImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReport"];
+                };
+            };
+            /** @description A file could not be read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_parts_api_v1_library_parts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Part-Output"][];
+                };
+            };
+        };
+    };
+    get_part_api_v1_library_parts__part_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Part-Output"];
+                };
+            };
+            /** @description No entry with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_part_api_v1_library_parts__part_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Part-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Part-Output"];
+                };
+            };
+            /** @description The change would break the library. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_part_api_v1_library_parts__part_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No entry with this ID. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

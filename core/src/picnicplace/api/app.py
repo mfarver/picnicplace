@@ -15,6 +15,7 @@ from starlette.types import Scope
 
 from picnicplace import __version__
 from picnicplace.api import cameras as camera_routes
+from picnicplace.api import library as library_routes
 from picnicplace.api import routes, websocket
 from picnicplace.api.context import AppContext
 from picnicplace.auth import Authenticator
@@ -23,6 +24,7 @@ from picnicplace.camera.source import Frame
 from picnicplace.config import Config
 from picnicplace.events import EventBus
 from picnicplace.lease import LeaseManager
+from picnicplace.library import Library
 from picnicplace.machine.errors import MachineError
 from picnicplace.machine.factory import build_driver
 from picnicplace.machine.service import MachineService
@@ -69,10 +71,13 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
+        ctx.library = Library(config.data.library_path)
         await machine.start()
         try:
             yield
         finally:
+            ctx.library.close()
+            ctx.library = None
             await cameras.shutdown()
             await operations.shutdown()
             await presence.shutdown()
@@ -84,6 +89,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(routes.public)
     app.include_router(routes.router)
     app.include_router(camera_routes.router)
+    app.include_router(library_routes.router)
     app.include_router(websocket.router)
 
     @app.exception_handler(MachineError)

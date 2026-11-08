@@ -256,6 +256,43 @@
         "title": "PingMessage",
         "type": "object"
       },
+      "Conflict": {
+        "properties": {
+          "current": {
+            "description": "The library's value, which was kept.",
+            "title": "Current"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "incoming": {
+            "description": "The imported value, which was not used.",
+            "title": "Incoming"
+          },
+          "kind": {
+            "enum": [
+              "footprint",
+              "part"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "field",
+          "current",
+          "incoming"
+        ],
+        "title": "Conflict",
+        "type": "object"
+      },
       "ErrorEvent": {
         "properties": {
           "message": {
@@ -351,6 +388,160 @@
         "title": "FeederBank",
         "type": "object"
       },
+      "Filled": {
+        "properties": {
+          "fields": {
+            "description": "Fields that were empty and now have a value.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "footprint",
+              "part"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "fields"
+        ],
+        "title": "Filled",
+        "type": "object"
+      },
+      "Footprint-Input": {
+        "additionalProperties": false,
+        "description": "The shape of a part as seen from above: its pads and body.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Size"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Body outline, centered on the origin, if known."
+          },
+          "body_basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Body Basis",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "pads": {
+            "items": {
+              "$ref": "#/components/schemas/Pad-Input"
+            },
+            "title": "Pads",
+            "type": "array"
+          },
+          "source": {
+            "default": "",
+            "description": "Where this footprint came from.",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "Footprint",
+        "type": "object"
+      },
+      "Footprint-Output": {
+        "additionalProperties": false,
+        "description": "The shape of a part as seen from above: its pads and body.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Size"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Body outline, centered on the origin, if known."
+          },
+          "body_basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Body Basis",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "pads": {
+            "items": {
+              "$ref": "#/components/schemas/Pad-Output"
+            },
+            "title": "Pads",
+            "type": "array"
+          },
+          "source": {
+            "default": "",
+            "description": "Where this footprint came from.",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "description",
+          "body",
+          "body_basis",
+          "pads",
+          "source"
+        ],
+        "title": "Footprint",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -430,6 +621,72 @@
           "lease"
         ],
         "title": "HelloEvent",
+        "type": "object"
+      },
+      "ImportReport": {
+        "properties": {
+          "added": {
+            "description": "'footprint:ID' or 'part:ID' for new entries.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/Conflict"
+            },
+            "title": "Conflicts",
+            "type": "array"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "filled": {
+            "items": {
+              "$ref": "#/components/schemas/Filled"
+            },
+            "title": "Filled",
+            "type": "array"
+          },
+          "replaced": {
+            "description": "Entries overwritten (overwrite mode only).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Replaced",
+            "type": "array"
+          },
+          "unchanged": {
+            "default": 0,
+            "title": "Unchanged",
+            "type": "integer"
+          }
+        },
+        "title": "ImportReport",
+        "type": "object"
+      },
+      "ImportRequest": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/LibraryDocument-Input"
+          },
+          "overwrite": {
+            "default": false,
+            "description": "Replace entries that already exist. By default existing entries keep their values: only empty values are filled in, and differences are reported.",
+            "title": "Overwrite",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "document"
+        ],
+        "title": "ImportRequest",
         "type": "object"
       },
       "Input": {
@@ -625,6 +882,80 @@
           "holder"
         ],
         "title": "LeaseState",
+        "type": "object"
+      },
+      "LibraryDocument-Input": {
+        "additionalProperties": false,
+        "description": "The whole library, or part of it, as one document: the text export format.",
+        "properties": {
+          "footprints": {
+            "items": {
+              "$ref": "#/components/schemas/Footprint-Input"
+            },
+            "title": "Footprints",
+            "type": "array"
+          },
+          "format": {
+            "const": "picnicplace-library",
+            "default": "picnicplace-library",
+            "title": "Format",
+            "type": "string"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/Part-Input"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "title": "LibraryDocument",
+        "type": "object"
+      },
+      "LibraryDocument-Output": {
+        "additionalProperties": false,
+        "description": "The whole library, or part of it, as one document: the text export format.",
+        "properties": {
+          "footprints": {
+            "items": {
+              "$ref": "#/components/schemas/Footprint-Output"
+            },
+            "title": "Footprints",
+            "type": "array"
+          },
+          "format": {
+            "const": "picnicplace-library",
+            "default": "picnicplace-library",
+            "title": "Format",
+            "type": "string"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/Part-Output"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "footprints",
+          "parts"
+        ],
+        "title": "LibraryDocument",
         "type": "object"
       },
       "Location": {
@@ -1382,6 +1713,41 @@
         "title": "Nozzle",
         "type": "object"
       },
+      "OpenPnpImportRequest": {
+        "properties": {
+          "overwrite": {
+            "default": false,
+            "title": "Overwrite",
+            "type": "boolean"
+          },
+          "packages_xml": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Contents of packages.xml.",
+            "title": "Packages Xml"
+          },
+          "parts_xml": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Contents of parts.xml.",
+            "title": "Parts Xml"
+          }
+        },
+        "title": "OpenPnpImportRequest",
+        "type": "object"
+      },
       "Operation": {
         "properties": {
           "error": {
@@ -1518,6 +1884,304 @@
           "on"
         ],
         "title": "OutputRequest",
+        "type": "object"
+      },
+      "Pad-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "description": "Size along Y before rotation, mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Height",
+            "type": "number"
+          },
+          "name": {
+            "description": "Pad number or name, such as '1' or 'EP'.",
+            "title": "Name",
+            "type": "string"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "roundness": {
+            "default": 0.0,
+            "description": "Corner rounding as a percentage of the shorter side: 0 is a rectangle, 100 a circle or oval.",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Roundness",
+            "type": "number"
+          },
+          "width": {
+            "description": "Size along X before rotation, mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "description": "Pad center in the footprint frame, mm.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "Pad",
+        "type": "object"
+      },
+      "Pad-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "description": "Size along Y before rotation, mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Height",
+            "type": "number"
+          },
+          "name": {
+            "description": "Pad number or name, such as '1' or 'EP'.",
+            "title": "Name",
+            "type": "string"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "roundness": {
+            "default": 0.0,
+            "description": "Corner rounding as a percentage of the shorter side: 0 is a rectangle, 100 a circle or oval.",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Roundness",
+            "type": "number"
+          },
+          "width": {
+            "description": "Size along X before rotation, mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "description": "Pad center in the footprint frame, mm.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "x",
+          "y",
+          "width",
+          "height",
+          "rotation",
+          "roundness"
+        ],
+        "title": "Pad",
+        "type": "object"
+      },
+      "Part-Input": {
+        "additionalProperties": false,
+        "description": "A part number: what it is, its footprint, its height, and its tape.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "footprint_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Footprint Id",
+            "type": "string"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Height above the board, mm. None if not known.",
+            "title": "Height"
+          },
+          "height_basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Height Basis",
+            "type": "string"
+          },
+          "height_source": {
+            "default": "",
+            "title": "Height Source",
+            "type": "string"
+          },
+          "id": {
+            "description": "Usually the manufacturer part number, as in the board's BOM.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "manufacturer": {
+            "default": "",
+            "title": "Manufacturer",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "description": "Short name or value, such as '100nF'.",
+            "title": "Name",
+            "type": "string"
+          },
+          "speed": {
+            "default": 1.0,
+            "description": "Fraction of full speed when carrying this part.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Speed",
+            "type": "number"
+          },
+          "tape": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Tape-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "footprint_id"
+        ],
+        "title": "Part",
+        "type": "object"
+      },
+      "Part-Output": {
+        "additionalProperties": false,
+        "description": "A part number: what it is, its footprint, its height, and its tape.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "footprint_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Footprint Id",
+            "type": "string"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Height above the board, mm. None if not known.",
+            "title": "Height"
+          },
+          "height_basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Height Basis",
+            "type": "string"
+          },
+          "height_source": {
+            "default": "",
+            "title": "Height Source",
+            "type": "string"
+          },
+          "id": {
+            "description": "Usually the manufacturer part number, as in the board's BOM.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "manufacturer": {
+            "default": "",
+            "title": "Manufacturer",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "description": "Short name or value, such as '100nF'.",
+            "title": "Name",
+            "type": "string"
+          },
+          "speed": {
+            "default": 1.0,
+            "description": "Fraction of full speed when carrying this part.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Speed",
+            "type": "number"
+          },
+          "tape": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Tape-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "manufacturer",
+          "description",
+          "footprint_id",
+          "height",
+          "height_basis",
+          "height_source",
+          "tape",
+          "speed"
+        ],
+        "title": "Part",
         "type": "object"
       },
       "Point": {
@@ -1689,6 +2353,29 @@
           }
         ]
       },
+      "Size": {
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "description": "Along the footprint's X axis, mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "description": "Along the footprint's Y axis, mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "Size",
+        "type": "object"
+      },
       "StagingPlate": {
         "additionalProperties": false,
         "description": "A plate that boards and trays mount on, with a grid of tapped holes.",
@@ -1786,6 +2473,187 @@
           "holes"
         ],
         "title": "StagingPlate",
+        "type": "object"
+      },
+      "Tape-Input": {
+        "additionalProperties": false,
+        "description": "How a part is packaged in carrier tape (EIA-481).",
+        "properties": {
+          "basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "kind": {
+            "default": "unknown",
+            "enum": [
+              "paper",
+              "embossed",
+              "unknown"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "pin1_quadrant": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Q1",
+                  "Q2",
+                  "Q3",
+                  "Q4"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pin 1's quadrant in the tape frame, as in tape-and-reel datasheets: Q1 top left, Q2 top right, Q3 bottom left, Q4 bottom right.",
+            "title": "Pin1 Quadrant"
+          },
+          "pitch": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pocket pitch (P1), mm: 2, 4, 8, ... None if not known.",
+            "title": "Pitch"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right).",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tape width, mm: 8, 12, 16, 24, ... None if not known.",
+            "title": "Width"
+          }
+        },
+        "title": "Tape",
+        "type": "object"
+      },
+      "Tape-Output": {
+        "additionalProperties": false,
+        "description": "How a part is packaged in carrier tape (EIA-481).",
+        "properties": {
+          "basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "kind": {
+            "default": "unknown",
+            "enum": [
+              "paper",
+              "embossed",
+              "unknown"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "pin1_quadrant": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Q1",
+                  "Q2",
+                  "Q3",
+                  "Q4"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pin 1's quadrant in the tape frame, as in tape-and-reel datasheets: Q1 top left, Q2 top right, Q3 bottom left, Q4 bottom right.",
+            "title": "Pin1 Quadrant"
+          },
+          "pitch": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pocket pitch (P1), mm: 2, 4, 8, ... None if not known.",
+            "title": "Pitch"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right).",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tape width, mm: 8, 12, 16, 24, ... None if not known.",
+            "title": "Width"
+          }
+        },
+        "required": [
+          "kind",
+          "width",
+          "pitch",
+          "rotation",
+          "pin1_quadrant",
+          "basis",
+          "source"
+        ],
+        "title": "Tape",
         "type": "object"
       },
       "ValidationError": {
@@ -2373,6 +3241,540 @@
         "summary": "Acquire Lease",
         "tags": [
           "lease"
+        ]
+      }
+    },
+    "/api/v1/library/export": {
+      "get": {
+        "description": "The whole library as one JSON document, for backup or sharing.",
+        "operationId": "export_library_api_v1_library_export_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryDocument-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Library",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/footprints": {
+      "get": {
+        "operationId": "list_footprints_api_v1_library_footprints_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Footprint-Output"
+                  },
+                  "title": "Response List Footprints Api V1 Library Footprints Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Footprints",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/footprints/{footprint_id}": {
+      "delete": {
+        "description": "Delete a footprint. Refused while any part uses it.",
+        "operationId": "delete_footprint_api_v1_library_footprints__footprint_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "footprint_id",
+            "required": true,
+            "schema": {
+              "title": "Footprint Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No entry with this ID."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The change would break the library."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Footprint",
+        "tags": [
+          "library"
+        ]
+      },
+      "get": {
+        "operationId": "get_footprint_api_v1_library_footprints__footprint_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "footprint_id",
+            "required": true,
+            "schema": {
+              "title": "Footprint Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Footprint-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No entry with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Footprint",
+        "tags": [
+          "library"
+        ]
+      },
+      "put": {
+        "description": "Create or replace a footprint.",
+        "operationId": "put_footprint_api_v1_library_footprints__footprint_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "footprint_id",
+            "required": true,
+            "schema": {
+              "title": "Footprint Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Footprint-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Footprint-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Footprint",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/import": {
+      "post": {
+        "description": "Merge a library document (as exported) into the library.",
+        "operationId": "import_library_api_v1_library_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Import Library",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/import/openpnp": {
+      "post": {
+        "description": "Merge OpenPnP packages (as footprints) and parts into the library.",
+        "operationId": "import_openpnp_api_v1_library_import_openpnp_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenPnpImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A file could not be read."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Import Openpnp",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/parts": {
+      "get": {
+        "operationId": "list_parts_api_v1_library_parts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Part-Output"
+                  },
+                  "title": "Response List Parts Api V1 Library Parts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Parts",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/parts/{part_id}": {
+      "delete": {
+        "operationId": "delete_part_api_v1_library_parts__part_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No entry with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Part",
+        "tags": [
+          "library"
+        ]
+      },
+      "get": {
+        "operationId": "get_part_api_v1_library_parts__part_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Part-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No entry with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Part",
+        "tags": [
+          "library"
+        ]
+      },
+      "put": {
+        "description": "Create or replace a part. Its footprint must already be in the library.",
+        "operationId": "put_part_api_v1_library_parts__part_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Part-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Part-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The change would break the library."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Part",
+        "tags": [
+          "library"
         ]
       }
     },

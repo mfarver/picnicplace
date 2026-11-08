@@ -7,6 +7,8 @@ homing); the machine service does that before calling them.
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 
+from picnicplace.machine.errors import NotSupportedError
+
 
 class MotionDriver(ABC):
     name: str
@@ -32,6 +34,10 @@ class MotionDriver(ABC):
         """Where the machine physically is, for synthetic cameras. Real drivers report
         their position; the simulator adds its simulated homing error."""
         return self.position
+
+    async def rs485(self, packet: bytes) -> bytes | None:
+        """Send a packet on the feeder bus and return the reply, or None if none came."""
+        raise NotSupportedError(f"the {self.name} driver has no feeder bus")
 
     async def refresh_input(self, input_id: str) -> None:
         """Read an input now rather than waiting for the next poll (for safety checks)."""

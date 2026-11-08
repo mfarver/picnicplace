@@ -166,8 +166,8 @@ def test_visual_homing_on_the_lumenpnp_profile() -> None:
 
 
 def test_rotated_view_puts_the_front_at_the_bottom() -> None:
-    """On the LumenPnP (+Y toward the front), something in front of the camera center
-    appears lower in the image, and something at larger X appears to the left."""
+    """On the LumenPnP (+X right, +Y toward the back), something behind the camera
+    center appears higher in the image, and something at larger X to the right."""
     from picnicplace.camera.synthetic import SceneState, TopRenderer, render_size
     from picnicplace.machine.profile import load_profile
 
@@ -175,8 +175,8 @@ def test_rotated_view_puts_the_front_at_the_bottom() -> None:
     camera = next(c for c in profile.cameras if c.id == "top")
     size = render_size(camera)
     fiducial = next(loc for loc in profile.locations if loc.kind == "homing_fiducial")
-    # Camera 2 mm behind (-Y) and 3 mm right of (-X) the fiducial: the fiducial is in
-    # front of and to the left of the center.
+    # Camera 2 mm in front of (-Y) and 3 mm left of (-X) the fiducial: the fiducial is
+    # behind and to the right of the center.
     image = TopRenderer(profile, camera, size).render(
         SceneState(
             position={"X": fiducial.position.x - 3, "Y": fiducial.position.y - 2},
@@ -187,5 +187,5 @@ def test_rotated_view_puts_the_front_at_the_bottom() -> None:
     mm_per_px = camera.field_of_view.x / size[0]
     found = find_circle(image, 0.6 / mm_per_px, 1.5 / mm_per_px, 4.0 / mm_per_px)
     assert found is not None
-    assert found.x < size[0] / 2  # left
-    assert found.y > size[1] / 2  # lower: toward the front
+    assert found.x > size[0] / 2  # right
+    assert found.y < size[1] / 2  # higher: toward the back

@@ -7,23 +7,22 @@
 # docs/hardware/lumenpnp-v4.md. Calibrated values such as nozzle offsets differ a little
 # between machines and are refined by calibration.
 #
-# Still PROVISIONAL: the feeder rails. Photon feeder positions are not stored in OpenPnP's
-# config, so the rails below are rough estimates, and the back rail overlaps the rear
-# staging plate, so it is surely misplaced. The rear plate's exact position (assumed to
-# butt against the camera plate) is not measured either.
+# Still PROVISIONAL: the rear plate's exact position (assumed to butt against the camera
+# plate) is not measured, and the feeder rails' outlines (not their pick positions) are
+# estimates.
 #
-# Units: millimeters, degrees, seconds. +Y points toward the front. +X is believed to
-# point left (origin at the right rear), but that conflicts with N1 being the left
-# nozzle: with N1's offset at -X, N1 is the right nozzle if +X points left. Check by
-# jogging: if +X moves the head right, set x_points = "right" (and the origin is the
-# left rear).
+# Units: millimeters, degrees, seconds. +X points right and +Y toward the back, with the
+# origin at the front left. The bottom camera (Y 153 of 0-487) is near the front, as on
+# the machine, and N1 (at -X) is then the left nozzle, as OpenPnP names it. An earlier
+# version of this profile had both axes the other way; check by jogging: +X should move
+# the head right and +Y toward the back.
 # The head position is the center of the top camera; nozzle offsets are relative to it.
 
 id = "lumenpnp-v4.1"
 name = "LumenPnP v4.1"
 provisional = true
-x_points = "left"
-y_points = "front"
+x_points = "right"
+y_points = "back"
 
 # The outline is drawn to cover where the nozzles can reach (64 mm in front of the camera).
 bed = { x_min = -90, y_min = -75, x_max = 525, y_max = 500 }
@@ -37,6 +36,9 @@ safe_z = -15.0
 
 # After G28, center the top camera on the homing fiducial and correct X/Y (as OpenPnP does).
 visual_homing = true
+
+# Feeders talk Opulo's Photon protocol over RS-485, through the motherboard (M485).
+feeder_bus = "photon"
 
 [[axes]]
 name = "X"
@@ -74,11 +76,10 @@ min = -360
 max = 360
 max_speed = 720
 
-# N1 is at -X from the camera: the right-hand nozzle if +X points left (see the note on
-# x_points at the top).
+# N1 is at -X from the camera: the left-hand nozzle.
 [[nozzles]]
 id = "N1"
-label = "Right nozzle"
+label = "Left nozzle"
 offset = { x = -23.836, y = -64.409 }
 z_axis = "Z"
 z_sign = 1
@@ -89,7 +90,7 @@ valve_output = "valve_n1"
 
 [[nozzles]]
 id = "N2"
-label = "Left nozzle"
+label = "Right nozzle"
 offset = { x = 23.344, y = -64.384 }
 z_axis = "Z"
 z_sign = -1
@@ -118,8 +119,8 @@ looking = "up"
 field_of_view = { x = 39.6, y = 22.3 }
 light_output = "light_bottom"
 
-# The center fiducial of the datum board (PCB-0004), mounted on a raised spacer just
-# behind the bottom camera, its notched edge toward the camera: a 1.0 mm copper dot in a
+# The center fiducial of the datum board (PCB-0004), mounted on a raised spacer just in
+# front of the bottom camera, its notched edge toward the camera: a 1.0 mm copper dot in a
 # 2 mm opening of bare board, inside a reticle. OpenPnP measured it as 0.967 mm.
 [[locations]]
 id = "homing_fiducial"
@@ -130,8 +131,7 @@ z = -27.5
 diameter = 1.0
 style = "lumenpnp-datum"
 
-# A separate 20 x 20 mm board (cal-fid) in a clear holder just in front of the bottom
-# camera, 4 mm lower than the datum: a 1.0 mm copper dot in a 2 mm mask opening. With the
+# A separate 20 x 20 mm board (cal-fid) in a clear holder just behind the bottom camera, 4 mm lower than the datum: a 1.0 mm copper dot in a 2 mm mask opening. With the
 # datum, it gives the top camera's scale at two heights. (OpenPnP measured it as 1.2 mm
 # before its camera scale was calibrated at this height.)
 [[locations]]
@@ -159,12 +159,12 @@ hole_rows = 7
 corner_holes = [{ x = -290, y = -50 }, { x = 290, y = -50 }, { x = -290, y = 50 }, { x = 290, y = 50 }]
 knockout_diameter = 44
 
-# The second plate, toward the back (-Y) of the camera plate. Assumed to butt against
-# it (no gap); not measured.
+# The second plate, behind (+Y) the camera plate. Assumed to butt against it (no gap);
+# not measured.
 [[staging_plates]]
 id = "rear_plate"
 label = "Staging plate (rear)"
-center = { x = 217.736, y = 33.071 }
+center = { x = 217.736, y = 273.071 }
 size = { x = 600, y = 120 }
 hole_pitch = 15
 hole_diameter = 3.2
@@ -174,7 +174,7 @@ corner_holes = [{ x = -290, y = -50 }, { x = 290, y = -50 }, { x = -290, y = 50 
 
 # Boards cannot be mounted over the bottom camera or the fiducials around it, so they go
 # mostly on the rear plate. The datum board's outline is from its design (80 x 35 mm,
-# 25 mm in front of its fiducial and 10 mm behind); the aiming fiducial holder's size is
+# reaching 25 mm from its fiducial toward the camera and 10 mm away from it); the aiming fiducial holder's size is
 # estimated from a render (the board itself is 20 x 20 mm).
 [[keep_outs]]
 id = "datum"
@@ -191,24 +191,30 @@ id = "aiming_fiducial"
 label = "Aiming fiducial holder"
 area = { x_min = 197.5, y_min = 188, x_max = 237.5, y_max = 204 }
 
-# Estimated: see the note at the top.
+# Photon feeders on two rails, 25 slots each. Each slot's address is programmed into the
+# rail (the "feeder floor"); these are the usual addresses, front rail 1-25 and back rail
+# 26-50, as on the reference machine. Both rails feed toward the middle of the bed. Pick positions are fitted to that machine's
+# taught slot positions, which scatter about 1 mm around these lines: each slot's own
+# correction is taught in the Feeders workspace. Feeder outlines are estimated.
 [[feeder_banks]]
-id = "back"
-label = "Back rail"
-first_pick = { x = 40, y = 30 }
-pitch = { x = 15, y = 0 }
-count = 24
-width = 13
+id = "front"
+label = "Front rail"
+first_pick = { x = 28.62, y = 73.24 }
+pitch = { x = 15.769, y = 0 }
+count = 25
+first_address = 1
+width = 15
 length = 100
 rotation = 90
 
 [[feeder_banks]]
-id = "front"
-label = "Front rail"
-first_pick = { x = 40, y = 410 }
-pitch = { x = 15, y = 0 }
-count = 24
-width = 13
+id = "back"
+label = "Back rail"
+first_pick = { x = 405.06, y = 388.58 }
+pitch = { x = -15.758, y = 0 }
+count = 25
+first_address = 26
+width = 15
 length = 100
 rotation = -90
 
@@ -304,6 +310,9 @@ connect = [
   "M205 J0.02",
 ]
 home = ["G28"]
+# Send a Photon packet as hex; the reply comes back as "rs485-reply: <hex>" or
+# "rs485-reply: TIMEOUT".
+rs485 = "M485"
 default_variant = "stock"
 
 # Inferred: the PWM 180 outputs are the pumps, the full-on ones the valves.

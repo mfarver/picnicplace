@@ -75,6 +75,14 @@ class DataConfig(_Section):
     def jobs_dir(self) -> Path:
         return self.dir.expanduser() / "jobs"
 
+    @property
+    def feeders_path(self) -> Path:
+        return self.dir.expanduser() / "feeders.json"
+
+    @property
+    def bringup_path(self) -> Path:
+        return self.dir.expanduser() / "bring-up.json"
+
 
 class MarlinConfig(_Section):
     port: str | None = Field(
@@ -119,6 +127,13 @@ class MachineConfig(_Section):
         description=(
             "Simulator only: how far (X, Y in mm) the head really is from where homing "
             "says, as with real endstops. Visual homing finds and corrects it."
+        ),
+    )
+    sim_feeders: list[str] = Field(
+        default_factory=lambda: ["front:1", "front:2", "front:3", "front:4", "front:5", "back:1"],
+        description=(
+            "Simulator and fake firmware: the feeder slots that hold a simulated Photon "
+            "feeder, such as 'front:3' (bank ID and slot number)."
         ),
     )
     speed_scale: float = Field(

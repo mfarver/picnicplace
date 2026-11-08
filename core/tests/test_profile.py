@@ -78,6 +78,6 @@ def test_placement_area_is_where_every_nozzle_reaches() -> None:
     assert area.x_max == pytest.approx(min(r.x_max for r in reach.values()))
     assert reach["N1"].x_min < area.x_min < reach["N2"].x_min + 0.001
     # Within the staging plates, and the keep-outs sit inside it.
-    assert area.y_max == pytest.approx(213.071)
+    assert area.y_max == pytest.approx(333.071)
     for zone in profile.keep_outs:
         assert area.x_min < zone.area.x_min and zone.area.x_max < area.x_max

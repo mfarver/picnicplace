@@ -23,7 +23,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping
 
 from picnicplace.camera.source import Frame
-from picnicplace.camera.synthetic import SceneState
+from picnicplace.camera.synthetic import SceneState, TapeScene
 from picnicplace.events import EventBus
 from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.errors import (
@@ -40,11 +40,11 @@ from picnicplace.machine.errors import (
     VisionError,
     ZNotSafeError,
 )
-from picnicplace.machine.profile import Camera, Location, MachineProfile, nozzle_height
+from picnicplace.machine.profile import Camera, Location, MachineProfile, Point, nozzle_height
 from picnicplace.operations import OperationManager
 from picnicplace.presence import PresenceTracker
 from picnicplace.schemas import MachineState, MachineStateEvent, Operation
-from picnicplace.vision.fiducial import find_circle
+from picnicplace.vision.fiducial import find_circle, find_circles
 
 log = logging.getLogger(__name__)
 
@@ -104,6 +104,8 @@ class MachineService:
         self._connection_error: str | None = None
         self._connect_lock = asyncio.Lock()
         self._grab: Grab | None = None
+        self.scene_tapes: Callable[[], tuple[TapeScene, ...]] | None = None
+        """Simulated feeder tapes for the synthetic cameras, if any."""
 
         driver.on_change = self._on_driver_change
         presence.on_change.append(self._publish_state)
@@ -158,6 +160,7 @@ class MachineService:
             position={a: round(v, 3) for a, v in self._driver.scene_position.items()},
             outputs=dict(self._driver.outputs),
             held=held,
+            tapes=self.scene_tapes() if self.scene_tapes is not None else (),
         )
 
     @property
@@ -299,6 +302,92 @@ class MachineService:
         if self._busy:
             log.warning("controlling client left during motion; stopping")
             await self._driver.stop()
+
+    # --- For other services (feeders, calibration) -----------------------------------------
+
+    def check_can_actuate(self) -> None:
+        """Raise unless outputs and feeders may be used now."""
+        self._check_can_actuate()
+
+    def start_task(self, kind: str, work: _Work) -> Operation:
+        """Run work that moves the machine as an operation, with the machine busy."""
+        self._check_can_move()
+        self._check_homed()
+        return self._start_operation(kind, work)
+
+    def top_camera(self) -> Camera:
+        camera = next(
+            (c for c in self._profile.cameras if c.mount == "head" and c.looking == "down"),
+            None,
+        )
+        if camera is None:
+            raise VisionError("the machine profile has no down-looking head camera")
+        return camera
+
+    def camera_position(self) -> Point:
+        """Where the top camera is looking, in machine coordinates."""
+        camera = self.top_camera()
+        here = self._driver.position
+        return Point(x=here["X"] + camera.position.x, y=here["Y"] + camera.position.y)
+
+    async def move_camera_to(self, x: float, y: float) -> None:
+        """Center the top camera over a point, at safe Z. For use inside a task."""
+        camera = self.top_camera()
+        target = {"X": x - camera.position.x, "Y": y - camera.position.y}
+        self._check_target(target)
+        await self._run_steps(self._plan_move(target), None)
+
+    async def locate_circles(self, min_diameter: float, max_diameter: float) -> list[Point]:
+        """Every round mark the top camera sees: their machine positions."""
+        camera = self.top_camera()
+        if self._grab is None:
+            raise VisionError("the cameras are not available")
+        await asyncio.sleep(camera.settle_s)
+        frame = await self._grab(camera.id, time.time(), FRAME_WAIT_S)
+        if frame is None:
+            raise VisionError(f"the {camera.label.lower()} sent no frame")
+        h, w = frame.image.shape[:2]
+        mm_per_px = camera.field_of_view.x / w
+        circles = await asyncio.get_running_loop().run_in_executor(
+            None, find_circles, frame.image, min_diameter / mm_per_px, max_diameter / mm_per_px
+        )
+        here = self.camera_position()
+        out: list[Point] = []
+        for c in circles:
+            dx, dy = self._profile.image_to_machine(
+                (c.x - w / 2) * mm_per_px, (c.y - h / 2) * mm_per_px
+            )
+            out.append(Point(x=here.x + dx, y=here.y + dy))
+        return out
+
+    async def locate_circle(
+        self, min_diameter: float, max_diameter: float, search_mm: float
+    ) -> Point | None:
+        """Find a round mark near the top camera's center: its machine position, or None."""
+        camera = self.top_camera()
+        if self._grab is None:
+            raise VisionError("the cameras are not available")
+        await asyncio.sleep(camera.settle_s)
+        frame = await self._grab(camera.id, time.time(), FRAME_WAIT_S)
+        if frame is None:
+            raise VisionError(f"the {camera.label.lower()} sent no frame")
+        h, w = frame.image.shape[:2]
+        mm_per_px = camera.field_of_view.x / w
+        circle = await asyncio.get_running_loop().run_in_executor(
+            None,
+            find_circle,
+            frame.image,
+            min_diameter / mm_per_px,
+            max_diameter / mm_per_px,
+            search_mm / mm_per_px,
+        )
+        if circle is None:
+            return None
+        dx, dy = self._profile.image_to_machine(
+            (circle.x - w / 2) * mm_per_px, (circle.y - h / 2) * mm_per_px
+        )
+        here = self.camera_position()
+        return Point(x=here.x + dx, y=here.y + dy)
 
     # --- Checks --------------------------------------------------------------------------
 

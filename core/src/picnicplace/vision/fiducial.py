@@ -41,15 +41,9 @@ class Circle:
     """How many threshold levels found it."""
 
 
-def find_circle(
-    image: Image,
-    min_diameter_px: float,
-    max_diameter_px: float,
-    max_offset_px: float | None = None,
-) -> Circle | None:
-    """The round blob with a diameter in range that is nearest the image center, and
-    within ``max_offset_px`` of it if given. The limit keeps a search from locking onto
-    a neighboring fiducial when the one wanted is farther off than expected."""
+def find_circles(image: Image, min_diameter_px: float, max_diameter_px: float) -> list[Circle]:
+    """Every round blob with a diameter in range, each found at several threshold levels
+    (or, if none is, every one found at all)."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
     h, w = gray.shape
@@ -59,7 +53,7 @@ def find_circle(
             _, mask = cv2.threshold(gray, level, 255, mode)
             hits.extend(_round_blobs(mask, w, h, min_diameter_px, max_diameter_px))
     if not hits:
-        return None
+        return []
 
     # Group detections of the same blob: centers closer than a quarter of the smallest
     # expected diameter.
@@ -73,22 +67,36 @@ def find_circle(
         else:
             groups.append([hit])
     stable = [g for g in groups if len(g) >= MIN_HITS] or groups
+    return [
+        Circle(
+            x=median(c.x for c in g),
+            y=median(c.y for c in g),
+            diameter=median(c.diameter for c in g),
+            circularity=median(c.circularity for c in g),
+            hits=len(g),
+        )
+        for g in stable
+    ]
 
-    def offset(g: list[Circle]) -> float:
-        return math.hypot(g[0].x - w / 2, g[0].y - h / 2)
+
+def find_circle(
+    image: Image,
+    min_diameter_px: float,
+    max_diameter_px: float,
+    max_offset_px: float | None = None,
+) -> Circle | None:
+    """The round blob with a diameter in range that is nearest the image center, and
+    within ``max_offset_px`` of it if given. The limit keeps a search from locking onto
+    a neighboring fiducial when the one wanted is farther off than expected."""
+    h, w = image.shape[:2]
+    circles = find_circles(image, min_diameter_px, max_diameter_px)
+
+    def offset(c: Circle) -> float:
+        return math.hypot(c.x - w / 2, c.y - h / 2)
 
     if max_offset_px is not None:
-        stable = [g for g in stable if offset(g) <= max_offset_px]
-        if not stable:
-            return None
-    best = min(stable, key=offset)
-    return Circle(
-        x=median(c.x for c in best),
-        y=median(c.y for c in best),
-        diameter=median(c.diameter for c in best),
-        circularity=median(c.circularity for c in best),
-        hits=len(best),
-    )
+        circles = [c for c in circles if offset(c) <= max_offset_px]
+    return min(circles, key=offset, default=None)
 
 
 def _round_blobs(mask: MatLike, w: int, h: int, min_d: float, max_d: float) -> list[Circle]:

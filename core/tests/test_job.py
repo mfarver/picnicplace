@@ -61,20 +61,20 @@ def test_machine_coordinates() -> None:
     job, _ = demo()
     at = MachineLocation(x=100, y=50)
     placed = {p.ref: p for p in machine_placements(job, LUMEN, at)}
-    # +X left and +Y front: board right and back are machine -X and -Y.
-    assert (placed["R1"].x, placed["R1"].y, placed["R1"].rotation) == (88.0, 20.0, 0.0)
+    # +X right and +Y back: board right and back are machine +X and +Y.
+    assert (placed["R1"].x, placed["R1"].y, placed["R1"].rotation) == (112.0, 80.0, 0.0)
     assert "U3" not in placed  # on the bottom, facing down
 
     turned = {
         p.ref: p for p in machine_placements(job, LUMEN, at.model_copy(update={"rotation": 90}))
     }
-    assert (turned["R1"].x, turned["R1"].y) == pytest.approx((130.0, 38.0))
+    assert (turned["R1"].x, turned["R1"].y) == pytest.approx((70.0, 62.0))
     assert turned["R1"].rotation == 90.0 and turned["R2"].rotation == 180.0
 
     bottom = job.model_copy(update={"side_up": "bottom"})
     flipped = {p.ref: p for p in machine_placements(bottom, LUMEN, at)}
     # U3 at (48, 20), 180 degrees on the bottom: flipped, it is at (12, 20), 0 degrees.
-    assert (flipped["U3"].x, flipped["U3"].y, flipped["U3"].rotation) == (88.0, 30.0, 0.0)
+    assert (flipped["U3"].x, flipped["U3"].y, flipped["U3"].rotation) == (112.0, 70.0, 0.0)
     assert set(flipped) == {"C2", "C3", "U3", "FID4"}
 
 
@@ -140,7 +140,7 @@ def test_checks_and_finding_a_place() -> None:
     # Over the datum board: refused. The front-left corner is front and left of it,
     # so the board reaches back and right over it.
     datum = next(k for k in LUMEN.keep_outs if k.id == "datum")
-    on_datum = MachineLocation(x=datum.area.x_max + 10, y=datum.area.y_max + 5)
+    on_datum = MachineLocation(x=datum.area.x_min - 10, y=datum.area.y_min - 5)
     bad = layout(job.model_copy(update={"location": on_datum}), LUMEN)
     assert not bad.ok
     assert any("datum" in i.message for i in bad.issues)
@@ -148,7 +148,7 @@ def test_checks_and_finding_a_place() -> None:
     # Out of reach of a nozzle at the side of the bed.
     area = LUMEN.placement_area
     assert area is not None
-    edge = MachineLocation(x=area.x_min + 20, y=60)
+    edge = MachineLocation(x=area.x_max - 30, y=260)
     far = layout(job.model_copy(update={"location": edge}), LUMEN)
     assert any("cannot reach" in i.message for i in far.issues)
 

@@ -1,13 +1,12 @@
 """Job files: one JSON file per job in the data directory's ``jobs`` folder."""
 
-import os
 import re
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 from picnicplace.job.models import Job
 from picnicplace.schemas import WireModel
+from picnicplace.storage import write_atomic
 
 JOB_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
@@ -67,16 +66,7 @@ class JobStore:
 
     def put(self, job_id: str, job: Job) -> None:
         path = self._path(job_id)
-        self.directory.mkdir(parents=True, exist_ok=True)
-        # Write to a temporary file and rename, so a crash never leaves half a job.
-        fd, tmp = tempfile.mkstemp(dir=self.directory, prefix=f".{job_id}.", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w") as f:
-                f.write(job.model_dump_json(indent=2))
-            Path(tmp).replace(path)
-        except BaseException:
-            Path(tmp).unlink(missing_ok=True)
-            raise
+        write_atomic(path, job.model_dump_json(indent=2))
 
     def delete(self, job_id: str) -> bool:
         path = self._path(job_id)

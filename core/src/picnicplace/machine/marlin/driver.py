@@ -339,6 +339,21 @@ class MarlinDriver(MotionDriver):
 
     # --- I/O -----------------------------------------------------------------------------
 
+    async def rs485(self, packet: bytes) -> bytes | None:
+        if self._settings.rs485 is None:
+            return await super().rs485(packet)
+        lines = await self._command(f"{self._settings.rs485} {packet.hex().upper()}")
+        for line in lines:
+            if line.startswith("rs485-reply:"):
+                reply = line.removeprefix("rs485-reply:").strip()
+                if reply == "TIMEOUT" or not reply:
+                    return None
+                try:
+                    return bytes.fromhex(reply)
+                except ValueError:
+                    raise FirmwareError(f"unreadable feeder bus reply: {reply!r}") from None
+        raise FirmwareError(f"{self._settings.rs485} gave no rs485-reply line")
+
     async def set_output(self, output_id: str, on: bool) -> None:
         spec = self._settings.outputs.get(output_id)
         if output_id not in self._outputs:

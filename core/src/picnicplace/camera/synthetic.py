@@ -55,6 +55,35 @@ class SceneState:
     outputs: dict[str, bool]
     held: dict[str, bool]
     """Nozzle ID to whether it holds a part."""
+    tapes: tuple["TapeScene", ...] | None = None
+    """Simulated feeders: their tape and parts. None draws generic tape in every slot."""
+
+
+@dataclass(frozen=True)
+class TapeScene:
+    """One simulated feeder, as the top camera sees it. Positions are true (physical)
+    ones, which may differ from the profile's nominal slots."""
+
+    pick: tuple[float, float]
+    rotation: float
+    """Tape direction in machine degrees."""
+    width: float = 8.0
+    pitch: float = 4.0
+    pocket_line: float = 3.5
+    """From the sprocket holes' line to the pockets' line."""
+    advance: float = 0.0
+    """Tape moved since the start, in mm: the pockets shift by this, modulo the pitch."""
+    pick_full: bool = False
+    """Whether the pocket at the pick location still holds a part."""
+    part_rotation: float = 0.0
+    """The part's rotation in the tape, EIA-481 view."""
+    body: tuple[float, float] | None = None
+    pads: tuple[tuple[float, float, float, float, float], ...] = ()
+    """Pads as (x, y, width, height, rotation) in the footprint's frame."""
+    fiducial: tuple[float, float] | None = None
+    fiducial_diameter: float = 1.0
+    feeder_width: float = 15.0
+    feeder_length: float = 100.0
 
 
 class _Canvas:
@@ -188,7 +217,11 @@ class TopRenderer:
         self._plates(canvas, img)
         self._board(canvas, img)
         self._locations(canvas, img)
-        self._feeders(canvas, img)
+        if state.tapes is None:
+            self._feeders(canvas, img)
+        else:
+            for tape in state.tapes:
+                _tape(canvas, img, tape)
         return _finish(img, self._grain, self.camera, state)
 
     def _plates(self, c: _Canvas, img: Image) -> None:
@@ -232,7 +265,8 @@ class TopRenderer:
             if not c.visible(p.x, p.y, 50):
                 continue
             if loc.kind == "homing_fiducial" and loc.style == "lumenpnp-datum":
-                _datum_board(c, img, p)
+                bottom = next((k for k in self.profile.cameras if k.looking == "up"), None)
+                _datum_board(c, img, p, bottom.position.y if bottom else None)
             elif loc.kind == "homing_fiducial":
                 r = (loc.diameter or 2.0) / 2
                 c.circle(img, p.x, p.y, r * 3, (20, 20, 20))
@@ -283,6 +317,93 @@ class TopRenderer:
                     c.circle(img, qx + nx * 3.5, qy + ny * 3.5, 0.75, BED)
 
 
+FEEDER_BODY = (52, 52, 56)
+FEEDER_AHEAD = 8.0
+"""How far a feeder reaches past its pick location, along the feed."""
+SPROCKET_PITCH = 4.0
+SPROCKET_EDGE = 1.75
+
+
+def _tape(c: _Canvas, img: Image, t: TapeScene) -> None:
+    """A feeder with its tape, in the EIA-481 frame turned to the feeder's rotation: x
+    along the feed, y across it toward the sprocket holes."""
+    px, py = t.pick
+    a = math.radians(t.rotation)
+    ux, uy = math.cos(a), math.sin(a)
+    nx, ny = -uy, ux
+
+    def at(s: float, d: float) -> tuple[float, float]:
+        return px + ux * s + nx * d, py + uy * s + ny * d
+
+    if not c.visible(px, py, t.feeder_length + 20):
+        return
+    # The feeder body, then the tape on it.
+    bx, by = at(FEEDER_AHEAD - t.feeder_length / 2, 0)
+    c.rect(img, bx, by, t.feeder_length, t.feeder_width, t.rotation, FEEDER_BODY)
+    if t.fiducial is not None:
+        fx, fy = t.fiducial
+        c.circle(img, fx, fy, t.fiducial_diameter * 1.5, (25, 25, 25))
+        c.circle(img, fx, fy, t.fiducial_diameter / 2, DATUM_COPPER)
+    holes_line = t.pocket_line
+    edge = holes_line + SPROCKET_EDGE
+    length = t.feeder_length * 0.8
+    tx, ty = at(6 - length / 2, edge - t.width / 2)
+    c.rect(img, tx, ty, length, t.width, t.rotation, TAPE)
+
+    hole_phase = t.advance % SPROCKET_PITCH
+    for k in range(int(length // SPROCKET_PITCH) + 1):
+        # EIA-481: a pocket is 2 mm along the tape from a sprocket hole.
+        s = 6 - k * SPROCKET_PITCH + hole_phase
+        hx, hy = at(s, holes_line)
+        if c.visible(hx, hy, 2):
+            c.circle(img, hx, hy, 0.75, BED)
+
+    turn = math.radians(t.part_rotation)
+    angle = t.rotation + t.part_rotation
+    ex, ey = _extent(t)
+    ca, sa = abs(math.cos(turn)), abs(math.sin(turn))
+    pocket = (max(1.0, ex * ca + ey * sa + 0.4), max(0.8, ex * sa + ey * ca + 0.4))
+    # The pocket nearest the pick location is the one to pick next; those past it along
+    # the feed were picked already.
+    phase = t.advance % t.pitch
+    pick_s = phase if phase <= t.pitch / 2 else phase - t.pitch
+    for k in range(-1, int(length // t.pitch) + 1):
+        s = pick_s - k * t.pitch
+        if s > 5:
+            continue
+        qx, qy = at(s, 0)
+        if not c.visible(qx, qy, max(pocket) + 1):
+            continue
+        c.rect(img, qx, qy, pocket[0], pocket[1], t.rotation, POCKET)
+        if k < 0 or (k == 0 and not t.pick_full):
+            continue
+        _part(c, img, qx, qy, angle, t)
+
+
+def _extent(t: TapeScene) -> tuple[float, float]:
+    """The part's size in its own frame."""
+    if t.body is not None:
+        return t.body
+    if not t.pads:
+        return PART_SIZE
+    xs = [abs(x) + w / 2 for x, _, w, _, _ in t.pads]
+    ys = [abs(y) + h / 2 for _, y, _, h, _ in t.pads]
+    return 2 * max(xs), 2 * max(ys)
+
+
+def _part(c: _Canvas, img: Image, x: float, y: float, angle: float, t: TapeScene) -> None:
+    if t.body is None and not t.pads:
+        _chip(c, img, x, y, angle)
+        return
+    a = math.radians(angle)
+    ca, sa = math.cos(a), math.sin(a)
+    if t.body is not None:
+        c.rect(img, x, y, t.body[0], t.body[1], angle, PART_BODY)
+    for px, py, w, h, r in t.pads:
+        cx, cy = x + px * ca - py * sa, y + px * sa + py * ca
+        c.rect(img, cx, cy, w * 0.8, h * 0.8, angle + r, PART_END)
+
+
 # --- The LumenPnP datum board ----------------------------------------------------------
 # Geometry from the board's KiCad design (PCB-0004 rev 00), relative to its center
 # fiducial, in machine millimeters (+Y toward the back). Bare copper shows through the
@@ -314,13 +435,14 @@ DATUM_FIDUCIALS = [(-10, 5), (10, 5), (-10, -10), (10, -10), (-35, -20), (35, -2
 DATUM_HOLES = [(-15, 0), (-30, -15), (30, -15), (15, 0)]
 
 
-def _datum_board(c: _Canvas, img: Image, o: Point) -> None:
-    # The offsets below have +X to the operator's right and +Y toward the back, with the
-    # board's notched edge (ruler side) toward the front, facing the bottom camera.
-    # Turned into machine coordinates by which way the machine's axes point (on a
-    # LumenPnP, +Y is the front).
+def _datum_board(c: _Canvas, img: Image, o: Point, camera_y: float | None) -> None:
+    # The offsets below are in the board's own frame, with its notched edge (ruler side)
+    # toward -Y. The board is mounted with that edge facing the bottom camera, so it is
+    # turned (never mirrored) to face the camera.
+    s = 1 if camera_y is None or camera_y > o.y else -1
+
     def at(dx: float, dy: float) -> tuple[float, float]:
-        return o.x + c.x_sign * dx, o.y + c.y_sign * dy
+        return o.x - s * dx, o.y - s * dy
 
     pts = np.array([c.px(*at(dx, dy)) for dx, dy in DATUM_OUTLINE], dtype=np.int32)
     cv2.fillPoly(img, [pts], DATUM_MASK, cv2.LINE_AA, SHIFT)

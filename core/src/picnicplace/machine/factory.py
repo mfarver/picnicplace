@@ -4,6 +4,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from picnicplace.config import MachineConfig
+from picnicplace.feeders.sim import SimulatedPhotonBus
+from picnicplace.feeders.slots import machine_slots
 from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.marlin.driver import MarlinDriver
 from picnicplace.machine.marlin.fake import FakeMarlinPty, FakeSettings
@@ -20,12 +22,39 @@ class DriverBundle:
     driver: MotionDriver
     shutdown: Callable[[], Awaitable[None]] = _nothing
     """Stops anything started alongside the driver, such as a fake firmware."""
+    photon_sim: SimulatedPhotonBus | None = None
+    """Simulated feeders, with the simulator or the fake firmware."""
+
+
+SIM_FEEDER_STEP_SCALE = 1.01
+"""Simulated feeders move the tape 1% too far, so vision has drift to correct: after ten
+4 mm feeds the pocket is 0.4 mm past the pick location."""
+
+
+def simulated_feeders(config: MachineConfig) -> SimulatedPhotonBus | None:
+    """The simulated Photon feeders a config asks for, if the machine has a Photon bus."""
+    profile = config.machine_profile
+    if profile.feeder_bus != "photon":
+        return None
+    by_id = {s.id: s for s in machine_slots(profile)}
+    addresses: list[int] = []
+    for slot_id in config.sim_feeders:
+        slot = by_id.get(slot_id)
+        if slot is not None and slot.address is not None:
+            addresses.append(slot.address)
+    return SimulatedPhotonBus.with_feeders(
+        addresses, config.sim_time_scale, step_scale=SIM_FEEDER_STEP_SCALE
+    )
 
 
 def build_driver(config: MachineConfig) -> DriverBundle:
     profile = config.machine_profile
     if config.driver == "simulator":
-        return DriverBundle(SimulatorDriver(profile, config.sim_time_scale, config.sim_home_error))
+        photon = simulated_feeders(config)
+        driver = SimulatorDriver(
+            profile, config.sim_time_scale, config.sim_home_error, photon=photon
+        )
+        return DriverBundle(driver, photon_sim=photon)
 
     assert profile.marlin is not None  # checked when the config was loaded
     settings = profile.marlin.resolved(config.marlin.variant)
@@ -48,7 +77,8 @@ def build_driver(config: MachineConfig) -> DriverBundle:
         return DriverBundle(driver)
 
     # fake-marlin: the real driver and serial transport, against a fake on a pty.
-    fake = FakeMarlinPty(FakeSettings(time_scale=config.sim_time_scale))
+    photon = simulated_feeders(config)
+    fake = FakeMarlinPty(FakeSettings(time_scale=config.sim_time_scale, photon=photon))
 
     async def open_fake() -> LineTransport:
         path = fake.path or await fake.start()
@@ -57,4 +87,4 @@ def build_driver(config: MachineConfig) -> DriverBundle:
     driver = MarlinDriver(
         profile, settings, open_fake, connect_wait_s=0, command_timeout_s=marlin.command_timeout_s
     )
-    return DriverBundle(driver, fake.stop)
+    return DriverBundle(driver, fake.stop, photon_sim=photon)

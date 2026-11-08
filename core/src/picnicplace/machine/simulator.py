@@ -7,7 +7,9 @@ Besides motion, it simulates the profile's I/O:
 - Vacuum sensors follow their nozzle's pump and valve. With both on, the reading rises
   toward an open-nozzle level, or a higher level while a part is held. A nozzle "picks" a
   part when suction is on while it is lowered at least ``PICK_DEPTH``, and drops it when
-  suction goes off. There are no simulated parts or feeders yet, so this happens anywhere.
+  suction goes off. This happens anywhere; ``on_pick`` reports where, so the feeders can
+  show the part gone from the tape.
+- Photon feeders on the feeder bus (``feeders/sim.py``), if given.
 
 Faults can be injected for tests: ``inject_z_slip`` makes the real Z position differ from
 the commanded one, as if the motor lost steps. Sensors see the real position.
@@ -15,8 +17,9 @@ the commanded one, as if the motor lost steps. Sensors see the real position.
 
 import asyncio
 import contextlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
+from picnicplace.feeders.sim import SimulatedPhotonBus
 from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.errors import MotionInterruptedError
 from picnicplace.machine.profile import MachineProfile, Nozzle, nozzle_height
@@ -56,8 +59,12 @@ class SimulatorDriver(MotionDriver):
         profile: MachineProfile,
         time_scale: float = 1.0,
         home_error: tuple[float, float] = (0.0, 0.0),
+        photon: SimulatedPhotonBus | None = None,
     ) -> None:
         super().__init__()
+        self.photon = photon
+        self.on_pick: Callable[[str, float, float], None] | None = None
+        """Called with the nozzle ID and its physical X/Y when a nozzle picks up a part."""
         self._home_error = home_error
         self._offset = {"X": 0.0, "Y": 0.0}
         """Physical minus reported position: what homing gets wrong."""
@@ -197,6 +204,12 @@ class SimulatorDriver(MotionDriver):
             self._position[axis] = value
         self._notify()
 
+    async def rs485(self, packet: bytes) -> bytes | None:
+        if self.photon is None:
+            return await super().rs485(packet)
+        await asyncio.sleep(0.005 / self._time_scale)
+        return self.photon.handle(packet)
+
     def inject_z_slip(self, axis: str, distance: float) -> None:
         """Simulator only: make the real position of a Z axis differ from the commanded one."""
         self._z_slip[axis] = self._z_slip.get(axis, 0.0) + distance
@@ -227,8 +240,11 @@ class SimulatorDriver(MotionDriver):
         for n in self._profile.nozzles:
             if not self._suction(n):
                 self._held[n.id] = False
-            elif self._height(n) <= -PICK_DEPTH:
+            elif self._height(n) <= -PICK_DEPTH and not self._held[n.id]:
                 self._held[n.id] = True
+                if self.on_pick is not None:
+                    at = self.scene_position
+                    self.on_pick(n.id, at["X"] + n.offset.x, at["Y"] + n.offset.y)
         self._io_wake.set()
 
     def _vacuum_target(self, nozzle: Nozzle) -> float:

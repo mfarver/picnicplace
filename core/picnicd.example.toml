@@ -20,6 +20,20 @@ sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times fast
 speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 when
                            # bringing up a machine. Homing speed is the firmware's.
 
+# Places you choose for this machine: where rejected parts are dropped, and where the
+# head waits. These values are from one LumenPnP; set your own.
+# [[machine.locations]]
+# id = "discard"
+# label = "Discard"
+# kind = "discard"
+# position = { x = 157.751, y = 112.758 }
+#
+# [[machine.locations]]
+# id = "park"
+# label = "Park"
+# kind = "park"
+# position = { x = 389.292, y = 421.551 }
+
 [machine.marlin]
 # port = "/dev/ttyACM0"    # Required for driver = "marlin".
 baud = 115200

@@ -7,7 +7,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
-from picnicplace.machine.profile import MachineProfile, is_profile_path, load_profile
+from picnicplace.machine.profile import Location, MachineProfile, is_profile_path, load_profile
 
 
 class _Section(BaseModel):
@@ -76,6 +76,13 @@ class MachineConfig(_Section):
         ),
     )
     marlin: MarlinConfig = Field(default_factory=MarlinConfig)
+    locations: list[Location] = Field(
+        default_factory=list[Location],
+        description=(
+            "Places this machine's owner chooses, such as the discard and park positions. "
+            "Added to the machine profile's locations, which describe only the design."
+        ),
+    )
     profile: str = Field(
         default="lumenpnp-v4",
         description="Built-in machine profile ID, or a path to a profile TOML file.",
@@ -104,7 +111,14 @@ class MachineConfig(_Section):
 
     @model_validator(mode="after")
     def _load_profile(self) -> Self:
-        self._profile = load_profile(self.profile)
+        profile = load_profile(self.profile)
+        if self.locations:
+            # Re-validate so the merged locations get the profile's checks (unique IDs).
+            data = profile.model_dump(exclude_computed_fields=True)
+            data["marlin"] = profile.marlin
+            data["locations"] = [*profile.locations, *self.locations]
+            profile = MachineProfile.model_validate(data)
+        self._profile = profile
         if self.driver in ("marlin", "fake-marlin"):
             if self._profile.marlin is None:
                 raise ValueError(f"machine profile {self.profile!r} has no [marlin] settings")

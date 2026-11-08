@@ -137,17 +137,6 @@ position = { x = 217.463, y = 196.028 }
 z = -31.5
 diameter = 1.2
 
-[[locations]]
-id = "discard"
-label = "Discard"
-kind = "discard"
-position = { x = 157.751, y = 112.758 }
-
-[[locations]]
-id = "park"
-label = "Park"
-kind = "park"
-position = { x = 389.292, y = 421.551 }
 
 # The staging plate with the camera knockout (LumenPnP Staging Plate rev 00): 600 x 120
 # mm, centered on the bottom camera, M3 holes on a 15 mm checkerboard (columns 1-39,

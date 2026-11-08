@@ -45,3 +45,40 @@ def test_example_config_loads() -> None:
     config = load_config(EXAMPLE)
     assert config.machine.driver == "simulator"
     assert config.machine.machine_profile.id == "lumenpnp-v4"
+
+
+def test_machine_locations_are_added_to_the_profile() -> None:
+    config = Config.model_validate(
+        {
+            "machine": {
+                "profile": "lumenpnp-v4",
+                "locations": [
+                    {
+                        "id": "discard",
+                        "label": "Discard",
+                        "kind": "discard",
+                        "position": {"x": 150, "y": 110},
+                    },
+                ],
+            }
+        }
+    )
+    profile = config.machine.machine_profile
+    assert [loc.id for loc in profile.locations][-1] == "discard"
+    assert profile.marlin is not None  # driver settings survive the merge
+    with pytest.raises(ValidationError, match="duplicate location id"):
+        Config.model_validate(
+            {
+                "machine": {
+                    "profile": "lumenpnp-v4",
+                    "locations": [
+                        {
+                            "id": "homing_fiducial",
+                            "label": "X",
+                            "kind": "discard",
+                            "position": {"x": 0, "y": 0},
+                        },
+                    ],
+                }
+            }
+        )

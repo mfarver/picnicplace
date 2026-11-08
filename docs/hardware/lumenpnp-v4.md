@@ -84,10 +84,12 @@ From the reference machine (calibrated values vary slightly between machines):
 | Top camera | 1920 × 1080, 0.01075 mm/pixel at board height (about 20.6 × 11.7 mm) |
 | Bottom camera | At (217.74, 153.07), 1920 × 1080, 0.0206 mm/pixel (about 39.6 × 22.3 mm) |
 | Homing fiducial | (217, 106) |
-| Discard | (157.75, 112.76) |
-| Park | (389.29, 421.55) |
 
 Photon feeder positions are not stored in the config; OpenPnP finds them at run time.
+
+The reference machine's discard (157.75, 112.76) and park (389.29, 421.55) positions are
+its owner's choices, not part of the design. In PicnicPlace they go in each machine's
+config (`[[machine.locations]]`), not the profile.
 
 ## Vacuum
 

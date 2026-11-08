@@ -376,6 +376,15 @@ function LocationMarker({ kind, at }: { kind: string; at: Point }) {
           <circle cx={x} cy={y} r={1.8} className="mv-dot" />
         </g>
       );
+    case "park":
+      return (
+        <g>
+          <rect x={x - 7} y={y - 7} width={14} height={14} rx={3} />
+          <text className="mv-park-letter" x={x} y={y + 3.5} textAnchor="middle">
+            P
+          </text>
+        </g>
+      );
     case "tip_holder":
       return (
         <g>

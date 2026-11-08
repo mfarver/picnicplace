@@ -33,11 +33,15 @@ HOME_TOLERANCE = 0.01
 PICK_DEPTH = 5.0
 """How far below the top of travel a nozzle must be, with suction on, to pick a part."""
 
-VACUUM_OPEN = 12.0
-"""Vacuum reading with suction on and nothing on the nozzle."""
+VACUUM_OPEN = 0.9
+"""Suction on, nothing on the nozzle: this fraction of the way from the range start to the
+pick threshold. Readings are in the profile's units, whatever they are."""
 
-VACUUM_HELD = 55.0
-"""Vacuum reading with suction on and a part on the nozzle."""
+VACUUM_HELD = 0.5
+"""Suction on, part held: this fraction of the way from the threshold to the range end."""
+
+SETTLED_FRACTION = 0.0005
+"""A vacuum reading this close to its target (as a fraction of the range) snaps to it."""
 
 VACUUM_TAU_S = 0.15
 """Time constant of the simulated vacuum response."""
@@ -55,6 +59,7 @@ class SimulatorDriver(MotionDriver):
         self._vacuum = {n.vacuum_input: 0.0 for n in profile.nozzles if n.vacuum_input}
         self._held = {n.id: False for n in profile.nozzles}
         self._z_slip: dict[str, float] = {}
+        self._inputs_by_id = {i.id: i for i in profile.inputs}
         self._connected = False
         self._stop = asyncio.Event()
         self._io_wake = asyncio.Event()
@@ -79,7 +84,9 @@ class SimulatorDriver(MotionDriver):
         values: dict[str, bool | float] = {}
         for i in self._profile.inputs:
             if i.id in self._vacuum:
-                values[i.id] = round(self._vacuum[i.id], 2)
+                # Raw-count sensors read in whole numbers; small-range ones keep 2 places.
+                span = abs(i.range.max - i.range.min) if i.range else 1.0
+                values[i.id] = round(self._vacuum[i.id], 0 if span >= 1000 else 2)
             elif i.role == "home" and i.axis is not None:
                 home = self._profile.axis(i.axis).home
                 values[i.id] = abs(self._position[i.axis] - home) <= HOME_TOLERANCE
@@ -202,9 +209,18 @@ class SimulatorDriver(MotionDriver):
         self._io_wake.set()
 
     def _vacuum_target(self, nozzle: Nozzle) -> float:
-        if not self._suction(nozzle):
+        sensor = self._inputs_by_id.get(nozzle.vacuum_input or "")
+        if sensor is None or sensor.range is None:
             return 0.0
-        return VACUUM_HELD if self._held[nozzle.id] else VACUUM_OPEN
+        start, end = sensor.range.min, sensor.range.max
+        threshold = sensor.threshold if sensor.threshold is not None else (start + end) / 2
+        # The resting reading: zero when the range spans it, else the range start.
+        rest = 0.0 if min(start, end) <= 0 <= max(start, end) else start
+        if not self._suction(nozzle):
+            return rest
+        if self._held[nozzle.id]:
+            return threshold + (end - threshold) * VACUUM_HELD
+        return rest + (threshold - rest) * VACUUM_OPEN
 
     def _step_vacuum(self, dt: float) -> bool:
         """Advance the vacuum readings by ``dt`` simulated seconds. True if any changed."""
@@ -218,11 +234,15 @@ class SimulatorDriver(MotionDriver):
             if current == target:
                 continue
             new = current + (target - current) * alpha
-            if abs(target - new) < 0.05:
+            if abs(target - new) < SETTLED_FRACTION * self._span(n):
                 new = target
             self._vacuum[n.vacuum_input] = new
             changed = True
         return changed
+
+    def _span(self, nozzle: Nozzle) -> float:
+        sensor = self._inputs_by_id.get(nozzle.vacuum_input or "")
+        return abs(sensor.range.max - sensor.range.min) if sensor and sensor.range else 1.0
 
     async def _io_loop(self) -> None:
         while True:

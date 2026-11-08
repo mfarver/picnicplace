@@ -48,17 +48,27 @@ class Rect(ProfileModel):
 class Axis(ProfileModel):
     name: str = Field(min_length=1, max_length=8)
     kind: Literal["linear", "rotary"] = "linear"
-    min: float
-    max: float
-    home: float = 0.0
+    min: float = Field(description="Soft limit. Ignored for continuous axes.")
+    max: float = Field(description="Soft limit. Ignored for continuous axes.")
+    home: float = Field(
+        default=0.0,
+        description=(
+            "Position after homing. May lie outside the soft limits: the firmware homes "
+            "against a switch that moves can then not return to."
+        ),
+    )
     max_speed: float = Field(gt=0, description="Units per second (mm/s or deg/s).")
+    continuous: bool = Field(
+        default=False,
+        description="Rotary axes only: turns without limit, so min and max are not enforced.",
+    )
 
     @model_validator(mode="after")
     def _check_range(self) -> Self:
         if self.min >= self.max:
             raise ValueError(f"axis {self.name}: min must be less than max")
-        if not self.min <= self.home <= self.max:
-            raise ValueError(f"axis {self.name}: home must be within min..max")
+        if self.continuous and self.kind != "rotary":
+            raise ValueError(f"axis {self.name}: only rotary axes can be continuous")
         return self
 
 
@@ -95,7 +105,7 @@ class Camera(ProfileModel):
 class Location(ProfileModel):
     id: str
     label: str
-    kind: Literal["homing_fiducial", "tip_holder", "discard"]
+    kind: Literal["homing_fiducial", "tip_holder", "discard", "park"]
     position: Point
 
 
@@ -115,14 +125,21 @@ class FeederBank(ProfileModel):
 
 
 class ValueRange(ProfileModel):
+    """A display range. ``max`` may be below ``min`` for readings that grow more negative,
+    such as raw vacuum sensor counts."""
+
     min: float
     max: float
 
     @model_validator(mode="after")
     def _check_order(self) -> Self:
-        if self.min >= self.max:
-            raise ValueError("range min must be less than max")
+        if self.min == self.max:
+            raise ValueError("range min and max must differ")
         return self
+
+    def fraction(self, value: float) -> float:
+        """Where a value falls from min (0) to max (1), unclamped."""
+        return (value - self.min) / (self.max - self.min)
 
 
 class Input(ProfileModel):
@@ -134,8 +151,24 @@ class Input(ProfileModel):
     unit: str | None = None
     range: ValueRange | None = Field(default=None, description="Analog inputs: the display range.")
     threshold: float | None = Field(
-        default=None, description="Vacuum inputs: readings at or above this mean a part is held."
+        default=None,
+        description=(
+            "Vacuum inputs: readings at or past this value, going toward range.max, mean a "
+            "part is held."
+        ),
     )
+
+    @model_validator(mode="after")
+    def _threshold_needs_range(self) -> Self:
+        if self.threshold is not None and self.range is None:
+            raise ValueError(f"input {self.id}: a threshold needs a range")
+        return self
+
+    def past_threshold(self, value: float) -> bool:
+        """For vacuum inputs: whether a reading means a part is held."""
+        if self.threshold is None or self.range is None:
+            return False
+        return self.range.fraction(value) >= self.range.fraction(self.threshold)
 
 
 class Output(ProfileModel):

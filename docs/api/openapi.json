@@ -4,8 +4,15 @@
       "Axis": {
         "additionalProperties": false,
         "properties": {
+          "continuous": {
+            "default": false,
+            "description": "Rotary axes only: turns without limit, so min and max are not enforced.",
+            "title": "Continuous",
+            "type": "boolean"
+          },
           "home": {
             "default": 0.0,
+            "description": "Position after homing. May lie outside the soft limits: the firmware homes against a switch that moves can then not return to.",
             "title": "Home",
             "type": "number"
           },
@@ -19,6 +26,7 @@
             "type": "string"
           },
           "max": {
+            "description": "Soft limit. Ignored for continuous axes.",
             "title": "Max",
             "type": "number"
           },
@@ -29,6 +37,7 @@
             "type": "number"
           },
           "min": {
+            "description": "Soft limit. Ignored for continuous axes.",
             "title": "Min",
             "type": "number"
           },
@@ -45,7 +54,8 @@
           "min",
           "max",
           "home",
-          "max_speed"
+          "max_speed",
+          "continuous"
         ],
         "title": "Axis",
         "type": "object"
@@ -394,7 +404,7 @@
                 "type": "null"
               }
             ],
-            "description": "Vacuum inputs: readings at or above this mean a part is held.",
+            "description": "Vacuum inputs: readings at or past this value, going toward range.max, mean a part is held.",
             "title": "Threshold"
           },
           "unit": {
@@ -515,7 +525,8 @@
             "enum": [
               "homing_fiducial",
               "tip_holder",
-              "discard"
+              "discard",
+              "park"
             ],
             "title": "Kind",
             "type": "string"
@@ -1211,6 +1222,7 @@
       },
       "ValueRange": {
         "additionalProperties": false,
+        "description": "A display range. ``max`` may be below ``min`` for readings that grow more negative,\nsuch as raw vacuum sensor counts.",
         "properties": {
           "max": {
             "title": "Max",

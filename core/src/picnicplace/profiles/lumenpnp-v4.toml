@@ -1,9 +1,11 @@
 # LumenPnP v4 machine profile.
 #
-# PROVISIONAL: the layout, offsets, and I/O below are estimates from public information,
-# not measurements. They are close enough to develop the machine view against the
-# simulator, and will be replaced with values from a real v4 (its OpenPnP machine.xml and
-# a firmware session log).
+# Geometry, speeds, and I/O come from a working LumenPnP v4 (its OpenPnP machine.xml and a
+# serial log, November 2026); see docs/hardware/lumenpnp-v4.md. Calibrated values such as
+# nozzle offsets differ a little between machines and are refined by calibration.
+#
+# Still PROVISIONAL: the feeder rails. Photon feeder positions are not stored in OpenPnP's
+# config, so the rails below are estimates.
 #
 # Units: millimeters, degrees, seconds. X increases to the right, Y toward the back.
 # The head position is the center of the top camera; nozzle offsets are relative to it.
@@ -12,49 +14,56 @@ id = "lumenpnp-v4"
 name = "LumenPnP v4"
 provisional = true
 
-bed = { x_min = -20, y_min = -20, x_max = 470, y_max = 420 }
-work_area = { x_min = 20, y_min = 85, x_max = 420, y_max = 315 }
+# The outline is drawn to cover where the nozzles can reach (64 mm in front of the camera).
+bed = { x_min = -40, y_min = -75, x_max = 475, y_max = 500 }
+# Where the staging plates hold trays and boards, from the tray feeders on the reference
+# machine. Boards sit at about Z = -27.5.
+work_area = { x_min = 60, y_min = 90, x_max = 440, y_max = 300 }
 
 # Both nozzles share the Z motor: N1 goes down as Z decreases, N2 as Z increases.
-# Z = 0 has both nozzles at the top of their travel.
-safe_z = -1.0
+# Z = 0 has both nozzles up. OpenPnP's LumenPnP config treats -15..15 as safe for travel.
+safe_z = -15.0
 
 [[axes]]
 name = "X"
 min = 0
-max = 450
-max_speed = 500
+max = 433
+max_speed = 600
 
+# Y homes at 0, below its lower soft limit.
 [[axes]]
 name = "Y"
-min = 0
-max = 400
+min = 44.454
+max = 487
 max_speed = 500
 
 [[axes]]
 name = "Z"
-min = -30
-max = 30
-max_speed = 100
+min = -28.5
+max = 28.5
+max_speed = 400
 
+# Rotation is not homed and turns without limit; positions like -6300 are normal.
 [[axes]]
 name = "A"
 kind = "rotary"
+continuous = true
 min = -360
 max = 360
-max_speed = 1000
+max_speed = 720
 
 [[axes]]
 name = "B"
 kind = "rotary"
+continuous = true
 min = -360
 max = 360
-max_speed = 1000
+max_speed = 720
 
 [[nozzles]]
 id = "N1"
 label = "Left nozzle"
-offset = { x = -22, y = -35 }
+offset = { x = -23.836, y = -64.409 }
 z_axis = "Z"
 z_sign = 1
 rotation_axis = "A"
@@ -65,7 +74,7 @@ valve_output = "valve_n1"
 [[nozzles]]
 id = "N2"
 label = "Right nozzle"
-offset = { x = 22, y = -35 }
+offset = { x = 23.344, y = -64.384 }
 z_axis = "Z"
 z_sign = -1
 rotation_axis = "B"
@@ -73,46 +82,49 @@ vacuum_input = "vac_n2"
 pump_output = "pump_n2"
 valve_output = "valve_n2"
 
+# 1920 x 1080 at 0.01075 mm/pixel at board height.
 [[cameras]]
 id = "top"
 label = "Top camera"
 mount = "head"
 position = { x = 0, y = 0 }
 looking = "down"
-field_of_view = { x = 20, y = 15 }
+field_of_view = { x = 20.6, y = 11.7 }
 light_output = "light_top"
 
+# 1920 x 1080 at 0.0206 mm/pixel.
 [[cameras]]
 id = "bottom"
 label = "Bottom camera"
 mount = "fixed"
-position = { x = 440, y = 200 }
+position = { x = 217.736, y = 153.071 }
 looking = "up"
-field_of_view = { x = 24, y = 18 }
+field_of_view = { x = 39.6, y = 22.3 }
 light_output = "light_bottom"
 
 [[locations]]
 id = "homing_fiducial"
 label = "Homing fiducial"
 kind = "homing_fiducial"
-position = { x = 440, y = 120 }
-
-[[locations]]
-id = "tips"
-label = "Nozzle tip holder"
-kind = "tip_holder"
-position = { x = 440, y = 265 }
+position = { x = 217, y = 106 }
 
 [[locations]]
 id = "discard"
 label = "Discard"
 kind = "discard"
-position = { x = 440, y = 305 }
+position = { x = 157.751, y = 112.758 }
 
+[[locations]]
+id = "park"
+label = "Park"
+kind = "park"
+position = { x = 389.292, y = 421.551 }
+
+# Estimated: see the note at the top.
 [[feeder_banks]]
 id = "front"
 label = "Front rail"
-first_pick = { x = 40, y = 50 }
+first_pick = { x = 40, y = 30 }
 pitch = { x = 15, y = 0 }
 count = 24
 width = 13
@@ -122,7 +134,7 @@ rotation = 90
 [[feeder_banks]]
 id = "back"
 label = "Back rail"
-first_pick = { x = 40, y = 350 }
+first_pick = { x = 40, y = 410 }
 pitch = { x = 15, y = 0 }
 count = 24
 width = 13
@@ -150,24 +162,30 @@ kind = "digital"
 role = "home"
 axis = "Z"
 
+# Vacuum sensors report signed 24-bit counts that grow more negative with more vacuum. At
+# rest they read near 0; an open nozzle settles near -1,500,000. OpenPnP's nozzle tip
+# settings treat -1,600,000 and below as a part held. Firmware that reports only the top
+# byte is scaled to the same counts by the driver.
 [[inputs]]
 id = "vac_n1"
 label = "N1 vacuum"
 kind = "analog"
 role = "vacuum"
-unit = "kPa"
-range = { min = 0, max = 80 }
-threshold = 30
+unit = "counts"
+range = { min = 0, max = -2500000 }
+threshold = -1600000
 
 [[inputs]]
 id = "vac_n2"
 label = "N2 vacuum"
 kind = "analog"
 role = "vacuum"
-unit = "kPa"
-range = { min = 0, max = 80 }
-threshold = 30
+unit = "counts"
+range = { min = 0, max = -2500000 }
+threshold = -1600000
 
+# Each nozzle has a pump and a valve on Marlin fan outputs. OpenPnP switches the pair
+# together; which output is the pump and which the valve is inferred (see the notes).
 [[outputs]]
 id = "pump_n1"
 label = "N1 pump"

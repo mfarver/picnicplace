@@ -24,6 +24,14 @@ def test_builtin_profiles_load(profile_id: str) -> None:
     assert profile.id == profile_id
 
 
+def test_reversed_range_threshold() -> None:
+    # LumenPnP vacuum counts grow more negative with more vacuum.
+    profile = load_profile("lumenpnp-v4")
+    vac = next(i for i in profile.inputs if i.id == "vac_n1")
+    assert not vac.past_threshold(-1_500_000)  # open nozzle
+    assert vac.past_threshold(-2_000_000)  # part held
+
+
 def test_lumenpnp_shared_z() -> None:
     profile = load_profile("lumenpnp-v4")
     n1, n2 = profile.nozzles

@@ -154,8 +154,9 @@ class MachineService:
             raise InvalidTargetError(f"unknown axis {axis!r}")
         if axis in self._travel_axes:
             self._check_travel_allowed()
-        current = self._driver.position[axis]
-        target = min(limits.max, max(limits.min, current + distance))
+        target = self._driver.position[axis] + distance
+        if not limits.continuous:
+            target = min(limits.max, max(limits.min, target))
         return self._start_operation("jog", lambda: self._run_steps([{axis: target}], speed))
 
     async def set_output(self, output_id: str, on: bool) -> None:
@@ -213,7 +214,7 @@ class MachineService:
             axis = self._axes.get(name)
             if axis is None:
                 raise InvalidTargetError(f"unknown axis {name!r}")
-            if not axis.min <= value <= axis.max:
+            if not axis.continuous and not axis.min <= value <= axis.max:
                 raise InvalidTargetError(
                     f"{name}={value:g} is outside the limits {axis.min:g}..{axis.max:g}"
                 )

@@ -8,14 +8,12 @@ from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
 
-from .conftest import connect, fast_config, wait_for
-
-PROFILE = Path(__file__).parents[1] / "src/picnicplace/profiles/lumenpnp-v4.toml"
+from .conftest import TEST_PROFILE, connect, fast_config, wait_for
 
 
 def test_description(client: TestClient) -> None:
     body = client.get("/api/v1/machine/description").json()
-    assert body["id"] == "lumenpnp-v4"
+    assert body["id"] == "test-machine"
     assert [n["id"] for n in body["nozzles"]] == ["N1", "N2"]
     assert {c["id"] for c in body["cameras"]} == {"top", "bottom"}
     assert body["safe_z_input"] is None
@@ -55,7 +53,7 @@ def test_simulated_vacuum_and_pick(client: TestClient) -> None:
         # Suction with an empty nozzle settles at the open-nozzle level.
         s.put("/api/v1/machine/outputs/pump_n1", {"on": True})
         s.put("/api/v1/machine/outputs/valve_n1", {"on": True})
-        wait_for(lambda: 10 < vac() < 15)
+        wait_for(lambda: 20 < vac() < 30)  # below the 30 kPa pick threshold
 
         # Lowering the nozzle with suction on picks a part; vacuum rises past threshold.
         s.move(Z=-10)
@@ -119,13 +117,18 @@ def test_jog(client: TestClient) -> None:
         s.wait(s.post(jog, {"axis": "Z", "distance": -5}))
         assert s.post(jog, {"axis": "Y", "distance": 5}).json()["code"] == "z_not_safe"
         assert s.wait(s.post(jog, {"axis": "A", "distance": 90}))["status"] == "succeeded"
+        # A is clamped to its limits; B is continuous and turns past them.
+        s.wait(s.post(jog, {"axis": "A", "distance": 1000}))
+        assert s.state()["position"]["A"] == pytest.approx(360)
+        s.wait(s.post(jog, {"axis": "B", "distance": 1000}))
+        assert s.state()["position"]["B"] == pytest.approx(1000)
         assert s.post(jog, {"axis": "Q", "distance": 1}).status_code == 422
 
 
 @pytest.fixture
 def sensed_client(tmp_path: Path) -> Iterator[TestClient]:
-    """A LumenPnP v4 with a physical safe-Z sensor added."""
-    text = PROFILE.read_text().replace(
+    """The test machine with a physical safe-Z sensor added."""
+    text = TEST_PROFILE.read_text().replace(
         "safe_z = -1.0",
         'safe_z = -1.0\nsafe_z_input = "safe_z"',
     )

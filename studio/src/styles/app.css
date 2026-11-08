@@ -684,6 +684,13 @@ code,
   stroke-width: 1.25;
 }
 
+.mv-park-letter {
+  fill: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .mv-ring {
   fill: none;
   stroke: var(--text-muted);
@@ -929,6 +936,7 @@ code,
 
 .hi-vacuum-value {
   text-align: right;
+  white-space: nowrap;
 }
 
 .hi-bar {

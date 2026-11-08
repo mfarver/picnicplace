@@ -35,7 +35,27 @@ function partHeld(nozzle: Nozzle, d: MachineProfile, machine?: MachineState): bo
   if (!nozzle.vacuum_input) return false;
   const input = d.inputs.find((i) => i.id === nozzle.vacuum_input);
   const value = machine?.inputs[nozzle.vacuum_input];
-  return typeof value === "number" && input?.threshold != null && value >= input.threshold;
+  return typeof value === "number" && !!input && pastThreshold(input, value);
+}
+
+/** Where a value falls from range.min (0) to range.max (1). The range may run backward. */
+function rangeFraction(input: MachineInput, value: number): number {
+  const { min, max } = input.range ?? { min: 0, max: 100 };
+  return (value - min) / (max - min);
+}
+
+/** A vacuum reading at or past the pick threshold, going toward range.max (matches the core). */
+function pastThreshold(input: MachineInput, value: number): boolean {
+  if (input.threshold == null || !input.range) return false;
+  return rangeFraction(input, value) >= rangeFraction(input, input.threshold);
+}
+
+/** Large raw readings (sensor counts) read better as -1.50M than -1500000.0. */
+function formatReading(value: number, input: MachineInput): string {
+  const span = input.range ? Math.abs(input.range.max - input.range.min) : 100;
+  if (span >= 1e5) return `${(value / 1e6).toFixed(2)}M`;
+  if (span >= 1e3) return `${(value / 1e3).toFixed(1)}k`;
+  return value.toFixed(1);
 }
 
 export function HeadInset({
@@ -222,8 +242,8 @@ function Dial({ cx, cy, angle, label }: { cx: number; cy: number; angle: number;
 function VacuumBar({ input, value }: { input: MachineInput; value: number | boolean | undefined }) {
   const { min, max } = input.range ?? { min: 0, max: 100 };
   const reading = typeof value === "number" ? value : 0;
-  const frac = (v: number) => Math.min(1, Math.max(0, (v - min) / (max - min)));
-  const held = input.threshold != null && reading >= input.threshold;
+  const frac = (v: number) => Math.min(1, Math.max(0, rangeFraction(input, v)));
+  const held = pastThreshold(input, reading);
   return (
     <div className={`hi-vacuum${held ? " hi-lit" : ""}`}>
       <span className="hi-vacuum-label">{input.label}</span>
@@ -240,13 +260,13 @@ function VacuumBar({ input, value }: { input: MachineInput; value: number | bool
           <span
             className="hi-bar-threshold"
             style={{ left: `${frac(input.threshold) * 100}%` }}
-            title={`Pick threshold ${input.threshold} ${input.unit ?? ""}`}
+            title={`Pick threshold ${formatReading(input.threshold, input)} ${input.unit ?? ""}`}
           />
         )}
       </span>
       <span className="hi-vacuum-value mono">
-        {reading.toFixed(1)}
-        {input.unit && <span className="text-muted"> {input.unit}</span>}
+        {formatReading(reading, input)}
+        {input.unit && input.unit !== "counts" && <span className="text-muted"> {input.unit}</span>}
       </span>
     </div>
   );

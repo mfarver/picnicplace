@@ -248,7 +248,14 @@ export interface components {
         /** Axis */
         Axis: {
             /**
+             * Continuous
+             * @description Rotary axes only: turns without limit, so min and max are not enforced.
+             * @default false
+             */
+            continuous: boolean;
+            /**
              * Home
+             * @description Position after homing. May lie outside the soft limits: the firmware homes against a switch that moves can then not return to.
              * @default 0
              */
             home: number;
@@ -258,14 +265,20 @@ export interface components {
              * @enum {string}
              */
             kind: "linear" | "rotary";
-            /** Max */
+            /**
+             * Max
+             * @description Soft limit. Ignored for continuous axes.
+             */
             max: number;
             /**
              * Max Speed
              * @description Units per second (mm/s or deg/s).
              */
             max_speed: number;
-            /** Min */
+            /**
+             * Min
+             * @description Soft limit. Ignored for continuous axes.
+             */
             min: number;
             /** Name */
             name: string;
@@ -432,7 +445,7 @@ export interface components {
             role: "home" | "safe_z" | "vacuum" | "other";
             /**
              * Threshold
-             * @description Vacuum inputs: readings at or above this mean a part is held.
+             * @description Vacuum inputs: readings at or past this value, going toward range.max, mean a part is held.
              */
             threshold: number | null;
             /** Unit */
@@ -481,7 +494,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "homing_fiducial" | "tip_holder" | "discard";
+            kind: "homing_fiducial" | "tip_holder" | "discard" | "park";
             /** Label */
             label: string;
             position: components["schemas"]["Point"];
@@ -759,7 +772,11 @@ export interface components {
             /** Error Type */
             type: string;
         };
-        /** ValueRange */
+        /**
+         * ValueRange
+         * @description A display range. ``max`` may be below ``min`` for readings that grow more negative,
+         *     such as raw vacuum sensor counts.
+         */
         ValueRange: {
             /** Max */
             max: number;

@@ -2,6 +2,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx2 as httpx
@@ -12,11 +13,13 @@ from starlette.testclient import WebSocketTestSession
 from picnicplace.api import create_app
 from picnicplace.config import Config
 
+TEST_PROFILE = Path(__file__).parent / "profiles" / "test-machine.toml"
+
 
 def fast_config(**overrides: Any) -> Config:
-    """A config with a fast simulator and short presence timers."""
+    """A config for the test machine, with a fast simulator and short presence timers."""
     data: dict[str, Any] = {
-        "machine": {"sim_time_scale": 100.0},
+        "machine": {"sim_time_scale": 100.0, "profile": str(TEST_PROFILE)},
         "presence": {"grace_period_s": 0.2, "heartbeat_timeout_s": 5.0},
     }
     for section, values in overrides.items():

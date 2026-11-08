@@ -14,8 +14,9 @@
 # Units: millimeters, degrees, seconds. +X points right and +Y toward the back, with the
 # origin at the front left. The bottom camera (Y 153 of 0-487) is near the front, as on
 # the machine, and N1 (at -X) is then the left nozzle, as OpenPnP names it. An earlier
-# version of this profile had both axes the other way; check by jogging: +X should move
-# the head right and +Y toward the back.
+# version of this profile had both axes the other way; Opulo's assembly model agrees
+# with this one (see the bed below). Check by jogging: +X should move the head right and
+# +Y toward the back.
 # The head position is the center of the top camera; nozzle offsets are relative to it.
 
 id = "lumenpnp-v4.1"
@@ -24,8 +25,10 @@ provisional = true
 x_points = "right"
 y_points = "back"
 
-# The outline is drawn to cover where the nozzles can reach (64 mm in front of the camera).
-bed = { x_min = -90, y_min = -75, x_max = 525, y_max = 500 }
+# The bed outline is the frame's 600 x 600 mm of extrusion, from Opulo's assembly model
+# (a 2022 LumenPnP, placed by its bottom camera). That model also has the nozzles 66 mm in
+# front of the top camera and the endstops at the front left, as this orientation says.
+bed = { x_min = -82, y_min = -31, x_max = 518, y_max = 569 }
 # Where boards go is computed: the part of the staging plates every nozzle can reach
 # (the nozzles are 47 mm apart, so each reaches 47 mm farther on its own side).
 # Boards sit at about Z = -27.5.

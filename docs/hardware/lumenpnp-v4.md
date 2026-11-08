@@ -85,6 +85,15 @@ it, and the front feeder rail (pick Y ≈ 73) no longer lands on a staging plate
 **To confirm** by jogging: +X should move the head right, +Y toward the back. The
 bring-up checklist in the Studio asks.
 
+Opulo's assembly model (a STEP file from April 2022, so an earlier LumenPnP than v4.1)
+agrees. Placed by its bottom camera, it has the nozzles 66 mm in front of the top camera
+and 24 mm to each side (OpenPnP's offsets are 64.4 and 23.3 to 23.8), the Y endstop at
+the front left, the X endstop at the left, the 600 × 600 mm frame at X −82 … 518 and
+Y −31 … 569, and its one staging plate exactly where the profile puts the camera plate.
+Its datum board is behind the camera (Y ≈ 191), where v4.1 has the aiming fiducial, so
+the datum, the second plate, and the feeder rails have moved since; the model has no
+feeder rails.
+
 ## Where boards can go
 
 Each nozzle reaches the head's travel shifted by its offset, so with the nozzles 47 mm

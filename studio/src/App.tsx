@@ -7,7 +7,9 @@ import { StatusBar } from "./components/StatusBar";
 import { TokenPrompt } from "./components/TokenPrompt";
 import { TopBar, type WorkspaceTab } from "./components/TopBar";
 import { useTheme } from "./theme";
+import { LibraryWorkspace } from "./workspaces/LibraryWorkspace";
 import { MachineWorkspace } from "./workspaces/MachineWorkspace";
+import { PrepareWorkspace } from "./workspaces/PrepareWorkspace";
 
 interface Workspace extends WorkspaceTab {
   render: () => ReactNode;
@@ -18,27 +20,13 @@ const WORKSPACES: Workspace[] = [
     id: "prepare",
     label: "Prepare",
     icon: CircuitBoard,
-    render: () => (
-      <Placeholder
-        icon={CircuitBoard}
-        title="Prepare"
-        description="Import boards, assign parts, and set up panels and fiducials."
-        milestone="M4"
-      />
-    ),
+    render: () => <PrepareWorkspace />,
   },
   {
-    id: "feeders",
-    label: "Feeders",
+    id: "parts",
+    label: "Parts",
     icon: Layers,
-    render: () => (
-      <Placeholder
-        icon={Layers}
-        title="Feeders"
-        description="Lay out feeders, discover Photon feeders, and teach pick locations."
-        milestone="M3"
-      />
-    ),
+    render: () => <LibraryWorkspace />,
   },
   {
     id: "run",

@@ -60,6 +60,169 @@
         "title": "Axis",
         "type": "object"
       },
+      "Board-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/Placement-Input"
+            },
+            "title": "Placements",
+            "type": "array"
+          },
+          "size": {
+            "$ref": "#/components/schemas/Size",
+            "description": "The outline's bounding box."
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "thickness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Board thickness, mm.",
+            "title": "Thickness"
+          }
+        },
+        "required": [
+          "name",
+          "size"
+        ],
+        "title": "Board",
+        "type": "object"
+      },
+      "Board-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/Placement-Output"
+            },
+            "title": "Placements",
+            "type": "array"
+          },
+          "size": {
+            "$ref": "#/components/schemas/Size",
+            "description": "The outline's bounding box."
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "thickness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Board thickness, mm.",
+            "title": "Thickness"
+          }
+        },
+        "required": [
+          "name",
+          "size",
+          "thickness",
+          "source",
+          "placements"
+        ],
+        "title": "Board",
+        "type": "object"
+      },
+      "BoardCopy-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise, from the top.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "x": {
+            "description": "Where the board's origin is, in the panel frame.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "x",
+          "y"
+        ],
+        "title": "BoardCopy",
+        "type": "object"
+      },
+      "BoardCopy-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise, from the top.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "x": {
+            "description": "Where the board's origin is, in the panel frame.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "x",
+          "y",
+          "rotation",
+          "enabled"
+        ],
+        "title": "BoardCopy",
+        "type": "object"
+      },
       "Camera": {
         "additionalProperties": false,
         "properties": {
@@ -256,6 +419,43 @@
         "title": "PingMessage",
         "type": "object"
       },
+      "Conflict": {
+        "properties": {
+          "current": {
+            "description": "The library's value, which was kept.",
+            "title": "Current"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "incoming": {
+            "description": "The imported value, which was not used.",
+            "title": "Incoming"
+          },
+          "kind": {
+            "enum": [
+              "footprint",
+              "part"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "field",
+          "current",
+          "incoming"
+        ],
+        "title": "Conflict",
+        "type": "object"
+      },
       "ErrorEvent": {
         "properties": {
           "message": {
@@ -351,6 +551,160 @@
         "title": "FeederBank",
         "type": "object"
       },
+      "Filled": {
+        "properties": {
+          "fields": {
+            "description": "Fields that were empty and now have a value.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "footprint",
+              "part"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "fields"
+        ],
+        "title": "Filled",
+        "type": "object"
+      },
+      "Footprint-Input": {
+        "additionalProperties": false,
+        "description": "The shape of a part as seen from above: its pads and body.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Size"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Body outline, centered on the origin, if known."
+          },
+          "body_basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Body Basis",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "pads": {
+            "items": {
+              "$ref": "#/components/schemas/Pad-Input"
+            },
+            "title": "Pads",
+            "type": "array"
+          },
+          "source": {
+            "default": "",
+            "description": "Where this footprint came from.",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "Footprint",
+        "type": "object"
+      },
+      "Footprint-Output": {
+        "additionalProperties": false,
+        "description": "The shape of a part as seen from above: its pads and body.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Size"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Body outline, centered on the origin, if known."
+          },
+          "body_basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Body Basis",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "pads": {
+            "items": {
+              "$ref": "#/components/schemas/Pad-Output"
+            },
+            "title": "Pads",
+            "type": "array"
+          },
+          "source": {
+            "default": "",
+            "description": "Where this footprint came from.",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "description",
+          "body",
+          "body_basis",
+          "pads",
+          "source"
+        ],
+        "title": "Footprint",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -430,6 +784,80 @@
           "lease"
         ],
         "title": "HelloEvent",
+        "type": "object"
+      },
+      "ImportReport": {
+        "properties": {
+          "added": {
+            "description": "'footprint:ID' or 'part:ID' for new entries.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/Conflict"
+            },
+            "title": "Conflicts",
+            "type": "array"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "filled": {
+            "items": {
+              "$ref": "#/components/schemas/Filled"
+            },
+            "title": "Filled",
+            "type": "array"
+          },
+          "replaced": {
+            "description": "Entries overwritten (overwrite mode only).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Replaced",
+            "type": "array"
+          },
+          "unchanged": {
+            "default": 0,
+            "title": "Unchanged",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "added",
+          "replaced",
+          "filled",
+          "conflicts",
+          "unchanged",
+          "errors"
+        ],
+        "title": "ImportReport",
+        "type": "object"
+      },
+      "ImportRequest": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/LibraryDocument-Input"
+          },
+          "overwrite": {
+            "default": false,
+            "description": "Replace entries that already exist. By default existing entries keep their values: only empty values are filled in, and differences are reported.",
+            "title": "Overwrite",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "document"
+        ],
+        "title": "ImportRequest",
         "type": "object"
       },
       "Input": {
@@ -521,6 +949,278 @@
         "title": "Input",
         "type": "object"
       },
+      "Issue": {
+        "properties": {
+          "copy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Copy Id"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "message",
+          "ref",
+          "copy_id"
+        ],
+        "title": "Issue",
+        "type": "object"
+      },
+      "Job-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "board": {
+            "$ref": "#/components/schemas/Board-Input"
+          },
+          "board_z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Machine Z of the board's top surface, once measured.",
+            "title": "Board Z"
+          },
+          "format": {
+            "const": "picnicplace-job",
+            "default": "picnicplace-job",
+            "title": "Format",
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachineLocation-Input"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the panel sits on the machine, once set."
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "panel": {
+            "$ref": "#/components/schemas/Panel-Input"
+          },
+          "side_up": {
+            "description": "The board side facing up on the machine.",
+            "enum": [
+              "top",
+              "bottom"
+            ],
+            "title": "Side Up",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "board",
+          "panel",
+          "side_up"
+        ],
+        "title": "Job",
+        "type": "object"
+      },
+      "Job-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "board": {
+            "$ref": "#/components/schemas/Board-Output"
+          },
+          "board_z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Machine Z of the board's top surface, once measured.",
+            "title": "Board Z"
+          },
+          "format": {
+            "const": "picnicplace-job",
+            "default": "picnicplace-job",
+            "title": "Format",
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachineLocation-Output"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the panel sits on the machine, once set."
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "panel": {
+            "$ref": "#/components/schemas/Panel-Output"
+          },
+          "side_up": {
+            "description": "The board side facing up on the machine.",
+            "enum": [
+              "top",
+              "bottom"
+            ],
+            "title": "Side Up",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "name",
+          "board",
+          "panel",
+          "side_up",
+          "location",
+          "board_z"
+        ],
+        "title": "Job",
+        "type": "object"
+      },
+      "JobLayout": {
+        "properties": {
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "ok": {
+            "description": "No errors: the machine can do every enabled placement.",
+            "readOnly": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "outline": {
+            "description": "The panel's corners, machine coordinates.",
+            "items": {
+              "$ref": "#/components/schemas/Point"
+            },
+            "title": "Outline",
+            "type": "array"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/MachinePlacement"
+            },
+            "title": "Placements",
+            "type": "array"
+          }
+        },
+        "required": [
+          "placements",
+          "outline",
+          "issues",
+          "ok"
+        ],
+        "title": "JobLayout",
+        "type": "object"
+      },
+      "JobSummary": {
+        "properties": {
+          "board": {
+            "title": "Board",
+            "type": "string"
+          },
+          "copies": {
+            "title": "Copies",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "modified": {
+            "format": "date-time",
+            "title": "Modified",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "placed": {
+            "title": "Placed",
+            "type": "boolean"
+          },
+          "side_up": {
+            "title": "Side Up",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "board",
+          "copies",
+          "side_up",
+          "placed",
+          "modified"
+        ],
+        "title": "JobSummary",
+        "type": "object"
+      },
       "JogRequest": {
         "properties": {
           "axis": {
@@ -576,6 +1276,115 @@
         "title": "KeepOut",
         "type": "object"
       },
+      "KicadImportRequest": {
+        "properties": {
+          "add_to_library": {
+            "default": false,
+            "description": "Merge the board's footprints and parts into the library (existing entries keep their values). Needs the config permission.",
+            "title": "Add To Library",
+            "type": "boolean"
+          },
+          "bom_csv": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional BOM CSV from the schematic, to take part numbers from instead of the board's fields. Grouped or one row per reference.",
+            "title": "Bom Csv"
+          },
+          "kicad_pcb": {
+            "description": "Contents of the .kicad_pcb file.",
+            "title": "Kicad Pcb",
+            "type": "string"
+          },
+          "name": {
+            "default": "board",
+            "description": "Name for the board.",
+            "title": "Name",
+            "type": "string"
+          },
+          "panel_pcb": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional panel .kicad_pcb made from this board (such as by KiKit). Its board copies are found by matching references; its own fiducials are kept.",
+            "title": "Panel Pcb"
+          },
+          "part_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Field holding the part number. Default: the first of MP, MPN, ... found.",
+            "title": "Part Field"
+          }
+        },
+        "required": [
+          "kicad_pcb"
+        ],
+        "title": "KicadImportRequest",
+        "type": "object"
+      },
+      "KicadImportResult": {
+        "properties": {
+          "board": {
+            "$ref": "#/components/schemas/Board-Output"
+          },
+          "job": {
+            "$ref": "#/components/schemas/Job-Output",
+            "description": "A new job for the board or panel, not yet saved or placed."
+          },
+          "library": {
+            "$ref": "#/components/schemas/LibraryDocument-Output",
+            "description": "Footprints read from the board, and a part for each part number."
+          },
+          "library_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportReport"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What merging into the library did, when add_to_library was set."
+          },
+          "panel": {
+            "$ref": "#/components/schemas/Panel-Output",
+            "description": "The panel layout, or a single copy of the board."
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "board",
+          "panel",
+          "job",
+          "library",
+          "library_report",
+          "warnings"
+        ],
+        "title": "KicadImportResult",
+        "type": "object"
+      },
       "LeaseEvent": {
         "properties": {
           "lease": {
@@ -625,6 +1434,80 @@
           "holder"
         ],
         "title": "LeaseState",
+        "type": "object"
+      },
+      "LibraryDocument-Input": {
+        "additionalProperties": false,
+        "description": "The whole library, or part of it, as one document: the text export format.",
+        "properties": {
+          "footprints": {
+            "items": {
+              "$ref": "#/components/schemas/Footprint-Input"
+            },
+            "title": "Footprints",
+            "type": "array"
+          },
+          "format": {
+            "const": "picnicplace-library",
+            "default": "picnicplace-library",
+            "title": "Format",
+            "type": "string"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/Part-Input"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "title": "LibraryDocument",
+        "type": "object"
+      },
+      "LibraryDocument-Output": {
+        "additionalProperties": false,
+        "description": "The whole library, or part of it, as one document: the text export format.",
+        "properties": {
+          "footprints": {
+            "items": {
+              "$ref": "#/components/schemas/Footprint-Output"
+            },
+            "title": "Footprints",
+            "type": "array"
+          },
+          "format": {
+            "const": "picnicplace-library",
+            "default": "picnicplace-library",
+            "title": "Format",
+            "type": "string"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/Part-Output"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "footprints",
+          "parts"
+        ],
+        "title": "LibraryDocument",
         "type": "object"
       },
       "Location": {
@@ -698,6 +1581,142 @@
           "style"
         ],
         "title": "Location",
+        "type": "object"
+      },
+      "MachineLocation-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise, as the operator sees the bed from the front.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "x": {
+            "description": "Machine X of the panel's front-left corner, mm.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "description": "Machine Y of the panel's front-left corner, mm.",
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "MachineLocation",
+        "type": "object"
+      },
+      "MachineLocation-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise, as the operator sees the bed from the front.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "x": {
+            "description": "Machine X of the panel's front-left corner, mm.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "description": "Machine Y of the panel's front-left corner, mm.",
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "rotation"
+        ],
+        "title": "MachineLocation",
+        "type": "object"
+      },
+      "MachinePlacement": {
+        "properties": {
+          "copy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Board copy, or None for a panel fiducial.",
+            "title": "Copy Id"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "footprint_id": {
+            "title": "Footprint Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "part",
+              "fiducial"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Id"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "rotation": {
+            "description": "The part's angle as the operator sees it, degrees counterclockwise.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "x": {
+            "description": "Machine X, mm.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "description": "Machine Y, mm.",
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "copy_id",
+          "ref",
+          "kind",
+          "part_id",
+          "footprint_id",
+          "x",
+          "y",
+          "rotation",
+          "enabled",
+          "note"
+        ],
+        "title": "MachinePlacement",
         "type": "object"
       },
       "MachineProfile": {
@@ -1382,6 +2401,41 @@
         "title": "Nozzle",
         "type": "object"
       },
+      "OpenPnpImportRequest": {
+        "properties": {
+          "overwrite": {
+            "default": false,
+            "title": "Overwrite",
+            "type": "boolean"
+          },
+          "packages_xml": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Contents of packages.xml.",
+            "title": "Packages Xml"
+          },
+          "parts_xml": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Contents of parts.xml.",
+            "title": "Parts Xml"
+          }
+        },
+        "title": "OpenPnpImportRequest",
+        "type": "object"
+      },
       "Operation": {
         "properties": {
           "error": {
@@ -1518,6 +2572,535 @@
           "on"
         ],
         "title": "OutputRequest",
+        "type": "object"
+      },
+      "Pad-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "description": "Size along Y before rotation, mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Height",
+            "type": "number"
+          },
+          "name": {
+            "description": "Pad number or name, such as '1' or 'EP'.",
+            "title": "Name",
+            "type": "string"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "roundness": {
+            "default": 0.0,
+            "description": "Corner rounding as a percentage of the shorter side: 0 is a rectangle, 100 a circle or oval.",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Roundness",
+            "type": "number"
+          },
+          "width": {
+            "description": "Size along X before rotation, mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "description": "Pad center in the footprint frame, mm.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "Pad",
+        "type": "object"
+      },
+      "Pad-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "description": "Size along Y before rotation, mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Height",
+            "type": "number"
+          },
+          "name": {
+            "description": "Pad number or name, such as '1' or 'EP'.",
+            "title": "Name",
+            "type": "string"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "roundness": {
+            "default": 0.0,
+            "description": "Corner rounding as a percentage of the shorter side: 0 is a rectangle, 100 a circle or oval.",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Roundness",
+            "type": "number"
+          },
+          "width": {
+            "description": "Size along X before rotation, mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "description": "Pad center in the footprint frame, mm.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "x",
+          "y",
+          "width",
+          "height",
+          "rotation",
+          "roundness"
+        ],
+        "title": "Pad",
+        "type": "object"
+      },
+      "Panel-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "copies": {
+            "items": {
+              "$ref": "#/components/schemas/BoardCopy-Input"
+            },
+            "title": "Copies",
+            "type": "array"
+          },
+          "fiducials": {
+            "description": "The panel's own, in the panel frame.",
+            "items": {
+              "$ref": "#/components/schemas/Placement-Input"
+            },
+            "title": "Fiducials",
+            "type": "array"
+          },
+          "size": {
+            "$ref": "#/components/schemas/Size"
+          }
+        },
+        "required": [
+          "size",
+          "copies"
+        ],
+        "title": "Panel",
+        "type": "object"
+      },
+      "Panel-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "copies": {
+            "items": {
+              "$ref": "#/components/schemas/BoardCopy-Output"
+            },
+            "title": "Copies",
+            "type": "array"
+          },
+          "fiducials": {
+            "description": "The panel's own, in the panel frame.",
+            "items": {
+              "$ref": "#/components/schemas/Placement-Output"
+            },
+            "title": "Fiducials",
+            "type": "array"
+          },
+          "size": {
+            "$ref": "#/components/schemas/Size"
+          }
+        },
+        "required": [
+          "size",
+          "copies",
+          "fiducials"
+        ],
+        "title": "Panel",
+        "type": "object"
+      },
+      "Part-Input": {
+        "additionalProperties": false,
+        "description": "A part number: what it is, its footprint, its height, and its tape.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "footprint_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Footprint Id",
+            "type": "string"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Height above the board, mm. None if not known.",
+            "title": "Height"
+          },
+          "height_basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Height Basis",
+            "type": "string"
+          },
+          "height_source": {
+            "default": "",
+            "title": "Height Source",
+            "type": "string"
+          },
+          "id": {
+            "description": "Usually the manufacturer part number, as in the board's BOM.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "manufacturer": {
+            "default": "",
+            "title": "Manufacturer",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "description": "Short name or value, such as '100nF'.",
+            "title": "Name",
+            "type": "string"
+          },
+          "speed": {
+            "default": 1.0,
+            "description": "Fraction of full speed when carrying this part.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Speed",
+            "type": "number"
+          },
+          "tape": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Tape-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "footprint_id"
+        ],
+        "title": "Part",
+        "type": "object"
+      },
+      "Part-Output": {
+        "additionalProperties": false,
+        "description": "A part number: what it is, its footprint, its height, and its tape.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "footprint_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Footprint Id",
+            "type": "string"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Height above the board, mm. None if not known.",
+            "title": "Height"
+          },
+          "height_basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Height Basis",
+            "type": "string"
+          },
+          "height_source": {
+            "default": "",
+            "title": "Height Source",
+            "type": "string"
+          },
+          "id": {
+            "description": "Usually the manufacturer part number, as in the board's BOM.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "manufacturer": {
+            "default": "",
+            "title": "Manufacturer",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "description": "Short name or value, such as '100nF'.",
+            "title": "Name",
+            "type": "string"
+          },
+          "speed": {
+            "default": 1.0,
+            "description": "Fraction of full speed when carrying this part.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Speed",
+            "type": "number"
+          },
+          "tape": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Tape-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "manufacturer",
+          "description",
+          "footprint_id",
+          "height",
+          "height_basis",
+          "height_source",
+          "tape",
+          "speed"
+        ],
+        "title": "Part",
+        "type": "object"
+      },
+      "Placement-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "footprint_id": {
+            "description": "Library footprint ID (the footprint's name).",
+            "title": "Footprint Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "part",
+            "enum": [
+              "part",
+              "fiducial"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "description": "Why the placement is disabled, if it is.",
+            "title": "Note",
+            "type": "string"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Library part ID, usually the manufacturer part number. None if unknown.",
+            "title": "Part Id"
+          },
+          "ref": {
+            "description": "Reference designator, such as 'C1'.",
+            "title": "Ref",
+            "type": "string"
+          },
+          "rotation": {
+            "description": "Degrees counterclockwise, seen from the top.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "side": {
+            "enum": [
+              "top",
+              "bottom"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "value": {
+            "default": "",
+            "title": "Value",
+            "type": "string"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ref",
+          "part_id",
+          "footprint_id",
+          "x",
+          "y",
+          "rotation",
+          "side"
+        ],
+        "title": "Placement",
+        "type": "object"
+      },
+      "Placement-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "footprint_id": {
+            "description": "Library footprint ID (the footprint's name).",
+            "title": "Footprint Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "part",
+            "enum": [
+              "part",
+              "fiducial"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "description": "Why the placement is disabled, if it is.",
+            "title": "Note",
+            "type": "string"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Library part ID, usually the manufacturer part number. None if unknown.",
+            "title": "Part Id"
+          },
+          "ref": {
+            "description": "Reference designator, such as 'C1'.",
+            "title": "Ref",
+            "type": "string"
+          },
+          "rotation": {
+            "description": "Degrees counterclockwise, seen from the top.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "side": {
+            "enum": [
+              "top",
+              "bottom"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "value": {
+            "default": "",
+            "title": "Value",
+            "type": "string"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ref",
+          "kind",
+          "part_id",
+          "value",
+          "footprint_id",
+          "x",
+          "y",
+          "rotation",
+          "side",
+          "enabled",
+          "note"
+        ],
+        "title": "Placement",
         "type": "object"
       },
       "Point": {
@@ -1689,6 +3272,29 @@
           }
         ]
       },
+      "Size": {
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "description": "Along the footprint's X axis, mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "description": "Along the footprint's Y axis, mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "Size",
+        "type": "object"
+      },
       "StagingPlate": {
         "additionalProperties": false,
         "description": "A plate that boards and trays mount on, with a grid of tapped holes.",
@@ -1788,6 +3394,187 @@
         "title": "StagingPlate",
         "type": "object"
       },
+      "Tape-Input": {
+        "additionalProperties": false,
+        "description": "How a part is packaged in carrier tape (EIA-481).",
+        "properties": {
+          "basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "kind": {
+            "default": "unknown",
+            "enum": [
+              "paper",
+              "embossed",
+              "unknown"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "pin1_quadrant": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Q1",
+                  "Q2",
+                  "Q3",
+                  "Q4"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pin 1's quadrant in the tape frame, as in tape-and-reel datasheets: Q1 top left, Q2 top right, Q3 bottom left, Q4 bottom right.",
+            "title": "Pin1 Quadrant"
+          },
+          "pitch": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pocket pitch (P1), mm: 2, 4, 8, ... None if not known.",
+            "title": "Pitch"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right).",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tape width, mm: 8, 12, 16, 24, ... None if not known.",
+            "title": "Width"
+          }
+        },
+        "title": "Tape",
+        "type": "object"
+      },
+      "Tape-Output": {
+        "additionalProperties": false,
+        "description": "How a part is packaged in carrier tape (EIA-481).",
+        "properties": {
+          "basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "kind": {
+            "default": "unknown",
+            "enum": [
+              "paper",
+              "embossed",
+              "unknown"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "pin1_quadrant": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Q1",
+                  "Q2",
+                  "Q3",
+                  "Q4"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pin 1's quadrant in the tape frame, as in tape-and-reel datasheets: Q1 top left, Q2 top right, Q3 bottom left, Q4 bottom right.",
+            "title": "Pin1 Quadrant"
+          },
+          "pitch": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pocket pitch (P1), mm: 2, 4, 8, ... None if not known.",
+            "title": "Pitch"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right).",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tape width, mm: 8, 12, 16, 24, ... None if not known.",
+            "title": "Width"
+          }
+        },
+        "required": [
+          "kind",
+          "width",
+          "pitch",
+          "rotation",
+          "pin1_quadrant",
+          "basis",
+          "source"
+        ],
+        "title": "Tape",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -1863,6 +3650,63 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/boards/import/kicad": {
+      "post": {
+        "description": "Read a KiCad board: its placements, and the footprints and parts it uses.",
+        "operationId": "import_kicad_api_v1_boards_import_kicad_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KicadImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KicadImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A file could not be read."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Import Kicad",
+        "tags": [
+          "boards"
+        ]
+      }
+    },
     "/api/v1/cameras": {
       "get": {
         "operationId": "list_cameras_api_v1_cameras_get",
@@ -2210,6 +4054,301 @@
         ]
       }
     },
+    "/api/v1/jobs": {
+      "get": {
+        "operationId": "list_jobs_api_v1_jobs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobSummary"
+                  },
+                  "title": "Response List Jobs Api V1 Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Jobs",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/find-location": {
+      "post": {
+        "description": "A place on the bed where the job fits: every placement within reach of every\nnozzle, fiducials where the camera sees them, clear of the keep-outs.",
+        "operationId": "job_find_location_api_v1_jobs_find_location_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Job-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineLocation-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The board fits nowhere."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Job Find Location",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/layout": {
+      "post": {
+        "description": "Where each placement of a job (saved or not) lands on this machine, and anything\nthat stops the machine from doing it: placements out of reach, fiducials the\ncamera cannot see, or the board over a keep-out.",
+        "operationId": "job_layout_api_v1_jobs_layout_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Job-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobLayout"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Job Layout",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}": {
+      "delete": {
+        "operationId": "delete_job_api_v1_jobs__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No job with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Job",
+        "tags": [
+          "jobs"
+        ]
+      },
+      "get": {
+        "operationId": "get_job_api_v1_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No job with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Job",
+        "tags": [
+          "jobs"
+        ]
+      },
+      "put": {
+        "description": "Save a job, creating or replacing it.",
+        "operationId": "put_job_api_v1_jobs__job_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Job-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
     "/api/v1/lease": {
       "delete": {
         "description": "Give up control of the machine, if this client holds it.",
@@ -2373,6 +4512,540 @@
         "summary": "Acquire Lease",
         "tags": [
           "lease"
+        ]
+      }
+    },
+    "/api/v1/library/export": {
+      "get": {
+        "description": "The whole library as one JSON document, for backup or sharing.",
+        "operationId": "export_library_api_v1_library_export_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryDocument-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Library",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/footprints": {
+      "get": {
+        "operationId": "list_footprints_api_v1_library_footprints_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Footprint-Output"
+                  },
+                  "title": "Response List Footprints Api V1 Library Footprints Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Footprints",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/footprints/{footprint_id}": {
+      "delete": {
+        "description": "Delete a footprint. Refused while any part uses it.",
+        "operationId": "delete_footprint_api_v1_library_footprints__footprint_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "footprint_id",
+            "required": true,
+            "schema": {
+              "title": "Footprint Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No entry with this ID."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The change would break the library."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Footprint",
+        "tags": [
+          "library"
+        ]
+      },
+      "get": {
+        "operationId": "get_footprint_api_v1_library_footprints__footprint_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "footprint_id",
+            "required": true,
+            "schema": {
+              "title": "Footprint Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Footprint-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No entry with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Footprint",
+        "tags": [
+          "library"
+        ]
+      },
+      "put": {
+        "description": "Create or replace a footprint.",
+        "operationId": "put_footprint_api_v1_library_footprints__footprint_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "footprint_id",
+            "required": true,
+            "schema": {
+              "title": "Footprint Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Footprint-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Footprint-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Footprint",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/import": {
+      "post": {
+        "description": "Merge a library document (as exported) into the library.",
+        "operationId": "import_library_api_v1_library_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Import Library",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/import/openpnp": {
+      "post": {
+        "description": "Merge OpenPnP packages (as footprints) and parts into the library.",
+        "operationId": "import_openpnp_api_v1_library_import_openpnp_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenPnpImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A file could not be read."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Import Openpnp",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/parts": {
+      "get": {
+        "operationId": "list_parts_api_v1_library_parts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Part-Output"
+                  },
+                  "title": "Response List Parts Api V1 Library Parts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Parts",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/parts/{part_id}": {
+      "delete": {
+        "operationId": "delete_part_api_v1_library_parts__part_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No entry with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Part",
+        "tags": [
+          "library"
+        ]
+      },
+      "get": {
+        "operationId": "get_part_api_v1_library_parts__part_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Part-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No entry with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Part",
+        "tags": [
+          "library"
+        ]
+      },
+      "put": {
+        "description": "Create or replace a part. Its footprint must already be in the library.",
+        "operationId": "put_part_api_v1_library_parts__part_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Part-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Part-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The change would break the library."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Part",
+        "tags": [
+          "library"
         ]
       }
     },

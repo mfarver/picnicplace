@@ -1,6 +1,7 @@
 """Core configuration, loaded from a TOML file and validated with Pydantic."""
 
 import ipaddress
+import os
 import tomllib
 from pathlib import Path
 from typing import Any, Literal, Self
@@ -50,6 +51,29 @@ class PresenceConfig(_Section):
         gt=0,
         description="A client that sends nothing for this long is disconnected.",
     )
+
+
+def _default_data_dir() -> Path:
+    base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return Path(base) / "picnicplace"
+
+
+class DataConfig(_Section):
+    dir: Path = Field(
+        default_factory=_default_data_dir,
+        description=(
+            "Where the core keeps its data, such as the parts library. "
+            "Default: $XDG_DATA_HOME/picnicplace, or ~/.local/share/picnicplace."
+        ),
+    )
+
+    @property
+    def library_path(self) -> Path:
+        return self.dir.expanduser() / "library.sqlite3"
+
+    @property
+    def jobs_dir(self) -> Path:
+        return self.dir.expanduser() / "jobs"
 
 
 class MarlinConfig(_Section):
@@ -167,6 +191,7 @@ class CameraConfig(_Section):
 class Config(_Section):
     server: ServerConfig = Field(default_factory=ServerConfig)
     presence: PresenceConfig = Field(default_factory=PresenceConfig)
+    data: DataConfig = Field(default_factory=DataConfig)
     machine: MachineConfig = Field(default_factory=MachineConfig)
     cameras: dict[str, CameraConfig] = Field(
         default_factory=dict[str, CameraConfig],

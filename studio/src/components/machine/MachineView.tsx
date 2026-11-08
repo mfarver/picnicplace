@@ -2,6 +2,7 @@ import { Maximize } from "lucide-react";
 import {
   createContext,
   type PointerEvent,
+  type ReactNode,
   type SVGProps,
   useCallback,
   useContext,
@@ -40,7 +41,7 @@ function orientation(d: MachineProfile): Orientation {
 const ViewOrientation = createContext<Orientation>({ xs: 1, ys: 1 });
 
 /** SVG text at a point in the drawing, kept readable however the view is flipped. */
-function Label({ x, y, ...rest }: SVGProps<SVGTextElement> & { x: number; y: number }) {
+export function Label({ x, y, ...rest }: SVGProps<SVGTextElement> & { x: number; y: number }) {
   const { xs, ys } = useContext(ViewOrientation);
   const flipped = xs !== 1 || ys !== 1;
   return (
@@ -112,9 +113,11 @@ interface Props {
   canMove?: boolean;
   /** Move the head (top camera) to a point. Leave out to disable click-to-move. */
   onMoveTo?: (target: Point) => void;
+  /** Extra drawing, in the map's coordinates: machine X, and machine Y negated. */
+  overlay?: ReactNode;
 }
 
-export function MachineView({ description, machine, canMove = false, onMoveTo }: Props) {
+export function MachineView({ description, machine, canMove = false, onMoveTo, overlay }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [view, setView] = useState<ViewBox>(() => fitView(description));
   const [cursor, setCursor] = useState<Point | null>(null);
@@ -329,6 +332,7 @@ export function MachineView({ description, machine, canMove = false, onMoveTo }:
               </g>
             ))}
 
+            {overlay}
             {head && <Head description={description} at={head} />}
             {target && <TargetMarker at={target} />}
           </g>

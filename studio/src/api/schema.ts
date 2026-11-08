@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/boards/import/kicad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Kicad
+         * @description Read a KiCad board: its placements, and the footprints and parts it uses.
+         */
+        post: operations["import_kicad_api_v1_boards_import_kicad_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cameras": {
         parameters: {
             query?: never;
@@ -81,6 +101,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Jobs */
+        get: operations["list_jobs_api_v1_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/find-location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Job Find Location
+         * @description A place on the bed where the job fits: every placement within reach of every
+         *     nozzle, fiducials where the camera sees them, clear of the keep-outs.
+         */
+        post: operations["job_find_location_api_v1_jobs_find_location_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/layout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Job Layout
+         * @description Where each placement of a job (saved or not) lands on this machine, and anything
+         *     that stops the machine from doing it: placements out of reach, fiducials the
+         *     camera cannot see, or the board over a keep-out.
+         */
+        post: operations["job_layout_api_v1_jobs_layout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Job */
+        get: operations["get_job_api_v1_jobs__job_id__get"];
+        /**
+         * Put Job
+         * @description Save a job, creating or replacing it.
+         */
+        put: operations["put_job_api_v1_jobs__job_id__put"];
+        post?: never;
+        /** Delete Job */
+        delete: operations["delete_job_api_v1_jobs__job_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lease": {
         parameters: {
             query?: never;
@@ -101,6 +203,147 @@ export interface paths {
          * @description Give up control of the machine, if this client holds it.
          */
         delete: operations["release_lease_api_v1_lease_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Library
+         * @description The whole library as one JSON document, for backup or sharing.
+         */
+        get: operations["export_library_api_v1_library_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/footprints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Footprints */
+        get: operations["list_footprints_api_v1_library_footprints_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/footprints/{footprint_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Footprint */
+        get: operations["get_footprint_api_v1_library_footprints__footprint_id__get"];
+        /**
+         * Put Footprint
+         * @description Create or replace a footprint.
+         */
+        put: operations["put_footprint_api_v1_library_footprints__footprint_id__put"];
+        post?: never;
+        /**
+         * Delete Footprint
+         * @description Delete a footprint. Refused while any part uses it.
+         */
+        delete: operations["delete_footprint_api_v1_library_footprints__footprint_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Library
+         * @description Merge a library document (as exported) into the library.
+         */
+        post: operations["import_library_api_v1_library_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/import/openpnp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Openpnp
+         * @description Merge OpenPnP packages (as footprints) and parts into the library.
+         */
+        post: operations["import_openpnp_api_v1_library_import_openpnp_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Parts */
+        get: operations["list_parts_api_v1_library_parts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/parts/{part_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Part */
+        get: operations["get_part_api_v1_library_parts__part_id__get"];
+        /**
+         * Put Part
+         * @description Create or replace a part. Its footprint must already be in the library.
+         */
+        put: operations["put_part_api_v1_library_parts__part_id__put"];
+        post?: never;
+        /** Delete Part */
+        delete: operations["delete_part_api_v1_library_parts__part_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -402,6 +645,90 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** Board */
+        "Board-Input": {
+            /** Name */
+            name: string;
+            /** Placements */
+            placements?: components["schemas"]["Placement-Input"][];
+            /** @description The outline's bounding box. */
+            size: components["schemas"]["Size"];
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Thickness
+             * @description Board thickness, mm.
+             */
+            thickness?: number | null;
+        };
+        /** Board */
+        "Board-Output": {
+            /** Name */
+            name: string;
+            /** Placements */
+            placements: components["schemas"]["Placement-Output"][];
+            /** @description The outline's bounding box. */
+            size: components["schemas"]["Size"];
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Thickness
+             * @description Board thickness, mm.
+             */
+            thickness: number | null;
+        };
+        /** BoardCopy */
+        "BoardCopy-Input": {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, from the top.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * X
+             * @description Where the board's origin is, in the panel frame.
+             */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** BoardCopy */
+        "BoardCopy-Output": {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, from the top.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * X
+             * @description Where the board's origin is, in the panel frame.
+             */
+            x: number;
+            /** Y */
+            y: number;
+        };
         /** Camera */
         Camera: {
             /** @description Width (x) and height (y) of the view in mm. */
@@ -492,6 +819,28 @@ export interface components {
              */
             type: "ping";
         };
+        /** Conflict */
+        Conflict: {
+            /**
+             * Current
+             * @description The library's value, which was kept.
+             */
+            current: unknown;
+            /** Field */
+            field: string;
+            /** Id */
+            id: string;
+            /**
+             * Incoming
+             * @description The imported value, which was not used.
+             */
+            incoming: unknown;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "footprint" | "part";
+        };
         /** ErrorEvent */
         ErrorEvent: {
             /** Message */
@@ -541,6 +890,79 @@ export interface components {
              */
             width: number;
         };
+        /** Filled */
+        Filled: {
+            /**
+             * Fields
+             * @description Fields that were empty and now have a value.
+             */
+            fields: string[];
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "footprint" | "part";
+        };
+        /**
+         * Footprint
+         * @description The shape of a part as seen from above: its pads and body.
+         */
+        "Footprint-Input": {
+            /** @description Body outline, centered on the origin, if known. */
+            body?: components["schemas"]["Size"] | null;
+            /**
+             * Body Basis
+             * @default unknown
+             * @enum {string}
+             */
+            body_basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
+            /** Pads */
+            pads?: components["schemas"]["Pad-Input"][];
+            /**
+             * Source
+             * @description Where this footprint came from.
+             * @default
+             */
+            source: string;
+        };
+        /**
+         * Footprint
+         * @description The shape of a part as seen from above: its pads and body.
+         */
+        "Footprint-Output": {
+            /** @description Body outline, centered on the origin, if known. */
+            body: components["schemas"]["Size"] | null;
+            /**
+             * Body Basis
+             * @default unknown
+             * @enum {string}
+             */
+            body_basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
+            /** Pads */
+            pads: components["schemas"]["Pad-Output"][];
+            /**
+             * Source
+             * @description Where this footprint came from.
+             * @default
+             */
+            source: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -579,6 +1001,40 @@ export interface components {
              */
             type: "hello";
         };
+        /** ImportReport */
+        ImportReport: {
+            /**
+             * Added
+             * @description 'footprint:ID' or 'part:ID' for new entries.
+             */
+            added: string[];
+            /** Conflicts */
+            conflicts: components["schemas"]["Conflict"][];
+            /** Errors */
+            errors: string[];
+            /** Filled */
+            filled: components["schemas"]["Filled"][];
+            /**
+             * Replaced
+             * @description Entries overwritten (overwrite mode only).
+             */
+            replaced: string[];
+            /**
+             * Unchanged
+             * @default 0
+             */
+            unchanged: number;
+        };
+        /** ImportRequest */
+        ImportRequest: {
+            document: components["schemas"]["LibraryDocument-Input"];
+            /**
+             * Overwrite
+             * @description Replace entries that already exist. By default existing entries keep their values: only empty values are filled in, and differences are reported.
+             * @default false
+             */
+            overwrite: boolean;
+        };
         /** Input */
         Input: {
             /**
@@ -610,6 +1066,121 @@ export interface components {
             /** Unit */
             unit: string | null;
         };
+        /** Issue */
+        Issue: {
+            /** Copy Id */
+            copy_id: string | null;
+            /** Message */
+            message: string;
+            /** Ref */
+            ref: string | null;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "error" | "warning";
+        };
+        /** Job */
+        "Job-Input": {
+            board: components["schemas"]["Board-Input"];
+            /**
+             * Board Z
+             * @description Machine Z of the board's top surface, once measured.
+             */
+            board_z?: number | null;
+            /**
+             * Format
+             * @default picnicplace-job
+             * @constant
+             */
+            format: "picnicplace-job";
+            /** @description Where the panel sits on the machine, once set. */
+            location?: components["schemas"]["MachineLocation-Input"] | null;
+            /** Name */
+            name: string;
+            panel: components["schemas"]["Panel-Input"];
+            /**
+             * Side Up
+             * @description The board side facing up on the machine.
+             * @enum {string}
+             */
+            side_up: "top" | "bottom";
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
+        /** Job */
+        "Job-Output": {
+            board: components["schemas"]["Board-Output"];
+            /**
+             * Board Z
+             * @description Machine Z of the board's top surface, once measured.
+             */
+            board_z: number | null;
+            /**
+             * Format
+             * @default picnicplace-job
+             * @constant
+             */
+            format: "picnicplace-job";
+            /** @description Where the panel sits on the machine, once set. */
+            location: components["schemas"]["MachineLocation-Output"] | null;
+            /** Name */
+            name: string;
+            panel: components["schemas"]["Panel-Output"];
+            /**
+             * Side Up
+             * @description The board side facing up on the machine.
+             * @enum {string}
+             */
+            side_up: "top" | "bottom";
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
+        /** JobLayout */
+        JobLayout: {
+            /** Issues */
+            issues: components["schemas"]["Issue"][];
+            /**
+             * Ok
+             * @description No errors: the machine can do every enabled placement.
+             */
+            readonly ok: boolean;
+            /**
+             * Outline
+             * @description The panel's corners, machine coordinates.
+             */
+            outline: components["schemas"]["Point"][];
+            /** Placements */
+            placements: components["schemas"]["MachinePlacement"][];
+        };
+        /** JobSummary */
+        JobSummary: {
+            /** Board */
+            board: string;
+            /** Copies */
+            copies: number;
+            /** Id */
+            id: string;
+            /**
+             * Modified
+             * Format: date-time
+             */
+            modified: string;
+            /** Name */
+            name: string;
+            /** Placed */
+            placed: boolean;
+            /** Side Up */
+            side_up: string;
+        };
         /** JogRequest */
         JogRequest: {
             /** Axis */
@@ -633,6 +1204,55 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** KicadImportRequest */
+        KicadImportRequest: {
+            /**
+             * Add To Library
+             * @description Merge the board's footprints and parts into the library (existing entries keep their values). Needs the config permission.
+             * @default false
+             */
+            add_to_library: boolean;
+            /**
+             * Bom Csv
+             * @description Optional BOM CSV from the schematic, to take part numbers from instead of the board's fields. Grouped or one row per reference.
+             */
+            bom_csv?: string | null;
+            /**
+             * Kicad Pcb
+             * @description Contents of the .kicad_pcb file.
+             */
+            kicad_pcb: string;
+            /**
+             * Name
+             * @description Name for the board.
+             * @default board
+             */
+            name: string;
+            /**
+             * Panel Pcb
+             * @description Optional panel .kicad_pcb made from this board (such as by KiKit). Its board copies are found by matching references; its own fiducials are kept.
+             */
+            panel_pcb?: string | null;
+            /**
+             * Part Field
+             * @description Field holding the part number. Default: the first of MP, MPN, ... found.
+             */
+            part_field?: string | null;
+        };
+        /** KicadImportResult */
+        KicadImportResult: {
+            board: components["schemas"]["Board-Output"];
+            /** @description A new job for the board or panel, not yet saved or placed. */
+            job: components["schemas"]["Job-Output"];
+            /** @description Footprints read from the board, and a part for each part number. */
+            library: components["schemas"]["LibraryDocument-Output"];
+            /** @description What merging into the library did, when add_to_library was set. */
+            library_report: components["schemas"]["ImportReport"] | null;
+            /** @description The panel layout, or a single copy of the board. */
+            panel: components["schemas"]["Panel-Output"];
+            /** Warnings */
+            warnings: string[];
+        };
         /** LeaseEvent */
         LeaseEvent: {
             lease: components["schemas"]["LeaseState"];
@@ -655,6 +1275,50 @@ export interface components {
         LeaseState: {
             /** @description The client allowed to move the machine, or null if no one holds it. */
             holder: components["schemas"]["ClientInfo"] | null;
+        };
+        /**
+         * LibraryDocument
+         * @description The whole library, or part of it, as one document: the text export format.
+         */
+        "LibraryDocument-Input": {
+            /** Footprints */
+            footprints?: components["schemas"]["Footprint-Input"][];
+            /**
+             * Format
+             * @default picnicplace-library
+             * @constant
+             */
+            format: "picnicplace-library";
+            /** Parts */
+            parts?: components["schemas"]["Part-Input"][];
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
+        /**
+         * LibraryDocument
+         * @description The whole library, or part of it, as one document: the text export format.
+         */
+        "LibraryDocument-Output": {
+            /** Footprints */
+            footprints: components["schemas"]["Footprint-Output"][];
+            /**
+             * Format
+             * @default picnicplace-library
+             * @constant
+             */
+            format: "picnicplace-library";
+            /** Parts */
+            parts: components["schemas"]["Part-Output"][];
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
         };
         /** Location */
         Location: {
@@ -685,6 +1349,85 @@ export interface components {
              * @description Height of the surface, where it matters (fiducials).
              */
             z: number | null;
+        };
+        /** MachineLocation */
+        "MachineLocation-Input": {
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, as the operator sees the bed from the front.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * X
+             * @description Machine X of the panel's front-left corner, mm.
+             */
+            x: number;
+            /**
+             * Y
+             * @description Machine Y of the panel's front-left corner, mm.
+             */
+            y: number;
+        };
+        /** MachineLocation */
+        "MachineLocation-Output": {
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, as the operator sees the bed from the front.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * X
+             * @description Machine X of the panel's front-left corner, mm.
+             */
+            x: number;
+            /**
+             * Y
+             * @description Machine Y of the panel's front-left corner, mm.
+             */
+            y: number;
+        };
+        /** MachinePlacement */
+        MachinePlacement: {
+            /**
+             * Copy Id
+             * @description Board copy, or None for a panel fiducial.
+             */
+            copy_id: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Footprint Id */
+            footprint_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "part" | "fiducial";
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Part Id */
+            part_id: string | null;
+            /** Ref */
+            ref: string;
+            /**
+             * Rotation
+             * @description The part's angle as the operator sees it, degrees counterclockwise.
+             */
+            rotation: number;
+            /**
+             * X
+             * @description Machine X, mm.
+             */
+            x: number;
+            /**
+             * Y
+             * @description Machine Y, mm.
+             */
+            y: number;
         };
         /** MachineProfile */
         MachineProfile: {
@@ -987,6 +1730,24 @@ export interface components {
              */
             z_sign: 1 | -1;
         };
+        /** OpenPnpImportRequest */
+        OpenPnpImportRequest: {
+            /**
+             * Overwrite
+             * @default false
+             */
+            overwrite: boolean;
+            /**
+             * Packages Xml
+             * @description Contents of packages.xml.
+             */
+            packages_xml?: string | null;
+            /**
+             * Parts Xml
+             * @description Contents of parts.xml.
+             */
+            parts_xml?: string | null;
+        };
         /** Operation */
         Operation: {
             /**
@@ -1045,6 +1806,314 @@ export interface components {
         OutputRequest: {
             /** On */
             on: boolean;
+        };
+        /** Pad */
+        "Pad-Input": {
+            /**
+             * Height
+             * @description Size along Y before rotation, mm.
+             */
+            height: number;
+            /**
+             * Name
+             * @description Pad number or name, such as '1' or 'EP'.
+             */
+            name: string;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * Roundness
+             * @description Corner rounding as a percentage of the shorter side: 0 is a rectangle, 100 a circle or oval.
+             * @default 0
+             */
+            roundness: number;
+            /**
+             * Width
+             * @description Size along X before rotation, mm.
+             */
+            width: number;
+            /**
+             * X
+             * @description Pad center in the footprint frame, mm.
+             */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** Pad */
+        "Pad-Output": {
+            /**
+             * Height
+             * @description Size along Y before rotation, mm.
+             */
+            height: number;
+            /**
+             * Name
+             * @description Pad number or name, such as '1' or 'EP'.
+             */
+            name: string;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * Roundness
+             * @description Corner rounding as a percentage of the shorter side: 0 is a rectangle, 100 a circle or oval.
+             * @default 0
+             */
+            roundness: number;
+            /**
+             * Width
+             * @description Size along X before rotation, mm.
+             */
+            width: number;
+            /**
+             * X
+             * @description Pad center in the footprint frame, mm.
+             */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** Panel */
+        "Panel-Input": {
+            /** Copies */
+            copies: components["schemas"]["BoardCopy-Input"][];
+            /**
+             * Fiducials
+             * @description The panel's own, in the panel frame.
+             */
+            fiducials?: components["schemas"]["Placement-Input"][];
+            size: components["schemas"]["Size"];
+        };
+        /** Panel */
+        "Panel-Output": {
+            /** Copies */
+            copies: components["schemas"]["BoardCopy-Output"][];
+            /**
+             * Fiducials
+             * @description The panel's own, in the panel frame.
+             */
+            fiducials: components["schemas"]["Placement-Output"][];
+            size: components["schemas"]["Size"];
+        };
+        /**
+         * Part
+         * @description A part number: what it is, its footprint, its height, and its tape.
+         */
+        "Part-Input": {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Footprint Id */
+            footprint_id: string;
+            /**
+             * Height
+             * @description Height above the board, mm. None if not known.
+             */
+            height?: number | null;
+            /**
+             * Height Basis
+             * @default unknown
+             * @enum {string}
+             */
+            height_basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /**
+             * Height Source
+             * @default
+             */
+            height_source: string;
+            /**
+             * Id
+             * @description Usually the manufacturer part number, as in the board's BOM.
+             */
+            id: string;
+            /**
+             * Manufacturer
+             * @default
+             */
+            manufacturer: string;
+            /**
+             * Name
+             * @description Short name or value, such as '100nF'.
+             * @default
+             */
+            name: string;
+            /**
+             * Speed
+             * @description Fraction of full speed when carrying this part.
+             * @default 1
+             */
+            speed: number;
+            tape?: components["schemas"]["Tape-Input"] | null;
+        };
+        /**
+         * Part
+         * @description A part number: what it is, its footprint, its height, and its tape.
+         */
+        "Part-Output": {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Footprint Id */
+            footprint_id: string;
+            /**
+             * Height
+             * @description Height above the board, mm. None if not known.
+             */
+            height: number | null;
+            /**
+             * Height Basis
+             * @default unknown
+             * @enum {string}
+             */
+            height_basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /**
+             * Height Source
+             * @default
+             */
+            height_source: string;
+            /**
+             * Id
+             * @description Usually the manufacturer part number, as in the board's BOM.
+             */
+            id: string;
+            /**
+             * Manufacturer
+             * @default
+             */
+            manufacturer: string;
+            /**
+             * Name
+             * @description Short name or value, such as '100nF'.
+             * @default
+             */
+            name: string;
+            /**
+             * Speed
+             * @description Fraction of full speed when carrying this part.
+             * @default 1
+             */
+            speed: number;
+            tape: components["schemas"]["Tape-Output"] | null;
+        };
+        /** Placement */
+        "Placement-Input": {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Footprint Id
+             * @description Library footprint ID (the footprint's name).
+             */
+            footprint_id: string;
+            /**
+             * Kind
+             * @default part
+             * @enum {string}
+             */
+            kind: "part" | "fiducial";
+            /**
+             * Note
+             * @description Why the placement is disabled, if it is.
+             * @default
+             */
+            note: string;
+            /**
+             * Part Id
+             * @description Library part ID, usually the manufacturer part number. None if unknown.
+             */
+            part_id: string | null;
+            /**
+             * Ref
+             * @description Reference designator, such as 'C1'.
+             */
+            ref: string;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, seen from the top.
+             */
+            rotation: number;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "top" | "bottom";
+            /**
+             * Value
+             * @default
+             */
+            value: string;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** Placement */
+        "Placement-Output": {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Footprint Id
+             * @description Library footprint ID (the footprint's name).
+             */
+            footprint_id: string;
+            /**
+             * Kind
+             * @default part
+             * @enum {string}
+             */
+            kind: "part" | "fiducial";
+            /**
+             * Note
+             * @description Why the placement is disabled, if it is.
+             * @default
+             */
+            note: string;
+            /**
+             * Part Id
+             * @description Library part ID, usually the manufacturer part number. None if unknown.
+             */
+            part_id: string | null;
+            /**
+             * Ref
+             * @description Reference designator, such as 'C1'.
+             */
+            ref: string;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, seen from the top.
+             */
+            rotation: number;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "top" | "bottom";
+            /**
+             * Value
+             * @default
+             */
+            value: string;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
         };
         /** Point */
         Point: {
@@ -1110,6 +2179,19 @@ export interface components {
             y_min: number;
         };
         ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
+        /** Size */
+        Size: {
+            /**
+             * X
+             * @description Along the footprint's X axis, mm.
+             */
+            x: number;
+            /**
+             * Y
+             * @description Along the footprint's Y axis, mm.
+             */
+            y: number;
+        };
         /**
          * StagingPlate
          * @description A plate that boards and trays mount on, with a grid of tapped holes.
@@ -1162,6 +2244,94 @@ export interface components {
             label: string;
             size: components["schemas"]["Point"];
         };
+        /**
+         * Tape
+         * @description How a part is packaged in carrier tape (EIA-481).
+         */
+        "Tape-Input": {
+            /**
+             * Basis
+             * @default unknown
+             * @enum {string}
+             */
+            basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /**
+             * Kind
+             * @default unknown
+             * @enum {string}
+             */
+            kind: "paper" | "embossed" | "unknown";
+            /**
+             * Pin1 Quadrant
+             * @description Pin 1's quadrant in the tape frame, as in tape-and-reel datasheets: Q1 top left, Q2 top right, Q3 bottom left, Q4 bottom right.
+             */
+            pin1_quadrant?: ("Q1" | "Q2" | "Q3" | "Q4") | null;
+            /**
+             * Pitch
+             * @description Pocket pitch (P1), mm: 2, 4, 8, ... None if not known.
+             */
+            pitch?: number | null;
+            /**
+             * Rotation
+             * @description The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right).
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Width
+             * @description Tape width, mm: 8, 12, 16, 24, ... None if not known.
+             */
+            width?: number | null;
+        };
+        /**
+         * Tape
+         * @description How a part is packaged in carrier tape (EIA-481).
+         */
+        "Tape-Output": {
+            /**
+             * Basis
+             * @default unknown
+             * @enum {string}
+             */
+            basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /**
+             * Kind
+             * @default unknown
+             * @enum {string}
+             */
+            kind: "paper" | "embossed" | "unknown";
+            /**
+             * Pin1 Quadrant
+             * @description Pin 1's quadrant in the tape frame, as in tape-and-reel datasheets: Q1 top left, Q2 top right, Q3 bottom left, Q4 bottom right.
+             */
+            pin1_quadrant: ("Q1" | "Q2" | "Q3" | "Q4") | null;
+            /**
+             * Pitch
+             * @description Pocket pitch (P1), mm: 2, 4, 8, ... None if not known.
+             */
+            pitch: number | null;
+            /**
+             * Rotation
+             * @description The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right).
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Width
+             * @description Tape width, mm: 8, 12, 16, 24, ... None if not known.
+             */
+            width: number | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -1195,6 +2365,48 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    import_kicad_api_v1_boards_import_kicad_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KicadImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KicadImportResult"];
+                };
+            };
+            /** @description A file could not be read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_cameras_api_v1_cameras_get: {
         parameters: {
             query?: {
@@ -1363,6 +2575,214 @@ export interface operations {
             };
         };
     };
+    list_jobs_api_v1_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobSummary"][];
+                };
+            };
+        };
+    };
+    job_find_location_api_v1_jobs_find_location_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Job-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineLocation-Output"];
+                };
+            };
+            /** @description The board fits nowhere. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    job_layout_api_v1_jobs_layout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Job-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobLayout"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_api_v1_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job-Output"];
+                };
+            };
+            /** @description No job with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_job_api_v1_jobs__job_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Job-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_job_api_v1_jobs__job_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No job with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_lease_api_v1_lease_get: {
         parameters: {
             query?: never;
@@ -1451,6 +2871,385 @@ export interface operations {
             };
             /** @description The machine cannot do this right now, or this client does not hold the control lease. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_library_api_v1_library_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryDocument-Output"];
+                };
+            };
+        };
+    };
+    list_footprints_api_v1_library_footprints_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Footprint-Output"][];
+                };
+            };
+        };
+    };
+    get_footprint_api_v1_library_footprints__footprint_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                footprint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Footprint-Output"];
+                };
+            };
+            /** @description No entry with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_footprint_api_v1_library_footprints__footprint_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                footprint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Footprint-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Footprint-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_footprint_api_v1_library_footprints__footprint_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                footprint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No entry with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The change would break the library. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_library_api_v1_library_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_openpnp_api_v1_library_import_openpnp_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenPnpImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReport"];
+                };
+            };
+            /** @description A file could not be read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_parts_api_v1_library_parts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Part-Output"][];
+                };
+            };
+        };
+    };
+    get_part_api_v1_library_parts__part_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Part-Output"];
+                };
+            };
+            /** @description No entry with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_part_api_v1_library_parts__part_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Part-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Part-Output"];
+                };
+            };
+            /** @description The change would break the library. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_part_api_v1_library_parts__part_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No entry with this ID. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

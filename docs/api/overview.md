@@ -46,6 +46,14 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/cameras` | Cameras and whether they are streaming |
 | `GET /api/v1/cameras/{id}/snapshot.jpg` | One JPEG frame |
 | `GET /api/v1/cameras/{id}/stream.mjpg` | A live MJPEG stream |
+| `GET`, `PUT`, `DELETE /api/v1/library/parts/{id}` | Parts (and `GET /library/parts` to list) |
+| `GET`, `PUT`, `DELETE /api/v1/library/footprints/{id}` | Footprints (and `GET /library/footprints`) |
+| `GET /api/v1/library/export`, `POST /api/v1/library/import` | The library as one JSON document |
+| `POST /api/v1/library/import/openpnp` | Merge OpenPnP `packages.xml` and `parts.xml` |
+| `POST /api/v1/boards/import/kicad` | Read a KiCad board (and panel, and BOM) into a board, its library entries, and a new job |
+| `GET /api/v1/jobs`; `GET`, `PUT`, `DELETE /api/v1/jobs/{id}` | Saved jobs |
+| `POST /api/v1/jobs/layout` | Where a job's placements land on the machine, and what stops it |
+| `POST /api/v1/jobs/find-location` | A place on the bed where a job fits |
 
 ## Rules worth knowing
 

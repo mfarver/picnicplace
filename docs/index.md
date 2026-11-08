@@ -102,8 +102,8 @@ assumptions. See the [LumenPnP notes](hardware/lumenpnp-v4.md).
 | M0: Skeleton | Core, simulator, event socket, Studio shell | Done |
 | M1: Manual control | Machine profiles, machine view, jogging, safe-Z interlock, control lease, Marlin driver, camera streams | Done, awaiting real-machine tests |
 | M2: Calibration | Visual homing and camera scale (done); lens calibration, nozzle offsets and runout, guided wizards | In progress |
-| M3: Single placement | Parts and packages, Photon feeders, pick, bottom-camera alignment, place | Planned |
-| M4: Jobs | KiCad and CSV import, board fiducials, planner, run history | Planned |
+| M3: Single placement | Parts library (done: footprints, heights, tape orientation); Photon feeders, pick, bottom-camera alignment, place | In progress |
+| M4: Jobs | KiCad board and KiKit panel import, placing a job within every nozzle's reach (done); board fiducials, planner, run history | In progress |
 | M5: 1.0 | Strip and tray feeders, packaging, user documentation, OpenPnP library import | Planned |
 
 ## Get involved

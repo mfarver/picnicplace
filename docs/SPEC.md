@@ -410,7 +410,11 @@ correction. Implementations:
 
 - Machine config: human-readable text files under a config directory, validated by
   Pydantic, versioned with automatic migrations. Easy to diff and back up.
-- Part, package, and feeder libraries: SQLite, with import/export to text.
+- Part, footprint (OpenPnP: package), and feeder libraries: SQLite, with import/export to
+  text. Imports merge: new entries are added and empty values filled in, but a value the
+  library already has is kept and the difference reported, so values tuned on the
+  machine survive re-importing a board.
+- Jobs: one JSON file per job, holding the board, panel, side up, and location.
 - Calibration results are stored separately from hand-written config so recalibration does
   not rewrite user edits.
 
@@ -561,8 +565,8 @@ refusing to connect.
 | **M0 — Skeleton** | Repo layout, tooling, CI, `picnicd` with health endpoint, simulator driver, event socket, GUI shell with theme and status bar. |
 | **M1 — Manual control** | Machine description API and I/O state; machine view with head inset (built first, against the simulator); connect to LumenPnP, home, jog, actuators, vacuum readings, safe-Z interlock, MJPEG camera streams in the GUI, control lease, E-stop. |
 | **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. Started: fiducial finder, visual homing (after `G28`, center the top camera on the homing fiducial and correct X/Y with `G92`), and a camera scale measurement, all tested against the simulator, whose homing has a realistic error for visual homing to find. |
-| **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. |
-| **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. Boards must lie inside the profile's placement area (where every nozzle can reach, on the staging plates) and clear of its keep-outs; import warns about any placement a nozzle cannot reach. |
+| **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. Started: the parts library (footprints, parts with height and its source, tape packaging after EIA-481 with rotation in tape and pin-1 quadrant), merge-only imports, OpenPnP library import, and a library editor in the Studio. |
+| **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. Boards must lie inside the profile's placement area (where every nozzle can reach, on the staging plates) and clear of its keep-outs; import warns about any placement a nozzle cannot reach. Started: KiCad board import (footprints with pads, part numbers from the board or the schematic's BOM), panels recovered from a KiKit panel file, jobs placed on the bed with reach, camera, and keep-out checks and a search for a place that fits, saved as job files, and a Prepare workspace. |
 | **M5 — 1.0 polish** | Strip and tray feeders, installer/packaging, docs, OpenPnP library import. |
 
 ## 12. Repository layout

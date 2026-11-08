@@ -714,6 +714,22 @@ code,
   stroke-width: 1.5;
 }
 
+.mv-plate rect {
+  fill: var(--mv-plate);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.mv-plate-hole {
+  fill: var(--bg);
+}
+
+.mv-plate-knockout {
+  fill: var(--bg);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
 .mv-work {
   fill: var(--mv-work);
   stroke: var(--mv-work-stroke);

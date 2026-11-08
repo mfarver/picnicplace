@@ -47,6 +47,14 @@ What OpenPnP sends after opening the port (and waiting 3 s for the board to rese
   `X:0.00 Y:0.00 Z:0.00 A:-6300.00 B:-540.00 Count X:0 Y:0 Z:0 A:-27972 B:-2398`.
 - Dwell: `G4 P<ms>`.
 
+## Coordinates
+
+The origin (0, 0) is the right rear corner. Facing the machine, +X points left and +Y
+toward the front. The profile sets `view_rotation = 180`, so the Studio draws the map,
+the jog arrows, and camera images as an operator facing the machine sees them (front at
+the bottom, +X to the left), and vision converts image offsets the same way. N1 is at
+−X from the top camera, so it is the right-hand nozzle; N2 is the left.
+
 ## Axes and geometry
 
 From the reference machine (calibrated values vary slightly between machines):
@@ -136,11 +144,29 @@ protocol and is not described here yet.
   Until the camera is calibrated, the scale comes from the profile's field of view; the
   Calibration panel's Camera scale button measures the real one.
 
+## Staging plates
+
+From the plate's KiCad design (LumenPnP Staging Plate rev 00): 600 × 120 mm, black.
+
+- M3 holes (3.2 mm) on a 15 mm grid in a checkerboard pattern, columns 1–39 along the
+  long side and rows A–G across it (labels on both sides), 133 in all, and four M5
+  holes (5.3 mm) near the corners at ±290, ±50 mm from the center.
+- A 44 mm round knockout at the plate's center, held by four mouse-bite tabs, to be
+  broken out for the bottom camera. The same design is used for both plates; only the
+  one over the camera has its knockout removed.
+- On the reference machine the camera plate is centered on the bottom camera at
+  (217.74, 153.07), so it spans X −82 … 518 and Y 93 … 213. Where the second plate sits
+  is not recorded yet.
+- The datum board stands on a raised spacer just behind the knockout (Y 106) with its
+  notched edge toward the camera. A small green board in a clear holder just in front of
+  the knockout carries the aiming fiducial, at (217.46, 196.03), Z −31.5, 1.2 mm across.
+  With the datum (Z −27.5) it gives the top camera's scale at two heights.
+
 ## Datum board (homing fiducial)
 
 From the board's KiCad design (PCB-0004 rev 00, 80 × 35 mm, 1.6 mm). Positions are
-relative to the center fiducial, with +Y toward the back if the board is mounted with
-its ruler toward the front (the mounting orientation is not confirmed).
+relative to the center fiducial, as seen from the front of the machine (+ right, + back);
+the board's notched edge, with the ruler, faces the front and the bottom camera.
 
 - **Colors:** LumenPnP boards are black with white silkscreen (the staging plates too).
   The copper finish is not recorded in the design; the simulator assumes gold (ENIG).

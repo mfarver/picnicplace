@@ -626,6 +626,7 @@
           "kind": {
             "enum": [
               "homing_fiducial",
+              "fiducial",
               "tip_holder",
               "discard",
               "park"
@@ -649,6 +650,18 @@
             ],
             "title": "Style",
             "type": "string"
+          },
+          "z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Height of the surface, where it matters (fiducials).",
+            "title": "Z"
           }
         },
         "required": [
@@ -656,6 +669,7 @@
           "label",
           "kind",
           "position",
+          "z",
           "diameter",
           "style"
         ],
@@ -750,6 +764,23 @@
             "description": "A digital input that reads true when every nozzle is at safe height.",
             "title": "Safe Z Input"
           },
+          "staging_plates": {
+            "items": {
+              "$ref": "#/components/schemas/StagingPlate"
+            },
+            "title": "Staging Plates",
+            "type": "array"
+          },
+          "view_rotation": {
+            "default": 0,
+            "description": "0: +X points right and +Y toward the back, seen from the front. 180: +X points left and +Y toward the front (the origin is at the right rear, as on the LumenPnP). Clients draw the machine and its camera images turned this way.",
+            "enum": [
+              0,
+              180
+            ],
+            "title": "View Rotation",
+            "type": "integer"
+          },
           "visual_homing": {
             "default": false,
             "description": "After homing, center the top camera on the homing fiducial and correct the X/Y coordinates to its known position.",
@@ -776,12 +807,14 @@
           "work_area",
           "axes",
           "safe_z",
+          "view_rotation",
           "visual_homing",
           "safe_z_input",
           "nozzles",
           "cameras",
           "locations",
           "feeder_banks",
+          "staging_plates",
           "inputs",
           "outputs"
         ],
@@ -1588,6 +1621,105 @@
             "$ref": "#/components/schemas/ErrorEvent"
           }
         ]
+      },
+      "StagingPlate": {
+        "additionalProperties": false,
+        "description": "A plate that boards and trays mount on, with a grid of tapped holes.",
+        "properties": {
+          "center": {
+            "$ref": "#/components/schemas/Point"
+          },
+          "checkerboard": {
+            "default": true,
+            "description": "Holes only where column + row (from the center) is even.",
+            "title": "Checkerboard",
+            "type": "boolean"
+          },
+          "corner_hole_diameter": {
+            "default": 5.3,
+            "title": "Corner Hole Diameter",
+            "type": "number"
+          },
+          "corner_holes": {
+            "description": "Large mounting holes, relative to the center; grid holes near them are left out.",
+            "items": {
+              "$ref": "#/components/schemas/Point"
+            },
+            "title": "Corner Holes",
+            "type": "array"
+          },
+          "hole_columns": {
+            "description": "Columns of the grid, centered on the plate.",
+            "minimum": 1.0,
+            "title": "Hole Columns",
+            "type": "integer"
+          },
+          "hole_diameter": {
+            "exclusiveMinimum": 0.0,
+            "title": "Hole Diameter",
+            "type": "number"
+          },
+          "hole_pitch": {
+            "description": "Spacing of the hole grid, in mm.",
+            "exclusiveMinimum": 0.0,
+            "title": "Hole Pitch",
+            "type": "number"
+          },
+          "hole_rows": {
+            "minimum": 1.0,
+            "title": "Hole Rows",
+            "type": "integer"
+          },
+          "holes": {
+            "description": "Grid hole centers, in machine coordinates.",
+            "items": {
+              "$ref": "#/components/schemas/Point"
+            },
+            "readOnly": true,
+            "title": "Holes",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "knockout_diameter": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A round opening at the center (for a bottom camera); grid holes inside are left out.",
+            "title": "Knockout Diameter"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "size": {
+            "$ref": "#/components/schemas/Point"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "center",
+          "size",
+          "hole_pitch",
+          "hole_diameter",
+          "hole_columns",
+          "hole_rows",
+          "checkerboard",
+          "corner_holes",
+          "corner_hole_diameter",
+          "knockout_diameter",
+          "holes"
+        ],
+        "title": "StagingPlate",
+        "type": "object"
       },
       "ValidationError": {
         "properties": {

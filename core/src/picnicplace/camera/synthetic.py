@@ -60,8 +60,16 @@ class SceneState:
 class _Canvas:
     """Maps machine millimeters to pixels for one frame."""
 
-    def __init__(self, size: tuple[int, int], center: Point, fov_w: float, mirror_x: bool):
+    def __init__(
+        self,
+        size: tuple[int, int],
+        center: Point,
+        fov_w: float,
+        mirror_x: bool,
+        rotation: int = 0,
+    ):
         self.w, self.h = size
+        self.sign = -1.0 if rotation == 180 else 1.0
         self.ppm = self.w / fov_w
         self.cx, self.cy = center.x, center.y
         self.mirror = mirror_x
@@ -69,11 +77,13 @@ class _Canvas:
         self.half_h = self.h / self.ppm / 2
 
     def px(self, x: float, y: float) -> tuple[int, int]:
-        dx = x - self.cx
+        # Images are shown turned like the machine view (see MachineProfile.view_rotation).
+        dx = (x - self.cx) * self.sign
+        dy = (y - self.cy) * self.sign
         if self.mirror:
             dx = -dx
         u = self.w / 2 + dx * self.ppm
-        v = self.h / 2 - (y - self.cy) * self.ppm
+        v = self.h / 2 - dy * self.ppm
         return round(u * ONE), round(v * ONE)
 
     def visible(self, x: float, y: float, margin: float) -> bool:
@@ -163,13 +173,32 @@ class TopRenderer:
         w, h = self.size
         head = Point(x=state.position.get("X", 0.0), y=state.position.get("Y", 0.0))
         center = Point(x=head.x + self.camera.position.x, y=head.y + self.camera.position.y)
-        canvas = _Canvas(self.size, center, self.camera.field_of_view.x, mirror_x=False)
+        canvas = _Canvas(
+            self.size, center, self.camera.field_of_view.x, False, self.profile.view_rotation
+        )
         img = np.empty((h, w, 3), dtype=np.uint8)
         img[:] = BED
+        self._plates(canvas, img)
         self._board(canvas, img)
         self._locations(canvas, img)
         self._feeders(canvas, img)
         return _finish(img, self._grain, self.camera, state)
+
+    def _plates(self, c: _Canvas, img: Image) -> None:
+        for plate in self.profile.staging_plates:
+            for hole in plate.holes:
+                if c.visible(hole.x, hole.y, 5):
+                    c.circle(img, hole.x, hole.y, plate.hole_diameter / 2, (10, 10, 10))
+            for corner in plate.corner_holes:
+                x, y = plate.center.x + corner.x, plate.center.y + corner.y
+                if c.visible(x, y, 6):
+                    c.circle(img, x, y, plate.corner_hole_diameter / 2, (10, 10, 10))
+            if plate.knockout_diameter and c.visible(
+                plate.center.x, plate.center.y, plate.knockout_diameter
+            ):
+                c.circle(
+                    img, plate.center.x, plate.center.y, plate.knockout_diameter / 2, (6, 6, 8)
+                )
 
     def _board(self, c: _Canvas, img: Image) -> None:
         b = self.board
@@ -201,6 +230,12 @@ class TopRenderer:
                 r = (loc.diameter or 2.0) / 2
                 c.circle(img, p.x, p.y, r * 3, (20, 20, 20))
                 c.circle(img, p.x, p.y, r, (235, 235, 235))
+            elif loc.kind == "fiducial":
+                # A small green board with a copper dot in a mask opening.
+                c.rect(img, p.x, p.y, 10, 6, 0, (40, 110, 45))
+                r = (loc.diameter or 1.0) / 2
+                c.circle(img, p.x, p.y, r * 2, (95, 140, 150))
+                c.circle(img, p.x, p.y, r, DATUM_COPPER)
             elif loc.kind == "discard":
                 c.rect(img, p.x, p.y, 14, 14, 0, (30, 30, 30))
                 c.rect(img, p.x, p.y, 12, 12, 0, (15, 15, 15))
@@ -273,8 +308,14 @@ DATUM_HOLES = [(-15, 0), (-30, -15), (30, -15), (15, 0)]
 
 
 def _datum_board(c: _Canvas, img: Image, o: Point) -> None:
+    # The offsets below have +X to the operator's right and +Y toward the back, with the
+    # board's notched edge (ruler side) toward the front, facing the bottom camera.
+    # Turned into machine coordinates by the view rotation (on a LumenPnP, +X is left
+    # and +Y is the front).
+    sign = c.sign
+
     def at(dx: float, dy: float) -> tuple[float, float]:
-        return o.x + dx, o.y + dy
+        return o.x + sign * dx, o.y + sign * dy
 
     pts = np.array([c.px(*at(dx, dy)) for dx, dy in DATUM_OUTLINE], dtype=np.int32)
     cv2.fillPoly(img, [pts], DATUM_MASK, cv2.LINE_AA, SHIFT)
@@ -331,7 +372,13 @@ class BottomRenderer:
 
     def render(self, state: SceneState) -> Image:
         w, h = self.size
-        canvas = _Canvas(self.size, self.camera.position, self.camera.field_of_view.x, True)
+        canvas = _Canvas(
+            self.size,
+            self.camera.position,
+            self.camera.field_of_view.x,
+            True,
+            self.profile.view_rotation,
+        )
         img = np.empty((h, w, 3), dtype=np.uint8)
         img[:] = (12, 12, 14)
         head_x, head_y = state.position.get("X", 0.0), state.position.get("Y", 0.0)

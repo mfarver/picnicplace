@@ -40,7 +40,12 @@ export function JogPanel({ description, machine, canMove, onJog, onSafeZ }: Prop
       ? "Raise Z to safe height first"
       : undefined;
 
-  const jogButton = (axis: string, sign: 1 | -1, label: string, icon: ReactNode) => (
+  // Arrows are screen directions, as the operator faces the machine (the map is drawn the
+  // same way). The profile's view rotation decides which axis sign each one is: on a
+  // LumenPnP (origin at the right rear), "back" is -Y and "right" is -X.
+  const flip: 1 | -1 = description.view_rotation === 180 ? -1 : 1;
+
+  const jogButton = (axis: string, sign: number, label: string, icon: ReactNode) => (
     <button
       type="button"
       className="button jog-button"
@@ -60,9 +65,9 @@ export function JogPanel({ description, machine, canMove, onJog, onSafeZ }: Prop
       <div className="jog-layout">
         <div className="jog-pad">
           <span />
-          {jogButton("Y", 1, "Y+ (back)", <ArrowUp size={16} />)}
+          {jogButton("Y", flip, `Back (Y${flip > 0 ? "+" : "−"})`, <ArrowUp size={16} />)}
           <span />
-          {jogButton("X", -1, "X− (left)", <ArrowLeft size={16} />)}
+          {jogButton("X", -flip, `Left (X${flip > 0 ? "−" : "+"})`, <ArrowLeft size={16} />)}
           <button
             type="button"
             className="button jog-button"
@@ -73,9 +78,9 @@ export function JogPanel({ description, machine, canMove, onJog, onSafeZ }: Prop
           >
             <ChevronsUp size={16} />
           </button>
-          {jogButton("X", 1, "X+ (right)", <ArrowRight size={16} />)}
+          {jogButton("X", flip, `Right (X${flip > 0 ? "+" : "−"})`, <ArrowRight size={16} />)}
           <span />
-          {jogButton("Y", -1, "Y− (front)", <ArrowDown size={16} />)}
+          {jogButton("Y", -flip, `Front (Y${flip > 0 ? "−" : "+"})`, <ArrowDown size={16} />)}
           <span />
         </div>
 

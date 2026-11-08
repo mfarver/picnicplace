@@ -121,7 +121,9 @@ def test_finds_the_datum_board_center(dx: float, dy: float, light: bool) -> None
     mm_per_px = camera.field_of_view.x / size[0]
     found = find_circle(image, 0.6 / mm_per_px, 1.5 / mm_per_px, 4.0 / mm_per_px)
     assert found is not None
-    seen = ((found.x - size[0] / 2) * mm_per_px, -(found.y - size[1] / 2) * mm_per_px)
+    seen = profile.image_to_machine(
+        (found.x - size[0] / 2) * mm_per_px, (found.y - size[1] / 2) * mm_per_px
+    )
     assert seen == pytest.approx((-dx, -dy), abs=0.01)
     assert found.diameter * mm_per_px == pytest.approx(1.0, abs=0.05)
 
@@ -149,3 +151,41 @@ def test_camera_scale(visual_client: TestClient) -> None:
         # The synthetic camera's true scale is what the profile implies.
         assert x == pytest.approx(assumed, rel=0.01)
         assert y == pytest.approx(assumed, rel=0.01)
+
+
+def test_visual_homing_on_the_lumenpnp_profile() -> None:
+    """The real profile: origin at the right rear (+X left, +Y front), the datum board,
+    and the staging plate. The homing error must come back with the right signs."""
+    config = fast_config(machine={"profile": "lumenpnp-v4", "sim_home_error": (0.4, -0.25)})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        op = home(s)
+        assert op["status"] == "succeeded", op
+        assert found_offset(op["message"]) == pytest.approx((0.4, -0.25), abs=0.02)
+        state = s.state()
+        assert (state["position"]["X"], state["position"]["Y"]) == pytest.approx((217, 106))
+
+
+def test_rotated_view_puts_the_front_at_the_bottom() -> None:
+    """On the LumenPnP (+Y toward the front), something in front of the camera center
+    appears lower in the image, and something at larger X appears to the left."""
+    from picnicplace.camera.synthetic import SceneState, TopRenderer, render_size
+    from picnicplace.machine.profile import load_profile
+
+    profile = load_profile("lumenpnp-v4")
+    camera = next(c for c in profile.cameras if c.id == "top")
+    size = render_size(camera)
+    fiducial = next(loc for loc in profile.locations if loc.kind == "homing_fiducial")
+    # Camera 2 mm behind (-Y) and 3 mm right of (-X) the fiducial: the fiducial is in
+    # front of and to the left of the center.
+    image = TopRenderer(profile, camera, size).render(
+        SceneState(
+            position={"X": fiducial.position.x - 3, "Y": fiducial.position.y - 2},
+            outputs={"light_top": True},
+            held={},
+        )
+    )
+    mm_per_px = camera.field_of_view.x / size[0]
+    found = find_circle(image, 0.6 / mm_per_px, 1.5 / mm_per_px, 4.0 / mm_per_px)
+    assert found is not None
+    assert found.x < size[0] / 2  # left
+    assert found.y > size[1] / 2  # lower: toward the front

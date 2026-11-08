@@ -489,8 +489,9 @@ class MachineService:
         for _ in range(VISUAL_PASSES):
             u, v, w, h = await self._locate_fiducial(fiducial, camera)
             mm_per_px = camera.field_of_view.x / w  # until the camera is calibrated
-            dx = (u - w / 2) * mm_per_px
-            dy = -(v - h / 2) * mm_per_px  # image rows grow toward the front
+            dx, dy = self._profile.image_to_machine(
+                (u - w / 2) * mm_per_px, (v - h / 2) * mm_per_px
+            )
             if math.hypot(dx, dy) <= VISUAL_TOLERANCE_MM:
                 break
             here = self._driver.position

@@ -658,7 +658,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "homing_fiducial" | "tip_holder" | "discard" | "park";
+            kind: "homing_fiducial" | "fiducial" | "tip_holder" | "discard" | "park";
             /** Label */
             label: string;
             position: components["schemas"]["Point"];
@@ -669,6 +669,11 @@ export interface components {
              * @enum {string}
              */
             style: "dot" | "lumenpnp-datum";
+            /**
+             * Z
+             * @description Height of the surface, where it matters (fiducials).
+             */
+            z: number | null;
         };
         /** MachineProfile */
         MachineProfile: {
@@ -708,6 +713,15 @@ export interface components {
              * @description A digital input that reads true when every nozzle is at safe height.
              */
             safe_z_input: string | null;
+            /** Staging Plates */
+            staging_plates: components["schemas"]["StagingPlate"][];
+            /**
+             * View Rotation
+             * @description 0: +X points right and +Y toward the back, seen from the front. 180: +X points left and +Y toward the front (the origin is at the right rear, as on the LumenPnP). Clients draw the machine and its camera images turned this way.
+             * @default 0
+             * @enum {integer}
+             */
+            view_rotation: 0 | 180;
             /**
              * Visual Homing
              * @description After homing, center the top camera on the homing fiducial and correct the X/Y coordinates to its known position.
@@ -1060,6 +1074,58 @@ export interface components {
             y_min: number;
         };
         ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
+        /**
+         * StagingPlate
+         * @description A plate that boards and trays mount on, with a grid of tapped holes.
+         */
+        StagingPlate: {
+            center: components["schemas"]["Point"];
+            /**
+             * Checkerboard
+             * @description Holes only where column + row (from the center) is even.
+             * @default true
+             */
+            checkerboard: boolean;
+            /**
+             * Corner Hole Diameter
+             * @default 5.3
+             */
+            corner_hole_diameter: number;
+            /**
+             * Corner Holes
+             * @description Large mounting holes, relative to the center; grid holes near them are left out.
+             */
+            corner_holes: components["schemas"]["Point"][];
+            /**
+             * Hole Columns
+             * @description Columns of the grid, centered on the plate.
+             */
+            hole_columns: number;
+            /** Hole Diameter */
+            hole_diameter: number;
+            /**
+             * Hole Pitch
+             * @description Spacing of the hole grid, in mm.
+             */
+            hole_pitch: number;
+            /** Hole Rows */
+            hole_rows: number;
+            /**
+             * Holes
+             * @description Grid hole centers, in machine coordinates.
+             */
+            readonly holes: components["schemas"]["Point"][];
+            /** Id */
+            id: string;
+            /**
+             * Knockout Diameter
+             * @description A round opening at the center (for a bottom camera); grid holes inside are left out.
+             */
+            knockout_diameter: number | null;
+            /** Label */
+            label: string;
+            size: components["schemas"]["Point"];
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */

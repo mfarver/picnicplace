@@ -8,17 +8,21 @@ endpoint) all work from the same profile.
 Profiles are TOML files. Built-in ones ship in ``picnicplace/profiles``; a config can also
 point at a profile file by path.
 
-Coordinates are machine coordinates in millimeters: X increases to the right and Y
-increases toward the back of the machine, seen from above. The head position (the X and Y
-axis positions) is the center of the top camera; nozzles are offsets from it.
+Coordinates are the machine's own, in millimeters, as its firmware reports them. Machines
+differ in where the origin is and which way the axes point; ``view_rotation`` says how
+to turn the X-right, Y-up layout so the front of the machine is at the bottom of the
+screen. Camera images are shown the same way, so the picture, the map, and the jog
+arrows all agree with what an operator facing the machine sees. The head position (the
+X and Y axis positions) is the center of the top camera; nozzles are offsets from it.
 """
 
+import math
 import tomllib
 from importlib import resources
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from picnicplace.machine.marlin.settings import MarlinSettings
 
@@ -112,8 +116,11 @@ class Camera(ProfileModel):
 class Location(ProfileModel):
     id: str
     label: str
-    kind: Literal["homing_fiducial", "tip_holder", "discard", "park"]
+    kind: Literal["homing_fiducial", "fiducial", "tip_holder", "discard", "park"]
     position: Point
+    z: float | None = Field(
+        default=None, description="Height of the surface, where it matters (fiducials)."
+    )
     diameter: float | None = Field(
         default=None, gt=0, description="Fiducials: the round mark's diameter in mm."
     )
@@ -157,6 +164,53 @@ class ValueRange(ProfileModel):
     def fraction(self, value: float) -> float:
         """Where a value falls from min (0) to max (1), unclamped."""
         return (value - self.min) / (self.max - self.min)
+
+
+class StagingPlate(ProfileModel):
+    """A plate that boards and trays mount on, with a grid of tapped holes."""
+
+    id: str
+    label: str
+    center: Point
+    size: Point
+    hole_pitch: float = Field(gt=0, description="Spacing of the hole grid, in mm.")
+    hole_diameter: float = Field(gt=0)
+    hole_columns: int = Field(ge=1, description="Columns of the grid, centered on the plate.")
+    hole_rows: int = Field(ge=1)
+    checkerboard: bool = Field(
+        default=True, description="Holes only where column + row (from the center) is even."
+    )
+    corner_holes: list[Point] = Field(
+        default_factory=list[Point],
+        description=(
+            "Large mounting holes, relative to the center; grid holes near them are left out."
+        ),
+    )
+    corner_hole_diameter: float = 5.3
+    knockout_diameter: float | None = Field(
+        default=None,
+        description=(
+            "A round opening at the center (for a bottom camera); grid holes inside are left out."
+        ),
+    )
+
+    @computed_field
+    @property
+    def holes(self) -> list[Point]:
+        """Grid hole centers, in machine coordinates."""
+        out: list[Point] = []
+        half_c, half_r = (self.hole_columns - 1) // 2, (self.hole_rows - 1) // 2
+        for i in range(-half_c, half_c + 1):
+            for j in range(-half_r, half_r + 1):
+                if self.checkerboard and (i + j) % 2:
+                    continue
+                dx, dy = i * self.hole_pitch, j * self.hole_pitch
+                if self.knockout_diameter and math.hypot(dx, dy) < self.knockout_diameter / 2 + 3:
+                    continue
+                if any(math.hypot(dx - c.x, dy - c.y) < 10 for c in self.corner_holes):
+                    continue
+                out.append(Point(x=self.center.x + dx, y=self.center.y + dy))
+        return out
 
 
 class Input(ProfileModel):
@@ -207,6 +261,14 @@ class MachineProfile(ProfileModel):
     safe_z: float = Field(
         description="A nozzle at or above this height (on its own Z scale) is safe for travel."
     )
+    view_rotation: Literal[0, 180] = Field(
+        default=0,
+        description=(
+            "0: +X points right and +Y toward the back, seen from the front. 180: +X points "
+            "left and +Y toward the front (the origin is at the right rear, as on the "
+            "LumenPnP). Clients draw the machine and its camera images turned this way."
+        ),
+    )
     visual_homing: bool = Field(
         default=False,
         description=(
@@ -222,6 +284,7 @@ class MachineProfile(ProfileModel):
     cameras: list[Camera] = Field(default_factory=list[Camera])
     locations: list[Location] = Field(default_factory=list[Location])
     feeder_banks: list[FeederBank] = Field(default_factory=list[FeederBank])
+    staging_plates: list[StagingPlate] = Field(default_factory=list[StagingPlate])
     inputs: list[Input] = Field(default_factory=list[Input])
     outputs: list[Output] = Field(default_factory=list[Output])
     marlin: MarlinSettings | None = Field(
@@ -278,6 +341,12 @@ class MachineProfile(ProfileModel):
             if safe is None or safe.kind != "digital":
                 raise ValueError("safe_z_input must name a digital input")
         return self
+
+    def image_to_machine(self, right: float, down: float) -> tuple[float, float]:
+        """A displacement seen in a top camera image (mm right and mm down, as shown to
+        the operator) as a machine X/Y displacement."""
+        sign = -1.0 if self.view_rotation == 180 else 1.0
+        return sign * right, -sign * down
 
     def axis(self, name: str) -> Axis:
         return next(a for a in self.axes if a.name == name)

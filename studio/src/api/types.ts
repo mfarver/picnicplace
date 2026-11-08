@@ -19,3 +19,4 @@ export type Rect = Schemas["Rect"];
 export type LeaseState = Schemas["LeaseState"];
 export type ClientInfo = Schemas["ClientInfo"];
 export type CameraInfo = Schemas["CameraInfo"];
+export type StagingPlate = Schemas["StagingPlate"];

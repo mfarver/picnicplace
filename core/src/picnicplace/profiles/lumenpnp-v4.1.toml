@@ -25,10 +25,12 @@ provisional = true
 x_points = "right"
 y_points = "back"
 
-# The bed outline is the frame's 600 x 600 mm of extrusion, from Opulo's assembly model
-# (a 2022 LumenPnP, placed by its bottom camera). That model also has the nozzles 66 mm in
-# front of the top camera and the endstops at the front left, as this orientation says.
-bed = { x_min = -82, y_min = -31, x_max = 518, y_max = 569 }
+# The bed outline is the frame's 600 x 600 mm. Left to right it is placed from Opulo's
+# assembly model (a 2022 LumenPnP, by its bottom camera). Front to back that model does
+# not fit v4.1: at Y home (0) the nozzles are 64 mm in front of the camera, at Y -64,
+# beyond its frame, so the bottom camera has moved since. Here the front edge clears the
+# nozzles at Y home by about 10 mm. Not measured.
+bed = { x_min = -82, y_min = -75, x_max = 518, y_max = 525 }
 # Where boards go is computed: the part of the staging plates every nozzle can reach
 # (the nozzles are 47 mm apart, so each reaches 47 mm farther on its own side).
 # Boards sit at about Z = -27.5.

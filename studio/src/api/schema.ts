@@ -1314,6 +1314,11 @@ export interface components {
         };
         /** HealthResponse */
         HealthResponse: {
+            /**
+             * Api
+             * @description Fingerprint of the core's OpenAPI document. A Studio built from a different document comes from a different version of PicnicPlace.
+             */
+            api: string;
             /** Protocol */
             protocol: number;
             /**

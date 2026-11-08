@@ -1,6 +1,5 @@
 """Application factory."""
 
-import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -21,6 +20,7 @@ from picnicplace.api import jobs as job_routes
 from picnicplace.api import library as library_routes
 from picnicplace.api import routes, websocket
 from picnicplace.api.context import AppContext
+from picnicplace.api.fingerprint import openapi_text
 from picnicplace.auth import Authenticator
 from picnicplace.bringup import BringUpStore
 from picnicplace.camera.manager import CameraManager
@@ -169,4 +169,4 @@ def build_openapi(app: FastAPI) -> dict[str, Any]:
 
 
 def openapi_json(app: FastAPI | None = None) -> str:
-    return json.dumps((app or create_app()).openapi(), indent=2, sort_keys=True) + "\n"
+    return openapi_text((app or create_app()).openapi())

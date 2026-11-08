@@ -2,10 +2,11 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from picnicplace import __version__
 from picnicplace.api.context import Context, get_client_id, require, require_control
+from picnicplace.api.fingerprint import api_fingerprint
 from picnicplace.auth import Permission
 from picnicplace.machine.profile import MachineProfile
 from picnicplace.schemas import (
@@ -36,9 +37,11 @@ router = APIRouter(prefix="/api/v1", dependencies=[Depends(require(Permission.VI
 
 
 @public.get("/health", tags=["system"])
-def health() -> HealthResponse:
+def health(request: Request) -> HealthResponse:
     """Liveness check. Does not require authentication."""
-    return HealthResponse(version=__version__, protocol=PROTOCOL_VERSION)
+    return HealthResponse(
+        version=__version__, protocol=PROTOCOL_VERSION, api=api_fingerprint(request.app)
+    )
 
 
 @router.get("/presence", tags=["system"])

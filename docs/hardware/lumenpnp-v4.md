@@ -88,11 +88,14 @@ bring-up checklist in the Studio asks.
 Opulo's assembly model (a STEP file from April 2022, so an earlier LumenPnP than v4.1)
 agrees. Placed by its bottom camera, it has the nozzles 66 mm in front of the top camera
 and 24 mm to each side (OpenPnP's offsets are 64.4 and 23.3 to 23.8), the Y endstop at
-the front left, the X endstop at the left, the 600 × 600 mm frame at X −82 … 518 and
-Y −31 … 569, and its one staging plate exactly where the profile puts the camera plate.
-Its datum board is behind the camera (Y ≈ 191), where v4.1 has the aiming fiducial, so
-the datum, the second plate, and the feeder rails have moved since; the model has no
-feeder rails.
+the front left, the X endstop at the left, the 600 × 600 mm frame at X −82 … 518, and
+its one staging plate where the profile puts the camera plate. Front to back it does not
+fit v4.1: it would put the frame's front at Y −31, but at Y home (0) the nozzles are at
+Y −64. So v4.1's bottom camera sits farther back in the frame than the model's, and the
+profile's bed outline (Y −75 … 525) is set to clear the nozzles at home instead. Its
+datum board is behind the camera (Y ≈ 191), where v4.1 has the aiming fiducial; the
+datum, the plates, and the camera have all moved since, and the model has no feeder
+rails.
 
 ## Where boards can go
 

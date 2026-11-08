@@ -1056,6 +1056,11 @@
       },
       "HealthResponse": {
         "properties": {
+          "api": {
+            "description": "Fingerprint of the core's OpenAPI document. A Studio built from a different document comes from a different version of PicnicPlace.",
+            "title": "Api",
+            "type": "string"
+          },
           "protocol": {
             "title": "Protocol",
             "type": "integer"
@@ -1074,7 +1079,8 @@
         "required": [
           "status",
           "version",
-          "protocol"
+          "protocol",
+          "api"
         ],
         "title": "HealthResponse",
         "type": "object"

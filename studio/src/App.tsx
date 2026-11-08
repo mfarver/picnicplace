@@ -1,6 +1,8 @@
 import { CircuitBoard, Cog, Eye, Film, Layers, Play } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useCore } from "./api/core";
+import { useCoreCompatibility } from "./api/version";
+import { VersionBanner } from "./components/ErrorScreen";
 import { Placeholder } from "./components/Placeholder";
 import { Splash } from "./components/Splash";
 import { StatusBar } from "./components/StatusBar";
@@ -68,10 +70,11 @@ export function App() {
   const [active, setActive] = useState("machine");
   const [theme, toggleTheme] = useTheme();
   const { status } = useCore();
+  const compatibility = useCoreCompatibility();
   const workspace = WORKSPACES.find((w) => w.id === active) ?? WORKSPACES[0]!;
 
   return (
-    <div className="app">
+    <div className={compatibility === "different" ? "app app-with-banner" : "app"}>
       <TopBar
         tabs={WORKSPACES}
         active={workspace.id}
@@ -79,6 +82,7 @@ export function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
       />
+      {compatibility === "different" && <VersionBanner />}
       <main className="main">{workspace.render()}</main>
       <StatusBar />
       {status === "unauthorized" && <TokenPrompt />}

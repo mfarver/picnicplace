@@ -334,7 +334,7 @@ export function MachineView({ description, machine, canMove = false, onMoveTo, o
             ))}
 
             {overlay}
-            {head && <Head description={description} at={head} />}
+            {head && <Head description={description} at={head} homed={!!machine?.homed} />}
             {target && <TargetMarker at={target} />}
           </g>
         </ViewOrientation.Provider>
@@ -560,11 +560,24 @@ function LocationMarker({ kind, at }: { kind: string; at: Point }) {
   }
 }
 
-function Head({ description, at }: { description: MachineProfile; at: Point }) {
+/**
+ * The head: top camera view, nozzles, and crosshair. Until the machine is homed the
+ * reported position means nothing (firmware starts at zero wherever the head is), so the
+ * head is drawn faded and labeled as unknown.
+ */
+function Head({ description, at, homed }: { description: MachineProfile; at: Point; homed: boolean }) {
   const camera = description.cameras.find((c) => c.mount === "head");
   const reach = 12;
   return (
-    <g className="mv-head" transform={`translate(${at.x} ${-at.y})`}>
+    <g
+      className={homed ? "mv-head" : "mv-head mv-head-unknown"}
+      transform={`translate(${at.x} ${-at.y})`}
+    >
+      {!homed && (
+        <Label className="mv-label mv-label-head" x={0} y={-reach - 6} textAnchor="middle">
+          Position unknown until homed
+        </Label>
+      )}
       {camera && (
         <rect
           className="mv-head-fov"

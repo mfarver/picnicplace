@@ -105,6 +105,12 @@ class HealthResponse(WireModel):
     status: Literal["ok"] = "ok"
     version: str
     protocol: int
+    api: str = Field(
+        description=(
+            "Fingerprint of the core's OpenAPI document. A Studio built from a different "
+            "document comes from a different version of PicnicPlace."
+        )
+    )
 
 
 class MoveRequest(WireModel):

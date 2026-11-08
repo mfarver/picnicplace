@@ -20,6 +20,8 @@ const MARGIN = 30;
 const GRID = 50;
 const MIN_WIDTH = 10;
 const ZOOM_STEP = 1.15;
+/** A press that moves less than this is a click, not a drag. */
+const CLICK_SLOP_PX = 4;
 
 /** Room kept clear on the right for the head inset, in screen pixels. */
 const INSET_RESERVE_PX = 330;
@@ -53,17 +55,24 @@ function svgPoint(svg: SVGSVGElement, clientX: number, clientY: number, ctm?: DO
 interface Props {
   description: MachineProfile;
   machine?: MachineState;
+  /** Moves are allowed right now. */
+  canMove?: boolean;
+  /** Move the head (top camera) to a point. Leave out to disable click-to-move. */
+  onMoveTo?: (target: Point) => void;
 }
 
-export function MachineView({ description, machine }: Props) {
+export function MachineView({ description, machine, canMove = false, onMoveTo }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [view, setView] = useState<ViewBox>(() => fitView(description));
   const [cursor, setCursor] = useState<Point | null>(null);
   const drag = useRef<{
     start: DOMPoint;
+    screen: Point;
+    dragging: boolean;
     view: ViewBox;
     ctm: DOMMatrix;
   } | null>(null);
+  const [target, setTarget] = useState<Point | null>(null);
 
   const userMoved = useRef(false);
 
@@ -115,9 +124,10 @@ export function MachineView({ description, machine }: Props) {
     const ctm = svg?.getScreenCTM()?.inverse();
     if (!svg || !ctm || e.button !== 0) return;
     svg.setPointerCapture(e.pointerId);
-    userMoved.current = true;
     drag.current = {
       start: new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm),
+      screen: { x: e.clientX, y: e.clientY },
+      dragging: false,
       view,
       ctm,
     };
@@ -128,25 +138,55 @@ export function MachineView({ description, machine }: Props) {
     if (!svg) return;
     const d = drag.current;
     if (d) {
+      if (!d.dragging) {
+        const moved = Math.hypot(e.clientX - d.screen.x, e.clientY - d.screen.y);
+        if (moved < CLICK_SLOP_PX) return;
+        d.dragging = true;
+        userMoved.current = true;
+      }
       const p = svgPoint(svg, e.clientX, e.clientY, d.ctm);
-      if (p)
-        setView({
-          ...d.view,
-          x: d.view.x - (p.x - d.start.x),
-          y: d.view.y - (p.y - d.start.y),
-        });
+      if (p) {
+        setView({ ...d.view, x: d.view.x - (p.x - d.start.x), y: d.view.y - (p.y - d.start.y) });
+      }
       return;
     }
     const p = svgPoint(svg, e.clientX, e.clientY);
     if (p) setCursor({ x: p.x, y: -p.y });
   };
 
+  const onPointerUp = (e: PointerEvent<SVGSVGElement>) => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d || d.dragging || !onMoveTo) return;
+    // A click, not a drag: pick a move target. Moving needs a second, explicit step.
+    const svg = svgRef.current;
+    const p = svg ? svgPoint(svg, e.clientX, e.clientY) : null;
+    if (p) setTarget({ x: p.x, y: -p.y });
+  };
+
   const endDrag = () => {
     drag.current = null;
   };
 
+  // Escape cancels a pending move target.
+  useEffect(() => {
+    if (!target) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTarget(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [target]);
+
   const xAxis = description.axes.find((a) => a.name === "X");
   const yAxis = description.axes.find((a) => a.name === "Y");
+  const inTravel = (p: Point) =>
+    !!xAxis &&
+    !!yAxis &&
+    p.x >= xAxis.min &&
+    p.x <= xAxis.max &&
+    p.y >= yAxis.min &&
+    p.y <= yAxis.max;
   const head =
     machine && machine.position.X !== undefined && machine.position.Y !== undefined
       ? { x: machine.position.X, y: machine.position.Y }
@@ -161,7 +201,7 @@ export function MachineView({ description, machine }: Props) {
         preserveAspectRatio="xMidYMid meet"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
+        onPointerUp={onPointerUp}
         onPointerCancel={endDrag}
         onPointerLeave={() => setCursor(null)}
         role="img"
@@ -251,6 +291,7 @@ export function MachineView({ description, machine }: Props) {
         ))}
 
         {head && <Head description={description} at={head} />}
+        {target && <TargetMarker at={target} />}
       </svg>
 
       <div className="mv-overlay mv-overlay-top">
@@ -266,6 +307,18 @@ export function MachineView({ description, machine }: Props) {
           <Maximize size={16} aria-hidden />
         </button>
       </div>
+      {target && onMoveTo && (
+        <MoveTargetBar
+          target={target}
+          reachable={inTravel(target)}
+          canMove={canMove}
+          onMove={() => {
+            onMoveTo(target);
+            setTarget(null);
+          }}
+          onCancel={() => setTarget(null)}
+        />
+      )}
       <div className="mv-overlay mv-overlay-bottom mono">
         {cursor ? `X ${cursor.x.toFixed(1)}  Y ${cursor.y.toFixed(1)}` : " "}
       </div>
@@ -377,5 +430,55 @@ function Head({ description, at }: { description: MachineProfile; at: Point }) {
       <path className="mv-crosshair" d={`M${-reach} 0 H${reach} M0 ${-reach} V${reach}`} />
       <circle className="mv-crosshair" r={2.5} />
     </g>
+  );
+}
+
+function TargetMarker({ at }: { at: Point }) {
+  const r = 6;
+  return (
+    <g className="mv-target" transform={`translate(${at.x} ${-at.y})`}>
+      <circle r={r} />
+      <path
+        d={`M${-r - 4} 0 H${-r + 2} M${r - 2} 0 H${r + 4} M0 ${-r - 4} V${-r + 2} M0 ${r - 2} V${r + 4}`}
+      />
+    </g>
+  );
+}
+
+function MoveTargetBar({
+  target,
+  reachable,
+  canMove,
+  onMove,
+  onCancel,
+}: {
+  target: Point;
+  reachable: boolean;
+  canMove: boolean;
+  onMove: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="mv-move-bar" role="dialog" aria-label="Move to point">
+      <span>
+        Move camera to{" "}
+        <span className="mono">
+          X {target.x.toFixed(2)} Y {target.y.toFixed(2)}
+        </span>
+        {!reachable && <span className="text-danger"> · outside travel limits</span>}
+      </span>
+      <button
+        type="button"
+        className="button primary"
+        disabled={!reachable || !canMove}
+        onClick={onMove}
+        title={canMove ? "Moves at safe Z" : "Motion is not available right now"}
+      >
+        Move
+      </button>
+      <button type="button" className="button" onClick={onCancel}>
+        Cancel
+      </button>
+    </div>
   );
 }

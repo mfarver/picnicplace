@@ -132,9 +132,7 @@ class Input(ProfileModel):
     role: Literal["home", "safe_z", "vacuum", "other"]
     axis: str | None = Field(default=None, description="Home sensors: the axis they home.")
     unit: str | None = None
-    range: ValueRange | None = Field(
-        default=None, description="Analog inputs: the display range."
-    )
+    range: ValueRange | None = Field(default=None, description="Analog inputs: the display range.")
     threshold: float | None = Field(
         default=None, description="Vacuum inputs: readings at or above this mean a part is held."
     )

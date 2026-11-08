@@ -8,6 +8,9 @@ Besides motion, it simulates the profile's I/O:
   toward an open-nozzle level, or a higher level while a part is held. A nozzle "picks" a
   part when suction is on while it is lowered at least ``PICK_DEPTH``, and drops it when
   suction goes off. There are no simulated parts or feeders yet, so this happens anywhere.
+
+Faults can be injected for tests: ``inject_z_slip`` makes the real Z position differ from
+the commanded one, as if the motor lost steps. Sensors see the real position.
 """
 
 import asyncio
@@ -51,6 +54,7 @@ class SimulatorDriver(MotionDriver):
         self._outputs = {o.id: False for o in profile.outputs}
         self._vacuum = {n.vacuum_input: 0.0 for n in profile.nozzles if n.vacuum_input}
         self._held = {n.id: False for n in profile.nozzles}
+        self._z_slip: dict[str, float] = {}
         self._connected = False
         self._stop = asyncio.Event()
         self._io_wake = asyncio.Event()
@@ -116,11 +120,19 @@ class SimulatorDriver(MotionDriver):
     # --- Motion --------------------------------------------------------------------------
 
     async def home(self) -> None:
+        """Home Z first, so X and Y home with the nozzles up, then everything else."""
         self._stop.clear()
-        await self._sleep_interruptible(HOME_DURATION_S / self._time_scale)
-        self._position = {a.name: a.home for a in self._profile.axes}
-        self._update_parts()
-        self._notify()
+        z_axes = {n.z_axis for n in self._profile.nozzles}
+        for group in (
+            [a for a in self._profile.axes if a.name in z_axes],
+            [a for a in self._profile.axes if a.name not in z_axes],
+        ):
+            await self._sleep_interruptible(HOME_DURATION_S / 2 / self._time_scale)
+            for axis in group:
+                self._position[axis.name] = axis.home
+                self._z_slip.pop(axis.name, None)
+            self._update_parts()
+            self._notify()
 
     async def move_to(self, target: Mapping[str, float], speed: float | None) -> None:
         self._stop.clear()
@@ -155,6 +167,12 @@ class SimulatorDriver(MotionDriver):
     async def reset(self) -> None:
         self._stop.clear()
 
+    def inject_z_slip(self, axis: str, distance: float) -> None:
+        """Simulator only: make the real position of a Z axis differ from the commanded one."""
+        self._z_slip[axis] = self._z_slip.get(axis, 0.0) + distance
+        self._update_parts()
+        self._notify()
+
     # --- I/O -----------------------------------------------------------------------------
 
     async def set_output(self, output_id: str, on: bool) -> None:
@@ -165,7 +183,8 @@ class SimulatorDriver(MotionDriver):
         self._notify()
 
     def _height(self, nozzle: Nozzle) -> float:
-        return nozzle_height(nozzle, self._position[nozzle.z_axis])
+        real_z = self._position[nozzle.z_axis] + self._z_slip.get(nozzle.z_axis, 0.0)
+        return nozzle_height(nozzle, real_z)
 
     def _suction(self, nozzle: Nozzle) -> bool:
         outputs = (nozzle.pump_output, nozzle.valve_output)

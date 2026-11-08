@@ -1,7 +1,18 @@
 """The machine service: the one owner of the machine, and where safety rules live.
 
 Clients never reach a driver directly. Every motion request passes through here, where
-presence, E-stop, homing, busy state, and soft limits are checked (spec section 5.2).
+presence, E-stop, homing, busy state, soft limits, and safe Z are checked (spec section
+5.2). The control lease is checked by the API before a request reaches this service.
+
+Axes come in three groups, derived from the profile:
+
+- **Z axes** move nozzles up and down (each nozzle's ``z_axis``).
+- **Travel axes** are the other linear axes (X and Y): they move the head over the bed.
+- **Rotary axes** turn nozzles.
+
+Travel-axis motion is only allowed with every nozzle at safe Z. Moves that include travel
+run in up to three steps: raise Z to travel height (if needed), move the travel and rotary
+axes, then lower Z to its target (if one was given).
 """
 
 import logging
@@ -16,7 +27,9 @@ from picnicplace.machine.errors import (
     NoClientPresentError,
     NotConnectedError,
     NotHomedError,
+    SafeZFaultError,
     UnknownOutputError,
+    ZNotSafeError,
 )
 from picnicplace.machine.profile import MachineProfile, nozzle_height
 from picnicplace.operations import OperationManager
@@ -26,6 +39,12 @@ from picnicplace.schemas import MachineState, MachineStateEvent, Operation
 log = logging.getLogger(__name__)
 
 _Work = Callable[[], Awaitable[None]]
+
+EPSILON = 1e-6
+"""Axis positions closer than this count as equal."""
+
+TRAVEL_HEIGHT = 0.0
+"""Z axis position used for travel: every nozzle at the top of its travel."""
 
 
 class MachineService:
@@ -39,6 +58,10 @@ class MachineService:
     ) -> None:
         self._profile = profile
         self._axes = {a.name: a for a in profile.axes}
+        self._z_axes = {n.z_axis for n in profile.nozzles}
+        self._travel_axes = {
+            a.name for a in profile.axes if a.kind == "linear" and a.name not in self._z_axes
+        }
         self._driver = driver
         self._bus = bus
         self._presence = presence
@@ -49,11 +72,26 @@ class MachineService:
 
         driver.on_change = self._publish_state
         presence.on_change.append(self._publish_state)
-        presence.on_empty.append(self._on_no_clients)
+        presence.on_empty.append(self.stop_manual_motion)
+
+    # --- State ---------------------------------------------------------------------------
 
     @property
     def profile(self) -> MachineProfile:
         return self._profile
+
+    @property
+    def driver(self) -> MotionDriver:
+        return self._driver
+
+    @property
+    def z_safe_computed(self) -> bool:
+        """Every nozzle at or above safe Z, according to the Z positions."""
+        position = self._driver.position
+        return all(
+            nozzle_height(n, position[n.z_axis]) >= self._profile.safe_z
+            for n in self._profile.nozzles
+        )
 
     @property
     def z_safe(self) -> bool:
@@ -63,12 +101,8 @@ class MachineService:
         Otherwise this is computed from the Z positions.
         """
         if self._profile.safe_z_input is not None:
-            return bool(self._driver.inputs.get(self._profile.safe_z_input, False))
-        position = self._driver.position
-        return all(
-            nozzle_height(n, position[n.z_axis]) >= self._profile.safe_z
-            for n in self._profile.nozzles
-        )
+            return self._driver.inputs.get(self._profile.safe_z_input) is True
+        return self.z_safe_computed
 
     @property
     def state(self) -> MachineState:
@@ -93,16 +127,36 @@ class MachineService:
     async def shutdown(self) -> None:
         await self._driver.disconnect()
 
+    # --- Commands ------------------------------------------------------------------------
+
     def start_home(self) -> Operation:
         self._check_can_move()
         return self._start_operation("home", self._home)
 
     def start_move(self, target: Mapping[str, float], speed: float | None) -> Operation:
+        """Move to an absolute position, at safe Z if X or Y change."""
         self._check_can_move()
-        if not self._homed:
-            raise NotHomedError("home the machine before moving")
+        self._check_homed()
         self._check_target(target)
-        return self._start_operation("move", lambda: self._move(target, speed))
+        steps = self._plan_move(target)
+        return self._start_operation("move", lambda: self._run_steps(steps, speed))
+
+    def start_jog(self, axis: str, distance: float, speed: float | None) -> Operation:
+        """Move one axis by a relative distance, clamped to its limits.
+
+        Unlike a move, a jog never raises Z on its own: jogging X or Y with a nozzle below
+        safe Z is refused, so the operator decides when Z moves.
+        """
+        self._check_can_move()
+        self._check_homed()
+        limits = self._axes.get(axis)
+        if limits is None:
+            raise InvalidTargetError(f"unknown axis {axis!r}")
+        if axis in self._travel_axes:
+            self._check_travel_allowed()
+        current = self._driver.position[axis]
+        target = min(limits.max, max(limits.min, current + distance))
+        return self._start_operation("jog", lambda: self._run_steps([{axis: target}], speed))
 
     async def set_output(self, output_id: str, on: bool) -> None:
         """Switch an output. Turning one off is allowed whenever the machine is connected."""
@@ -129,6 +183,14 @@ class MachineService:
         self._estop = False
         self._publish_state()
 
+    async def stop_manual_motion(self) -> None:
+        """Stop the current manual move, keeping position (the controlling client left)."""
+        if self._busy:
+            log.warning("controlling client left during motion; stopping")
+            await self._driver.stop()
+
+    # --- Checks --------------------------------------------------------------------------
+
     def _check_can_actuate(self) -> None:
         if not self._driver.connected:
             raise NotConnectedError("the machine is not connected")
@@ -142,6 +204,10 @@ class MachineService:
         if self._busy:
             raise MachineBusyError("the machine is busy")
 
+    def _check_homed(self) -> None:
+        if not self._homed:
+            raise NotHomedError("home the machine before moving")
+
     def _check_target(self, target: Mapping[str, float]) -> None:
         for name, value in target.items():
             axis = self._axes.get(name)
@@ -151,6 +217,60 @@ class MachineService:
                 raise InvalidTargetError(
                     f"{name}={value:g} is outside the limits {axis.min:g}..{axis.max:g}"
                 )
+
+    def _check_travel_allowed(self) -> None:
+        """Refuse X/Y motion unless every nozzle is at safe Z.
+
+        With a safe-Z sensor, a sensor reading "not safe" while the Z positions say safe
+        means Z has lost steps: that is a fault, and the machine must be homed again.
+        """
+        computed = self.z_safe_computed
+        if self._profile.safe_z_input is not None and not self.z_safe:
+            if computed:
+                self._homed = False
+                self._publish_state()
+                raise SafeZFaultError(
+                    "the safe-Z sensor reads not safe although Z is at a safe height; "
+                    "Z may have lost steps. Home the machine again."
+                )
+            raise ZNotSafeError("raise Z to a safe height before moving X or Y")
+        if not computed:
+            raise ZNotSafeError("raise Z to a safe height before moving X or Y")
+
+    # --- Motion --------------------------------------------------------------------------
+
+    def _plan_move(self, target: Mapping[str, float]) -> list[dict[str, float]]:
+        position = self._driver.position
+        travels = any(
+            abs(value - position[axis]) > EPSILON
+            for axis, value in target.items()
+            if axis in self._travel_axes
+        )
+        if not travels:
+            return [dict(target)]
+        steps: list[dict[str, float]] = []
+        if not self.z_safe:
+            steps.append({axis: TRAVEL_HEIGHT for axis in sorted(self._z_axes)})
+        steps.append({a: v for a, v in target.items() if a not in self._z_axes})
+        lower = {a: v for a, v in target.items() if a in self._z_axes}
+        if lower:
+            steps.append(lower)
+        return steps
+
+    async def _run_steps(self, steps: list[dict[str, float]], speed: float | None) -> None:
+        for step in steps:
+            if any(axis in self._travel_axes for axis in step):
+                self._check_travel_allowed()
+            await self._driver.move_to(step, speed)
+
+    async def _home(self) -> None:
+        await self._driver.home()
+        if self._profile.safe_z_input is not None and not self.z_safe:
+            raise SafeZFaultError(
+                "after homing, the safe-Z sensor reads not safe; check the sensor and the "
+                "Z mechanism"
+            )
+        self._homed = True
 
     def _start_operation(self, kind: str, work: _Work) -> Operation:
         self._busy = True
@@ -164,18 +284,6 @@ class MachineService:
                 self._publish_state()
 
         return self._operations.start(kind, run)
-
-    async def _home(self) -> None:
-        await self._driver.home()
-        self._homed = True
-
-    async def _move(self, target: Mapping[str, float], speed: float | None) -> None:
-        await self._driver.move_to(target, speed)
-
-    async def _on_no_clients(self) -> None:
-        if self._busy:
-            log.warning("last client disconnected during motion; stopping")
-            await self._driver.stop()
 
     def _publish_state(self) -> None:
         self._bus.publish(MachineStateEvent(machine=self.state))

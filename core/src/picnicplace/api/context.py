@@ -4,15 +4,17 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from picnicplace.auth import Authenticator, Permission, Principal
 from picnicplace.config import Config
 from picnicplace.events import EventBus
+from picnicplace.lease import LeaseManager
 from picnicplace.machine.service import MachineService
 from picnicplace.operations import OperationManager
 from picnicplace.presence import PresenceTracker
+from picnicplace.schemas import ClientInfo
 
 
 @dataclass
@@ -23,6 +25,7 @@ class AppContext:
     presence: PresenceTracker
     operations: OperationManager
     machine: MachineService
+    lease: LeaseManager
 
 
 def get_context(request: Request) -> AppContext:
@@ -60,3 +63,31 @@ def require(permission: Permission) -> Callable[[Principal], Principal]:
         return principal
 
     return check
+
+
+CLIENT_HEADER = "X-PicnicPlace-Client"
+
+
+def get_client_id(
+    client_id: Annotated[
+        str | None,
+        Header(
+            alias=CLIENT_HEADER,
+            description="Client ID from the event socket's hello message.",
+        ),
+    ] = None,
+) -> str | None:
+    return client_id
+
+
+def require_control(
+    ctx: Context,
+    _principal: Annotated[Principal, Depends(require(Permission.MOTION))],
+    client_id: Annotated[str | None, Depends(get_client_id)],
+) -> ClientInfo:
+    """Dependency for motion and actuator endpoints: the calling client must hold the
+    control lease. A free lease is taken implicitly."""
+    return ctx.lease.require(client_id)
+
+
+Controller = Annotated[ClientInfo, Depends(require_control)]

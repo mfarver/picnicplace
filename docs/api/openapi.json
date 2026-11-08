@@ -109,6 +109,38 @@
         "title": "Camera",
         "type": "object"
       },
+      "ClientInfo": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Network address the client connected from.",
+            "title": "Address"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name the client gave when connecting, such as 'Studio'.",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "address"
+        ],
+        "title": "ClientInfo",
+        "type": "object"
+      },
       "ClientMessage": {
         "description": "Heartbeat. Clients send one every couple of seconds; the server answers with pong.",
         "properties": {
@@ -265,6 +297,9 @@
             "title": "Client Id",
             "type": "string"
           },
+          "lease": {
+            "$ref": "#/components/schemas/LeaseState"
+          },
           "machine": {
             "$ref": "#/components/schemas/MachineState"
           },
@@ -292,7 +327,8 @@
           "server_version",
           "client_id",
           "machine",
-          "presence"
+          "presence",
+          "lease"
         ],
         "title": "HelloEvent",
         "type": "object"
@@ -384,6 +420,88 @@
           "threshold"
         ],
         "title": "Input",
+        "type": "object"
+      },
+      "JogRequest": {
+        "properties": {
+          "axis": {
+            "title": "Axis",
+            "type": "string"
+          },
+          "distance": {
+            "description": "Relative distance, mm or degrees. Clamped to limits.",
+            "title": "Distance",
+            "type": "number"
+          },
+          "speed": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed"
+          }
+        },
+        "required": [
+          "axis",
+          "distance"
+        ],
+        "title": "JogRequest",
+        "type": "object"
+      },
+      "LeaseEvent": {
+        "properties": {
+          "lease": {
+            "$ref": "#/components/schemas/LeaseState"
+          },
+          "type": {
+            "const": "lease",
+            "default": "lease",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "lease"
+        ],
+        "title": "LeaseEvent",
+        "type": "object"
+      },
+      "LeaseRequest": {
+        "properties": {
+          "force": {
+            "default": false,
+            "description": "Take the lease even if another client holds it. Ask the user first.",
+            "title": "Force",
+            "type": "boolean"
+          }
+        },
+        "title": "LeaseRequest",
+        "type": "object"
+      },
+      "LeaseState": {
+        "properties": {
+          "holder": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The client allowed to move the machine, or null if no one holds it."
+          }
+        },
+        "required": [
+          "holder"
+        ],
+        "title": "LeaseState",
         "type": "object"
       },
       "Location": {
@@ -1015,6 +1133,7 @@
           "mapping": {
             "error": "#/components/schemas/ErrorEvent",
             "hello": "#/components/schemas/HelloEvent",
+            "lease": "#/components/schemas/LeaseEvent",
             "machine.state": "#/components/schemas/MachineStateEvent",
             "operation": "#/components/schemas/OperationEvent",
             "pong": "#/components/schemas/PongEvent",
@@ -1035,6 +1154,9 @@
           },
           {
             "$ref": "#/components/schemas/PresenceLostEvent"
+          },
+          {
+            "$ref": "#/components/schemas/LeaseEvent"
           },
           {
             "$ref": "#/components/schemas/OperationEvent"
@@ -1143,6 +1265,172 @@
         ]
       }
     },
+    "/api/v1/lease": {
+      "delete": {
+        "description": "Give up control of the machine, if this client holds it.",
+        "operationId": "release_lease_api_v1_lease_delete",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Release Lease",
+        "tags": [
+          "lease"
+        ]
+      },
+      "get": {
+        "operationId": "get_lease_api_v1_lease_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Lease",
+        "tags": [
+          "lease"
+        ]
+      },
+      "post": {
+        "description": "Take control of the machine. With ``force``, take it from another client.",
+        "operationId": "acquire_lease_api_v1_lease_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Acquire Lease",
+        "tags": [
+          "lease"
+        ]
+      }
+    },
     "/api/v1/machine": {
       "get": {
         "operationId": "get_machine_api_v1_machine_get",
@@ -1227,6 +1515,26 @@
       "post": {
         "description": "Start homing. Returns an operation; follow it over the event socket.",
         "operationId": "home_api_v1_machine_home_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
         "responses": {
           "202": {
             "content": {
@@ -1246,7 +1554,17 @@
                 }
               }
             },
-            "description": "The machine cannot do this right now."
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -1260,10 +1578,107 @@
         ]
       }
     },
+    "/api/v1/machine/jog": {
+      "post": {
+        "description": "Move one axis by a relative distance, clamped to its limits. X and Y jogs are\nrefused while a nozzle is below safe Z.",
+        "operationId": "jog_api_v1_machine_jog_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The axis is unknown."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Jog",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
     "/api/v1/machine/move": {
       "post": {
         "description": "Start an absolute move. Returns an operation; follow it over the event socket.",
         "operationId": "move_api_v1_machine_move_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1293,7 +1708,7 @@
                 }
               }
             },
-            "description": "The machine cannot do this right now."
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
           },
           "422": {
             "content": {
@@ -1329,6 +1744,24 @@
             "schema": {
               "title": "Output Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
             }
           }
         ],
@@ -1371,7 +1804,7 @@
                 }
               }
             },
-            "description": "The machine cannot do this right now."
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
           },
           "422": {
             "content": {
@@ -1399,6 +1832,26 @@
       "post": {
         "description": "Clear a latched emergency stop. The machine must be homed again afterward.",
         "operationId": "reset_api_v1_machine_reset_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1409,6 +1862,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [

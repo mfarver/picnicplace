@@ -2,10 +2,21 @@ import createClient, { type Middleware } from "openapi-fetch";
 import type { paths } from "./schema";
 import { loadToken } from "./token";
 
+/** This Studio's ID on the event socket, from the hello message. Motion commands carry it. */
+let clientId: string | null = null;
+
+export function setClientId(id: string | null) {
+  clientId = id;
+}
+
+/** Name this client gives the core, shown to other clients (for example, who has control). */
+export const CLIENT_NAME = "Studio";
+
 const auth: Middleware = {
   onRequest({ request }) {
     const token = loadToken();
     if (token) request.headers.set("Authorization", `Bearer ${token}`);
+    if (clientId) request.headers.set("X-PicnicPlace-Client", clientId);
     return request;
   },
 };
@@ -18,6 +29,7 @@ export function eventsUrl(token: string | null): string {
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
   const url = new URL(`${scheme}://${window.location.host}/api/v1/events`);
   if (token) url.searchParams.set("token", token);
+  url.searchParams.set("name", CLIENT_NAME);
   return url.toString();
 }
 

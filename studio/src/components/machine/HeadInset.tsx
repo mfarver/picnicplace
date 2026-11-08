@@ -20,6 +20,8 @@ interface Props {
   /** Outputs can be switched on (motion is enabled). */
   canActuate: boolean;
   busy: boolean;
+  /** Another client has control: outputs are shown but cannot be switched. */
+  readOnly?: boolean;
   onSetOutput: (id: string, on: boolean) => void;
 }
 
@@ -36,7 +38,14 @@ function partHeld(nozzle: Nozzle, d: MachineProfile, machine?: MachineState): bo
   return typeof value === "number" && input?.threshold != null && value >= input.threshold;
 }
 
-export function HeadInset({ description, machine, canActuate, busy, onSetOutput }: Props) {
+export function HeadInset({
+  description,
+  machine,
+  canActuate,
+  busy,
+  readOnly = false,
+  onSetOutput,
+}: Props) {
   const [open, setOpen] = useState(true);
 
   const vacuumInputs = description.inputs.filter((i) => i.role === "vacuum");
@@ -100,7 +109,7 @@ export function HeadInset({ description, machine, canActuate, busy, onSetOutput 
                   key={output.id}
                   output={output}
                   on={machine?.outputs[output.id] ?? false}
-                  disabled={!machine?.connected || busy}
+                  disabled={!machine?.connected || busy || readOnly}
                   canTurnOn={canActuate}
                   onSet={onSetOutput}
                 />

@@ -1,28 +1,60 @@
 import { House, Map as MapIcon, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { api } from "../api/client";
-import { useCore } from "../api/core";
+import { hasControl, useCore } from "../api/core";
 import { useAction } from "../api/useAction";
 import { useDescription } from "../api/useDescription";
+import type { Operation } from "../api/types";
 import { CameraView } from "../components/CameraView";
+import { JogPanel } from "../components/JogPanel";
+import { LeaseStatus } from "../components/LeaseStatus";
 import { Panel } from "../components/Panel";
 import { HeadInset } from "../components/machine/HeadInset";
 import { MachineView } from "../components/machine/MachineView";
 import { Placeholder } from "../components/Placeholder";
 
 export function MachineWorkspace() {
-  const { status, machine, operations } = useCore();
+  const core = useCore();
+  const { status, machine, operations } = core;
+  // Another client holds the control lease: this one can watch but not move the machine.
+  const controlledElsewhere = !!core.lease?.holder && !hasControl(core);
   const { run, pending, error } = useAction();
   const description = useDescription();
   const [lastOpId, setLastOpId] = useState<string | null>(null);
 
   const lastOp = lastOpId ? operations[lastOpId] : undefined;
-  const canMove = status === "open" && !!machine?.motion_enabled && !machine.busy && !pending;
+  // Successful jogs and moves are visible on the map; only report how homing went, and
+  // anything that failed.
+  const showLastOp =
+    !!lastOp && !machine?.estop && (lastOp.kind === "home" || lastOp.status === "failed");
+  // One fixed-height line for results, so buttons below it never shift under the cursor.
+  const statusLine = error
+    ? { text: error, danger: true }
+    : showLastOp
+      ? {
+          text: `${lastOp.kind}: ${lastOp.status}${lastOp.error ? ` (${lastOp.error})` : ""}`,
+          danger: lastOp.status === "failed",
+        }
+      : { text: machine?.homed ? "Ready." : "Home the machine to begin.", danger: false };
+  const canActuate = status === "open" && !!machine?.motion_enabled && !controlledElsewhere;
+  const canMove = canActuate && !machine.busy && !pending;
 
-  const home = async () => {
-    const op = await run(() => api.POST("/api/v1/machine/home"));
+  const track = async (call: () => Promise<{ data?: Operation; error?: unknown }>) => {
+    const op = await run(call);
     if (op) setLastOpId(op.id);
   };
+  const home = () => void track(() => api.POST("/api/v1/machine/home"));
+  const jog = (axis: string, distance: number) =>
+    void track(() => api.POST("/api/v1/machine/jog", { body: { axis, distance } }));
+  const moveTo = (position: Record<string, number>) =>
+    void track(() => api.POST("/api/v1/machine/move", { body: { position } }));
+  const safeZ = () => {
+    if (!description) return;
+    const zAxes = new Set(description.nozzles.map((n) => n.z_axis));
+    moveTo(Object.fromEntries([...zAxes].map((axis) => [axis, 0])));
+  };
+  const takeControl = () => void run(() => api.POST("/api/v1/lease", { body: { force: true } }));
+  const releaseControl = () => void run(() => api.DELETE("/api/v1/lease"));
   const reset = () => run(() => api.POST("/api/v1/machine/reset"));
   const setOutput = (id: string, on: boolean) =>
     void run(() =>
@@ -35,10 +67,11 @@ export function MachineWorkspace() {
   return (
     <div className="workspace">
       <aside className="sidebar">
-        <CameraView title="Top camera" />
-        <CameraView title="Bottom camera" />
+        <CameraView id="top" title="Top camera" />
+        <CameraView id="bottom" title="Bottom camera" />
 
         <Panel title="Control">
+          <LeaseStatus busy={pending} onTake={takeControl} onRelease={releaseControl} />
           <div className="button-row">
             <button type="button" className="button primary" disabled={!canMove} onClick={home}>
               <House size={16} aria-hidden />
@@ -54,25 +87,36 @@ export function MachineWorkspace() {
           {machine?.estop && (
             <p className="note note-danger">Emergency stop is latched. Reset, then home again.</p>
           )}
-          {lastOp && !machine?.estop && (
-            <p className="note">
-              {lastOp.kind}: <strong>{lastOp.status}</strong>
-              {lastOp.error && ` (${lastOp.error})`}
-            </p>
-          )}
-          {error && <p className="note note-danger">{error}</p>}
-          <p className="note text-muted">Jogging and click-to-move come next.</p>
+          <p className={`note status-line${statusLine.danger ? " text-danger" : " text-muted"}`}>
+            {statusLine.text}
+          </p>
         </Panel>
+
+        {description && (
+          <JogPanel
+            description={description}
+            machine={machine}
+            canMove={canMove}
+            onJog={jog}
+            onSafeZ={safeZ}
+          />
+        )}
       </aside>
 
       <div className="canvas machine-canvas">
         {description ? (
           <>
-            <MachineView description={description} machine={machine} />
+            <MachineView
+              description={description}
+              machine={machine}
+              canMove={canMove && !!machine?.homed}
+              onMoveTo={(p) => moveTo({ X: p.x, Y: p.y })}
+            />
             <HeadInset
               description={description}
               machine={machine}
-              canActuate={status === "open" && !!machine?.motion_enabled}
+              canActuate={canActuate}
+              readOnly={controlledElsewhere}
               busy={pending}
               onSetOutput={setOutput}
             />

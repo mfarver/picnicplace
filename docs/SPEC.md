@@ -175,9 +175,21 @@ shows Python cannot hold target throughput.
   - The core can only check the input before sending a move. A firmware-level interlock
     (firmware refuses or halts X/Y motion while the input is unsafe) is the stronger
     guarantee and is recommended where firmware supports it.
+- **Moves travel at safe Z.** A move that changes X or Y first raises every nozzle to
+  travel height (if any is below safe Z), then moves X, Y, and rotation, then lowers Z to
+  its target. Jogs never move Z on their own: an X or Y jog with a nozzle below safe Z is
+  refused, so the operator decides when Z moves.
 - **Control lease.** Many clients may observe; only one holds the **control lease** at a
-  time and can move the machine. Leases can be requested, handed over, or forcibly taken
-  with confirmation.
+  time and can move the machine or switch outputs. Leases can be requested, handed over,
+  or forcibly taken with confirmation.
+  - A client that commands motion while no one holds the lease takes it implicitly, so a
+    single operator never has to think about it.
+  - Taking the lease from another client needs an explicit `force`, which clients confirm
+    with the user first.
+  - Motion requests name the sending client (the ID from the event socket's `hello`,
+    in the `X-PicnicPlace-Client` header). The client must be connected; one-shot
+    requests from nowhere cannot move the machine.
+  - The emergency stop needs no lease: any client can stop the machine.
 
 ### 5.3 Client presence rules
 

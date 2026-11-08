@@ -45,6 +45,18 @@ class MachineState(WireModel):
     )
 
 
+class ClientInfo(WireModel):
+    id: str
+    name: str = Field(description="Name the client gave when connecting, such as 'Studio'.")
+    address: str | None = Field(description="Network address the client connected from.")
+
+
+class LeaseState(WireModel):
+    holder: ClientInfo | None = Field(
+        description="The client allowed to move the machine, or null if no one holds it."
+    )
+
+
 class PresenceState(WireModel):
     clients: int = Field(description="Clients with a live event-socket connection.")
     present: bool
@@ -84,6 +96,19 @@ class OutputRequest(WireModel):
     on: bool
 
 
+class JogRequest(WireModel):
+    axis: str
+    distance: float = Field(description="Relative distance, mm or degrees. Clamped to limits.")
+    speed: float | None = Field(default=None, gt=0)
+
+
+class LeaseRequest(WireModel):
+    force: bool = Field(
+        default=False,
+        description="Take the lease even if another client holds it. Ask the user first.",
+    )
+
+
 class ErrorResponse(WireModel):
     detail: str
     code: str
@@ -101,6 +126,7 @@ class HelloEvent(WireModel):
     client_id: str
     machine: MachineState
     presence: PresenceState
+    lease: LeaseState
 
 
 class MachineStateEvent(WireModel):
@@ -118,6 +144,11 @@ class PresenceLostEvent(WireModel):
 
     type: Literal["presence.lost"] = "presence.lost"
     grace_period_s: float
+
+
+class LeaseEvent(WireModel):
+    type: Literal["lease"] = "lease"
+    lease: LeaseState
 
 
 class OperationEvent(WireModel):
@@ -140,6 +171,7 @@ Event = (
     | MachineStateEvent
     | PresenceEvent
     | PresenceLostEvent
+    | LeaseEvent
     | OperationEvent
     | PongEvent
     | ErrorEvent

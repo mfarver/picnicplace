@@ -2,6 +2,7 @@ import asyncio
 
 from picnicplace.events import EventBus
 from picnicplace.presence import PresenceTracker
+from picnicplace.schemas import ClientInfo
 
 
 async def _flush() -> None:
@@ -25,11 +26,11 @@ def test_grace_period_fires_only_when_nobody_returns() -> None:
         tracker.on_empty.append(on_empty)
         tracker.on_grace_expired.append(on_grace)
 
-        tracker.add("a")
+        tracker.add(ClientInfo(id="a", name="A", address=None))
         tracker.remove("a")
         await _flush()
         assert calls == ["empty"]
-        tracker.add("b")  # returns within the grace period
+        tracker.add(ClientInfo(id="b", name="B", address=None))  # returns within the grace period
         await asyncio.sleep(0.2)
         assert calls == ["empty"]
 

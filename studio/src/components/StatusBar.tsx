@@ -1,5 +1,5 @@
-import { type ConnectionStatus, useCore } from "../api/core";
-import { formatAxis } from "../format";
+import { type ConnectionStatus, hasControl, useCore } from "../api/core";
+import { describeClient, formatAxis } from "../format";
 
 const CONNECTION_LABEL: Record<ConnectionStatus, string> = {
   connecting: "Connecting",
@@ -9,7 +9,13 @@ const CONNECTION_LABEL: Record<ConnectionStatus, string> = {
 };
 
 export function StatusBar() {
-  const { status, machine, presence, serverVersion } = useCore();
+  const core = useCore();
+  const { status, machine, presence, lease, serverVersion } = core;
+  const control = hasControl(core)
+    ? "you"
+    : lease?.holder
+      ? describeClient(lease.holder)
+      : "no one";
   const live = status === "open" && machine !== undefined;
 
   return (
@@ -27,6 +33,9 @@ export function StatusBar() {
             </strong>
           </span>
           <span className="status-item">{machine.homed ? "Homed" : "Not homed"}</span>
+          <span className="status-item">
+            Control <strong className={hasControl(core) ? "text-ok" : undefined}>{control}</strong>
+          </span>
           {machine.estop && <span className="status-item badge-danger">E-STOP LATCHED</span>}
           <span className="status-item mono">
             {machine.axes.map((axis) => (

@@ -1,32 +1,16 @@
 """Machine description, simulated I/O, and the safe-Z state."""
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
 
-from .conftest import fast_config, operation_done, receive_until, wait_for
+from .conftest import connect, fast_config, wait_for
 
 PROFILE = Path(__file__).parents[1] / "src/picnicplace/profiles/lumenpnp-v4.toml"
-
-
-def move(client: TestClient, **position: float) -> None:
-    r = client.post("/api/v1/machine/move", json={"position": position})
-    assert r.status_code == 202, r.json()
-    wait_for(
-        lambda: client.get(f"/api/v1/operations/{r.json()['id']}").json()["status"] != "running"
-    )
-
-
-def set_output(client: TestClient, output_id: str, on: bool) -> int:
-    return client.put(f"/api/v1/machine/outputs/{output_id}", json={"on": on}).status_code
-
-
-def state(client: TestClient) -> dict[str, Any]:
-    return client.get("/api/v1/machine").json()
 
 
 def test_description(client: TestClient) -> None:
@@ -51,54 +35,96 @@ def test_io_in_machine_state(client: TestClient) -> None:
     assert s["z_safe"] is True
 
 
-def test_outputs_require_a_client_to_turn_on(client: TestClient) -> None:
-    assert set_output(client, "light_top", True) == 409
-    assert set_output(client, "light_top", False) == 200
-    with client.websocket_connect("/api/v1/events") as ws:
-        ws.receive_json()
-        assert set_output(client, "light_top", True) == 200
-        assert state(client)["outputs"]["light_top"] is True
-        assert set_output(client, "nope", True) == 404
+def test_outputs(client: TestClient) -> None:
+    url = "/api/v1/machine/outputs/light_top"
+    assert client.put(url, json={"on": True}).json()["code"] == "client_required"
+    with connect(client) as s:
+        assert s.put(url, {"on": True}).status_code == 200
+        assert s.state()["outputs"]["light_top"] is True
+        assert s.put(url, {"on": False}).status_code == 200
+        assert s.put("/api/v1/machine/outputs/nope", {"on": True}).status_code == 404
 
 
 def test_simulated_vacuum_and_pick(client: TestClient) -> None:
-    with client.websocket_connect("/api/v1/events") as ws:
-        ws.receive_json()
-        op_id = client.post("/api/v1/machine/home").json()["id"]
-        receive_until(ws, operation_done(op_id))
+    with connect(client) as s:
+        s.home()
 
         def vac() -> float:
-            return state(client)["inputs"]["vac_n1"]
+            return s.state()["inputs"]["vac_n1"]
 
         # Suction with an empty nozzle settles at the open-nozzle level.
-        set_output(client, "pump_n1", True)
-        set_output(client, "valve_n1", True)
+        s.put("/api/v1/machine/outputs/pump_n1", {"on": True})
+        s.put("/api/v1/machine/outputs/valve_n1", {"on": True})
         wait_for(lambda: 10 < vac() < 15)
 
         # Lowering the nozzle with suction on picks a part; vacuum rises past threshold.
-        move(client, Z=-10)
-        assert state(client)["z_safe"] is False
+        s.move(Z=-10)
+        assert s.state()["z_safe"] is False
         wait_for(lambda: vac() > 50)
-        move(client, Z=0)
-        assert state(client)["z_safe"] is True
+        s.move(Z=0)
+        assert s.state()["z_safe"] is True
         assert vac() > 50
 
         # Closing the valve drops the part.
-        set_output(client, "valve_n1", False)
+        s.put("/api/v1/machine/outputs/valve_n1", {"on": False})
         wait_for(lambda: vac() == 0)
 
 
 def test_estop_turns_outputs_off(client: TestClient) -> None:
-    with client.websocket_connect("/api/v1/events") as ws:
-        ws.receive_json()
-        set_output(client, "pump_n2", True)
+    with connect(client) as s:
+        s.put("/api/v1/machine/outputs/pump_n2", {"on": True})
         client.post("/api/v1/machine/estop")
-        assert state(client)["outputs"]["pump_n2"] is False
-        assert set_output(client, "pump_n2", True) == 409
+        assert s.state()["outputs"]["pump_n2"] is False
+        assert s.put("/api/v1/machine/outputs/pump_n2", {"on": True}).status_code == 409
+
+
+# --- Safe Z ------------------------------------------------------------------------------
+
+
+def test_move_travels_at_safe_z(client: TestClient) -> None:
+    with connect(client) as s:
+        s.home()
+        s.move(Z=-12)
+        # A move to X/Y with a nozzle down raises Z first, then travels, then lowers.
+        z_during_travel: list[float] = []
+        r = s.post("/api/v1/machine/move", {"position": {"X": 50, "Y": 40, "Z": -5}})
+        op_id = r.json()["id"]
+        while True:
+            msg = s.ws.receive_json()
+            if msg["type"] == "machine.state":
+                pos = msg["machine"]["position"]
+                if 0 < pos["X"] < 50:
+                    z_during_travel.append(pos["Z"])
+            elif msg["type"] == "operation" and msg["operation"]["id"] == op_id:
+                status = msg["operation"]["status"]
+                if status != "running":
+                    assert status == "succeeded"
+                    break
+        assert z_during_travel
+        assert all(z == pytest.approx(0) for z in z_during_travel)
+        pos = s.state()["position"]
+        assert (pos["X"], pos["Y"], pos["Z"]) == pytest.approx((50, 40, -5))
+
+
+def test_jog(client: TestClient) -> None:
+    with connect(client) as s:
+        s.home()
+        jog = "/api/v1/machine/jog"
+        assert s.wait(s.post(jog, {"axis": "X", "distance": 10}))["status"] == "succeeded"
+        assert s.state()["position"]["X"] == pytest.approx(10)
+        # Clamped to the soft limit rather than refused.
+        s.wait(s.post(jog, {"axis": "X", "distance": -100}))
+        assert s.state()["position"]["X"] == pytest.approx(0)
+        # X/Y jogs are refused while a nozzle is down; Z and rotation are not.
+        s.wait(s.post(jog, {"axis": "Z", "distance": -5}))
+        assert s.post(jog, {"axis": "Y", "distance": 5}).json()["code"] == "z_not_safe"
+        assert s.wait(s.post(jog, {"axis": "A", "distance": 90}))["status"] == "succeeded"
+        assert s.post(jog, {"axis": "Q", "distance": 1}).status_code == 422
 
 
 @pytest.fixture
-def sensed_client(tmp_path: Path) -> TestClient:
+def sensed_client(tmp_path: Path) -> Iterator[TestClient]:
+    """A LumenPnP v4 with a physical safe-Z sensor added."""
     text = PROFILE.read_text().replace(
         "safe_z = -1.0",
         'safe_z = -1.0\nsafe_z_input = "safe_z"',
@@ -106,17 +132,72 @@ def sensed_client(tmp_path: Path) -> TestClient:
     text += '\n[[inputs]]\nid = "safe_z"\nlabel = "Safe Z"\nkind = "digital"\nrole = "safe_z"\n'
     profile = tmp_path / "sensed.toml"
     profile.write_text(text)
-    return TestClient(create_app(fast_config(machine={"profile": str(profile)})))
+    with TestClient(create_app(fast_config(machine={"profile": str(profile)}))) as c:
+        yield c
 
 
 def test_sensed_safe_z(sensed_client: TestClient) -> None:
-    with sensed_client as client, client.websocket_connect("/api/v1/events") as ws:
-        ws.receive_json()
-        op_id = client.post("/api/v1/machine/home").json()["id"]
-        receive_until(ws, operation_done(op_id))
-        assert client.get("/api/v1/machine/description").json()["safe_z_input"] == "safe_z"
-        assert state(client)["inputs"]["safe_z"] is True
-        move(client, Z=8)
-        s = state(client)
-        assert s["inputs"]["safe_z"] is False
-        assert s["z_safe"] is False
+    with connect(sensed_client) as s:
+        s.home()
+        assert s.client.get("/api/v1/machine/description").json()["safe_z_input"] == "safe_z"
+        assert s.state()["inputs"]["safe_z"] is True
+        s.move(Z=8)
+        state = s.state()
+        assert state["inputs"]["safe_z"] is False
+        assert state["z_safe"] is False
+
+
+def test_lost_z_steps_fault(sensed_client: TestClient) -> None:
+    with connect(sensed_client) as s:
+        s.home()
+        # Z loses steps: commanded Z still says safe, but the nozzle is really low.
+        s.client.app.state.ctx.machine.driver.inject_z_slip("Z", -5)  # type: ignore[attr-defined]
+        state = s.state()
+        assert state["z_safe"] is False
+        op = s.move(X=20)
+        assert op["status"] == "failed"
+        assert "lost steps" in op["error"]
+        assert s.state()["homed"] is False
+        # Homing clears the fault.
+        s.home()
+        assert s.move(X=20)["status"] == "succeeded"
+
+
+# --- Control lease -----------------------------------------------------------------------
+
+
+def test_lease(client: TestClient) -> None:
+    with connect(client, "Studio") as a, connect(client, "Panel") as b:
+        assert a.hello["lease"] == {"holder": None}
+        # The first client to command motion takes the free lease.
+        a.home()
+        assert client.get("/api/v1/lease").json()["holder"]["name"] == "Studio"
+
+        jog = {"axis": "X", "distance": 5}
+        r = b.post("/api/v1/machine/jog", jog)
+        assert r.status_code == 409
+        assert r.json()["code"] == "lease_held"
+        assert "Studio" in r.json()["detail"]
+        assert b.post("/api/v1/lease", {}).json()["code"] == "lease_held"
+
+        # Taking control needs force; then the other client is refused.
+        assert b.post("/api/v1/lease", {"force": True}).json()["holder"]["name"] == "Panel"
+        assert b.wait(b.post("/api/v1/machine/jog", jog))["status"] == "succeeded"
+        assert a.post("/api/v1/machine/jog", jog).json()["code"] == "lease_held"
+
+        # E-stop never needs the lease.
+        assert a.post("/api/v1/machine/estop").json()["estop"] is True
+
+        assert b.delete("/api/v1/lease").json() == {"holder": None}
+        assert a.post("/api/v1/machine/reset").status_code == 200
+
+
+def test_lease_released_when_holder_leaves(client: TestClient) -> None:
+    with connect(client, "Watcher") as watcher:
+        with connect(client, "Studio") as s:
+            s.home()
+            r = s.post("/api/v1/machine/move", {"position": {"X": 400}, "speed": 1})
+            op_id = r.json()["id"]
+        wait_for(lambda: client.get("/api/v1/lease").json() == {"holder": None})
+        wait_for(lambda: client.get(f"/api/v1/operations/{op_id}").json()["status"] == "failed")
+        assert watcher.state()["busy"] is False

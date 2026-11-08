@@ -17,6 +17,7 @@ from picnicplace.api.context import AppContext
 from picnicplace.auth import Authenticator
 from picnicplace.config import Config
 from picnicplace.events import EventBus
+from picnicplace.lease import LeaseManager
 from picnicplace.machine.errors import MachineError
 from picnicplace.machine.service import MachineService
 from picnicplace.machine.simulator import SimulatorDriver
@@ -35,6 +36,8 @@ def create_app(config: Config | None = None) -> FastAPI:
     profile = config.machine.machine_profile
     driver = SimulatorDriver(profile, config.machine.sim_time_scale)
     machine = MachineService(profile, driver, bus, presence, operations)
+    lease = LeaseManager(bus, presence)
+    lease.on_holder_left.append(machine.stop_manual_motion)
     ctx = AppContext(
         config=config,
         auth=Authenticator(config.server.token),
@@ -42,6 +45,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         presence=presence,
         operations=operations,
         machine=machine,
+        lease=lease,
     )
 
     @asynccontextmanager

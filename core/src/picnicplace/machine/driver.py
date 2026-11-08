@@ -48,7 +48,10 @@ class MotionDriver(ABC):
 
     @abstractmethod
     async def home(self) -> None:
-        """Home all axes. Raises MotionInterruptedError if stopped."""
+        """Home all axes, Z first so X and Y travel with the nozzles up.
+
+        Raises MotionInterruptedError if stopped.
+        """
 
     @abstractmethod
     async def move_to(self, target: Mapping[str, float], speed: float | None) -> None:

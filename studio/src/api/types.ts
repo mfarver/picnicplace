@@ -16,3 +16,5 @@ export type MachineOutput = Schemas["Output"];
 export type FeederBank = Schemas["FeederBank"];
 export type Point = Schemas["Point"];
 export type Rect = Schemas["Rect"];
+export type LeaseState = Schemas["LeaseState"];
+export type ClientInfo = Schemas["ClientInfo"];

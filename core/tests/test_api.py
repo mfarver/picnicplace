@@ -5,7 +5,7 @@ from starlette.websockets import WebSocketDisconnect
 from picnicplace.api import create_app
 from picnicplace.api.websocket import CLOSE_HEARTBEAT_TIMEOUT, CLOSE_UNAUTHORIZED
 
-from .conftest import fast_config, operation_done, receive_until, wait_for
+from .conftest import connect, fast_config, receive_until, wait_for
 
 TOKEN = "correct-horse-battery-staple"
 
@@ -37,31 +37,28 @@ def test_ping_pong(client: TestClient) -> None:
         receive_until(ws, lambda m: m["type"] == "error")
 
 
-def test_motion_requires_a_client(client: TestClient) -> None:
+def test_motion_requires_a_connected_client(client: TestClient) -> None:
     r = client.post("/api/v1/machine/home")
     assert r.status_code == 409
-    assert r.json()["code"] == "no_client"
+    assert r.json()["code"] == "client_required"
+    r = client.post("/api/v1/machine/home", headers={"X-PicnicPlace-Client": "not-connected"})
+    assert r.json()["code"] == "client_required"
 
 
 def test_home_then_move(client: TestClient) -> None:
-    with client.websocket_connect("/api/v1/events") as ws:
-        ws.receive_json()
-        r = client.post("/api/v1/machine/move", json={"position": {"X": 10}})
-        assert r.json()["code"] == "not_homed"
+    with connect(client) as s:
+        assert s.post("/api/v1/machine/move", {"position": {"X": 10}}).json()["code"] == (
+            "not_homed"
+        )
+        s.home()
 
-        r = client.post("/api/v1/machine/home")
-        assert r.status_code == 202
-        op = receive_until(ws, operation_done(r.json()["id"]))["operation"]
-        assert op["status"] == "succeeded"
-
-        r = client.post("/api/v1/machine/move", json={"position": {"X": 100, "Y": 50}})
+        r = s.post("/api/v1/machine/move", {"position": {"X": 100, "Y": 50}})
         assert r.status_code == 202
         op_id = r.json()["id"]
-        assert client.post("/api/v1/machine/home").json()["code"] == "busy"
-        op = receive_until(ws, operation_done(op_id))["operation"]
-        assert op["status"] == "succeeded"
+        assert s.post("/api/v1/machine/home").json()["code"] == "busy"
+        assert s.wait(r)["status"] == "succeeded"
 
-        state = client.get("/api/v1/machine").json()
+        state = s.state()
         assert state["position"]["X"] == pytest.approx(100)
         assert state["position"]["Y"] == pytest.approx(50)
         assert state["busy"] is False
@@ -69,44 +66,35 @@ def test_home_then_move(client: TestClient) -> None:
 
 
 def test_move_rejects_bad_targets(client: TestClient) -> None:
-    with client.websocket_connect("/api/v1/events") as ws:
-        ws.receive_json()
-        op_id = client.post("/api/v1/machine/home").json()["id"]
-        receive_until(ws, operation_done(op_id))
+    with connect(client) as s:
+        s.home()
         for position in ({"X": 10_000}, {"Q": 1}):
-            r = client.post("/api/v1/machine/move", json={"position": position})
+            r = s.post("/api/v1/machine/move", {"position": position})
             assert r.status_code == 422
             assert r.json()["code"] == "invalid_target"
 
 
 def test_estop_interrupts_and_latches(client: TestClient) -> None:
-    with client.websocket_connect("/api/v1/events") as ws:
-        ws.receive_json()
-        op_id = client.post("/api/v1/machine/home").json()["id"]
-        receive_until(ws, operation_done(op_id))
+    with connect(client) as s:
+        s.home()
         # A slow move so the E-stop lands mid-motion.
-        op_id = client.post(
-            "/api/v1/machine/move", json={"position": {"X": 400}, "speed": 1}
-        ).json()["id"]
+        r = s.post("/api/v1/machine/move", {"position": {"X": 400}, "speed": 1})
+        # E-stop needs no lease or client ID.
         state = client.post("/api/v1/machine/estop").json()
         assert state["estop"] is True
         assert state["homed"] is False
-        op = receive_until(ws, operation_done(op_id))["operation"]
-        assert op["status"] == "failed"
+        assert s.wait(r)["status"] == "failed"
 
-        assert client.post("/api/v1/machine/home").json()["code"] == "estop_active"
-        assert client.post("/api/v1/machine/reset").json()["estop"] is False
-        assert client.post("/api/v1/machine/home").status_code == 202
+        assert s.post("/api/v1/machine/home").json()["code"] == "estop_active"
+        assert s.post("/api/v1/machine/reset").json()["estop"] is False
+        assert s.post("/api/v1/machine/home").status_code == 202
 
 
 def test_disconnect_stops_motion(client: TestClient) -> None:
-    with client.websocket_connect("/api/v1/events") as ws:
-        ws.receive_json()
-        op_id = client.post("/api/v1/machine/home").json()["id"]
-        receive_until(ws, operation_done(op_id))
-        op_id = client.post(
-            "/api/v1/machine/move", json={"position": {"X": 400}, "speed": 1}
-        ).json()["id"]
+    with connect(client) as s:
+        s.home()
+        r = s.post("/api/v1/machine/move", {"position": {"X": 400}, "speed": 1})
+        op_id = r.json()["id"]
     wait_for(lambda: client.get(f"/api/v1/operations/{op_id}").json()["status"] == "failed")
     state = client.get("/api/v1/machine").json()
     assert state["busy"] is False

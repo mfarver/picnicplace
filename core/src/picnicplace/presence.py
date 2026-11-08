@@ -11,22 +11,25 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from picnicplace.events import EventBus
-from picnicplace.schemas import PresenceEvent, PresenceLostEvent, PresenceState
+from picnicplace.schemas import ClientInfo, PresenceEvent, PresenceLostEvent, PresenceState
 
 log = logging.getLogger(__name__)
 
 AsyncCallback = Callable[[], Awaitable[None]]
+ClientCallback = Callable[[ClientInfo], Awaitable[None]]
 
 
 class PresenceTracker:
     def __init__(self, bus: EventBus, grace_period_s: float) -> None:
         self._bus = bus
         self._grace_period_s = grace_period_s
-        self._clients: set[str] = set()
+        self._clients: dict[str, ClientInfo] = {}
         self._grace_task: asyncio.Task[None] | None = None
         self._tasks: set[asyncio.Task[None]] = set()
         self.on_change: list[Callable[[], None]] = []
         self.on_empty: list[AsyncCallback] = []
+        self.on_remove: list[ClientCallback] = []
+        """Run when any client disconnects, before ``on_empty``."""
         self.on_grace_expired: list[AsyncCallback] = []
 
     @property
@@ -37,18 +40,24 @@ class PresenceTracker:
     def state(self) -> PresenceState:
         return PresenceState(clients=len(self._clients), present=self.present)
 
-    def add(self, client_id: str) -> None:
-        self._clients.add(client_id)
+    def get(self, client_id: str) -> ClientInfo | None:
+        """The connected client with this ID, if any."""
+        return self._clients.get(client_id)
+
+    def add(self, client: ClientInfo) -> None:
+        self._clients[client.id] = client
         if self._grace_task is not None:
             self._grace_task.cancel()
             self._grace_task = None
         self._changed()
 
     def remove(self, client_id: str) -> None:
-        if client_id not in self._clients:
+        client = self._clients.pop(client_id, None)
+        if client is None:
             return
-        self._clients.remove(client_id)
         self._changed()
+        for on_remove in self.on_remove:
+            self._spawn(on_remove(client))
         if not self._clients:
             log.info("last client disconnected")
             for callback in self.on_empty:

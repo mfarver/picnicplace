@@ -24,6 +24,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lease": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lease */
+        get: operations["get_lease_api_v1_lease_get"];
+        put?: never;
+        /**
+         * Acquire Lease
+         * @description Take control of the machine. With ``force``, take it from another client.
+         */
+        post: operations["acquire_lease_api_v1_lease_post"];
+        /**
+         * Release Lease
+         * @description Give up control of the machine, if this client holds it.
+         */
+        delete: operations["release_lease_api_v1_lease_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine": {
         parameters: {
             query?: never;
@@ -95,6 +120,27 @@ export interface paths {
          * @description Start homing. Returns an operation; follow it over the event socket.
          */
         post: operations["home_api_v1_machine_home_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/machine/jog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Jog
+         * @description Move one axis by a relative distance, clamped to its limits. X and Y jogs are
+         *     refused while a nozzle is below safe Z.
+         */
+        post: operations["jog_api_v1_machine_jog_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -247,6 +293,21 @@ export interface components {
             /** @description Head cameras: offset from the head. Fixed cameras: machine coordinates. */
             position: components["schemas"]["Point"];
         };
+        /** ClientInfo */
+        ClientInfo: {
+            /**
+             * Address
+             * @description Network address the client connected from.
+             */
+            address: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Name
+             * @description Name the client gave when connecting, such as 'Studio'.
+             */
+            name: string;
+        };
         /**
          * PingMessage
          * @description Heartbeat. Clients send one every couple of seconds; the server answers with pong.
@@ -333,6 +394,7 @@ export interface components {
         HelloEvent: {
             /** Client Id */
             client_id: string;
+            lease: components["schemas"]["LeaseState"];
             machine: components["schemas"]["MachineState"];
             presence: components["schemas"]["PresenceState"];
             /** Protocol */
@@ -375,6 +437,41 @@ export interface components {
             threshold: number | null;
             /** Unit */
             unit: string | null;
+        };
+        /** JogRequest */
+        JogRequest: {
+            /** Axis */
+            axis: string;
+            /**
+             * Distance
+             * @description Relative distance, mm or degrees. Clamped to limits.
+             */
+            distance: number;
+            /** Speed */
+            speed?: number | null;
+        };
+        /** LeaseEvent */
+        LeaseEvent: {
+            lease: components["schemas"]["LeaseState"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "lease";
+        };
+        /** LeaseRequest */
+        LeaseRequest: {
+            /**
+             * Force
+             * @description Take the lease even if another client holds it. Ask the user first.
+             * @default false
+             */
+            force: boolean;
+        };
+        /** LeaseState */
+        LeaseState: {
+            /** @description The client allowed to move the machine, or null if no one holds it. */
+            holder: components["schemas"]["ClientInfo"] | null;
         };
         /** Location */
         Location: {
@@ -648,7 +745,7 @@ export interface components {
             /** Y Min */
             y_min: number;
         };
-        ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
+        ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -694,6 +791,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    get_lease_api_v1_lease_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseState"];
+                };
+            };
+        };
+    };
+    acquire_lease_api_v1_lease_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_lease_api_v1_lease_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -761,7 +964,10 @@ export interface operations {
     home_api_v1_machine_home_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -776,8 +982,62 @@ export interface operations {
                     "application/json": components["schemas"]["Operation"];
                 };
             };
-            /** @description The machine cannot do this right now. */
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    jog_api_v1_machine_jog_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JogRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The axis is unknown. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -790,7 +1050,10 @@ export interface operations {
     move_api_v1_machine_move_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -809,7 +1072,7 @@ export interface operations {
                     "application/json": components["schemas"]["Operation"];
                 };
             };
-            /** @description The machine cannot do this right now. */
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -832,7 +1095,10 @@ export interface operations {
     set_output_api_v1_machine_outputs__output_id__put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
             path: {
                 output_id: string;
             };
@@ -862,7 +1128,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The machine cannot do this right now. */
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -885,7 +1151,10 @@ export interface operations {
     reset_api_v1_machine_reset_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -898,6 +1167,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MachineState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

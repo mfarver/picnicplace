@@ -60,7 +60,7 @@
         "title": "Axis",
         "type": "object"
       },
-      "Board": {
+      "Board-Input": {
         "additionalProperties": false,
         "properties": {
           "name": {
@@ -69,7 +69,50 @@
           },
           "placements": {
             "items": {
-              "$ref": "#/components/schemas/Placement"
+              "$ref": "#/components/schemas/Placement-Input"
+            },
+            "title": "Placements",
+            "type": "array"
+          },
+          "size": {
+            "$ref": "#/components/schemas/Size",
+            "description": "The outline's bounding box."
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "thickness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Board thickness, mm.",
+            "title": "Thickness"
+          }
+        },
+        "required": [
+          "name",
+          "size"
+        ],
+        "title": "Board",
+        "type": "object"
+      },
+      "Board-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/Placement-Output"
             },
             "title": "Placements",
             "type": "array"
@@ -104,6 +147,80 @@
           "placements"
         ],
         "title": "Board",
+        "type": "object"
+      },
+      "BoardCopy-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise, from the top.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "x": {
+            "description": "Where the board's origin is, in the panel frame.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "x",
+          "y"
+        ],
+        "title": "BoardCopy",
+        "type": "object"
+      },
+      "BoardCopy-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise, from the top.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "x": {
+            "description": "Where the board's origin is, in the panel frame.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "x",
+          "y",
+          "rotation",
+          "enabled"
+        ],
+        "title": "BoardCopy",
         "type": "object"
       },
       "Camera": {
@@ -824,6 +941,276 @@
         "title": "Input",
         "type": "object"
       },
+      "Issue": {
+        "properties": {
+          "copy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Copy Id"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "message"
+        ],
+        "title": "Issue",
+        "type": "object"
+      },
+      "Job-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "board": {
+            "$ref": "#/components/schemas/Board-Input"
+          },
+          "board_z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Machine Z of the board's top surface, once measured.",
+            "title": "Board Z"
+          },
+          "format": {
+            "const": "picnicplace-job",
+            "default": "picnicplace-job",
+            "title": "Format",
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachineLocation-Input"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the panel sits on the machine, once set."
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "panel": {
+            "$ref": "#/components/schemas/Panel-Input"
+          },
+          "side_up": {
+            "description": "The board side facing up on the machine.",
+            "enum": [
+              "top",
+              "bottom"
+            ],
+            "title": "Side Up",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "board",
+          "panel",
+          "side_up"
+        ],
+        "title": "Job",
+        "type": "object"
+      },
+      "Job-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "board": {
+            "$ref": "#/components/schemas/Board-Output"
+          },
+          "board_z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Machine Z of the board's top surface, once measured.",
+            "title": "Board Z"
+          },
+          "format": {
+            "const": "picnicplace-job",
+            "default": "picnicplace-job",
+            "title": "Format",
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachineLocation-Output"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the panel sits on the machine, once set."
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "panel": {
+            "$ref": "#/components/schemas/Panel-Output"
+          },
+          "side_up": {
+            "description": "The board side facing up on the machine.",
+            "enum": [
+              "top",
+              "bottom"
+            ],
+            "title": "Side Up",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "name",
+          "board",
+          "panel",
+          "side_up",
+          "location",
+          "board_z"
+        ],
+        "title": "Job",
+        "type": "object"
+      },
+      "JobLayout": {
+        "properties": {
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "ok": {
+            "description": "No errors: the machine can do every enabled placement.",
+            "readOnly": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "outline": {
+            "description": "The panel's corners, machine coordinates.",
+            "items": {
+              "$ref": "#/components/schemas/Point"
+            },
+            "title": "Outline",
+            "type": "array"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/MachinePlacement"
+            },
+            "title": "Placements",
+            "type": "array"
+          }
+        },
+        "required": [
+          "placements",
+          "outline",
+          "issues",
+          "ok"
+        ],
+        "title": "JobLayout",
+        "type": "object"
+      },
+      "JobSummary": {
+        "properties": {
+          "board": {
+            "title": "Board",
+            "type": "string"
+          },
+          "copies": {
+            "title": "Copies",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "modified": {
+            "format": "date-time",
+            "title": "Modified",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "placed": {
+            "title": "Placed",
+            "type": "boolean"
+          },
+          "side_up": {
+            "title": "Side Up",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "board",
+          "copies",
+          "side_up",
+          "placed",
+          "modified"
+        ],
+        "title": "JobSummary",
+        "type": "object"
+      },
       "JogRequest": {
         "properties": {
           "axis": {
@@ -910,6 +1297,18 @@
             "title": "Name",
             "type": "string"
           },
+          "panel_pcb": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional panel .kicad_pcb made from this board (such as by KiKit). Its board copies are found by matching references; its own fiducials are kept.",
+            "title": "Panel Pcb"
+          },
           "part_field": {
             "anyOf": [
               {
@@ -932,7 +1331,11 @@
       "KicadImportResult": {
         "properties": {
           "board": {
-            "$ref": "#/components/schemas/Board"
+            "$ref": "#/components/schemas/Board-Output"
+          },
+          "job": {
+            "$ref": "#/components/schemas/Job-Output",
+            "description": "A new job for the board or panel, not yet saved or placed."
           },
           "library": {
             "$ref": "#/components/schemas/LibraryDocument-Output",
@@ -949,6 +1352,10 @@
             ],
             "description": "What merging into the library did, when add_to_library was set."
           },
+          "panel": {
+            "$ref": "#/components/schemas/Panel-Output",
+            "description": "The panel layout, or a single copy of the board."
+          },
           "warnings": {
             "items": {
               "type": "string"
@@ -959,6 +1366,8 @@
         },
         "required": [
           "board",
+          "panel",
+          "job",
           "library",
           "library_report",
           "warnings"
@@ -1162,6 +1571,141 @@
           "style"
         ],
         "title": "Location",
+        "type": "object"
+      },
+      "MachineLocation-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise, as the operator sees the bed from the front.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "x": {
+            "description": "Machine X of the panel's front-left corner, mm.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "description": "Machine Y of the panel's front-left corner, mm.",
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "MachineLocation",
+        "type": "object"
+      },
+      "MachineLocation-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise, as the operator sees the bed from the front.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "x": {
+            "description": "Machine X of the panel's front-left corner, mm.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "description": "Machine Y of the panel's front-left corner, mm.",
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "rotation"
+        ],
+        "title": "MachineLocation",
+        "type": "object"
+      },
+      "MachinePlacement": {
+        "properties": {
+          "copy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Board copy, or None for a panel fiducial.",
+            "title": "Copy Id"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "footprint_id": {
+            "title": "Footprint Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "part",
+              "fiducial"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Id"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "rotation": {
+            "description": "The part's angle as the operator sees it, degrees counterclockwise.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "x": {
+            "description": "Machine X, mm.",
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "description": "Machine Y, mm.",
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "copy_id",
+          "ref",
+          "kind",
+          "part_id",
+          "footprint_id",
+          "x",
+          "y",
+          "rotation",
+          "enabled"
+        ],
+        "title": "MachinePlacement",
         "type": "object"
       },
       "MachineProfile": {
@@ -2129,6 +2673,65 @@
         "title": "Pad",
         "type": "object"
       },
+      "Panel-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "copies": {
+            "items": {
+              "$ref": "#/components/schemas/BoardCopy-Input"
+            },
+            "title": "Copies",
+            "type": "array"
+          },
+          "fiducials": {
+            "description": "The panel's own, in the panel frame.",
+            "items": {
+              "$ref": "#/components/schemas/Placement-Input"
+            },
+            "title": "Fiducials",
+            "type": "array"
+          },
+          "size": {
+            "$ref": "#/components/schemas/Size"
+          }
+        },
+        "required": [
+          "size",
+          "copies"
+        ],
+        "title": "Panel",
+        "type": "object"
+      },
+      "Panel-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "copies": {
+            "items": {
+              "$ref": "#/components/schemas/BoardCopy-Output"
+            },
+            "title": "Copies",
+            "type": "array"
+          },
+          "fiducials": {
+            "description": "The panel's own, in the panel frame.",
+            "items": {
+              "$ref": "#/components/schemas/Placement-Output"
+            },
+            "title": "Fiducials",
+            "type": "array"
+          },
+          "size": {
+            "$ref": "#/components/schemas/Size"
+          }
+        },
+        "required": [
+          "size",
+          "copies",
+          "fiducials"
+        ],
+        "title": "Panel",
+        "type": "object"
+      },
       "Part-Input": {
         "additionalProperties": false,
         "description": "A part number: what it is, its footprint, its height, and its tape.",
@@ -2317,7 +2920,91 @@
         "title": "Part",
         "type": "object"
       },
-      "Placement": {
+      "Placement-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "footprint_id": {
+            "description": "Library footprint ID (the footprint's name).",
+            "title": "Footprint Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "part",
+            "enum": [
+              "part",
+              "fiducial"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "description": "Why the placement is disabled, if it is.",
+            "title": "Note",
+            "type": "string"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Library part ID, usually the manufacturer part number. None if unknown.",
+            "title": "Part Id"
+          },
+          "ref": {
+            "description": "Reference designator, such as 'C1'.",
+            "title": "Ref",
+            "type": "string"
+          },
+          "rotation": {
+            "description": "Degrees counterclockwise, seen from the top.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "side": {
+            "enum": [
+              "top",
+              "bottom"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "value": {
+            "default": "",
+            "title": "Value",
+            "type": "string"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ref",
+          "part_id",
+          "footprint_id",
+          "x",
+          "y",
+          "rotation",
+          "side"
+        ],
+        "title": "Placement",
+        "type": "object"
+      },
+      "Placement-Output": {
         "additionalProperties": false,
         "properties": {
           "enabled": {
@@ -3353,6 +4040,301 @@
         "summary": "Health",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/v1/jobs": {
+      "get": {
+        "operationId": "list_jobs_api_v1_jobs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobSummary"
+                  },
+                  "title": "Response List Jobs Api V1 Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Jobs",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/find-location": {
+      "post": {
+        "description": "A place on the bed where the job fits: every placement within reach of every\nnozzle, fiducials where the camera sees them, clear of the keep-outs.",
+        "operationId": "job_find_location_api_v1_jobs_find_location_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Job-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineLocation-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The board fits nowhere."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Job Find Location",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/layout": {
+      "post": {
+        "description": "Where each placement of a job (saved or not) lands on this machine, and anything\nthat stops the machine from doing it: placements out of reach, fiducials the\ncamera cannot see, or the board over a keep-out.",
+        "operationId": "job_layout_api_v1_jobs_layout_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Job-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobLayout"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Job Layout",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}": {
+      "delete": {
+        "operationId": "delete_job_api_v1_jobs__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No job with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Job",
+        "tags": [
+          "jobs"
+        ]
+      },
+      "get": {
+        "operationId": "get_job_api_v1_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No job with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Job",
+        "tags": [
+          "jobs"
+        ]
+      },
+      "put": {
+        "description": "Save a job, creating or replacing it.",
+        "operationId": "put_job_api_v1_jobs__job_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Job-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Job",
+        "tags": [
+          "jobs"
         ]
       }
     },

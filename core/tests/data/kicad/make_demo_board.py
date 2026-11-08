@@ -101,3 +101,12 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+# The panel, made with KiKit (installed into KiCad's Python):
+#
+#   $KICAD_PYTHON -m kikit.ui panelize \
+#       --layout 'grid; rows: 2; cols: 2; space: 4mm; rotation: 0deg; alternation: rows' \
+#       --tabs 'fixed; width: 3mm' --cuts 'mousebites; drill: 0.5mm; spacing: 1mm' \
+#       --framing 'railstb; width: 6mm; space: 3mm' \
+#       --fiducials '3fid; hoffset: 6mm; voffset: 3mm; coppersize: 1mm; opening: 2mm' \
+#       --post 'millradius: 1mm' picnic-demo.kicad_pcb picnic-demo-panel.kicad_pcb

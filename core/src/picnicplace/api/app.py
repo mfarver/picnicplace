@@ -16,6 +16,7 @@ from starlette.types import Scope
 from picnicplace import __version__
 from picnicplace.api import boards as board_routes
 from picnicplace.api import cameras as camera_routes
+from picnicplace.api import jobs as job_routes
 from picnicplace.api import library as library_routes
 from picnicplace.api import routes, websocket
 from picnicplace.api.context import AppContext
@@ -92,6 +93,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(camera_routes.router)
     app.include_router(library_routes.router)
     app.include_router(board_routes.router)
+    app.include_router(job_routes.router)
     app.include_router(websocket.router)
 
     @app.exception_handler(MachineError)

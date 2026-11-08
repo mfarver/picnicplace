@@ -71,6 +71,10 @@ class DataConfig(_Section):
     def library_path(self) -> Path:
         return self.dir.expanduser() / "library.sqlite3"
 
+    @property
+    def jobs_dir(self) -> Path:
+        return self.dir.expanduser() / "jobs"
+
 
 class MarlinConfig(_Section):
     port: str | None = Field(

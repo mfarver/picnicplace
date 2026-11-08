@@ -10,7 +10,9 @@ from picnicplace.api.library import get_library
 from picnicplace.auth import Permission, Principal
 from picnicplace.board.kicad import read_bom, read_kicad_pcb
 from picnicplace.board.models import Board
+from picnicplace.board.panel import Panel, find_copies
 from picnicplace.board.sexpr import SexprError
+from picnicplace.job.models import Job
 from picnicplace.library import ImportReport, LibraryDocument
 from picnicplace.schemas import ErrorResponse
 
@@ -33,6 +35,13 @@ class KicadImportRequest(BaseModel):
             "the board's fields. Grouped or one row per reference."
         ),
     )
+    panel_pcb: str | None = Field(
+        default=None,
+        description=(
+            "Optional panel .kicad_pcb made from this board (such as by KiKit). Its board "
+            "copies are found by matching references; its own fiducials are kept."
+        ),
+    )
     part_field: str | None = Field(
         default=None,
         description="Field holding the part number. Default: the first of MP, MPN, ... found.",
@@ -48,6 +57,8 @@ class KicadImportRequest(BaseModel):
 
 class KicadImportResult(BaseModel):
     board: Board
+    panel: Panel = Field(description="The panel layout, or a single copy of the board.")
+    job: Job = Field(description="A new job for the board or panel, not yet saved or placed.")
     library: LibraryDocument = Field(
         description="Footprints read from the board, and a part for each part number."
     )
@@ -67,6 +78,12 @@ def import_kicad(
     try:
         bom = read_bom(body.bom_csv, body.part_field) if body.bom_csv else None
         result = read_kicad_pcb(body.kicad_pcb, body.name, bom=bom, part_field=body.part_field)
+        warnings = list(result.warnings)
+        panel = Panel.single(result.board)
+        if body.panel_pcb:
+            panel_board = read_kicad_pcb(body.panel_pcb, f"{body.name} panel").board
+            panel, panel_warnings = find_copies(result.board, panel_board)
+            warnings += panel_warnings
     except (SexprError, ValueError) as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     document = LibraryDocument(footprints=result.footprints, parts=result.parts)
@@ -80,5 +97,10 @@ def import_kicad(
         library = get_library(ctx)
         report = library.import_document(document)
     return KicadImportResult(
-        board=result.board, library=document, library_report=report, warnings=result.warnings
+        board=result.board,
+        panel=panel,
+        job=Job.for_board(result.board, panel, body.name),
+        library=document,
+        library_report=report,
+        warnings=warnings,
     )

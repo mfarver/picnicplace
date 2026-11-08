@@ -101,6 +101,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Jobs */
+        get: operations["list_jobs_api_v1_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/find-location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Job Find Location
+         * @description A place on the bed where the job fits: every placement within reach of every
+         *     nozzle, fiducials where the camera sees them, clear of the keep-outs.
+         */
+        post: operations["job_find_location_api_v1_jobs_find_location_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/layout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Job Layout
+         * @description Where each placement of a job (saved or not) lands on this machine, and anything
+         *     that stops the machine from doing it: placements out of reach, fiducials the
+         *     camera cannot see, or the board over a keep-out.
+         */
+        post: operations["job_layout_api_v1_jobs_layout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Job */
+        get: operations["get_job_api_v1_jobs__job_id__get"];
+        /**
+         * Put Job
+         * @description Save a job, creating or replacing it.
+         */
+        put: operations["put_job_api_v1_jobs__job_id__put"];
+        post?: never;
+        /** Delete Job */
+        delete: operations["delete_job_api_v1_jobs__job_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lease": {
         parameters: {
             query?: never;
@@ -564,11 +646,30 @@ export interface components {
             name: string;
         };
         /** Board */
-        Board: {
+        "Board-Input": {
             /** Name */
             name: string;
             /** Placements */
-            placements: components["schemas"]["Placement"][];
+            placements?: components["schemas"]["Placement-Input"][];
+            /** @description The outline's bounding box. */
+            size: components["schemas"]["Size"];
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Thickness
+             * @description Board thickness, mm.
+             */
+            thickness?: number | null;
+        };
+        /** Board */
+        "Board-Output": {
+            /** Name */
+            name: string;
+            /** Placements */
+            placements: components["schemas"]["Placement-Output"][];
             /** @description The outline's bounding box. */
             size: components["schemas"]["Size"];
             /**
@@ -581,6 +682,52 @@ export interface components {
              * @description Board thickness, mm.
              */
             thickness: number | null;
+        };
+        /** BoardCopy */
+        "BoardCopy-Input": {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, from the top.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * X
+             * @description Where the board's origin is, in the panel frame.
+             */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** BoardCopy */
+        "BoardCopy-Output": {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, from the top.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * X
+             * @description Where the board's origin is, in the panel frame.
+             */
+            x: number;
+            /** Y */
+            y: number;
         };
         /** Camera */
         Camera: {
@@ -919,6 +1066,121 @@ export interface components {
             /** Unit */
             unit: string | null;
         };
+        /** Issue */
+        Issue: {
+            /** Copy Id */
+            copy_id?: string | null;
+            /** Message */
+            message: string;
+            /** Ref */
+            ref?: string | null;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "error" | "warning";
+        };
+        /** Job */
+        "Job-Input": {
+            board: components["schemas"]["Board-Input"];
+            /**
+             * Board Z
+             * @description Machine Z of the board's top surface, once measured.
+             */
+            board_z?: number | null;
+            /**
+             * Format
+             * @default picnicplace-job
+             * @constant
+             */
+            format: "picnicplace-job";
+            /** @description Where the panel sits on the machine, once set. */
+            location?: components["schemas"]["MachineLocation-Input"] | null;
+            /** Name */
+            name: string;
+            panel: components["schemas"]["Panel-Input"];
+            /**
+             * Side Up
+             * @description The board side facing up on the machine.
+             * @enum {string}
+             */
+            side_up: "top" | "bottom";
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
+        /** Job */
+        "Job-Output": {
+            board: components["schemas"]["Board-Output"];
+            /**
+             * Board Z
+             * @description Machine Z of the board's top surface, once measured.
+             */
+            board_z: number | null;
+            /**
+             * Format
+             * @default picnicplace-job
+             * @constant
+             */
+            format: "picnicplace-job";
+            /** @description Where the panel sits on the machine, once set. */
+            location: components["schemas"]["MachineLocation-Output"] | null;
+            /** Name */
+            name: string;
+            panel: components["schemas"]["Panel-Output"];
+            /**
+             * Side Up
+             * @description The board side facing up on the machine.
+             * @enum {string}
+             */
+            side_up: "top" | "bottom";
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
+        /** JobLayout */
+        JobLayout: {
+            /** Issues */
+            issues: components["schemas"]["Issue"][];
+            /**
+             * Ok
+             * @description No errors: the machine can do every enabled placement.
+             */
+            readonly ok: boolean;
+            /**
+             * Outline
+             * @description The panel's corners, machine coordinates.
+             */
+            outline: components["schemas"]["Point"][];
+            /** Placements */
+            placements: components["schemas"]["MachinePlacement"][];
+        };
+        /** JobSummary */
+        JobSummary: {
+            /** Board */
+            board: string;
+            /** Copies */
+            copies: number;
+            /** Id */
+            id: string;
+            /**
+             * Modified
+             * Format: date-time
+             */
+            modified: string;
+            /** Name */
+            name: string;
+            /** Placed */
+            placed: boolean;
+            /** Side Up */
+            side_up: string;
+        };
         /** JogRequest */
         JogRequest: {
             /** Axis */
@@ -967,6 +1229,11 @@ export interface components {
              */
             name: string;
             /**
+             * Panel Pcb
+             * @description Optional panel .kicad_pcb made from this board (such as by KiKit). Its board copies are found by matching references; its own fiducials are kept.
+             */
+            panel_pcb?: string | null;
+            /**
              * Part Field
              * @description Field holding the part number. Default: the first of MP, MPN, ... found.
              */
@@ -974,11 +1241,15 @@ export interface components {
         };
         /** KicadImportResult */
         KicadImportResult: {
-            board: components["schemas"]["Board"];
+            board: components["schemas"]["Board-Output"];
+            /** @description A new job for the board or panel, not yet saved or placed. */
+            job: components["schemas"]["Job-Output"];
             /** @description Footprints read from the board, and a part for each part number. */
             library: components["schemas"]["LibraryDocument-Output"];
             /** @description What merging into the library did, when add_to_library was set. */
             library_report: components["schemas"]["ImportReport"] | null;
+            /** @description The panel layout, or a single copy of the board. */
+            panel: components["schemas"]["Panel-Output"];
             /** Warnings */
             warnings: string[];
         };
@@ -1078,6 +1349,85 @@ export interface components {
              * @description Height of the surface, where it matters (fiducials).
              */
             z: number | null;
+        };
+        /** MachineLocation */
+        "MachineLocation-Input": {
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, as the operator sees the bed from the front.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * X
+             * @description Machine X of the panel's front-left corner, mm.
+             */
+            x: number;
+            /**
+             * Y
+             * @description Machine Y of the panel's front-left corner, mm.
+             */
+            y: number;
+        };
+        /** MachineLocation */
+        "MachineLocation-Output": {
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, as the operator sees the bed from the front.
+             * @default 0
+             */
+            rotation: number;
+            /**
+             * X
+             * @description Machine X of the panel's front-left corner, mm.
+             */
+            x: number;
+            /**
+             * Y
+             * @description Machine Y of the panel's front-left corner, mm.
+             */
+            y: number;
+        };
+        /** MachinePlacement */
+        MachinePlacement: {
+            /**
+             * Copy Id
+             * @description Board copy, or None for a panel fiducial.
+             */
+            copy_id: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Footprint Id */
+            footprint_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "part" | "fiducial";
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Part Id */
+            part_id: string | null;
+            /** Ref */
+            ref: string;
+            /**
+             * Rotation
+             * @description The part's angle as the operator sees it, degrees counterclockwise.
+             */
+            rotation: number;
+            /**
+             * X
+             * @description Machine X, mm.
+             */
+            x: number;
+            /**
+             * Y
+             * @description Machine Y, mm.
+             */
+            y: number;
         };
         /** MachineProfile */
         MachineProfile: {
@@ -1531,6 +1881,28 @@ export interface components {
             /** Y */
             y: number;
         };
+        /** Panel */
+        "Panel-Input": {
+            /** Copies */
+            copies: components["schemas"]["BoardCopy-Input"][];
+            /**
+             * Fiducials
+             * @description The panel's own, in the panel frame.
+             */
+            fiducials?: components["schemas"]["Placement-Input"][];
+            size: components["schemas"]["Size"];
+        };
+        /** Panel */
+        "Panel-Output": {
+            /** Copies */
+            copies: components["schemas"]["BoardCopy-Output"][];
+            /**
+             * Fiducials
+             * @description The panel's own, in the panel frame.
+             */
+            fiducials: components["schemas"]["Placement-Output"][];
+            size: components["schemas"]["Size"];
+        };
         /**
          * Part
          * @description A part number: what it is, its footprint, its height, and its tape.
@@ -1636,7 +2008,61 @@ export interface components {
             tape: components["schemas"]["Tape-Output"] | null;
         };
         /** Placement */
-        Placement: {
+        "Placement-Input": {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Footprint Id
+             * @description Library footprint ID (the footprint's name).
+             */
+            footprint_id: string;
+            /**
+             * Kind
+             * @default part
+             * @enum {string}
+             */
+            kind: "part" | "fiducial";
+            /**
+             * Note
+             * @description Why the placement is disabled, if it is.
+             * @default
+             */
+            note: string;
+            /**
+             * Part Id
+             * @description Library part ID, usually the manufacturer part number. None if unknown.
+             */
+            part_id: string | null;
+            /**
+             * Ref
+             * @description Reference designator, such as 'C1'.
+             */
+            ref: string;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, seen from the top.
+             */
+            rotation: number;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "top" | "bottom";
+            /**
+             * Value
+             * @default
+             */
+            value: string;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** Placement */
+        "Placement-Output": {
             /**
              * Enabled
              * @default true
@@ -2145,6 +2571,214 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    list_jobs_api_v1_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobSummary"][];
+                };
+            };
+        };
+    };
+    job_find_location_api_v1_jobs_find_location_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Job-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineLocation-Output"];
+                };
+            };
+            /** @description The board fits nowhere. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    job_layout_api_v1_jobs_layout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Job-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobLayout"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_api_v1_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job-Output"];
+                };
+            };
+            /** @description No job with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_job_api_v1_jobs__job_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Job-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_job_api_v1_jobs__job_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No job with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

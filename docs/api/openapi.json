@@ -60,6 +60,52 @@
         "title": "Axis",
         "type": "object"
       },
+      "Board": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/Placement"
+            },
+            "title": "Placements",
+            "type": "array"
+          },
+          "size": {
+            "$ref": "#/components/schemas/Size",
+            "description": "The outline's bounding box."
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "thickness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Board thickness, mm.",
+            "title": "Thickness"
+          }
+        },
+        "required": [
+          "name",
+          "size",
+          "thickness",
+          "source",
+          "placements"
+        ],
+        "title": "Board",
+        "type": "object"
+      },
       "Camera": {
         "additionalProperties": false,
         "properties": {
@@ -831,6 +877,93 @@
           "area"
         ],
         "title": "KeepOut",
+        "type": "object"
+      },
+      "KicadImportRequest": {
+        "properties": {
+          "add_to_library": {
+            "default": false,
+            "description": "Merge the board's footprints and parts into the library (existing entries keep their values). Needs the config permission.",
+            "title": "Add To Library",
+            "type": "boolean"
+          },
+          "bom_csv": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional BOM CSV from the schematic, to take part numbers from instead of the board's fields. Grouped or one row per reference.",
+            "title": "Bom Csv"
+          },
+          "kicad_pcb": {
+            "description": "Contents of the .kicad_pcb file.",
+            "title": "Kicad Pcb",
+            "type": "string"
+          },
+          "name": {
+            "default": "board",
+            "description": "Name for the board.",
+            "title": "Name",
+            "type": "string"
+          },
+          "part_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Field holding the part number. Default: the first of MP, MPN, ... found.",
+            "title": "Part Field"
+          }
+        },
+        "required": [
+          "kicad_pcb"
+        ],
+        "title": "KicadImportRequest",
+        "type": "object"
+      },
+      "KicadImportResult": {
+        "properties": {
+          "board": {
+            "$ref": "#/components/schemas/Board"
+          },
+          "library": {
+            "$ref": "#/components/schemas/LibraryDocument-Output",
+            "description": "Footprints read from the board, and a part for each part number."
+          },
+          "library_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportReport"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What merging into the library did, when add_to_library was set."
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "board",
+          "library",
+          "library_report",
+          "warnings"
+        ],
+        "title": "KicadImportResult",
         "type": "object"
       },
       "LeaseEvent": {
@@ -2184,6 +2317,94 @@
         "title": "Part",
         "type": "object"
       },
+      "Placement": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "footprint_id": {
+            "description": "Library footprint ID (the footprint's name).",
+            "title": "Footprint Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "part",
+            "enum": [
+              "part",
+              "fiducial"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "description": "Why the placement is disabled, if it is.",
+            "title": "Note",
+            "type": "string"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Library part ID, usually the manufacturer part number. None if unknown.",
+            "title": "Part Id"
+          },
+          "ref": {
+            "description": "Reference designator, such as 'C1'.",
+            "title": "Ref",
+            "type": "string"
+          },
+          "rotation": {
+            "description": "Degrees counterclockwise, seen from the top.",
+            "title": "Rotation",
+            "type": "number"
+          },
+          "side": {
+            "enum": [
+              "top",
+              "bottom"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "value": {
+            "default": "",
+            "title": "Value",
+            "type": "string"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ref",
+          "kind",
+          "part_id",
+          "value",
+          "footprint_id",
+          "x",
+          "y",
+          "rotation",
+          "side",
+          "enabled",
+          "note"
+        ],
+        "title": "Placement",
+        "type": "object"
+      },
       "Point": {
         "additionalProperties": false,
         "properties": {
@@ -2731,6 +2952,63 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/boards/import/kicad": {
+      "post": {
+        "description": "Read a KiCad board: its placements, and the footprints and parts it uses.",
+        "operationId": "import_kicad_api_v1_boards_import_kicad_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KicadImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KicadImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A file could not be read."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Import Kicad",
+        "tags": [
+          "boards"
+        ]
+      }
+    },
     "/api/v1/cameras": {
       "get": {
         "operationId": "list_cameras_api_v1_cameras_get",

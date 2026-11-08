@@ -1,0 +1,4 @@
+"Refs","Value","Footprint","MF","MP","Qty"
+"R1-R2","10k","Resistor_SMD:R_0603_1608Metric","Example Parts Co.","EX-R0603-10K-B","2"
+"R4","4.7k","Resistor_SMD:R_0603_1608Metric","Example Parts Co.","EX-R0603-4K7","1"
+"C2,C3","100nF","Capacitor_SMD:C_0603_1608Metric","Example Parts Co.","EX-C0603-100N","2"

@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/boards/import/kicad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Kicad
+         * @description Read a KiCad board: its placements, and the footprints and parts it uses.
+         */
+        post: operations["import_kicad_api_v1_boards_import_kicad_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cameras": {
         parameters: {
             query?: never;
@@ -543,6 +563,25 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** Board */
+        Board: {
+            /** Name */
+            name: string;
+            /** Placements */
+            placements: components["schemas"]["Placement"][];
+            /** @description The outline's bounding box. */
+            size: components["schemas"]["Size"];
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Thickness
+             * @description Board thickness, mm.
+             */
+            thickness: number | null;
+        };
         /** Camera */
         Camera: {
             /** @description Width (x) and height (y) of the view in mm. */
@@ -902,6 +941,46 @@ export interface components {
             id: string;
             /** Label */
             label: string;
+        };
+        /** KicadImportRequest */
+        KicadImportRequest: {
+            /**
+             * Add To Library
+             * @description Merge the board's footprints and parts into the library (existing entries keep their values). Needs the config permission.
+             * @default false
+             */
+            add_to_library: boolean;
+            /**
+             * Bom Csv
+             * @description Optional BOM CSV from the schematic, to take part numbers from instead of the board's fields. Grouped or one row per reference.
+             */
+            bom_csv?: string | null;
+            /**
+             * Kicad Pcb
+             * @description Contents of the .kicad_pcb file.
+             */
+            kicad_pcb: string;
+            /**
+             * Name
+             * @description Name for the board.
+             * @default board
+             */
+            name: string;
+            /**
+             * Part Field
+             * @description Field holding the part number. Default: the first of MP, MPN, ... found.
+             */
+            part_field?: string | null;
+        };
+        /** KicadImportResult */
+        KicadImportResult: {
+            board: components["schemas"]["Board"];
+            /** @description Footprints read from the board, and a part for each part number. */
+            library: components["schemas"]["LibraryDocument-Output"];
+            /** @description What merging into the library did, when add_to_library was set. */
+            library_report: components["schemas"]["ImportReport"] | null;
+            /** Warnings */
+            warnings: string[];
         };
         /** LeaseEvent */
         LeaseEvent: {
@@ -1556,6 +1635,60 @@ export interface components {
             speed: number;
             tape: components["schemas"]["Tape-Output"] | null;
         };
+        /** Placement */
+        Placement: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Footprint Id
+             * @description Library footprint ID (the footprint's name).
+             */
+            footprint_id: string;
+            /**
+             * Kind
+             * @default part
+             * @enum {string}
+             */
+            kind: "part" | "fiducial";
+            /**
+             * Note
+             * @description Why the placement is disabled, if it is.
+             * @default
+             */
+            note: string;
+            /**
+             * Part Id
+             * @description Library part ID, usually the manufacturer part number. None if unknown.
+             */
+            part_id: string | null;
+            /**
+             * Ref
+             * @description Reference designator, such as 'C1'.
+             */
+            ref: string;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, seen from the top.
+             */
+            rotation: number;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "top" | "bottom";
+            /**
+             * Value
+             * @default
+             */
+            value: string;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
         /** Point */
         Point: {
             /** X */
@@ -1806,6 +1939,48 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    import_kicad_api_v1_boards_import_kicad_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KicadImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KicadImportResult"];
+                };
+            };
+            /** @description A file could not be read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_cameras_api_v1_cameras_get: {
         parameters: {
             query?: {

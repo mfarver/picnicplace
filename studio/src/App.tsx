@@ -1,4 +1,4 @@
-import { CircuitBoard, Cog, Eye, Layers, Play } from "lucide-react";
+import { CircuitBoard, Cog, Eye, Film, Layers, Play } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useCore } from "./api/core";
 import { Placeholder } from "./components/Placeholder";
@@ -7,6 +7,7 @@ import { StatusBar } from "./components/StatusBar";
 import { TokenPrompt } from "./components/TokenPrompt";
 import { TopBar, type WorkspaceTab } from "./components/TopBar";
 import { useTheme } from "./theme";
+import { FeedersWorkspace } from "./workspaces/FeedersWorkspace";
 import { LibraryWorkspace } from "./workspaces/LibraryWorkspace";
 import { MachineWorkspace } from "./workspaces/MachineWorkspace";
 import { PrepareWorkspace } from "./workspaces/PrepareWorkspace";
@@ -27,6 +28,12 @@ const WORKSPACES: Workspace[] = [
     label: "Parts",
     icon: Layers,
     render: () => <LibraryWorkspace />,
+  },
+  {
+    id: "feeders",
+    label: "Feeders",
+    icon: Film,
+    render: () => <FeedersWorkspace />,
   },
   {
     id: "run",

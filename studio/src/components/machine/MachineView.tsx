@@ -274,6 +274,7 @@ export function MachineView({ description, machine, canMove = false, onMoveTo, o
               height={description.bed.y_max - description.bed.y_min}
               rx={4}
             />
+            <FrontMarker description={description} />
             {description.staging_plates.map((plate) => (
               <PlateShape key={plate.id} plate={plate} />
             ))}
@@ -470,6 +471,24 @@ function PlateShape({ plate }: { plate: StagingPlate }) {
           r={plate.knockout_diameter / 2}
         />
       )}
+    </g>
+  );
+}
+
+/** The machine's front edge (where the operator stands), marked along the bed. */
+function FrontMarker({ description }: { description: MachineProfile }) {
+  const { bed } = description;
+  // Map coordinates are machine Y negated; outward is toward the front.
+  const frontIsMax = description.y_points === "front";
+  const edge = -(frontIsMax ? bed.y_max : bed.y_min);
+  const out = frontIsMax ? -1 : 1;
+  const cx = (bed.x_min + bed.x_max) / 2;
+  return (
+    <g className="mv-front">
+      <line x1={bed.x_min + 4} y1={edge} x2={bed.x_max - 4} y2={edge} />
+      <Label x={cx} y={edge + out * 15} textAnchor="middle" dominantBaseline="middle">
+        FRONT
+      </Label>
     </g>
   );
 }

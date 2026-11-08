@@ -10,12 +10,13 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import Field, computed_field
 
 from picnicplace.board.models import Placement, normalize_angle
 from picnicplace.board.panel import BoardCopy
 from picnicplace.job.models import Job, MachineLocation
 from picnicplace.machine.profile import MachineProfile, Point, Rect
+from picnicplace.schemas import WireModel
 
 Matrix = tuple[float, float, float, float]
 """(a, b, c, d): x' = a x + b y, y' = c x + d y."""
@@ -45,9 +46,10 @@ def rotation(degrees: float, tx: float = 0.0, ty: float = 0.0) -> Affine:
 
 
 MIRROR_X = (-1.0, 0.0, 0.0, 1.0)
+FIDUCIAL_MARGIN_MM = 1.0
 
 
-class MachinePlacement(BaseModel):
+class MachinePlacement(WireModel):
     copy_id: str | None = Field(description="Board copy, or None for a panel fiducial.")
     ref: str
     kind: Literal["part", "fiducial"]
@@ -62,14 +64,14 @@ class MachinePlacement(BaseModel):
     note: str = ""
 
 
-class Issue(BaseModel):
+class Issue(WireModel):
     severity: Literal["error", "warning"]
     message: str
     ref: str | None = None
     copy_id: str | None = None
 
 
-class JobLayout(BaseModel):
+class JobLayout(WireModel):
     placements: list[MachinePlacement]
     outline: list[Point] = Field(description="The panel's corners, machine coordinates.")
     issues: list[Issue]
@@ -263,9 +265,13 @@ def find_location(
             if p.kind == "fiducial" and p.enabled
         ]
         if travel is not None and fiducials:
+            # Keep fiducials a little inside the camera's travel, not on its very edge.
+            m = FIDUCIAL_MARGIN_MM
             fx, fy = [p.x for p in fiducials], [p.y for p in fiducials]
-            x_lo, x_hi = max(x_lo, travel.x_min - min(fx)), min(x_hi, travel.x_max - max(fx))
-            y_lo, y_hi = max(y_lo, travel.y_min - min(fy)), min(y_hi, travel.y_max - max(fy))
+            x_lo = max(x_lo, travel.x_min + m - min(fx))
+            x_hi = min(x_hi, travel.x_max - m - max(fx))
+            y_lo = max(y_lo, travel.y_min + m - min(fy))
+            y_hi = min(y_hi, travel.y_max - m - max(fy))
         if x_lo > x_hi or y_lo > y_hi:
             continue
         nx, ny = int((x_hi - x_lo) / step), int((y_hi - y_lo) / step)

@@ -1007,18 +1007,18 @@ export interface components {
              * Added
              * @description 'footprint:ID' or 'part:ID' for new entries.
              */
-            added?: string[];
+            added: string[];
             /** Conflicts */
-            conflicts?: components["schemas"]["Conflict"][];
+            conflicts: components["schemas"]["Conflict"][];
             /** Errors */
-            errors?: string[];
+            errors: string[];
             /** Filled */
-            filled?: components["schemas"]["Filled"][];
+            filled: components["schemas"]["Filled"][];
             /**
              * Replaced
              * @description Entries overwritten (overwrite mode only).
              */
-            replaced?: string[];
+            replaced: string[];
             /**
              * Unchanged
              * @default 0
@@ -1069,11 +1069,11 @@ export interface components {
         /** Issue */
         Issue: {
             /** Copy Id */
-            copy_id?: string | null;
+            copy_id: string | null;
             /** Message */
             message: string;
             /** Ref */
-            ref?: string | null;
+            ref: string | null;
             /**
              * Severity
              * @enum {string}

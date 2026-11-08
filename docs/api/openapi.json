@@ -831,6 +831,14 @@
             "type": "integer"
           }
         },
+        "required": [
+          "added",
+          "replaced",
+          "filled",
+          "conflicts",
+          "unchanged",
+          "errors"
+        ],
         "title": "ImportReport",
         "type": "object"
       },
@@ -980,7 +988,9 @@
         },
         "required": [
           "severity",
-          "message"
+          "message",
+          "ref",
+          "copy_id"
         ],
         "title": "Issue",
         "type": "object"
@@ -1703,7 +1713,8 @@
           "x",
           "y",
           "rotation",
-          "enabled"
+          "enabled",
+          "note"
         ],
         "title": "MachinePlacement",
         "type": "object"

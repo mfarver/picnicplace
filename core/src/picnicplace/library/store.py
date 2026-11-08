@@ -18,9 +18,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from picnicplace.library.models import Footprint, LibraryModel, Part
+from picnicplace.schemas import WireModel
 
 SCHEMA_VERSION = 1
 
@@ -44,13 +45,13 @@ class LibraryDocument(LibraryModel):
     parts: list[Part] = Field(default_factory=list[Part])
 
 
-class Filled(BaseModel):
+class Filled(WireModel):
     kind: Kind
     id: str
     fields: list[str] = Field(description="Fields that were empty and now have a value.")
 
 
-class Conflict(BaseModel):
+class Conflict(WireModel):
     kind: Kind
     id: str
     field: str
@@ -58,7 +59,7 @@ class Conflict(BaseModel):
     incoming: Any = Field(description="The imported value, which was not used.")
 
 
-class ImportReport(BaseModel):
+class ImportReport(WireModel):
     added: list[str] = Field(
         default_factory=list[str], description="'footprint:ID' or 'part:ID' for new entries."
     )

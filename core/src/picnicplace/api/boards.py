@@ -14,7 +14,7 @@ from picnicplace.board.panel import Panel, find_copies
 from picnicplace.board.sexpr import SexprError
 from picnicplace.job.models import Job
 from picnicplace.library import ImportReport, LibraryDocument
-from picnicplace.schemas import ErrorResponse
+from picnicplace.schemas import ErrorResponse, WireModel
 
 router = APIRouter(
     prefix="/api/v1/boards", tags=["boards"], dependencies=[Depends(require(Permission.JOB))]
@@ -55,7 +55,7 @@ class KicadImportRequest(BaseModel):
     )
 
 
-class KicadImportResult(BaseModel):
+class KicadImportResult(WireModel):
     board: Board
     panel: Panel = Field(description="The panel layout, or a single copy of the board.")
     job: Job = Field(description="A new job for the board or panel, not yet saved or placed.")

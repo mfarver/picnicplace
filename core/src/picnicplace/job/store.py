@@ -6,14 +6,13 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pydantic import BaseModel
-
 from picnicplace.job.models import Job
+from picnicplace.schemas import WireModel
 
 JOB_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
 
-class JobSummary(BaseModel):
+class JobSummary(WireModel):
     id: str
     name: str
     board: str

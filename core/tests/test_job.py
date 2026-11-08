@@ -155,6 +155,18 @@ def test_checks_and_finding_a_place() -> None:
     assert not layout(job, LUMEN).ok  # no location yet
 
 
+def test_a_found_place_passes_the_checks() -> None:
+    # The panel's rail fiducials are near its edge; rounding the location must not push
+    # them out of the camera's reach.
+    job, _ = demo()
+    for side in ("top", "bottom"):
+        panel_job = job.model_copy(update={"panel": demo_panel(), "side_up": side})
+        location = find_location(panel_job, LUMEN)
+        assert location is not None
+        result = layout(panel_job.model_copy(update={"location": location}), LUMEN)
+        assert result.ok, result.issues
+
+
 def test_too_big_to_fit_anywhere() -> None:
     job, _ = demo()
     big = job.model_copy(
@@ -188,6 +200,7 @@ def test_job_endpoints(client: TestClient) -> None:
     job = imported["job"]
     assert len(job["panel"]["copies"]) == 4 and job["location"] is None
 
+    # The panel's fiducials are near its edges: the found place keeps them in view.
     r = client.post("/api/v1/jobs/find-location", json=job)
     assert r.status_code == 200, r.json()
     job["location"] = r.json()

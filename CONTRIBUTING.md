@@ -9,7 +9,7 @@ architecture and the decisions behind it.
 |---|---|
 | `core/` | `picnicd`, the Python core: API, machine service, drivers, presence, operations |
 | `studio/` | PicnicPlace Studio, the React + TypeScript GUI |
-| `docs/` | Specification and the generated OpenAPI document (`docs/api/openapi.json`) |
+| `docs/` | The website (picnicplace.org): specification, guides, hardware notes, and the generated OpenAPI document (`docs/api/openapi.json`). Preview it with `make docs-serve`. |
 
 ## Development setup
 

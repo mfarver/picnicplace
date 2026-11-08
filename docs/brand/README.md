@@ -4,7 +4,6 @@
 |---|---|
 | `picnicplace-logo.png` | Original artwork, 1264 × 1264. Source for the website and any new sizes. |
 | `picnicplace-logo-cropped.jpg` | Cropped to the illustration and wordmark, 624 × 560. Used in the README. The Studio splash uses a copy in `studio/src/assets/splash.jpg`. |
-
 | `picnicplace-icon.png` | Original icon artwork (the basket), 1264 × 1264, on its background. |
 | `picnicplace-icon-transparent.png` | The basket cut out of its background, 512 × 512, transparent. Use this on any background. The Studio favicon (`studio/public/favicon.png`, 64 × 64) is made from it. |
 

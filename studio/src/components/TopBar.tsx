@@ -21,7 +21,7 @@ export function TopBar({ tabs, active, onSelect, theme, onToggleTheme }: Props) 
   return (
     <header className="topbar">
       <div className="brand">
-        <img src="/favicon.svg" alt="" width={24} height={24} />
+        <img src="/favicon.png" alt="" width={28} height={28} />
         <span>PicnicPlace</span>
       </div>
       <nav className="tabs" role="tablist" aria-label="Workspaces">

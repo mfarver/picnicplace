@@ -163,7 +163,10 @@ def test_plan_says_what_it_can_and_cannot_do(lumen: TestClient) -> None:
         items = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()["items"]
         u2 = next(i for i in items if i["ref"] == "U2")
         assert u2["status"] == "blocked"
-        assert u2["note"] == "EX-MCU-8 comes in 24 mm tape; this machine's feeders take 8 and 12 mm"
+        assert u2["note"] == (
+            "EX-MCU-8 comes in 24 mm tape; this machine's feeders take 8 and 12 mm "
+            "(hold it in a strip on the bed instead)"
+        )
         library.put_part(mcu)
 
         # Blocked placements must be skipped on purpose.

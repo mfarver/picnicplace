@@ -26,7 +26,7 @@ Placement = Annotated[PlacementService, Depends(get_placement)]
 
 
 class PickRequest(WireModel):
-    slot_id: str
+    slot_id: str = Field(description="A feeder slot, or a strip or tray on the bed (T1, ...).")
     nozzle_id: str
     feed: bool = Field(default=True, description="Feed the tape first.")
     find_pocket: bool = Field(
@@ -67,7 +67,7 @@ async def placement_state(placement: Placement) -> PlacementState:
     return placement.state()
 
 
-@_operation("/pick", "Pick a part from a feeder slot")
+@_operation("/pick", "Pick a part from a feeder slot, strip, or tray")
 async def pick(placement: Placement, body: PickRequest) -> Operation:
     return placement.start_pick(body.slot_id, body.nozzle_id, body.feed, body.find_pocket)
 

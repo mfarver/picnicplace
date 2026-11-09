@@ -1,5 +1,8 @@
 """The feeder service: finds feeders, feeds them, and knows where to pick from each.
 
+Fixed feeders (strips of tape and trays held on the bed) have no slot and no bus: each
+pick takes the next part in order, and when none are left the operator refills it.
+
 A slot's pick location is the profile's nominal location plus the slot's correction from
 the feeder setup. Corrections are taught by eye (center the top camera over the pocket)
 or found from the feeder's alignment fiducial: once the fiducial's offset from the pick
@@ -15,12 +18,22 @@ from typing import Literal
 from picnicplace.camera.synthetic import TapeScene
 from picnicplace.feeders.photon import PhotonBus
 from picnicplace.feeders.pocket import pocket_from_holes
-from picnicplace.feeders.setup import FeederAssignment, FeederSetupStore, SlotCalibration
+from picnicplace.feeders.setup import (
+    FeederAssignment,
+    FeederSetupStore,
+    FixedFeeder,
+    SlotCalibration,
+)
 from picnicplace.feeders.sim import SimulatedPhotonBus
 from picnicplace.feeders.slots import Slot, machine_slots
 from picnicplace.library import Library, Part
 from picnicplace.library.tape import SPROCKET_DIAMETER, geometry
-from picnicplace.machine.errors import FeederError, InvalidTargetError, NotSupportedError
+from picnicplace.machine.errors import (
+    FeederEmptyError,
+    FeederError,
+    InvalidTargetError,
+    NotSupportedError,
+)
 from picnicplace.machine.profile import FeederBank, Point
 from picnicplace.machine.service import MachineService
 from picnicplace.machine.simulator import SimulatorDriver
@@ -58,6 +71,9 @@ the tape (on an 8 mm feeder)."""
 SIM_PICK_RADIUS = 1.5
 """A simulated pick this close to a pocket takes its part."""
 
+SIM_FIXED_ERROR = Point(x=0.15, y=-0.1)
+"""How far a simulated strip or tray really is from where its setup says."""
+
 
 class FeederState(WireModel):
     uuid: str
@@ -85,6 +101,17 @@ class SlotState(WireModel):
     pocket: PocketCheck | None
 
 
+class FixedFeederState(WireModel):
+    id: str
+    feeder: FixedFeeder
+    remaining: int
+    next: Point | None
+    """Where the next part is, or None when it is empty."""
+    angle: float | None
+    """The parts' machine angle, if known (a strip needs its part's tape rotation)."""
+    pocket: PocketCheck | None
+
+
 class FeedersState(WireModel):
     bus: Literal["photon"] | None
     scanned: bool
@@ -94,6 +121,8 @@ class FeedersState(WireModel):
     fiducial_offset_source: Literal["measured", "profile"] | None
     assignments: dict[str, FeederAssignment]
     """Every feeder the setup knows, by ID, found or not."""
+    fixed: list[FixedFeederState]
+    """Strips and trays on the bed."""
 
 
 def rotate(p: Point, degrees: float) -> Point:
@@ -137,6 +166,8 @@ class FeederService:
 
         self._sim = simulated
         self._sim_full: dict[int, bool] = {}
+        self._sim_fixed_taken: dict[str, set[int]] = {}
+        """Simulated strips and trays: the parts really gone from each."""
         self._tapes: tuple[TapeScene, ...] | None = None
         self._tape_at: dict[int, TapeScene] = {}
         self.sim_parts: SimulatedParts | None = None
@@ -207,6 +238,18 @@ class FeederService:
             fiducial_offset=offset,
             fiducial_offset_source=source,  # type: ignore[arg-type]
             assignments=dict(setup.feeders),
+            fixed=[self.fixed_state(i) for i in sorted(setup.fixed, key=_fixed_order)],
+        )
+
+    def fixed_state(self, fixed_id: str) -> FixedFeederState:
+        f = self.fixed(fixed_id)
+        return FixedFeederState(
+            id=fixed_id,
+            feeder=f,
+            remaining=f.remaining,
+            next=f.position(f.picked) if f.remaining else None,
+            angle=self.fixed_angle(f),
+            pocket=self._pockets.get(fixed_id),
         )
 
     def slot(self, slot_id: str) -> Slot:
@@ -443,6 +486,171 @@ class FeederService:
 
         return self._machine.start_task("feeder_calibrate", work)
 
+    # --- Fixed feeders: strips and trays on the bed -----------------------------------
+
+    def is_fixed(self, source_id: str) -> bool:
+        return source_id in self._store.setup.fixed
+
+    def fixed(self, fixed_id: str) -> FixedFeeder:
+        f = self._store.setup.fixed.get(fixed_id)
+        if f is None:
+            raise InvalidTargetError(f"no strip or tray {fixed_id!r}")
+        return f
+
+    def fixed_label(self, fixed_id: str) -> str:
+        f = self.fixed(fixed_id)
+        return f"{fixed_id} ({f.label})" if f.label else fixed_id
+
+    def add_fixed(self, feeder: FixedFeeder) -> str:
+        taken = self._store.setup.fixed
+        n = 1
+        while f"T{n}" in taken:
+            n += 1
+        fixed_id = f"T{n}"
+        self.put_fixed(fixed_id, feeder)
+        return fixed_id
+
+    def put_fixed(self, fixed_id: str, feeder: FixedFeeder) -> None:
+        if fixed_id not in self._store.setup.fixed and not _is_fixed_id(fixed_id):
+            raise InvalidTargetError(f"a strip or tray's ID is T and a number, not {fixed_id!r}")
+        self._store.setup.fixed[fixed_id] = feeder
+        self._store.save()
+        self._sim_fixed_taken[fixed_id] = set(range(feeder.picked))
+        self._pockets.pop(fixed_id, None)
+        self._invalidate()
+
+    def remove_fixed(self, fixed_id: str) -> None:
+        self.fixed(fixed_id)
+        del self._store.setup.fixed[fixed_id]
+        self._store.save()
+        self._invalidate()
+
+    def refill(self, fixed_id: str, picked: int = 0) -> FixedFeeder:
+        """The operator refilled a strip or tray. ``picked``: parts already gone from the
+        start of the new one (0 for a full one)."""
+        f = self.fixed(fixed_id)
+        if picked > f.capacity:
+            raise InvalidTargetError(f"{fixed_id} holds only {f.capacity} parts")
+        f = f.model_copy(update={"picked": picked})
+        self._store.setup.fixed[fixed_id] = f
+        self._store.save()
+        self._sim_fixed_taken[fixed_id] = set(range(picked))
+        self._pockets.pop(fixed_id, None)
+        self._invalidate()
+        return f
+
+    def teach_fixed(
+        self, fixed_id: str, which: Literal["first", "row_end", "last"], at: Point
+    ) -> FixedFeeder:
+        """Teach where a part is, by the camera centered over it: the first part, the
+        last part of the first row (giving the step along a row), or the last part of
+        the last row (giving the step from row to row)."""
+        f = self.fixed(fixed_id)
+        update: dict[str, Point]
+        if which == "first":
+            update = {"first": Point(x=round(at.x, 3), y=round(at.y, 3))}
+        elif which == "row_end":
+            if f.columns < 2:
+                raise InvalidTargetError(f"{fixed_id} has one part per row: nothing to step")
+            n = f.columns - 1
+            update = {
+                "step": Point(
+                    x=round((at.x - f.first.x) / n, 4), y=round((at.y - f.first.y) / n, 4)
+                )
+            }
+        else:
+            if f.rows < 2:
+                raise InvalidTargetError(f"{fixed_id} has one row: teach the end of the row")
+            n, k = f.rows - 1, f.columns - 1
+            update = {
+                "row_step": Point(
+                    x=round((at.x - f.first.x - k * f.step.x) / n, 4),
+                    y=round((at.y - f.first.y - k * f.step.y) / n, 4),
+                )
+            }
+        f = f.model_copy(update=update)
+        self._store.setup.fixed[fixed_id] = f
+        self._store.save()
+        self._invalidate()
+        return f
+
+    def fixed_part(self, f: FixedFeeder) -> Part | None:
+        return self._part(FeederAssignment(part_id=f.part_id))
+
+    def fixed_angle(self, f: FixedFeeder) -> float | None:
+        """The machine angle of the parts' 0 degree direction."""
+        if f.kind == "tray":
+            return f.part_angle
+        part = self.fixed_part(f)
+        if part is None or part.tape is None:
+            return None
+        return _strip_direction(f) + part.tape.rotation
+
+    def fixed_pick_height(self, f: FixedFeeder, label: str) -> float:
+        if f.pick_height is not None:
+            return f.pick_height
+        board = self._profile.board_height
+        part = self.fixed_part(f)
+        if board is None or part is None or part.height is None:
+            raise FeederError(
+                f"{label} has no pick height: set one (the nozzle height at the top of a part)"
+            )
+        return board + part.height
+
+    def next_fixed(self, fixed_id: str) -> tuple[int, Point]:
+        """The next part to take from a strip or tray, and where it lies."""
+        f = self.fixed(fixed_id)
+        if not f.enabled:
+            raise FeederError(f"{self.fixed_label(fixed_id)} is turned off")
+        if f.remaining == 0:
+            raise FeederEmptyError(
+                f"{self.fixed_label(fixed_id)} is empty after {f.capacity} parts: refill it "
+                "and mark it refilled, then carry on"
+            )
+        return f.picked, f.position(f.picked)
+
+    def took_fixed(self, fixed_id: str) -> None:
+        """A pick was tried at the next part: whether or not it came up, move past it."""
+        f = self.fixed(fixed_id)
+        self._store.setup.fixed[fixed_id] = f.model_copy(update={"picked": f.picked + 1})
+        self._store.save()
+        self._pockets.pop(fixed_id, None)
+        self._invalidate()
+
+    async def locate_strip_pocket(self, fixed_id: str) -> PocketCheck:
+        """Find a strip's next pocket from its sprocket holes. For use inside a machine
+        task."""
+        f = self.fixed(fixed_id)
+        _, at = self.next_fixed(fixed_id)
+        part = self.fixed_part(f)
+        width = part.tape.width if part and part.tape and part.tape.width else 8.0
+        pitch = math.hypot(f.step.x, f.step.y) or DEFAULT_PITCH
+        line = _pocket_line_for(width)
+        # Look at the holes: on wide tape they are out of view from the pocket.
+        check = await self._find_pocket(
+            self.fixed_label(fixed_id), at, _strip_direction(f), line, pitch, look_across=line
+        )
+        self._pockets[fixed_id] = check
+        return check
+
+    def start_locate_strip_pocket(self, fixed_id: str) -> Operation:
+        f = self.fixed(fixed_id)
+        if f.kind != "strip":
+            raise InvalidTargetError(f"{fixed_id} is a tray: trays have no sprocket holes")
+        self.next_fixed(fixed_id)
+        label = self.fixed_label(fixed_id)
+
+        async def work() -> str:
+            check = await self.locate_strip_pocket(fixed_id)
+            await self._machine.move_camera_to(check.at.x, check.at.y)
+            return (
+                f"{label}: the next pocket is {check.along:+.2f} mm along the tape and "
+                f"{check.across:+.2f} mm across from where it should be "
+                f"(from {check.holes} sprocket holes)."
+            )
+
+        return self._machine.start_task("feeder_pocket", work)
+
     # --- Pockets -------------------------------------------------------------------------
 
     def _pocket_line(self, slot: Slot) -> tuple[float, float]:
@@ -455,28 +663,44 @@ class FeederService:
     async def locate_pocket(self, slot: Slot) -> PocketCheck:
         """Look at a slot's pick location and find the pick pocket from the sprocket
         holes. For use inside a machine task."""
-        pick = self.pick(slot)
-        await self._machine.move_camera_to(pick.x, pick.y)
+        line, pitch = self._pocket_line(slot)
+        try:
+            check = await self._find_pocket(slot.label, self.pick(slot), slot.rotation, line, pitch)
+        except FeederError:
+            self._pockets.pop(slot.id, None)
+            raise
+        self._pockets[slot.id] = check
+        return check
+
+    async def _find_pocket(
+        self,
+        label: str,
+        pick: Point,
+        rotation: float,
+        line: float,
+        pitch: float,
+        look_across: float = 0.0,
+    ) -> PocketCheck:
+        """``look_across``: center the camera this far across the tape from the pick
+        location, toward the holes."""
+        look = rotate(Point(x=0, y=look_across), rotation)
+        await self._machine.move_camera_to(pick.x + look.x, pick.y + look.y)
         low, high = SPROCKET_DIAMETER * 0.7, SPROCKET_DIAMETER * 1.3
         seen = await self._machine.locate_circles(low, high)
         holes = [
             (q.x, q.y)
-            for q in (rotate(Point(x=p.x - pick.x, y=p.y - pick.y), -slot.rotation) for p in seen)
+            for q in (rotate(Point(x=p.x - pick.x, y=p.y - pick.y), -rotation) for p in seen)
         ]
-        line, pitch = self._pocket_line(slot)
         fix = pocket_from_holes(holes, line, pitch)
         if fix is None:
-            self._pockets.pop(slot.id, None)
-            raise FeederError(f"{slot.label}: no sprocket holes found near the pick location")
-        shift = rotate(Point(x=fix.along, y=fix.across), slot.rotation)
-        check = PocketCheck(
+            raise FeederError(f"{label}: no sprocket holes found near the pick location")
+        shift = rotate(Point(x=fix.along, y=fix.across), rotation)
+        return PocketCheck(
             at=Point(x=round(pick.x + shift.x, 3), y=round(pick.y + shift.y, 3)),
             along=round(fix.along, 3),
             across=round(fix.across, 3),
             holes=fix.holes,
         )
-        self._pockets[slot.id] = check
-        return check
 
     def start_locate_pocket(self, slot_id: str) -> Operation:
         slot = self.slot(slot_id)
@@ -525,6 +749,32 @@ class FeederService:
             self._invalidate()
             shape = PartShape(body=tape.body, pads=tape.pads)
             return shape, px, py, tape.rotation + tape.part_rotation
+        return self._take_from_fixed(x, y)
+
+    def _take_from_fixed(self, x: float, y: float) -> tuple[PartShape, float, float, float] | None:
+        library = self._library()
+        for fixed_id, f in self._store.setup.fixed.items():
+            taken = self._sim_fixed_taken.setdefault(fixed_id, set(range(f.picked)))
+            for n in range(f.capacity):
+                at = f.position(n)
+                px, py = at.x + SIM_FIXED_ERROR.x, at.y + SIM_FIXED_ERROR.y
+                if math.hypot(px - x, py - y) > SIM_PICK_RADIUS:
+                    continue
+                if n in taken:
+                    return None
+                taken.add(n)
+                self._invalidate()
+                part = self.fixed_part(f)
+                footprint = library.find_footprint(part.footprint_id) if part and library else None
+                shape = PartShape(
+                    body=(footprint.body.x, footprint.body.y)
+                    if footprint is not None and footprint.body is not None
+                    else None,
+                    pads=tuple((q.x, q.y, q.width, q.height, q.rotation) for q in footprint.pads)
+                    if footprint is not None
+                    else (),
+                )
+                return shape, px, py, self.fixed_angle(f) or 0.0
         return None
 
     def _scene_tapes(self) -> tuple[TapeScene, ...]:
@@ -592,7 +842,60 @@ class FeederService:
                 )
             )
             self._tape_at[address] = tapes[-1]
+        tapes.extend(self._build_strips())
         return tuple(tapes)
+
+    def _build_strips(self) -> list[TapeScene]:
+        """Strips on the bed, drawn from the next pocket on."""
+        library = self._library()
+        out: list[TapeScene] = []
+        for fixed_id, f in self._store.setup.fixed.items():
+            part = self.fixed_part(f)
+            if f.kind != "strip" or f.remaining == 0 or part is None or part.tape is None:
+                continue
+            footprint = library.find_footprint(part.footprint_id) if library else None
+            taken = self._sim_fixed_taken.setdefault(fixed_id, set(range(f.picked)))
+            width = part.tape.width or 8.0
+            pitch = math.hypot(f.step.x, f.step.y) or DEFAULT_PITCH
+            line = _pocket_line_for(width)
+            at = f.position(f.picked)
+            length = (f.remaining * pitch + 8) / 0.8
+            out.append(
+                TapeScene(
+                    pick=(at.x + SIM_FIXED_ERROR.x, at.y + SIM_FIXED_ERROR.y),
+                    rotation=_strip_direction(f),
+                    width=width,
+                    pitch=pitch,
+                    pocket_line=line,
+                    pick_full=f.picked not in taken,
+                    part_rotation=part.tape.rotation,
+                    body=(footprint.body.x, footprint.body.y)
+                    if footprint is not None and footprint.body is not None
+                    else None,
+                    pads=tuple((q.x, q.y, q.width, q.height, q.rotation) for q in footprint.pads)
+                    if footprint is not None
+                    else (),
+                    feeder_ahead=8.0,
+                    feeder_center=line + 1.75 - width / 2,
+                    feeder_width=width + 6,
+                    feeder_length=length,
+                )
+            )
+        return out
+
+
+def _strip_direction(f: FixedFeeder) -> float:
+    """A strip's tape direction (the EIA-481 view's +X) in machine degrees: the tape
+    would feed opposite to the step from one pocket to the next one to pick."""
+    return math.degrees(math.atan2(-f.step.y, -f.step.x))
+
+
+def _is_fixed_id(fixed_id: str) -> bool:
+    return fixed_id[:1] == "T" and fixed_id[1:].isdigit() and int(fixed_id[1:]) > 0
+
+
+def _fixed_order(fixed_id: str) -> int:
+    return int(fixed_id[1:]) if _is_fixed_id(fixed_id) else 1_000_000
 
 
 def _pocket_line_for(width: float) -> float:

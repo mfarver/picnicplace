@@ -1053,6 +1053,13 @@
             ],
             "title": "Fiducial Offset Source"
           },
+          "fixed": {
+            "items": {
+              "$ref": "#/components/schemas/FixedFeederState"
+            },
+            "title": "Fixed",
+            "type": "array"
+          },
           "scanned": {
             "title": "Scanned",
             "type": "boolean"
@@ -1071,7 +1078,8 @@
           "slots",
           "fiducial_offset",
           "fiducial_offset_source",
-          "assignments"
+          "assignments",
+          "fixed"
         ],
         "title": "FeedersState",
         "type": "object"
@@ -1138,6 +1146,264 @@
           "fields"
         ],
         "title": "Filled",
+        "type": "object"
+      },
+      "FixedFeeder-Input": {
+        "additionalProperties": false,
+        "description": "A strip of tape or a tray of parts held in place on the bed. Parts are taken in\norder: along the first row, then the next row, and so on.",
+        "properties": {
+          "columns": {
+            "description": "Parts in each row.",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Columns",
+            "type": "integer"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "first": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Center of the first part, in machine coordinates."
+          },
+          "kind": {
+            "description": "A strip of tape (cover film peeled back), or a tray of parts. A strip's parts take their angle from the tape; a tray's from part_angle.",
+            "enum": [
+              "strip",
+              "tray"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "description": "What the owner calls it, such as '24 mm holder'.",
+            "title": "Label",
+            "type": "string"
+          },
+          "part_angle": {
+            "default": 0,
+            "description": "Trays: the machine angle of the part's 0 degree direction (its footprint's +X), the same for every part.",
+            "title": "Part Angle",
+            "type": "number"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Library part it holds.",
+            "title": "Part Id"
+          },
+          "pick_height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nozzle height at the top of a part. Empty: the board height plus the part's height, which is right only for parts lying on the bed itself.",
+            "title": "Pick Height"
+          },
+          "picked": {
+            "default": 0,
+            "description": "Parts taken (or tried) so far.",
+            "minimum": 0.0,
+            "title": "Picked",
+            "type": "integer"
+          },
+          "row_step": {
+            "$ref": "#/components/schemas/Point",
+            "description": "From the first part of one row to the first part of the next."
+          },
+          "rows": {
+            "default": 1,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Rows",
+            "type": "integer"
+          },
+          "step": {
+            "$ref": "#/components/schemas/Point",
+            "description": "From one part to the next along a row, in mm. On a strip, from one pocket to the next one to pick: against the direction the tape would feed."
+          }
+        },
+        "required": [
+          "kind",
+          "first",
+          "step",
+          "columns"
+        ],
+        "title": "FixedFeeder",
+        "type": "object"
+      },
+      "FixedFeeder-Output": {
+        "additionalProperties": false,
+        "description": "A strip of tape or a tray of parts held in place on the bed. Parts are taken in\norder: along the first row, then the next row, and so on.",
+        "properties": {
+          "columns": {
+            "description": "Parts in each row.",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Columns",
+            "type": "integer"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "first": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Center of the first part, in machine coordinates."
+          },
+          "kind": {
+            "description": "A strip of tape (cover film peeled back), or a tray of parts. A strip's parts take their angle from the tape; a tray's from part_angle.",
+            "enum": [
+              "strip",
+              "tray"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "description": "What the owner calls it, such as '24 mm holder'.",
+            "title": "Label",
+            "type": "string"
+          },
+          "part_angle": {
+            "default": 0,
+            "description": "Trays: the machine angle of the part's 0 degree direction (its footprint's +X), the same for every part.",
+            "title": "Part Angle",
+            "type": "number"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Library part it holds.",
+            "title": "Part Id"
+          },
+          "pick_height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nozzle height at the top of a part. Empty: the board height plus the part's height, which is right only for parts lying on the bed itself.",
+            "title": "Pick Height"
+          },
+          "picked": {
+            "default": 0,
+            "description": "Parts taken (or tried) so far.",
+            "minimum": 0.0,
+            "title": "Picked",
+            "type": "integer"
+          },
+          "row_step": {
+            "$ref": "#/components/schemas/Point",
+            "description": "From the first part of one row to the first part of the next."
+          },
+          "rows": {
+            "default": 1,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Rows",
+            "type": "integer"
+          },
+          "step": {
+            "$ref": "#/components/schemas/Point",
+            "description": "From one part to the next along a row, in mm. On a strip, from one pocket to the next one to pick: against the direction the tape would feed."
+          }
+        },
+        "required": [
+          "label",
+          "kind",
+          "part_id",
+          "first",
+          "step",
+          "columns",
+          "rows",
+          "row_step",
+          "part_angle",
+          "pick_height",
+          "picked",
+          "enabled"
+        ],
+        "title": "FixedFeeder",
+        "type": "object"
+      },
+      "FixedFeederState": {
+        "properties": {
+          "angle": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Angle"
+          },
+          "feeder": {
+            "$ref": "#/components/schemas/FixedFeeder-Output"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pocket": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PocketCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "remaining": {
+            "title": "Remaining",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "feeder",
+          "remaining",
+          "next",
+          "angle",
+          "pocket"
+        ],
+        "title": "FixedFeederState",
         "type": "object"
       },
       "Footprint-Input": {
@@ -3738,6 +4004,7 @@
             "type": "number"
           },
           "slot_id": {
+            "description": "A feeder slot, or a strip or tray on the bed (T1, ...).",
             "title": "Slot Id",
             "type": "string"
           },
@@ -4172,6 +4439,19 @@
         "title": "Rect",
         "type": "object"
       },
+      "RefillRequest": {
+        "properties": {
+          "picked": {
+            "default": 0,
+            "description": "Parts already gone from the start of it. 0: it is full.",
+            "minimum": 0.0,
+            "title": "Picked",
+            "type": "integer"
+          }
+        },
+        "title": "RefillRequest",
+        "type": "object"
+      },
       "RunItem": {
         "properties": {
           "copy_id": {
@@ -4254,7 +4534,7 @@
                 "type": "null"
               }
             ],
-            "description": "The feeder slot to pick from.",
+            "description": "The feeder slot to pick from, or a strip or tray on the bed (T1, ...).",
             "title": "Slot Id"
           },
           "status": {
@@ -5055,6 +5335,36 @@
         "title": "Tape",
         "type": "object"
       },
+      "TeachPartRequest": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the part is. Empty: where the top camera is now."
+          },
+          "which": {
+            "description": "The first part; the last part of the first row (sets the step along a row); or the last part of the last row (sets the step from row to row).",
+            "enum": [
+              "first",
+              "row_end",
+              "last"
+            ],
+            "title": "Which",
+            "type": "string"
+          }
+        },
+        "required": [
+          "which"
+        ],
+        "title": "TeachPartRequest",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -5151,6 +5461,7 @@
             "type": "string"
           },
           "slot_id": {
+            "description": "A feeder slot, or a strip or tray on the bed (T1, ...).",
             "title": "Slot Id",
             "type": "string"
           }
@@ -6046,6 +6357,416 @@
           }
         ],
         "summary": "Calibrate",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/fixed": {
+      "post": {
+        "description": "Add a strip of tape or a tray of parts held on the bed. It gets the next free ID:\nT1, T2, and so on.",
+        "operationId": "add_fixed_api_v1_feeders_fixed_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FixedFeeder-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixedFeederState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add Fixed",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/fixed/{fixed_id}": {
+      "delete": {
+        "operationId": "remove_fixed_api_v1_feeders_fixed__fixed_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fixed_id",
+            "required": true,
+            "schema": {
+              "title": "Fixed Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedersState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove Fixed",
+        "tags": [
+          "feeders"
+        ]
+      },
+      "put": {
+        "description": "Change a strip or tray (or add one with this ID).",
+        "operationId": "put_fixed_api_v1_feeders_fixed__fixed_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fixed_id",
+            "required": true,
+            "schema": {
+              "title": "Fixed Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FixedFeeder-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixedFeederState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Fixed",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/fixed/{fixed_id}/pocket": {
+      "post": {
+        "description": "Find a strip's next pocket from its sprocket holes, and center the camera on it.",
+        "operationId": "locate_strip_pocket_api_v1_feeders_fixed__fixed_id__pocket_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fixed_id",
+            "required": true,
+            "schema": {
+              "title": "Fixed Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Locate Strip Pocket",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/fixed/{fixed_id}/refill": {
+      "post": {
+        "description": "The strip or tray was refilled: start again from its first part.",
+        "operationId": "refill_api_v1_feeders_fixed__fixed_id__refill_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fixed_id",
+            "required": true,
+            "schema": {
+              "title": "Fixed Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixedFeederState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Refill",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/fixed/{fixed_id}/teach": {
+      "put": {
+        "description": "Teach where a part of a strip or tray is: by default, where the top camera is\ncentered now. Teach the first part before the others.",
+        "operationId": "teach_fixed_api_v1_feeders_fixed__fixed_id__teach_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fixed_id",
+            "required": true,
+            "schema": {
+              "title": "Fixed Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeachPartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixedFeederState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Teach Fixed",
         "tags": [
           "feeders"
         ]
@@ -8512,7 +9233,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Pick a part from a feeder slot",
+        "summary": "Pick a part from a feeder slot, strip, or tray",
         "tags": [
           "placement"
         ]

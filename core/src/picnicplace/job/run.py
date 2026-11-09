@@ -1,11 +1,12 @@
 """Running a job: every part on the board picked, aligned, and placed (milestone M4).
 
 **Plan.** Each enabled part placement on the side facing up becomes an item, with the
-feeder slot that holds its part and the nozzles that can reach both that slot and the
-placement. An item that cannot be done (no part number, no part in the library or no
-height for it, no feeder holding it, no nozzle reaching it) is *blocked*, and the plan
-says why. Planning moves nothing, so it doubles as a dry run of a job against the
-machine and its loaded feeders.
+feeder slot (or strip or tray on the bed) that holds its part and the nozzles that can
+reach both it and the placement. Feeder slots come before strips and trays. An item
+that cannot be done (no part number, no part in the library or no height for it, no
+feeder holding it, no nozzle reaching it) is *blocked*, and the plan says why. Planning
+moves nothing, so it doubles as a dry run of a job against the machine and its loaded
+feeders.
 
 **Board.** Before the first part, the top camera finds up to three of the job's
 fiducials (the panel's own if it has two or more, else the boards'). A rigid fit (shift
@@ -21,8 +22,10 @@ consecutive picks come from the same tape.
 ``PICK_ATTEMPTS`` times. A part bottom vision cannot find goes to the discard bin, if
 there is one, and its placement is tried again later. Anything else pauses the run,
 with the parts already picked left on their nozzles: fix the cause, then resume, or
-skip the placement. Pausing and stopping take effect after the batch in progress; a
-step resumes a paused run for one batch.
+skip the placement. An empty strip or tray pauses the run too, with the head moved to
+the park position out of the operator's way: refill it, mark it refilled, and resume.
+Pausing and stopping take effect after the batch in progress; a step resumes a paused
+run for one batch.
 """
 
 import asyncio
@@ -41,6 +44,7 @@ from picnicplace.job.models import Job
 from picnicplace.job.store import JobStore
 from picnicplace.library import Library, Part
 from picnicplace.machine.errors import (
+    FeederEmptyError,
     InvalidTargetError,
     MachineBusyError,
     MachineError,
@@ -82,7 +86,9 @@ class RunItem(WireModel):
     x: float = Field(description="Machine X from the job's location, before fiducial alignment.")
     y: float
     rotation: float = Field(description="The part's machine angle, degrees.")
-    slot_id: str | None = Field(description="The feeder slot to pick from.")
+    slot_id: str | None = Field(
+        description="The feeder slot to pick from, or a strip or tray on the bed (T1, ...)."
+    )
     nozzles: list[str] = Field(description="Nozzles that reach both the slot and the place.")
     status: ItemStatus
     note: str = Field(default="", description="Why it is blocked, skipped, or failed.")
@@ -198,11 +204,23 @@ def _too_wide(part: Part, profile: MachineProfile) -> str | None:
     if any(not b.tape_widths for b in profile.feeder_banks) or width in widths:
         return None
     takes = " and ".join(f"{w:g}" for w in sorted(widths))
-    return f"{part.id} comes in {width:g} mm tape; this machine's feeders take {takes} mm"
+    return (
+        f"{part.id} comes in {width:g} mm tape; this machine's feeders take {takes} mm "
+        "(hold it in a strip on the bed instead)"
+    )
 
 
 def _slot_order(slot_id: str | None) -> int:
-    return int(slot_id) if slot_id and slot_id.isdigit() else 1_000_000
+    """Feeder slots by number, then strips and trays (T1, T2, ...)."""
+    if slot_id and slot_id.isdigit():
+        return int(slot_id)
+    if slot_id and slot_id[:1] == "T" and slot_id[1:].isdigit():
+        return 1_000_000 + int(slot_id[1:])
+    return 2_000_000
+
+
+def _source(slot_id: str) -> str:
+    return f"slot {slot_id}" if slot_id.isdigit() else slot_id
 
 
 def plan_job(
@@ -216,13 +234,27 @@ def plan_job(
     issues = [i for i in result.issues if not (i.ref and i.severity == "warning")]
     reach = profile.nozzle_reach
 
-    # Feeders by part, in slot order, with where each picks.
-    loaded: dict[str, list[tuple[str, Point]]] = {}
+    # Feeders by part, in slot order, then strips and trays, with where each picks.
+    loaded: dict[str, list[tuple[str, list[Point]]]] = {}
     for s in feeders.slots:
         a = s.feeder.assignment if s.feeder else None
         if a is None or a.part_id is None or not a.enabled:
             continue
-        loaded.setdefault(a.part_id, []).append((s.slot.id, s.pick))
+        loaded.setdefault(a.part_id, []).append((s.slot.id, [s.pick]))
+    on_bed: set[str] = set()
+    for f in feeders.fixed:
+        if f.feeder.part_id is None or not f.feeder.enabled:
+            continue
+        on_bed.add(f.feeder.part_id)
+        problem = None
+        if f.angle is None:
+            problem = "its part has no tape data, so the parts' angle is not known"
+        elif f.feeder.pick_height is None and profile.board_height is None:
+            problem = "it has no pick height"
+        if problem:
+            issues.append(Issue(severity="warning", message=f"{f.id} is not used: {problem}"))
+            continue
+        loaded.setdefault(f.feeder.part_id, []).append((f.id, f.feeder.corners()))
     if not feeders.scanned and profile.feeder_bus is not None:
         issues.append(
             Issue(severity="warning", message="the feeders have not been scanned since start")
@@ -254,16 +286,16 @@ def plan_job(
                 note = f"{p.part_id} is not in the parts library"
             elif what.height is None:
                 note = f"{p.part_id} has no height in the parts library"
-            elif (wide := _too_wide(what, profile)) is not None:
+            elif p.part_id not in on_bed and (wide := _too_wide(what, profile)) is not None:
                 note = wide
             elif p.part_id not in loaded:
                 note = f"no feeder holds {p.part_id}"
             else:
-                for sid, pick in loaded[p.part_id]:
+                for sid, picks in loaded[p.part_id]:
                     ok = [
                         n
                         for n, r in reach.items()
-                        if _inside(r, p.x, p.y) and _inside(r, pick.x, pick.y)
+                        if _inside(r, p.x, p.y) and all(_inside(r, q.x, q.y) for q in picks)
                     ]
                     if ok:
                         slot_id, nozzles = sid, ok
@@ -319,6 +351,20 @@ def plan_job(
                 ),
             )
         )
+    # Strips and trays that will run out.
+    for f in feeders.fixed:
+        takes = sum(1 for i in items if i.status == "pending" and i.slot_id == f.id)
+        if takes > f.remaining:
+            issues.append(
+                Issue(
+                    severity="warning",
+                    message=(
+                        f"{f.id} has {f.remaining} part{'s' if f.remaining != 1 else ''} "
+                        f"left and this job takes {takes}: the run will pause for you to "
+                        "refill it"
+                    ),
+                )
+            )
     chosen = choose_fiducials(fiducials)
     if not chosen and result.placements:
         issues.append(
@@ -559,6 +605,11 @@ class JobRunner:
         except MachineError as e:
             run.status, run.error = "paused", str(e)
             run.pause_requested = False
+            if isinstance(e, FeederEmptyError):
+                run.error += await self._park()
+                if run.stop_requested:
+                    self._finish(run, "stopped", f"stopped: {self._summary(run)}")
+                raise FeederEmptyError(run.error) from e
             if run.stop_requested:
                 self._finish(run, "stopped", f"stopped: {self._summary(run)}")
             raise
@@ -663,14 +714,15 @@ class JobRunner:
             item = items[index]
             nozzle = self._machine.nozzle(nozzle_id)
             assert item.slot_id is not None
-            run.message = f"{nozzle_id} picking {item.ref} from slot {item.slot_id}"
+            run.message = f"{nozzle_id} picking {item.ref} from {_source(item.slot_id)}"
             for attempt in range(1, PICK_ATTEMPTS + 1):
                 try:
                     await self._placement.pick(item.slot_id, nozzle, True, run.find_pockets)
                     break
                 except MispickError as e:
                     if attempt == PICK_ATTEMPTS:
-                        item.note = f"picked nothing {PICK_ATTEMPTS} times from slot {item.slot_id}"
+                        where = _source(item.slot_id)
+                        item.note = f"picked nothing {PICK_ATTEMPTS} times from {where}"
                         raise RunError(
                             f"{item.ref}: {e} ({PICK_ATTEMPTS} tries). Check the feeder, "
                             "then resume to try again, or skip the placement."
@@ -709,6 +761,29 @@ class JobRunner:
             await self._placement.place(nozzle, target, item.rotation + run.fix.angle, job.board_z)
             del run.held[nozzle_id]
             item.status, item.note, item.nozzle = "placed", "", nozzle_id
+
+    async def _park(self) -> str:
+        """Move the head out of the way of an operator refilling a strip or tray: to the
+        park location, or else to the back of its travel. Says where it went, for the
+        run's message; a move that fails is reported, not raised, so the pause stands."""
+        profile = self._machine.profile
+        park = next((loc for loc in profile.locations if loc.kind == "park"), None)
+        if park is not None:
+            target = {"X": park.position.x, "Y": park.position.y}
+            where = f"the {park.label.lower()}"
+        else:
+            y = next((a for a in profile.axes if a.name == "Y"), None)
+            if y is None:
+                return ""
+            target = {"Y": y.max if profile.y_sign > 0 else y.min}
+            where = "the back (no park location is set)"
+        try:
+            await self._machine.raise_nozzles()
+            await self._machine.move_axes(target)
+        except MachineError as e:
+            log.warning("could not park the head: %s", e)
+            return f" The head could not move out of the way ({e}): mind it."
+        return f" The head moved to {where}."
 
     # --- Simulation --------------------------------------------------------------------
 

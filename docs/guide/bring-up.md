@@ -131,6 +131,13 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       location, if `[[machine.locations]]` in the config has one (`kind = "park"`, its
       position the head's X and Y), or else to the back of its travel. Refill it, click
       **Refilled** (in the Run workspace's **Strips and trays** panel), and resume.
+- [ ] Compare the two ways of keeping picks centered. **Keep picks centered with** in
+      the Run workspace offers the top camera (find each pocket from the sprocket holes
+      before the pick) or the bottom camera (move each feeder's picks by how far off
+      center it saw that feeder's earlier parts, with no trip to the pocket first). Run
+      the job once each way. Each feeder's detail in the Feeders workspace shows how far
+      off the nozzle's center its parts sat, on average, for each way. Set the one you
+      prefer as the default with `pick_correction` under `[machine]` in the config.
 
 ## 8. Measure what the profile only estimates
 

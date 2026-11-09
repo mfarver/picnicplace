@@ -397,6 +397,20 @@ correction. Implementations:
     at pick time from the tape's sprocket holes: EIA-481 fixes each pocket's place
     relative to them (2 mm along the tape, F across). Errors over 2 mm along the tape
     cannot be told from the next pocket.
+  - Or the bottom camera keeps picks centered instead (suggested on the LumenPnP
+    Discord): how far off the nozzle's center it sees each part says where that part
+    really lay when it was picked, and each feeder (slot, strip, or tray) learns the
+    offset from where its setup puts its parts: an even average of its first four picks,
+    then each new pick counting for a quarter. Picks more than 1.5 mm off center are
+    not learned from, and the offset is capped at 3 mm. It saves the top camera's trip
+    before each pick, but cannot follow an error that changes from part to part, such
+    as a feeder that steps unevenly. Teaching, calibrating, or moving a feeder, or a
+    different Photon feeder in the slot, starts it again.
+  - Which one is used is the owner's choice (`machine.pick_correction` in the config:
+    `top`, `bottom`, or `off`), and each run or single pick can choose again. The bottom
+    camera learns, and keeps score of how far off center each way's picks have been,
+    whichever is chosen, so the two can be compared on the machine. Trays have no
+    sprocket holes, so they use what it learned unless the choice is `off`.
   - The simulator has Photon feeders on its bus (and the fake firmware answers `M485`),
     with tape, parts from the library, a fiducial, a fixed error per slot, and feeders
     that step 1% long, so all of the above runs without hardware.

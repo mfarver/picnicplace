@@ -16,11 +16,21 @@ The reference hardware is the **Opulo LumenPnP v4.1**.
 
 ## Status
 
-Early development. Manual control (machine profiles, the machine view, jogging, the
-safe-Z interlock, the Marlin driver, and camera streams) and the start of calibration
-(visual homing and camera scale) work against the built-in simulator. First tests on a
-real LumenPnP are next. Start with the [specification](docs/SPEC.md), or visit
+Early development, working end to end in the built-in simulator: manual control, visual
+homing, the parts library, Photon feeders, strips and trays on the bed, single
+placements, and whole jobs from KiCad boards and KiKit panels (board fiducials, a planner
+and dry run, pause, step, and refills), with picks kept centered by the top or the bottom
+camera, and a flight recorder for sending real camera frames to developers. First tests on
+a real LumenPnP are next. Start with the [specification](docs/SPEC.md), or visit
 **[picnicplace.org](https://picnicplace.org)**.
+
+## Find your way around
+
+- [Code map](docs/developers/code-map.md): what every part of the code does, and where to
+  make common changes.
+- [AGENTS.md](AGENTS.md): commands and rules for coding agents (and a quick start for
+  people).
+- [CONTRIBUTING.md](CONTRIBUTING.md): setup, checks, and signing off commits.
 
 ## Try it
 

@@ -64,6 +64,8 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/feeders/fixed`; `PUT`, `DELETE …/fixed/{id}` | Strips and trays held on the bed (T1, T2, ...): add, change, remove |
 | `PUT /api/v1/feeders/fixed/{id}/teach` | Teach a strip or tray's first part, end of its first row, or last part (at the camera) |
 | `POST /api/v1/feeders/fixed/{id}/refill`, `…/pocket` | Mark it refilled; find a strip's next pocket from its sprocket holes |
+| `GET`, `POST /api/v1/recordings`; `POST …/stop` | Flight recordings: list them, start one, stop it |
+| `GET /api/v1/recordings/{id}/download`; `DELETE …/{id}` | One recording as a zip file; delete it |
 | `DELETE /api/v1/feeders/learned/{id}` | Forget what the bottom camera learned of a slot's, strip's, or tray's picks |
 | `GET`, `PUT /api/v1/bring-up` | The bring-up checklist's progress and findings |
 | `GET /api/v1/placement` | What each nozzle holds, how it sits once aligned, and the configured pick correction |

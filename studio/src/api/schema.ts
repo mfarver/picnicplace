@@ -1081,6 +1081,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/recordings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Recordings
+         * @description Kept recordings, newest first, with the one being made, if any.
+         */
+        get: operations["list_recordings_api_v1_recordings_get"];
+        put?: never;
+        /**
+         * Start Recording
+         * @description Start recording: every frame vision looks at, and everything the machine does,
+         *     until stopped.
+         */
+        post: operations["start_recording_api_v1_recordings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recordings/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Recording
+         * @description Stop the recording being made, if any.
+         */
+        post: operations["stop_recording_api_v1_recordings_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recordings/{recording_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Recording */
+        get: operations["get_recording_api_v1_recordings__recording_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Recording */
+        delete: operations["delete_recording_api_v1_recordings__recording_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recordings/{recording_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Recording
+         * @description The recording as one zip file, to send.
+         */
+        get: operations["download_recording_api_v1_recordings__recording_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/run": {
         parameters: {
             query?: never;
@@ -3406,6 +3489,54 @@ export interface components {
             /** Y */
             y: number;
         };
+        /** RecordingInfo */
+        RecordingInfo: {
+            /**
+             * Bytes
+             * @description Size on disk.
+             * @default 0
+             */
+            bytes: number;
+            /** Ended At */
+            ended_at: string | null;
+            /**
+             * Events
+             * @default 0
+             */
+            events: number;
+            /**
+             * Frames
+             * @default 0
+             */
+            frames: number;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Outcome
+             * @description How it ended, such as a run's.
+             */
+            outcome: string | null;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "manual" | "run";
+            /**
+             * Recording
+             * @description True while it is still recording.
+             * @default false
+             */
+            recording: boolean;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+        };
         /** Rect */
         Rect: {
             /** X Max */
@@ -3520,6 +3651,11 @@ export interface components {
             /** Placed */
             readonly placed: number;
             plan: components["schemas"]["JobPlan"];
+            /**
+             * Recording
+             * @description The flight recording this run is kept in, if any.
+             */
+            recording: string | null;
             /** Remaining */
             readonly remaining: number;
             /**
@@ -3650,6 +3786,15 @@ export interface components {
             label: string;
             size: components["schemas"]["Point"];
         };
+        /** StartRecordingRequest */
+        StartRecordingRequest: {
+            /**
+             * Label
+             * @description What it is for, in a few words.
+             * @default
+             */
+            label: string;
+        };
         /** StartRequest */
         StartRequest: {
             /** Job Id */
@@ -3659,6 +3804,12 @@ export interface components {
              * @description How to keep picks centered: 'top', find each tape pocket with the top camera first; 'bottom', move each pick by what the bottom camera saw of the feeder's earlier picks; 'off', neither. Empty: the config's choice.
              */
             pick_correction?: ("top" | "bottom" | "off") | null;
+            /**
+             * Record
+             * @description Keep a flight recording of the run (the frames vision looked at and what the machine did), if nothing else is being recorded. The config can record every run.
+             * @default false
+             */
+            record: boolean;
             /**
              * Skip Blocked
              * @description Start even if some placements are blocked, skipping them.
@@ -6361,6 +6512,239 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PresenceState"];
+                };
+            };
+        };
+    };
+    list_recordings_api_v1_recordings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingInfo"][];
+                };
+            };
+        };
+    };
+    start_recording_api_v1_recordings_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartRecordingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingInfo"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_recording_api_v1_recordings_stop_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingInfo"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_recording_api_v1_recordings__recording_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingInfo"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_recording_api_v1_recordings__recording_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_recording_api_v1_recordings__recording_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

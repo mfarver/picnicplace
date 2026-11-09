@@ -43,6 +43,14 @@ class StartRequest(PlanRequest):
             "earlier picks; 'off', neither. Empty: the config's choice."
         ),
     )
+    record: bool = Field(
+        default=False,
+        description=(
+            "Keep a flight recording of the run (the frames vision looked at and what the "
+            "machine did), if nothing else is being recorded. The config can record every "
+            "run."
+        ),
+    )
 
 
 class SkipRequest(WireModel):
@@ -71,7 +79,7 @@ async def plan(runner: Runner, body: PlanRequest) -> JobPlan:
 )
 async def start(runner: Runner, body: StartRequest) -> Operation:
     """Run a saved job: find the board's fiducials, then pick, align, and place every part."""
-    return runner.start(body.job_id, body.skip_blocked, body.pick_correction)
+    return runner.start(body.job_id, body.skip_blocked, body.pick_correction, body.record)
 
 
 @router.post(

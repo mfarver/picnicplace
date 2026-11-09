@@ -4578,6 +4578,103 @@
         "title": "RecordedPoint",
         "type": "object"
       },
+      "RecordingInfo": {
+        "properties": {
+          "bytes": {
+            "default": 0,
+            "description": "Size on disk.",
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "events": {
+            "default": 0,
+            "title": "Events",
+            "type": "integer"
+          },
+          "frames": {
+            "default": 0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How it ended, such as a run's.",
+            "title": "Outcome"
+          },
+          "reason": {
+            "enum": [
+              "manual",
+              "run"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "recording": {
+            "default": false,
+            "description": "True while it is still recording.",
+            "title": "Recording",
+            "type": "boolean"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "reason",
+          "job_id",
+          "started_at",
+          "ended_at",
+          "outcome",
+          "frames",
+          "events",
+          "bytes",
+          "recording"
+        ],
+        "title": "RecordingInfo",
+        "type": "object"
+      },
       "Rect": {
         "additionalProperties": false,
         "properties": {
@@ -4831,6 +4928,18 @@
           "plan": {
             "$ref": "#/components/schemas/JobPlan"
           },
+          "recording": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The flight recording this run is kept in, if any.",
+            "title": "Recording"
+          },
           "remaining": {
             "readOnly": true,
             "title": "Remaining",
@@ -4868,6 +4977,7 @@
           "pause_requested",
           "stop_requested",
           "pick_correction",
+          "recording",
           "held",
           "started_at",
           "finished_at",
@@ -5199,6 +5309,19 @@
         "title": "StagingPlate",
         "type": "object"
       },
+      "StartRecordingRequest": {
+        "properties": {
+          "label": {
+            "default": "",
+            "description": "What it is for, in a few words.",
+            "maxLength": 100,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "title": "StartRecordingRequest",
+        "type": "object"
+      },
       "StartRequest": {
         "properties": {
           "job_id": {
@@ -5221,6 +5344,12 @@
             ],
             "description": "How to keep picks centered: 'top', find each tape pocket with the top camera first; 'bottom', move each pick by what the bottom camera saw of the feeder's earlier picks; 'off', neither. Empty: the config's choice.",
             "title": "Pick Correction"
+          },
+          "record": {
+            "default": false,
+            "description": "Keep a flight recording of the run (the frames vision looked at and what the machine did), if nothing else is being recorded. The config can record every run.",
+            "title": "Record",
+            "type": "boolean"
           },
           "skip_blocked": {
             "default": false,
@@ -9668,6 +9797,356 @@
         "summary": "Get Presence",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/v1/recordings": {
+      "get": {
+        "description": "Kept recordings, newest first, with the one being made, if any.",
+        "operationId": "list_recordings_api_v1_recordings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RecordingInfo"
+                  },
+                  "title": "Response List Recordings Api V1 Recordings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Recordings",
+        "tags": [
+          "recordings"
+        ]
+      },
+      "post": {
+        "description": "Start recording: every frame vision looks at, and everything the machine does,\nuntil stopped.",
+        "operationId": "start_recording_api_v1_recordings_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRecordingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Recording",
+        "tags": [
+          "recordings"
+        ]
+      }
+    },
+    "/api/v1/recordings/stop": {
+      "post": {
+        "description": "Stop the recording being made, if any.",
+        "operationId": "stop_recording_api_v1_recordings_stop_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RecordingInfo"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Stop Recording Api V1 Recordings Stop Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stop Recording",
+        "tags": [
+          "recordings"
+        ]
+      }
+    },
+    "/api/v1/recordings/{recording_id}": {
+      "delete": {
+        "operationId": "delete_recording_api_v1_recordings__recording_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recording_id",
+            "required": true,
+            "schema": {
+              "title": "Recording Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Recording",
+        "tags": [
+          "recordings"
+        ]
+      },
+      "get": {
+        "operationId": "get_recording_api_v1_recordings__recording_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recording_id",
+            "required": true,
+            "schema": {
+              "title": "Recording Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Recording",
+        "tags": [
+          "recordings"
+        ]
+      }
+    },
+    "/api/v1/recordings/{recording_id}/download": {
+      "get": {
+        "description": "The recording as one zip file, to send.",
+        "operationId": "download_recording_api_v1_recordings__recording_id__download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recording_id",
+            "required": true,
+            "schema": {
+              "title": "Recording Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {}
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Download Recording",
+        "tags": [
+          "recordings"
         ]
       }
     },

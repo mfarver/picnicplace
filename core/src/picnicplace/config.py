@@ -88,6 +88,10 @@ class DataConfig(_Section):
     def bringup_path(self) -> Path:
         return self.dir.expanduser() / "bring-up.json"
 
+    @property
+    def recordings_dir(self) -> Path:
+        return self.dir.expanduser() / "recordings"
+
 
 class MarlinConfig(_Section):
     port: str | None = Field(
@@ -228,11 +232,26 @@ class CameraConfig(_Section):
         return self
 
 
+class RecorderConfig(_Section):
+    record_runs: bool = Field(
+        default=False,
+        description=(
+            "Record every job run: the frames vision looked at and what the machine did, "
+            "to send to PicnicPlace's developers. A run can also ask for it."
+        ),
+    )
+    keep: int = Field(default=10, ge=1, description="Keep at most this many recordings.")
+    max_mb: int = Field(
+        default=5000, ge=10, description="Delete the oldest recordings beyond this many MB."
+    )
+
+
 class Config(_Section):
     server: ServerConfig = Field(default_factory=ServerConfig)
     presence: PresenceConfig = Field(default_factory=PresenceConfig)
     data: DataConfig = Field(default_factory=DataConfig)
     machine: MachineConfig = Field(default_factory=MachineConfig)
+    recorder: RecorderConfig = Field(default_factory=RecorderConfig)
     cameras: dict[str, CameraConfig] = Field(
         default_factory=dict[str, CameraConfig],
         description=(

@@ -445,7 +445,20 @@ correction. Implementations:
 - **Debuggability**: every pipeline run can return intermediate images and numeric
   results over the API, so the GUI can show each stage.
 - **Test corpus**: a collection of real LumenPnP camera images with expected results,
-  used in CI to catch regressions.
+  used in CI to catch regressions. Flight recordings (below) are how real images arrive.
+- **Flight recorder** (done): on request, or for every run, the core keeps every frame
+  vision looked at (lossless PNG) with the vision function, its arguments, and its
+  answer, a JSON-lines timeline of what the machine did (the event stream, the log,
+  moves, vacuum readings, picks, alignments, learning, placements, run progress), and a
+  snapshot of the setup (the config without its token or data folder, the profile, the
+  feeders, the parts in use, the job). Recordings are kept in the data directory, the
+  newest ten and at most 5 GB by default, and download as one zip from the Studio.
+  `picnicd --replay` runs today's vision on a recording's frames and reports every answer
+  that changed, so a user's recording becomes a regression test. Recording never stops
+  the machine: what cannot be written is logged and dropped. A recording holds photos of
+  the user's boards and, for a run, the job, and the guide says so before it is sent.
+  Next: a replay camera for the simulator, so a run can be driven by recorded frames,
+  and an optional upload to the project (see the guide).
 
 ### 7.6 Configuration and data
 
@@ -607,19 +620,22 @@ refusing to connect.
 | **M1 — Manual control** | Machine description API and I/O state; machine view with head inset (built first, against the simulator); connect to LumenPnP, home, jog, actuators, vacuum readings, safe-Z interlock, MJPEG camera streams in the GUI, control lease, E-stop. |
 | **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. Started: fiducial finder, visual homing (after `G28`, center the top camera on the homing fiducial and correct X/Y with `G92`), and a camera scale measurement, all tested against the simulator, whose homing has a realistic error for visual homing to find. |
 | **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. Started: the parts library (footprints, parts with height and its source, tape packaging after EIA-481 with rotation in tape and pin-1 quadrant), merge-only imports, OpenPnP library import, and a library editor in the Studio. Photon feeders: discovery and initialization, part assignment by feeder ID, feeding, simulated feeders with drawn tape, slot pick locations taught by eye or found from each feeder's fiducial, and pockets found from the tape's sprocket holes; a Feeders workspace and a bring-up checklist in the Studio. Single placement: pick (feed, find the pocket, pick at the tape's part height, check the vacuum), align on the bottom camera (the part's offset and angle on the nozzle), and place at a given location and angle (with a part-off check), one step at a time or all three, in the simulator to within 0.05 mm; camera captures for tuning vision on real images. |
-| **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. Boards must lie inside the profile's placement area (where every nozzle can reach, on the staging plates) and clear of its keep-outs; import warns about any placement a nozzle cannot reach. Started: KiCad board import (footprints with pads, part numbers from the board or the schematic's BOM), panels recovered from a KiKit panel file, jobs placed on the bed with reach, camera, and keep-out checks and a search for a place that fits (parts within every nozzle's reach; empty rails may lie outside it), saved as job files, and a Prepare workspace. Runs: a planner that is also a dry run against the loaded feeders (blocked placements and why, parts only some nozzles reach, tape too wide for the feeders), board alignment from up to three fiducials (a rigid fit), batches with a part on every nozzle that can take one, lowest parts first, retries for empty picks, discard and retry after a failed alignment, pause, step, resume, stop, and skip, and a Run workspace; in the simulator a whole board lands within 0.06 mm of where the misplaced board wants its parts. Run history is to come. |
-| **M5 — 1.0 polish** | Strip and tray feeders, installer/packaging, docs, OpenPnP library import. |
+| **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. Boards must lie inside the profile's placement area (where every nozzle can reach, on the staging plates) and clear of its keep-outs; import warns about any placement a nozzle cannot reach. Started: KiCad board import (footprints with pads, part numbers from the board or the schematic's BOM), panels recovered from a KiKit panel file, jobs placed on the bed with reach, camera, and keep-out checks and a search for a place that fits (parts within every nozzle's reach; empty rails may lie outside it), saved as job files, and a Prepare workspace. Runs: a planner that is also a dry run against the loaded feeders (blocked placements and why, parts only some nozzles reach, tape too wide for the feeders), board alignment from up to three fiducials (a rigid fit), batches with a part on every nozzle that can take one, lowest parts first, retries for empty picks, discard and retry after a failed alignment, pause, step, resume, stop, and skip, and a Run workspace; in the simulator a whole board lands within 0.06 mm of where the misplaced board wants its parts. Strips and trays held on the bed as feeders, with refills (the run pauses and parks the head). Picks kept centered by the top camera (pockets from sprocket holes) or the bottom camera (each feeder learns where its parts really lie from earlier picks), the owner's choice. A flight recorder for sending real frames and timelines to developers, with vision replay. Run history is to come. |
+| **M5 — 1.0 polish** | Installer/packaging, docs. Done early: strip and tray feeders (M4), OpenPnP library import (M3). |
 
 ## 12. Repository layout
 
 ```
 picnicplace/
   core/            Python package: picnicd, drivers, vision, job engine, CLI, and the
-                   built-in machine profiles (core/src/picnicplace/profiles/)
+                   built-in machine profiles (core/src/picnicplace/profiles/); its
+                   tests and their sample boards in core/tests/
   studio/          TypeScript GUI
-  docs/            Specs, ADRs, user docs, generated OpenAPI document (docs/api/)
-  testdata/        Vision image corpus, sample boards
+  docs/            The website: spec, guides, code map, generated OpenAPI document
+  AGENTS.md        Rules and commands for coding agents (CLAUDE.md points to it)
 ```
+
+The [code map](developers/code-map.md) describes every module.
 
 ## 13. Open questions
 

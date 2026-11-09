@@ -16,6 +16,7 @@ nav = [
   { "Get started" = [
     { "Try the simulator" = "guide/try-the-simulator.md" },
     { "Bring up a machine" = "guide/bring-up.md" },
+    { "Send a flight recording" = "guide/flight-recorder.md" },
   ] },
   { "Design" = [
     { "Specification" = "SPEC.md" },
@@ -26,6 +27,7 @@ nav = [
   ] },
   { "Project" = [
     { "Contributing" = "contributing.md" },
+    { "Code map" = "developers/code-map.md" },
   ] },
 ]
 

@@ -11,6 +11,7 @@ import { BringUpPanel } from "../components/BringUpPanel";
 import { CalibrationPanel } from "../components/CalibrationPanel";
 import { CameraView } from "../components/CameraView";
 import { CapturePanel } from "../components/CapturePanel";
+import { RecordingsPanel } from "../components/RecordingsPanel";
 import { JogPanel } from "../components/JogPanel";
 import { LeaseStatus } from "../components/LeaseStatus";
 import { Panel } from "../components/Panel";
@@ -158,6 +159,7 @@ export function MachineWorkspace() {
         )}
 
         <CapturePanel />
+        <RecordingsPanel />
 
         {description && (
           <BringUpPanel

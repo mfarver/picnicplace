@@ -50,9 +50,9 @@ from picnicplace.machine.profile import (
 )
 from picnicplace.operations import OperationManager
 from picnicplace.presence import PresenceTracker
+from picnicplace.recorder import FlightRecorder
 from picnicplace.schemas import MachineState, MachineStateEvent, Operation
 from picnicplace.simparts import HeldPart, PlacedPart
-from picnicplace.vision.fiducial import find_circle, find_circles
 
 log = logging.getLogger(__name__)
 
@@ -93,8 +93,11 @@ class MachineService:
         operations: OperationManager,
         *,
         speed_scale: float = 1.0,
+        recorder: FlightRecorder | None = None,
     ) -> None:
         self._speed_scale = speed_scale
+        self.recorder = recorder or FlightRecorder(None)
+        """Keeps what the machine saw and did, while recording."""
         self._profile = profile
         self._axes = {a.name: a for a in profile.axes}
         self._inputs = {i.id: i for i in profile.inputs}
@@ -406,6 +409,9 @@ class MachineService:
                 and sensor.past_threshold(float(value))
             )
             if held == expect or loop.time() >= deadline:
+                self.recorder.event(
+                    "vacuum", nozzle=nozzle.id, expect=expect, held=held, reading=value
+                )
                 return held
             await asyncio.sleep(0.03)
 
@@ -457,8 +463,14 @@ class MachineService:
             raise VisionError(f"the {camera.label.lower()} sent no frame")
         h, w = frame.image.shape[:2]
         mm_per_px = camera.field_of_view.x / w
-        circles = await asyncio.get_running_loop().run_in_executor(
-            None, find_circles, frame.image, min_diameter / mm_per_px, max_diameter / mm_per_px
+        circles = await self.recorder.vision(
+            "find_circles",
+            frame.image,
+            min_diameter / mm_per_px,
+            max_diameter / mm_per_px,
+            camera=camera.id,
+            position=dict(self._driver.position),
+            mm_per_px=mm_per_px,
         )
         here = self.camera_position()
         out: list[Point] = []
@@ -482,13 +494,15 @@ class MachineService:
             raise VisionError(f"the {camera.label.lower()} sent no frame")
         h, w = frame.image.shape[:2]
         mm_per_px = camera.field_of_view.x / w
-        circle = await asyncio.get_running_loop().run_in_executor(
-            None,
-            find_circle,
+        circle = await self.recorder.vision(
+            "find_circle",
             frame.image,
             min_diameter / mm_per_px,
             max_diameter / mm_per_px,
             search_mm / mm_per_px,
+            camera=camera.id,
+            position=dict(self._driver.position),
+            mm_per_px=mm_per_px,
         )
         if circle is None:
             return None
@@ -578,6 +592,7 @@ class MachineService:
                 if self._profile.safe_z_input is not None:
                     await self._driver.refresh_input(self._profile.safe_z_input)
                 self._check_travel_allowed()
+            self.recorder.event("move", to=step, speed=speed)
             await self._driver.move_to(step, self._limit_speed(step, speed))
 
     def _limit_speed(self, step: Mapping[str, float], speed: float | None) -> float | None:
@@ -639,13 +654,16 @@ class MachineService:
         mm_per_px = camera.field_of_view.x / w
         expected = fiducial.diameter
         low, high = (expected * 0.6, expected * 1.5) if expected else (0.5, 4.0)
-        circle = await asyncio.get_running_loop().run_in_executor(
-            None,
-            find_circle,
+        circle = await self.recorder.vision(
+            "find_circle",
             frame.image,
             low / mm_per_px,
             high / mm_per_px,
             VISUAL_SEARCH_RADIUS_MM / mm_per_px,
+            camera=camera.id,
+            position=dict(self._driver.position),
+            mm_per_px=mm_per_px,
+            purpose="homing fiducial",
         )
         if circle is None:
             raise VisionError(

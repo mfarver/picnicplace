@@ -105,14 +105,29 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       nozzle from below, and the placed part. Captured frames are saved losslessly in the
       data directory's `captures/` folder, for tuning vision on real images.
 
-## 7. Measure what the profile only estimates
+## 7. A whole job
+
+- [ ] In the Prepare workspace, import the board (and its panel), use **Find a place**,
+      fasten the board where the map shows it, and save the job. Its parts may run to
+      the edges of where both nozzles reach; rails without parts may go beyond.
+- [ ] In the Run workspace, choose the job. The checks are a dry run against the loaded
+      feeders: each placement's feeder and nozzles, and what blocks any of them (no part
+      number, no height, no feeder holding the part, tape too wide for the feeders, or
+      out of reach). Fix what you can; tick **Place the rest** to leave out the others.
+- [ ] **Start**, then **Pause** at once: the run finds the board's fiducials and pauses
+      before the first part. Check the reported offset and turn look right.
+- [ ] **Step** places one part on each nozzle and pauses again. Check them, then
+      **Resume**. A jammed feeder or a failed pick pauses the run with the parts already
+      on the nozzles kept there; fix it and resume, or skip that placement.
+
+## 8. Measure what the profile only estimates
 
 With the camera centered on each point, record it in the checklist's last steps: the
 corners of the datum board, the camera opening, the aiming fiducial's holder, and the
 rear staging plate. Points that share a first word become a keep-out rectangle in the
 suggested changes.
 
-## 8. Full speed
+## 9. Full speed
 
 When everything above checks out, remove `speed_scale` (or set it to 1.0) and restart
 the core.

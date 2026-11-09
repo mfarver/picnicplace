@@ -220,7 +220,8 @@ area = { x_min = 197.5, y_min = 188, x_max = 237.5, y_max = 204 }
 # line toward the pockets, with two 0.5 mm marks 2 mm to either side of it (their
 # spacing encodes the feeder's width). Opulo notes the board's placement varies a
 # little from feeder to feeder, so the fiducial gives the pick location roughly and
-# vision on the tape finds the pocket.
+# vision on the tape finds the pocket. The design comes in 8 mm and 12 mm versions, so
+# wider tape (16 mm and up) needs another kind of feeder.
 [[feeder_banks]]
 id = "front"
 label = "Front rail"
@@ -235,6 +236,7 @@ pick_height = -27.6
 rotation = 90
 fiducial_offset = { x = 19.15, y = -4.1 }
 fiducial_diameter = 1.0
+tape_widths = [8, 12]
 
 [[feeder_banks]]
 id = "back"
@@ -250,6 +252,7 @@ pick_height = -27.6
 rotation = -90
 fiducial_offset = { x = 19.15, y = -4.1 }
 fiducial_diameter = 1.0
+tape_widths = [8, 12]
 
 [[inputs]]
 id = "home_x"

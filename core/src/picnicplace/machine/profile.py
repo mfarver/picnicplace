@@ -182,6 +182,10 @@ class FeederBank(ProfileModel):
         ),
     )
     fiducial_diameter: float | None = Field(default=None, gt=0)
+    tape_widths: list[float] = Field(
+        default_factory=list[float],
+        description="The tape widths, in mm, that feeders in this bank take. Empty if any.",
+    )
 
     def footprint(self) -> "Rect":
         """The area the bank's feeders cover, as a rectangle around all of them."""
@@ -464,6 +468,19 @@ class MachineProfile(ProfileModel):
             for n in self.nozzles
         }
 
+    @property
+    def bed_area(self) -> Rect | None:
+        """Where boards can be mounted at all: around the staging plates, or the work
+        area without plates."""
+        if self.staging_plates:
+            return Rect(
+                x_min=min(p.center.x - p.size.x / 2 for p in self.staging_plates),
+                y_min=min(p.center.y - p.size.y / 2 for p in self.staging_plates),
+                x_max=max(p.center.x + p.size.x / 2 for p in self.staging_plates),
+                y_max=max(p.center.y + p.size.y / 2 for p in self.staging_plates),
+            )
+        return self.work_area
+
     @computed_field
     @property
     def placement_area(self) -> Rect | None:
@@ -471,17 +488,8 @@ class MachineProfile(ProfileModel):
         nozzles' reach, all of them, within the staging plates (or the work area). Boards
         must also stay clear of the keep-outs inside it."""
         areas = list(self.nozzle_reach.values())
-        if self.staging_plates:
-            areas.append(
-                Rect(
-                    x_min=min(p.center.x - p.size.x / 2 for p in self.staging_plates),
-                    y_min=min(p.center.y - p.size.y / 2 for p in self.staging_plates),
-                    x_max=max(p.center.x + p.size.x / 2 for p in self.staging_plates),
-                    y_max=max(p.center.y + p.size.y / 2 for p in self.staging_plates),
-                )
-            )
-        elif self.work_area is not None:
-            areas.append(self.work_area)
+        if self.bed_area is not None:
+            areas.append(self.bed_area)
         if not areas:
             return None
         x_min = max(a.x_min for a in areas)

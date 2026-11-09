@@ -140,6 +140,14 @@ class MachineConfig(_Section):
             "simulated Photon feeder."
         ),
     )
+    sim_board_error: tuple[float, float, float] = Field(
+        default=(0.6, -0.4, 0.5),
+        description=(
+            "Simulator only: how far a job's board really is from where the job puts it, "
+            "as X and Y in mm and a turn in degrees about its front-left corner. Fiducial "
+            "alignment finds and corrects it."
+        ),
+    )
     speed_scale: float = Field(
         default=1.0,
         gt=0,

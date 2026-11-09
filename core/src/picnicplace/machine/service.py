@@ -23,7 +23,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping
 
 from picnicplace.camera.source import Frame
-from picnicplace.camera.synthetic import SceneState, TapeScene
+from picnicplace.camera.synthetic import BoardScene, SceneState, TapeScene
 from picnicplace.events import EventBus
 from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.errors import (
@@ -118,6 +118,8 @@ class MachineService:
             Callable[[], tuple[tuple[tuple[str, HeldPart], ...], tuple[PlacedPart, ...]]] | None
         ) = None
         """Simulated parts held by nozzles and placed on boards, if any."""
+        self.scene_boards: Callable[[], tuple[BoardScene, ...]] | None = None
+        """Simulated boards loaded for a job, if any."""
 
         driver.on_change = self._on_driver_change
         presence.on_change.append(self._publish_state)
@@ -176,6 +178,7 @@ class MachineService:
             tapes=self.scene_tapes() if self.scene_tapes is not None else None,
             held_parts=held_parts,
             placed=placed,
+            boards=self.scene_boards() if self.scene_boards is not None else (),
         )
 
     @property

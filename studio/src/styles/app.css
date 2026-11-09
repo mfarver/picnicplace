@@ -1870,3 +1870,90 @@ code,
 .capture-list a {
   color: var(--accent);
 }
+
+/* --- Run ----------------------------------------------------------------------------- */
+
+.run-progress {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.run-progress progress {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.run-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 26px;
+  padding: 0 var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.run-row .item-id {
+  flex: none;
+}
+
+.run-where {
+  flex: 1;
+  overflow: hidden;
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.run-dot.run-pending {
+  background: var(--text-faint);
+}
+
+.run-dot.run-placed {
+  background: var(--accent);
+}
+
+.run-dot.run-failed,
+.run-dot.run-blocked {
+  background: var(--danger);
+}
+
+.run-dot.run-skipped {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--text-faint);
+}
+
+.run-mark {
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.run-mark.run-pending {
+  fill: none;
+  stroke: var(--text-muted);
+}
+
+.run-mark.run-placed {
+  fill: var(--accent);
+  stroke: none;
+}
+
+.run-mark.run-failed,
+.run-mark.run-blocked {
+  fill: var(--danger);
+  stroke: none;
+}
+
+.run-mark.run-skipped {
+  fill: none;
+  stroke: none;
+}

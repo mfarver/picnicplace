@@ -1,9 +1,10 @@
 """Where a job's placements are on the machine, and whether the machine can do them.
 
-The checks follow the machine profile: every placement must be inside the area every
-nozzle can reach (``placement_area``), every fiducial where the top camera can see it,
-and the panel's outline must stay clear of the keep-outs (the bottom camera, the datum
-board, and similar). ``find_location`` searches for a spot that passes.
+The checks follow the machine profile: every placement must be on the plates and within
+reach of a nozzle (with a warning if some nozzle cannot reach it; ``placement_area`` is
+where every nozzle can), every fiducial where the top camera can see it, and the panel's
+outline must stay clear of the keep-outs (the bottom camera, the datum board, and
+similar). ``find_location`` searches for a spot where every nozzle reaches everything.
 """
 
 import math
@@ -204,12 +205,30 @@ def layout(job: Job, profile: MachineProfile) -> JobLayout:
     issues: list[Issue] = []
     area = profile.placement_area
     travel = camera_travel(profile)
+    bed = profile.bed_area
+    reach = profile.nozzle_reach
     for p in placements:
         if not p.enabled:
             continue
         if p.kind == "part" and area is not None and not _inside(area, p.x, p.y):
-            short = [n for n, r in profile.nozzle_reach.items() if not _inside(r, p.x, p.y)]
-            where = f"nozzle {', '.join(short)} cannot reach it" if short else "off the plates"
+            short = [n for n, r in reach.items() if not _inside(r, p.x, p.y)]
+            some = len(short) < len(reach)
+            on_bed = bed is None or _inside(bed, p.x, p.y)
+            if on_bed and some:
+                # Another nozzle can place it: the planner gives it to that one.
+                issues.append(
+                    Issue(
+                        severity="warning",
+                        message=(
+                            f"{p.ref}: nozzle {', '.join(short)} cannot reach it, "
+                            "so the others place it"
+                        ),
+                        ref=p.ref,
+                        copy_id=p.copy_id,
+                    )
+                )
+                continue
+            where = "no nozzle can reach it" if on_bed else "off the plates"
             issues.append(
                 Issue(
                     severity="error",
@@ -232,6 +251,17 @@ def layout(job: Job, profile: MachineProfile) -> JobLayout:
             issues.append(
                 Issue(severity="error", message=f"the board covers the {keep_out.label.lower()}")
             )
+    if bed is not None:
+        over = max(
+            max(bed.x_min - c.x, c.x - bed.x_max, bed.y_min - c.y, c.y - bed.y_max) for c in corners
+        )
+        if over > 0.5:
+            issues.append(
+                Issue(
+                    severity="warning",
+                    message=f"the board hangs up to {over:.1f} mm over the edge of the plates",
+                )
+            )
     if area is not None and not all(_inside(area, c.x, c.y) for c in corners):
         issues.append(
             Issue(
@@ -245,12 +275,14 @@ def layout(job: Job, profile: MachineProfile) -> JobLayout:
 def find_location(
     job: Job, profile: MachineProfile, rotations: tuple[float, ...] = (0, 90, 180, 270)
 ) -> MachineLocation | None:
-    """A location where the whole panel is inside the placement area, its fiducials are
-    where the top camera can see them, and it is clear of the keep-outs. Searched on a
-    1 mm grid, nearest the back of the bed first."""
+    """A location where every part is where every nozzle can reach it, the fiducials
+    are where the top camera can see them, and the panel is on the plates and clear of
+    the keep-outs. Rails and other edges without parts may lie outside the nozzles'
+    reach. Searched on a 1 mm grid, nearest the back of the bed first."""
     area = profile.placement_area
     if area is None:
         return None
+    bed = profile.bed_area or area
     travel = camera_travel(profile)
     keep_outs = profile.board_keep_outs()
     step = 1.0
@@ -258,13 +290,16 @@ def find_location(
         origin = MachineLocation(x=0.0, y=0.0, rotation=turn)
         corners = outline(job, profile, origin)
         xs, ys = [c.x for c in corners], [c.y for c in corners]
-        x_lo, x_hi = area.x_min - min(xs), area.x_max - max(xs)
-        y_lo, y_hi = area.y_min - min(ys), area.y_max - max(ys)
-        fiducials = [
-            p
-            for p in machine_placements(job, profile, origin)
-            if p.kind == "fiducial" and p.enabled
+        x_lo, x_hi = bed.x_min - min(xs), bed.x_max - max(xs)
+        y_lo, y_hi = bed.y_min - min(ys), bed.y_max - max(ys)
+        placed = [p for p in machine_placements(job, profile, origin) if p.enabled]
+        parts = [p for p in placed if p.kind == "part"] or [
+            Point(x=x, y=y) for x, y in zip(xs, ys, strict=True)
         ]
+        px, py = [p.x for p in parts], [p.y for p in parts]
+        x_lo, x_hi = max(x_lo, area.x_min - min(px)), min(x_hi, area.x_max - max(px))
+        y_lo, y_hi = max(y_lo, area.y_min - min(py)), min(y_hi, area.y_max - max(py))
+        fiducials = [p for p in placed if p.kind == "fiducial"]
         if travel is not None and fiducials:
             # Keep fiducials a little inside the camera's travel, not on its very edge.
             m = FIDUCIAL_MARGIN_MM

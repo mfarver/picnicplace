@@ -46,3 +46,6 @@ export type RecordedPoint = Schemas["RecordedPoint"];
 export type PlacementState = Schemas["PlacementState"];
 export type NozzleLoad = Schemas["NozzleLoad"];
 export type CaptureInfo = Schemas["CaptureInfo"];
+export type JobPlan = Schemas["JobPlan"];
+export type RunItem = Schemas["RunItem"];
+export type RunState = Schemas["RunState"];

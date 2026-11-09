@@ -2055,3 +2055,11 @@ code,
 .ff-form {
   grid-template-columns: 1fr 1fr;
 }
+
+/* What the bottom camera has learned of a feeder's picks. */
+.learned-picks {
+  margin: var(--space-2) 0 var(--space-3);
+}
+.learned-picks p {
+  margin: 0 0 var(--space-1);
+}

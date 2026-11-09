@@ -51,3 +51,5 @@ export type RunItem = Schemas["RunItem"];
 export type RunState = Schemas["RunState"];
 export type FixedFeeder = Schemas["FixedFeeder-Output"];
 export type FixedFeederState = Schemas["FixedFeederState"];
+export type PickLearning = Schemas["PickLearning"];
+export type PickCorrection = PlacementState["pick_correction"];

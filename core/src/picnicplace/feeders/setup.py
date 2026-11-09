@@ -8,7 +8,9 @@ Kept in the data directory as ``feeders.json``:
   nominal one, taught by eye or found from the feeder's fiducial;
 - the feeder fiducial's offset from the pick location, once measured;
 - fixed feeders: strips of tape and trays held on the bed, with how many parts have
-  been taken from each.
+  been taken from each;
+- what the bottom camera has learned of each feeder's picks: how far its parts really
+  lie from where the rest of the setup says, and how far off center its picks have been.
 """
 
 import threading
@@ -23,6 +25,43 @@ from picnicplace.storage import write_atomic
 
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_serialization_defaults_required=True)
+
+
+PickCorrection = Literal["top", "bottom", "off"]
+"""How picks are kept centered: the top camera finds each pocket before the pick, or the
+bottom camera's view of earlier picks moves the pick place, or neither."""
+
+
+class PickMisses(_Model):
+    """How far off center the picks made one way have been."""
+
+    count: int = Field(default=0, ge=0, description="Picks seen by the bottom camera.")
+    mean: float = Field(
+        default=0.0,
+        ge=0,
+        description="Mean distance in mm of the part's center from the nozzle's axis, over "
+        "the last 20 picks at most.",
+    )
+    last: float = Field(default=0.0, ge=0, description="The latest pick's distance, in mm.")
+
+
+class PickLearning(_Model):
+    """What the bottom camera has seen of one feeder's picks."""
+
+    feeder: str | None = Field(
+        default=None,
+        description="Photon feeders: the ID of the feeder in the slot then. Learning from "
+        "another feeder does not carry over.",
+    )
+    offset: Point = Field(
+        description="Where its parts really lie, minus where the rest of the setup puts "
+        "them. A pick with the bottom camera's correction goes there."
+    )
+    samples: int = Field(ge=0, description="Picks it has learned from.")
+    misses: dict[PickCorrection, PickMisses] = Field(
+        default_factory=dict[PickCorrection, PickMisses],
+        description="How far off center its picks have been, by how they were corrected.",
+    )
 
 
 class FeederAssignment(_Model):
@@ -127,6 +166,11 @@ class FeederSetup(_Model):
     fixed: dict[str, FixedFeeder] = Field(
         default_factory=dict[str, FixedFeeder],
         description="Strips and trays on the bed, by ID: T1, T2, and so on.",
+    )
+    learned: dict[str, PickLearning] = Field(
+        default_factory=dict[str, PickLearning],
+        description="What the bottom camera has learned of each slot's or strip's or "
+        "tray's picks, by slot ID or T ID.",
     )
 
 

@@ -1370,6 +1370,16 @@
             "title": "Id",
             "type": "string"
           },
+          "learned": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PickLearning"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "next": {
             "anyOf": [
               {
@@ -1401,7 +1411,8 @@
           "remaining",
           "next",
           "angle",
-          "pocket"
+          "pocket",
+          "learned"
         ],
         "title": "FixedFeederState",
         "type": "object"
@@ -3361,6 +3372,32 @@
             "title": "Angle",
             "type": "number"
           },
+          "base": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "correction": {
+            "anyOf": [
+              {
+                "enum": [
+                  "top",
+                  "bottom",
+                  "off"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correction"
+          },
           "nozzle": {
             "title": "Nozzle",
             "type": "string"
@@ -3376,6 +3413,27 @@
             ],
             "title": "Part Id"
           },
+          "pick_angle": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pick Angle"
+          },
+          "picked_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "slot_id": {
             "title": "Slot Id",
             "type": "string"
@@ -3386,7 +3444,11 @@
           "part_id",
           "slot_id",
           "angle",
-          "alignment"
+          "alignment",
+          "picked_at",
+          "base",
+          "pick_angle",
+          "correction"
         ],
         "title": "NozzleLoad",
         "type": "object"
@@ -3988,15 +4050,26 @@
             "title": "Feed",
             "type": "boolean"
           },
-          "find_pocket": {
-            "default": true,
-            "description": "Find the pocket from the sprocket holes before picking.",
-            "title": "Find Pocket",
-            "type": "boolean"
-          },
           "nozzle_id": {
             "title": "Nozzle Id",
             "type": "string"
+          },
+          "pick_correction": {
+            "anyOf": [
+              {
+                "enum": [
+                  "top",
+                  "bottom",
+                  "off"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How to keep picks centered: 'top', find each tape pocket with the top camera first; 'bottom', move each pick by what the bottom camera saw of the feeder's earlier picks; 'off', neither. Empty: the config's choice.",
+            "title": "Pick Correction"
           },
           "rotation": {
             "default": 0.0,
@@ -4024,6 +4097,91 @@
           "y"
         ],
         "title": "PickAndPlaceRequest",
+        "type": "object"
+      },
+      "PickLearning": {
+        "additionalProperties": false,
+        "description": "What the bottom camera has seen of one feeder's picks.",
+        "properties": {
+          "feeder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Photon feeders: the ID of the feeder in the slot then. Learning from another feeder does not carry over.",
+            "title": "Feeder"
+          },
+          "misses": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PickMisses"
+            },
+            "description": "How far off center its picks have been, by how they were corrected.",
+            "propertyNames": {
+              "enum": [
+                "top",
+                "bottom",
+                "off"
+              ]
+            },
+            "title": "Misses",
+            "type": "object"
+          },
+          "offset": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Where its parts really lie, minus where the rest of the setup puts them. A pick with the bottom camera's correction goes there."
+          },
+          "samples": {
+            "description": "Picks it has learned from.",
+            "minimum": 0.0,
+            "title": "Samples",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "feeder",
+          "offset",
+          "samples",
+          "misses"
+        ],
+        "title": "PickLearning",
+        "type": "object"
+      },
+      "PickMisses": {
+        "additionalProperties": false,
+        "description": "How far off center the picks made one way have been.",
+        "properties": {
+          "count": {
+            "default": 0,
+            "description": "Picks seen by the bottom camera.",
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "last": {
+            "default": 0.0,
+            "description": "The latest pick's distance, in mm.",
+            "minimum": 0.0,
+            "title": "Last",
+            "type": "number"
+          },
+          "mean": {
+            "default": 0.0,
+            "description": "Mean distance in mm of the part's center from the nozzle's axis, over the last 20 picks at most.",
+            "minimum": 0.0,
+            "title": "Mean",
+            "type": "number"
+          }
+        },
+        "required": [
+          "count",
+          "mean",
+          "last"
+        ],
+        "title": "PickMisses",
         "type": "object"
       },
       "PlaceRequest": {
@@ -4235,10 +4393,20 @@
             },
             "title": "Loads",
             "type": "array"
+          },
+          "pick_correction": {
+            "enum": [
+              "top",
+              "bottom",
+              "off"
+            ],
+            "title": "Pick Correction",
+            "type": "string"
           }
         },
         "required": [
-          "loads"
+          "loads",
+          "pick_correction"
         ],
         "title": "PlacementState",
         "type": "object"
@@ -4591,11 +4759,6 @@
             "description": "Why the run paused, if it did.",
             "title": "Error"
           },
-          "find_pockets": {
-            "default": true,
-            "title": "Find Pockets",
-            "type": "boolean"
-          },
           "finished_at": {
             "anyOf": [
               {
@@ -4650,6 +4813,16 @@
             "title": "Pause Requested",
             "type": "boolean"
           },
+          "pick_correction": {
+            "default": "top",
+            "enum": [
+              "top",
+              "bottom",
+              "off"
+            ],
+            "title": "Pick Correction",
+            "type": "string"
+          },
           "placed": {
             "readOnly": true,
             "title": "Placed",
@@ -4694,7 +4867,7 @@
           "error",
           "pause_requested",
           "stop_requested",
-          "find_pockets",
+          "pick_correction",
           "held",
           "started_at",
           "finished_at",
@@ -4888,6 +5061,16 @@
               }
             ]
           },
+          "learned": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PickLearning"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "pick": {
             "$ref": "#/components/schemas/Point"
           },
@@ -4909,6 +5092,7 @@
           "slot",
           "pick",
           "calibration",
+          "learned",
           "feeder",
           "error",
           "pocket"
@@ -5017,15 +5201,26 @@
       },
       "StartRequest": {
         "properties": {
-          "find_pockets": {
-            "default": true,
-            "description": "Find each pocket from the sprocket holes before picking.",
-            "title": "Find Pockets",
-            "type": "boolean"
-          },
           "job_id": {
             "title": "Job Id",
             "type": "string"
+          },
+          "pick_correction": {
+            "anyOf": [
+              {
+                "enum": [
+                  "top",
+                  "bottom",
+                  "off"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How to keep picks centered: 'top', find each tape pocket with the top camera first; 'bottom', move each pick by what the bottom camera saw of the feeder's earlier picks; 'off', neither. Empty: the config's choice.",
+            "title": "Pick Correction"
           },
           "skip_blocked": {
             "default": false,
@@ -5450,15 +5645,26 @@
             "title": "Feed",
             "type": "boolean"
           },
-          "find_pocket": {
-            "default": true,
-            "description": "Find the pocket from the sprocket holes before picking.",
-            "title": "Find Pocket",
-            "type": "boolean"
-          },
           "nozzle_id": {
             "title": "Nozzle Id",
             "type": "string"
+          },
+          "pick_correction": {
+            "anyOf": [
+              {
+                "enum": [
+                  "top",
+                  "bottom",
+                  "off"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How to keep picks centered: 'top', find each tape pocket with the top camera first; 'bottom', move each pick by what the bottom camera saw of the feeder's earlier picks; 'off', neither. Empty: the config's choice.",
+            "title": "Pick Correction"
           },
           "slot_id": {
             "description": "A feeder slot, or a strip or tray on the bed (T1, ...).",
@@ -6767,6 +6973,54 @@
           }
         ],
         "summary": "Teach Fixed",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/learned/{source_id}": {
+      "delete": {
+        "description": "Forget what the bottom camera has learned of a slot's, strip's, or tray's picks.",
+        "operationId": "forget_learned_api_v1_feeders_learned__source_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedersState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Forget Learned",
         "tags": [
           "feeders"
         ]
@@ -8986,7 +9240,7 @@
     },
     "/api/v1/placement": {
       "get": {
-        "description": "What each nozzle holds, and how it sits on the nozzle once aligned.",
+        "description": "What each nozzle holds, how it sits on the nozzle once aligned, and how picks are\ncorrected unless asked otherwise.",
         "operationId": "placement_state_api_v1_placement_get",
         "responses": {
           "200": {

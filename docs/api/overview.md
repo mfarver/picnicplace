@@ -64,8 +64,9 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/feeders/fixed`; `PUT`, `DELETE …/fixed/{id}` | Strips and trays held on the bed (T1, T2, ...): add, change, remove |
 | `PUT /api/v1/feeders/fixed/{id}/teach` | Teach a strip or tray's first part, end of its first row, or last part (at the camera) |
 | `POST /api/v1/feeders/fixed/{id}/refill`, `…/pocket` | Mark it refilled; find a strip's next pocket from its sprocket holes |
+| `DELETE /api/v1/feeders/learned/{id}` | Forget what the bottom camera learned of a slot's, strip's, or tray's picks |
 | `GET`, `PUT /api/v1/bring-up` | The bring-up checklist's progress and findings |
-| `GET /api/v1/placement` | What each nozzle holds, and how it sits once aligned |
+| `GET /api/v1/placement` | What each nozzle holds, how it sits once aligned, and the configured pick correction |
 | `POST /api/v1/placement/pick`, `…/align`, `…/place` | Pick from a feeder slot; find the part on the bottom camera; place it at a location and angle |
 | `POST /api/v1/placement/pick-and-place`, `…/discard` | All three steps at once; drop a held part in the discard bin |
 | `POST /api/v1/run/plan` | A dry run of a saved job: each placement's feeder and nozzles, and what blocks any |

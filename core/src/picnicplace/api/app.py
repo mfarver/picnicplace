@@ -93,7 +93,9 @@ def create_app(config: Config | None = None) -> FastAPI:
             lambda: ctx.library,
             bundle.photon_sim,
         )
-        ctx.placement = PlacementService(machine, ctx.feeders, lambda: ctx.library)
+        ctx.placement = PlacementService(
+            machine, ctx.feeders, lambda: ctx.library, config.machine.pick_correction
+        )
         ctx.runner = JobRunner(
             machine,
             ctx.feeders,

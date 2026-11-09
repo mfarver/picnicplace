@@ -8,6 +8,7 @@ from pydantic import Field
 from picnicplace.api.context import Context, require, require_control
 from picnicplace.api.routes import MACHINE_ERRORS
 from picnicplace.auth import Permission
+from picnicplace.feeders.setup import PickCorrection
 from picnicplace.placement import PlacementService, PlacementState
 from picnicplace.schemas import Operation, WireModel
 
@@ -29,8 +30,13 @@ class PickRequest(WireModel):
     slot_id: str = Field(description="A feeder slot, or a strip or tray on the bed (T1, ...).")
     nozzle_id: str
     feed: bool = Field(default=True, description="Feed the tape first.")
-    find_pocket: bool = Field(
-        default=True, description="Find the pocket from the sprocket holes before picking."
+    pick_correction: PickCorrection | None = Field(
+        default=None,
+        description=(
+            "How to keep picks centered: 'top', find each tape pocket with the top camera "
+            "first; 'bottom', move each pick by what the bottom camera saw of the feeder's "
+            "earlier picks; 'off', neither. Empty: the config's choice."
+        ),
     )
 
 
@@ -63,13 +69,14 @@ def _operation(path: str, summary: str):
 
 @router.get("")
 async def placement_state(placement: Placement) -> PlacementState:
-    """What each nozzle holds, and how it sits on the nozzle once aligned."""
+    """What each nozzle holds, how it sits on the nozzle once aligned, and how picks are
+    corrected unless asked otherwise."""
     return placement.state()
 
 
 @_operation("/pick", "Pick a part from a feeder slot, strip, or tray")
 async def pick(placement: Placement, body: PickRequest) -> Operation:
-    return placement.start_pick(body.slot_id, body.nozzle_id, body.feed, body.find_pocket)
+    return placement.start_pick(body.slot_id, body.nozzle_id, body.feed, body.pick_correction)
 
 
 @_operation("/align", "Find a held part with the bottom camera")
@@ -85,7 +92,7 @@ async def place(placement: Placement, body: PlaceRequest) -> Operation:
 @_operation("/pick-and-place", "Pick, align, and place one part")
 async def pick_and_place(placement: Placement, body: PickAndPlaceRequest) -> Operation:
     return placement.start_pick_and_place(
-        body.slot_id, body.nozzle_id, body.x, body.y, body.rotation, body.feed, body.find_pocket
+        body.slot_id, body.nozzle_id, body.x, body.y, body.rotation, body.feed, body.pick_correction
     )
 
 

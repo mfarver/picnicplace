@@ -4,7 +4,8 @@ Each step is an operation, so a first run on a real machine can go one step at a
 
 - **Pick**: feed the slot's tape, find the pocket from the sprocket holes, put the nozzle
   over it, lower it to the top of the part, turn suction on, lift, and check the vacuum
-  says a part is held.
+  says a part is held. From a strip or tray on the bed (a fixed feeder, ID T1, T2, ...),
+  take the next part in order instead of feeding.
 - **Align**: carry the part over the bottom camera with its underside in focus, find it,
   and record where it sits on the nozzle and at what angle.
 - **Place**: turn the nozzle so the part has the angle asked for, put the part's center
@@ -104,14 +105,28 @@ class PlacementService:
 
     # --- Operations ----------------------------------------------------------------------
 
+    def _check_source(self, source_id: str, feed: bool) -> None:
+        """Raise now, not mid-task, if parts cannot come from this slot or strip/tray."""
+        if self._feeders.is_fixed(source_id):
+            self._feeders.next_fixed(source_id)
+            return
+        slot = self._feeders.slot(source_id)
+        if feed:
+            self._feeders.check_can_feed(slot)
+
+    def _source_part(self, source_id: str) -> tuple[Part | None, str]:
+        if self._feeders.is_fixed(source_id):
+            f = self._feeders.fixed(source_id)
+            return self._feeders.fixed_part(f), self._feeders.fixed_label(source_id)
+        slot = self._feeders.slot(source_id)
+        return self._feeders.part(slot), slot.label
+
     def start_pick(
         self, slot_id: str, nozzle_id: str, feed: bool = True, find_pocket: bool = True
     ) -> Operation:
-        slot = self._feeders.slot(slot_id)
         nozzle = self._machine.nozzle(nozzle_id)
         self._check_empty(nozzle)
-        if feed:
-            self._feeders.check_can_feed(slot)
+        self._check_source(slot_id, feed)
         return self._machine.start_task(
             "pick", lambda: self.pick(slot_id, nozzle, feed, find_pocket)
         )
@@ -142,14 +157,12 @@ class PlacementService:
         feed: bool = True,
         find_pocket: bool = True,
     ) -> Operation:
-        slot = self._feeders.slot(slot_id)
         nozzle = self._machine.nozzle(nozzle_id)
         self._check_empty(nozzle)
         self._bottom_camera()
-        part = self._feeders.part(slot)
-        self._part_height(part, slot.label)
-        if feed:
-            self._feeders.check_can_feed(slot)
+        part, label = self._source_part(slot_id)
+        self._part_height(part, label)
+        self._check_source(slot_id, feed)
 
         async def work() -> str:
             steps = [await self.pick(slot_id, nozzle, feed, find_pocket)]
@@ -187,6 +200,9 @@ class PlacementService:
     # --- Steps ---------------------------------------------------------------------------
 
     async def pick(self, slot_id: str, nozzle: Nozzle, feed: bool, find_pocket: bool) -> str:
+        """Pick from a feeder slot, or from a strip or tray on the bed by its ID."""
+        if self._feeders.is_fixed(slot_id):
+            return await self._pick_fixed(slot_id, nozzle, find_pocket)
         slot = self._feeders.slot(slot_id)
         bank = self._feeders.bank(slot)
         if bank.pick_height is None:
@@ -200,22 +216,8 @@ class PlacementService:
             check = await self._feeders.locate_pocket(slot)
             at = check.at
             found = f" (pocket {check.along:+.2f} mm along, {check.across:+.2f} mm across)"
-        await self._machine.move_nozzle_over(nozzle, at.x, at.y)
-        await self._machine.lower_nozzle(nozzle, bank.pick_height)
-        await self._machine.suction(nozzle, True)
-        await asyncio.sleep(PICK_DWELL_S)
-        await self._machine.raise_nozzles()
-        held = await self._machine.holds_part(nozzle, True, VACUUM_TIMEOUT_S)
-        if held is False:
-            await self._machine.suction(nozzle, False)
-            reading = self._machine.vacuum_reading(nozzle)
-            raise MispickError(
-                f"{nozzle.id} picked nothing from {slot.label}: the vacuum reads "
-                f"{reading:g}, not a part. Check the pocket and the pick height."
-                if reading is not None
-                else f"{nozzle.id} picked nothing from {slot.label}"
-            )
         tape_angle = slot.rotation + (part.tape.rotation if part and part.tape else 0.0)
+        await self._take(nozzle, at, bank.pick_height, slot.label)
         self._loads[nozzle.id] = NozzleLoad(
             nozzle=nozzle.id,
             part_id=part.id if part else None,
@@ -225,6 +227,53 @@ class PlacementService:
         )
         what = part.id if part else "a part"
         return f"{nozzle.id} picked {what} from {slot.label}{found}."
+
+    async def _pick_fixed(self, fixed_id: str, nozzle: Nozzle, find_pocket: bool) -> str:
+        feeders = self._feeders
+        f = feeders.fixed(fixed_id)
+        label = feeders.fixed_label(fixed_id)
+        part = feeders.fixed_part(f)
+        height = feeders.fixed_pick_height(f, label)
+        angle = feeders.fixed_angle(f)
+        if angle is None:
+            raise PlacementError(
+                f"{label}: {f.part_id or 'its part'} has no tape rotation in the parts library"
+            )
+        index, at = feeders.next_fixed(fixed_id)
+        found = ""
+        if find_pocket and f.kind == "strip":
+            check = await feeders.locate_strip_pocket(fixed_id)
+            at = check.at
+            found = f" (pocket {check.along:+.2f} mm along, {check.across:+.2f} mm across)"
+        feeders.took_fixed(fixed_id)  # tried or taken, that pocket is done with
+        await self._take(nozzle, at, height, label)
+        self._loads[nozzle.id] = NozzleLoad(
+            nozzle=nozzle.id,
+            part_id=part.id if part else None,
+            slot_id=fixed_id,
+            angle=wrap(angle - self._machine.nozzle_angle(nozzle)),
+            alignment=None,
+        )
+        what = part.id if part else "a part"
+        return f"{nozzle.id} picked {what} number {index + 1} from {label}{found}."
+
+    async def _take(self, nozzle: Nozzle, at: Point, height: float, label: str) -> None:
+        """Lower onto a part, take it with suction, lift, and check it came up."""
+        await self._machine.move_nozzle_over(nozzle, at.x, at.y)
+        await self._machine.lower_nozzle(nozzle, height)
+        await self._machine.suction(nozzle, True)
+        await asyncio.sleep(PICK_DWELL_S)
+        await self._machine.raise_nozzles()
+        held = await self._machine.holds_part(nozzle, True, VACUUM_TIMEOUT_S)
+        if held is False:
+            await self._machine.suction(nozzle, False)
+            reading = self._machine.vacuum_reading(nozzle)
+            raise MispickError(
+                f"{nozzle.id} picked nothing from {label}: the vacuum reads "
+                f"{reading:g}, not a part. Check the pocket and the pick height."
+                if reading is not None
+                else f"{nozzle.id} picked nothing from {label}"
+            )
 
     async def align(self, nozzle: Nozzle) -> str:
         load = self._load(nozzle)

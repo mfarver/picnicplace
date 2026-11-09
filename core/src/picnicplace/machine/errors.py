@@ -82,6 +82,12 @@ class FeederError(MachineError):
     code = "feeder_failed"
 
 
+class FeederEmptyError(FeederError):
+    """A strip or tray on the bed has no parts left: the operator must refill it."""
+
+    code = "feeder_empty"
+
+
 class NotSupportedError(MachineError):
     """The machine or its driver cannot do this."""
 

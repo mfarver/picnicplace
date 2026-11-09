@@ -205,6 +205,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/feeders/fixed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Fixed
+         * @description Add a strip of tape or a tray of parts held on the bed. It gets the next free ID:
+         *     T1, T2, and so on.
+         */
+        post: operations["add_fixed_api_v1_feeders_fixed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/fixed/{fixed_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Fixed
+         * @description Change a strip or tray (or add one with this ID).
+         */
+        put: operations["put_fixed_api_v1_feeders_fixed__fixed_id__put"];
+        post?: never;
+        /** Remove Fixed */
+        delete: operations["remove_fixed_api_v1_feeders_fixed__fixed_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/fixed/{fixed_id}/pocket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Locate Strip Pocket
+         * @description Find a strip's next pocket from its sprocket holes, and center the camera on it.
+         */
+        post: operations["locate_strip_pocket_api_v1_feeders_fixed__fixed_id__pocket_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/fixed/{fixed_id}/refill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refill
+         * @description The strip or tray was refilled: start again from its first part.
+         */
+        post: operations["refill_api_v1_feeders_fixed__fixed_id__refill_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/fixed/{fixed_id}/teach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Teach Fixed
+         * @description Teach where a part of a strip or tray is: by default, where the top camera is
+         *     centered now. Teach the first part before the others.
+         */
+        put: operations["teach_fixed_api_v1_feeders_fixed__fixed_id__teach_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/feeders/scan": {
         parameters: {
             query?: never;
@@ -898,7 +1001,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Pick a part from a feeder slot */
+        /** Pick a part from a feeder slot, strip, or tray */
         post: operations["pick_api_v1_placement_pick_post"];
         delete?: never;
         options?: never;
@@ -1628,6 +1731,8 @@ export interface components {
             fiducial_offset: components["schemas"]["Point"] | null;
             /** Fiducial Offset Source */
             fiducial_offset_source: ("measured" | "profile") | null;
+            /** Fixed */
+            fixed: components["schemas"]["FixedFeederState"][];
             /** Scanned */
             scanned: boolean;
             /** Slots */
@@ -1656,6 +1761,142 @@ export interface components {
              * @enum {string}
              */
             kind: "footprint" | "part";
+        };
+        /**
+         * FixedFeeder
+         * @description A strip of tape or a tray of parts held in place on the bed. Parts are taken in
+         *     order: along the first row, then the next row, and so on.
+         */
+        "FixedFeeder-Input": {
+            /**
+             * Columns
+             * @description Parts in each row.
+             */
+            columns: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** @description Center of the first part, in machine coordinates. */
+            first: components["schemas"]["Point"];
+            /**
+             * Kind
+             * @description A strip of tape (cover film peeled back), or a tray of parts. A strip's parts take their angle from the tape; a tray's from part_angle.
+             * @enum {string}
+             */
+            kind: "strip" | "tray";
+            /**
+             * Label
+             * @description What the owner calls it, such as '24 mm holder'.
+             * @default
+             */
+            label: string;
+            /**
+             * Part Angle
+             * @description Trays: the machine angle of the part's 0 degree direction (its footprint's +X), the same for every part.
+             * @default 0
+             */
+            part_angle: number;
+            /**
+             * Part Id
+             * @description Library part it holds.
+             */
+            part_id?: string | null;
+            /**
+             * Pick Height
+             * @description Nozzle height at the top of a part. Empty: the board height plus the part's height, which is right only for parts lying on the bed itself.
+             */
+            pick_height?: number | null;
+            /**
+             * Picked
+             * @description Parts taken (or tried) so far.
+             * @default 0
+             */
+            picked: number;
+            /** @description From the first part of one row to the first part of the next. */
+            row_step?: components["schemas"]["Point"];
+            /**
+             * Rows
+             * @default 1
+             */
+            rows: number;
+            /** @description From one part to the next along a row, in mm. On a strip, from one pocket to the next one to pick: against the direction the tape would feed. */
+            step: components["schemas"]["Point"];
+        };
+        /**
+         * FixedFeeder
+         * @description A strip of tape or a tray of parts held in place on the bed. Parts are taken in
+         *     order: along the first row, then the next row, and so on.
+         */
+        "FixedFeeder-Output": {
+            /**
+             * Columns
+             * @description Parts in each row.
+             */
+            columns: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** @description Center of the first part, in machine coordinates. */
+            first: components["schemas"]["Point"];
+            /**
+             * Kind
+             * @description A strip of tape (cover film peeled back), or a tray of parts. A strip's parts take their angle from the tape; a tray's from part_angle.
+             * @enum {string}
+             */
+            kind: "strip" | "tray";
+            /**
+             * Label
+             * @description What the owner calls it, such as '24 mm holder'.
+             * @default
+             */
+            label: string;
+            /**
+             * Part Angle
+             * @description Trays: the machine angle of the part's 0 degree direction (its footprint's +X), the same for every part.
+             * @default 0
+             */
+            part_angle: number;
+            /**
+             * Part Id
+             * @description Library part it holds.
+             */
+            part_id: string | null;
+            /**
+             * Pick Height
+             * @description Nozzle height at the top of a part. Empty: the board height plus the part's height, which is right only for parts lying on the bed itself.
+             */
+            pick_height: number | null;
+            /**
+             * Picked
+             * @description Parts taken (or tried) so far.
+             * @default 0
+             */
+            picked: number;
+            /** @description From the first part of one row to the first part of the next. */
+            row_step: components["schemas"]["Point"];
+            /**
+             * Rows
+             * @default 1
+             */
+            rows: number;
+            /** @description From one part to the next along a row, in mm. On a strip, from one pocket to the next one to pick: against the direction the tape would feed. */
+            step: components["schemas"]["Point"];
+        };
+        /** FixedFeederState */
+        FixedFeederState: {
+            /** Angle */
+            angle: number | null;
+            feeder: components["schemas"]["FixedFeeder-Output"];
+            /** Id */
+            id: string;
+            next: components["schemas"]["Point"] | null;
+            pocket: components["schemas"]["PocketCheck"] | null;
+            /** Remaining */
+            remaining: number;
         };
         /**
          * Footprint
@@ -2864,7 +3105,10 @@ export interface components {
              * @default 0
              */
             rotation: number;
-            /** Slot Id */
+            /**
+             * Slot Id
+             * @description A feeder slot, or a strip or tray on the bed (T1, ...).
+             */
             slot_id: string;
             /** X */
             x: number;
@@ -3092,6 +3336,15 @@ export interface components {
             /** Y Min */
             y_min: number;
         };
+        /** RefillRequest */
+        RefillRequest: {
+            /**
+             * Picked
+             * @description Parts already gone from the start of it. 0: it is full.
+             * @default 0
+             */
+            picked: number;
+        };
         /** RunItem */
         RunItem: {
             /** Copy Id */
@@ -3133,7 +3386,7 @@ export interface components {
             rotation: number;
             /**
              * Slot Id
-             * @description The feeder slot to pick from.
+             * @description The feeder slot to pick from, or a strip or tray on the bed (T1, ...).
              */
             slot_id: string | null;
             /**
@@ -3465,6 +3718,17 @@ export interface components {
              */
             width: number | null;
         };
+        /** TeachPartRequest */
+        TeachPartRequest: {
+            /** @description Where the part is. Empty: where the top camera is now. */
+            at?: components["schemas"]["Point"] | null;
+            /**
+             * Which
+             * @description The first part; the last part of the first row (sets the step along a row); or the last part of the last row (sets the step from row to row).
+             * @enum {string}
+             */
+            which: "first" | "row_end" | "last";
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -3510,7 +3774,10 @@ export interface components {
             find_pocket: boolean;
             /** Nozzle Id */
             nozzle_id: string;
-            /** Slot Id */
+            /**
+             * Slot Id
+             * @description A feeder slot, or a strip or tray on the bed (T1, ...).
+             */
             slot_id: string;
         };
     };
@@ -4001,6 +4268,266 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_fixed_api_v1_feeders_fixed_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FixedFeeder-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedFeederState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_fixed_api_v1_feeders_fixed__fixed_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fixed_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FixedFeeder-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedFeederState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_fixed_api_v1_feeders_fixed__fixed_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fixed_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedersState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    locate_strip_pocket_api_v1_feeders_fixed__fixed_id__pocket_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                fixed_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refill_api_v1_feeders_fixed__fixed_id__refill_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fixed_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefillRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedFeederState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    teach_fixed_api_v1_feeders_fixed__fixed_id__teach_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                fixed_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeachPartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedFeederState"];
                 };
             };
             /** @description The machine cannot do this right now, or this client does not hold the control lease. */

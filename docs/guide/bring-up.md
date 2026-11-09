@@ -88,6 +88,13 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       each slot's pick location.
 - [ ] Feed a few times, then **Find pocket**. It finds the sprocket holes and centers the
       camera on the next part's pocket.
+- [ ] For parts held on the bed (a cut strip of 24 mm tape in a holder, or a tray), use
+      **Add strip or tray** under **Strips and trays**. Give it its part, the number of
+      parts (and rows, for a tray), and a pick height: the nozzle height at the top of a
+      part, measured with the nozzle jogged down onto one. Center the camera on the first
+      part and click **First part**, then on the last part and click **Last part** (on a
+      tray, also the end of the first row). On a strip, **Find pocket** should land on
+      the next part. The map shows how many parts each one has left.
 
 ## 6. One part
 
@@ -119,6 +126,11 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
 - [ ] **Step** places one part on each nozzle and pauses again. Check them, then
       **Resume**. A jammed feeder or a failed pick pauses the run with the parts already
       on the nozzles kept there; fix it and resume, or skip that placement.
+- [ ] With a part on a strip or tray, the run takes them in order and pauses when one is
+      empty, with the nozzles up and the head moved out of the way: to the park
+      location, if `[[machine.locations]]` in the config has one (`kind = "park"`, its
+      position the head's X and Y), or else to the back of its travel. Refill it, click
+      **Refilled** (in the Run workspace's **Strips and trays** panel), and resume.
 
 ## 8. Measure what the profile only estimates
 

@@ -400,8 +400,21 @@ correction. Implementations:
   - The simulator has Photon feeders on its bus (and the fake firmware answers `M485`),
     with tape, parts from the library, a fiducial, a fixed error per slot, and feeders
     that step 1% long, so all of the above runs without hardware.
-- **Strip feeders** (cut tape on a fixture) with vision-located sprocket holes. 1.0.
-- **Tray feeders** (grid of parts). 1.0.
+- **Strip and tray feeders** (fixed feeders: cut tape on a fixture, or a grid of parts in
+  a tray), supported. Each is kept in the feeder setup by ID (T1, T2, ...) with its
+  part, the first part's location, the step along a row and from row to row, the
+  number of parts and rows, a pick height, and how many parts have been taken. Parts
+  are taken along each row, then row by row; every pick, taken or not, moves on to the
+  next part. The first part, the end of the first row, and the last part are taught
+  with the top camera. A strip's parts take their angle from the part's tape, and its
+  next pocket can be found from its sprocket holes (the camera looks at the holes, since
+  on wide tape they are out of view from the pocket); a tray's parts have one angle.
+  The planner uses feeder slots first, warns when a strip or tray has fewer parts than
+  the job takes from it, and lets a part on tape too wide for the feeders come from a
+  strip. An empty one pauses the run until the operator marks it refilled, with the nozzles
+  raised and the head moved to the owner's park location (or, without one, to the back
+  of its travel) so it is out of the way. The machine
+  map shows each with the parts left.
 - Push-pull/drag feeders and tube feeders. Post-1.0.
 
 ### 7.5 Vision

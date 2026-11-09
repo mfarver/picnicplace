@@ -49,3 +49,5 @@ export type CaptureInfo = Schemas["CaptureInfo"];
 export type JobPlan = Schemas["JobPlan"];
 export type RunItem = Schemas["RunItem"];
 export type RunState = Schemas["RunState"];
+export type FixedFeeder = Schemas["FixedFeeder-Output"];
+export type FixedFeederState = Schemas["FixedFeederState"];

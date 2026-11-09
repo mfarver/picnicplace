@@ -22,7 +22,8 @@ function describe(load: NozzleLoad): string {
   const aligned = a
     ? `aligned: ${Math.hypot(a.dx, a.dy).toFixed(2)} mm off center`
     : "not aligned yet";
-  return `${what} from slot ${load.slot_id}, ${aligned}`;
+  const from = /^\d+$/.test(load.slot_id) ? `slot ${load.slot_id}` : load.slot_id;
+  return `${what} from ${from}, ${aligned}`;
 }
 
 /**
@@ -75,8 +76,20 @@ export function PlacementPanel({
     };
   }, [status, finished]);
 
-  const slots = (feeders?.slots ?? []).filter((s) => s.feeder);
-  const chosenSlot = slot || slots[0]?.slot.id || "";
+  // Feeder slots with a feeder, then strips and trays on the bed.
+  const slots = [
+    ...(feeders?.slots ?? [])
+      .filter((s) => s.feeder)
+      .map((s) => ({
+        id: s.slot.id,
+        label: `${s.slot.label}: ${s.feeder?.assignment?.part_id ?? "no part"}`,
+      })),
+    ...(feeders?.fixed ?? []).map((f) => ({
+      id: f.id,
+      label: `${f.id}: ${f.feeder.part_id ?? "no part"} (${f.remaining} left)`,
+    })),
+  ];
+  const chosenSlot = slot || slots[0]?.id || "";
   const camera = description.cameras.find((c) => c.mount === "head" && c.looking === "down");
   const here = () => {
     if (!machine || !camera) return;
@@ -126,8 +139,8 @@ export function PlacementPanel({
           >
             {slots.length === 0 && <option value="">Scan the feeders first</option>}
             {slots.map((s) => (
-              <option key={s.slot.id} value={s.slot.id}>
-                {s.slot.label}: {s.feeder?.assignment?.part_id ?? "no part"}
+              <option key={s.id} value={s.id}>
+                {s.label}
               </option>
             ))}
           </select>

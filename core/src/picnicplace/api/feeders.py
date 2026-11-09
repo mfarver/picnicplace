@@ -1,6 +1,6 @@
 """Feeders and the bring-up record, under /api/v1."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import Field
@@ -10,8 +10,8 @@ from picnicplace.api.routes import MACHINE_ERRORS
 from picnicplace.auth import Permission
 from picnicplace.bringup import BringUpRecord
 from picnicplace.feeders.photon import parse_uuid
-from picnicplace.feeders.service import FeederService, FeedersState
-from picnicplace.feeders.setup import FeederAssignment
+from picnicplace.feeders.service import FeederService, FeedersState, FixedFeederState
+from picnicplace.feeders.setup import FeederAssignment, FixedFeeder
 from picnicplace.machine.profile import Point
 from picnicplace.schemas import Operation, WireModel
 
@@ -177,6 +177,99 @@ async def assign(feeders: Feeders, feeder_id: str, body: FeederAssignment) -> Fe
 async def forget(feeders: Feeders, feeder_id: str) -> FeedersState:
     feeders.forget(feeder_id.upper())
     return feeders.state()
+
+
+class RefillRequest(WireModel):
+    picked: int = Field(
+        default=0, ge=0, description="Parts already gone from the start of it. 0: it is full."
+    )
+
+
+class TeachPartRequest(WireModel):
+    which: Literal["first", "row_end", "last"] = Field(
+        description=(
+            "The first part; the last part of the first row (sets the step along a row); "
+            "or the last part of the last row (sets the step from row to row)."
+        )
+    )
+    at: Point | None = Field(
+        default=None, description="Where the part is. Empty: where the top camera is now."
+    )
+
+
+@router.post(
+    "/feeders/fixed",
+    tags=["feeders"],
+    status_code=status.HTTP_201_CREATED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require(Permission.JOB))],
+)
+async def add_fixed(feeders: Feeders, body: FixedFeeder) -> FixedFeederState:
+    """Add a strip of tape or a tray of parts held on the bed. It gets the next free ID:
+    T1, T2, and so on."""
+    return feeders.fixed_state(feeders.add_fixed(body))
+
+
+@router.put(
+    "/feeders/fixed/{fixed_id}",
+    tags=["feeders"],
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require(Permission.JOB))],
+)
+async def put_fixed(feeders: Feeders, fixed_id: str, body: FixedFeeder) -> FixedFeederState:
+    """Change a strip or tray (or add one with this ID)."""
+    feeders.put_fixed(fixed_id, body)
+    return feeders.fixed_state(fixed_id)
+
+
+@router.delete(
+    "/feeders/fixed/{fixed_id}",
+    tags=["feeders"],
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require(Permission.JOB))],
+)
+async def remove_fixed(feeders: Feeders, fixed_id: str) -> FeedersState:
+    feeders.remove_fixed(fixed_id)
+    return feeders.state()
+
+
+@router.post(
+    "/feeders/fixed/{fixed_id}/refill",
+    tags=["feeders"],
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require(Permission.JOB))],
+)
+async def refill(feeders: Feeders, fixed_id: str, body: RefillRequest) -> FixedFeederState:
+    """The strip or tray was refilled: start again from its first part."""
+    feeders.refill(fixed_id, body.picked)
+    return feeders.fixed_state(fixed_id)
+
+
+@router.put(
+    "/feeders/fixed/{fixed_id}/teach",
+    tags=["feeders"],
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def teach_fixed(
+    ctx: Context, feeders: Feeders, fixed_id: str, body: TeachPartRequest
+) -> FixedFeederState:
+    """Teach where a part of a strip or tray is: by default, where the top camera is
+    centered now. Teach the first part before the others."""
+    feeders.teach_fixed(fixed_id, body.which, body.at or ctx.machine.camera_position())
+    return feeders.fixed_state(fixed_id)
+
+
+@router.post(
+    "/feeders/fixed/{fixed_id}/pocket",
+    tags=["feeders"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def locate_strip_pocket(feeders: Feeders, fixed_id: str) -> Operation:
+    """Find a strip's next pocket from its sprocket holes, and center the camera on it."""
+    return feeders.start_locate_strip_pocket(fixed_id)
 
 
 def _check_feeder_id(feeder_id: str) -> None:

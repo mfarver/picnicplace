@@ -17,6 +17,8 @@ import { useCameras } from "../api/useCameras";
 import { useMachineControl } from "../api/useMachineControl";
 import type { FeedersState, MachineProfile, Part, SlotState } from "../api/types";
 import { CameraView } from "../components/CameraView";
+import { FixedFeederDetail, type TeachWhich } from "../components/FixedFeederDetail";
+import { FixedFeederPanel } from "../components/FixedFeederPanel";
 import { Field, NumberInput } from "../components/Form";
 import { JogPanel } from "../components/JogPanel";
 import { Panel } from "../components/Panel";
@@ -34,6 +36,7 @@ export function FeedersWorkspace() {
   const [state, setState] = useState<FeedersState | null>(null);
   const [parts, setParts] = useState<Part[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedFixed, setSelectedFixed] = useState<string | null>(null);
   const [onlyFound, setOnlyFound] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -66,6 +69,7 @@ export function FeedersWorkspace() {
   }, [finished]);
 
   const slot = state?.slots.find((s) => s.slot.id === selected) ?? null;
+  const fixed = state?.fixed.find((f) => f.id === selectedFixed) ?? null;
   const camera = description?.cameras.find((c) => c.mount === "head" && c.looking === "down");
 
   const cameraTo = (x: number, y: number) => {
@@ -107,6 +111,59 @@ export function FeedersWorkspace() {
     void track(() => api.POST("/api/v1/feeders/slots/{slot_id}/pocket", slotPath(id)));
   const measureFiducial = (id: string) =>
     void track(() => api.POST("/api/v1/feeders/slots/{slot_id}/fiducial", slotPath(id)));
+  const refresh = async () => {
+    const { data } = await api.GET("/api/v1/feeders");
+    if (data) setState(data);
+  };
+  const fixedPath = (id: string) => ({ params: { path: { fixed_id: id } } });
+  const addFixed = async () => {
+    // Start where the camera is, if the machine knows; the operator teaches the rest.
+    const here =
+      camera && machine?.homed && machine.position.X !== undefined && machine.position.Y !== undefined
+        ? { x: machine.position.X + camera.position.x, y: machine.position.Y + camera.position.y }
+        : description
+          ? {
+              x: (description.bed.x_min + description.bed.x_max) / 2,
+              y: (description.bed.y_min + description.bed.y_max) / 2,
+            }
+          : { x: 0, y: 0 };
+    const created = await run(() =>
+      api.POST("/api/v1/feeders/fixed", {
+        body: {
+          label: "",
+          kind: "strip",
+          part_id: null,
+          first: { x: Math.round(here.x * 100) / 100, y: Math.round(here.y * 100) / 100 },
+          step: { x: -4, y: 0 },
+          columns: 10,
+          rows: 1,
+          row_step: { x: 0, y: 0 },
+          part_angle: 0,
+          pick_height: null,
+          picked: 0,
+          enabled: true,
+        },
+      }),
+    );
+    if (!created) return;
+    await refresh();
+    setSelected(null);
+    setSelectedFixed(created.id);
+  };
+  const teachFixed = async (id: string, which: TeachWhich) => {
+    const data = await run(() =>
+      api.PUT("/api/v1/feeders/fixed/{fixed_id}/teach", {
+        ...fixedPath(id),
+        body: { which, at: null },
+      }),
+    );
+    if (data) {
+      await refresh();
+      setNotice(`${id}: taught at the camera's position.`);
+    }
+  };
+  const findStripPocket = (id: string) =>
+    void track(() => api.POST("/api/v1/feeders/fixed/{fixed_id}/pocket", fixedPath(id)));
   const calibrate = () =>
     void track(() => api.POST("/api/v1/feeders/calibrate", { body: { slot_ids: [] } }));
 
@@ -194,6 +251,7 @@ export function FeedersWorkspace() {
                   className={s.slot.id === selected ? "item active" : "item"}
                   onClick={() => {
                     setSelected(s.slot.id);
+                    setSelectedFixed(null);
                     setNotice(null);
                   }}
                 >
@@ -216,6 +274,20 @@ export function FeedersWorkspace() {
           </ul>
         </Panel>
 
+        {state && (
+          <FixedFeederPanel
+            fixed={state.fixed}
+            onChanged={setState}
+            selected={selectedFixed}
+            onSelect={(id) => {
+              setSelectedFixed(id);
+              setSelected(null);
+              setNotice(null);
+            }}
+            onAdd={() => void addFixed()}
+          />
+        )}
+
         <JogPanel
           description={description}
           machine={machine}
@@ -232,7 +304,23 @@ export function FeedersWorkspace() {
           canMove={canMove && !!machine?.homed}
           onMoveTo={(p) => cameraTo(p.x, p.y)}
           overlay={state && <SlotOverlay slots={state.slots} selected={selected} />}
+          fixedFeeders={state?.fixed}
+          selectedFixed={selectedFixed}
         />
+        {fixed && (
+          <FixedFeederDetail
+            key={fixed.id}
+            state={fixed}
+            parts={parts}
+            canMove={canMove && !!machine?.homed}
+            canActuate={canActuate && !ctl.pending}
+            onGoTo={(p) => cameraTo(p.x, p.y)}
+            onTeach={(which) => void teachFixed(fixed.id, which)}
+            onPocket={() => findStripPocket(fixed.id)}
+            onChanged={setState}
+            onRemoved={() => setSelectedFixed(null)}
+          />
+        )}
         {slot && (
           <SlotDetail
             key={slot.slot.id}

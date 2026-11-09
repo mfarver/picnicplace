@@ -2063,3 +2063,32 @@ code,
 .learned-picks p {
   margin: 0 0 var(--space-1);
 }
+
+/* Flight recorder. */
+.rec-live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
+  color: var(--danger);
+}
+.rec-live svg {
+  fill: currentColor;
+}
+.rec-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+.rec-what {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.rec-what span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

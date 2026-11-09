@@ -48,6 +48,7 @@ export function RunWorkspace() {
   const [correction, setCorrection] = useState<PickCorrection | null>(null);
   const [configured, setConfigured] = useState<PickCorrection>();
   const [skipBlocked, setSkipBlocked] = useState(false);
+  const [record, setRecord] = useState(false);
   const [checking, setChecking] = useState(0);
 
   const controlledElsewhere = !!core.lease?.holder && !hasControl(core);
@@ -138,7 +139,12 @@ export function RunWorkspace() {
   const start = async () => {
     const op = await act(() =>
       api.POST("/api/v1/run/start", {
-        body: { job_id: chosen, skip_blocked: skipBlocked, pick_correction: correction },
+        body: {
+          job_id: chosen,
+          skip_blocked: skipBlocked,
+          pick_correction: correction,
+          record,
+        },
       }),
     );
     if (op) await refresh();
@@ -214,6 +220,14 @@ export function RunWorkspace() {
                   configured={configured}
                 />
               </Field>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={record}
+                  onChange={(e) => setRecord(e.target.checked)}
+                />
+                Record it, to send to PicnicPlace's developers
+              </label>
               {blocked > 0 && (
                 <label className="check">
                   <input

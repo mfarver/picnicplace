@@ -9,10 +9,12 @@ import type {
   MachineState,
   NozzleLoad,
   Operation,
+  PickCorrection,
   PlacementState,
 } from "../api/types";
 import { Field, NumberInput } from "./Form";
 import { Panel } from "./Panel";
+import { PickCorrectionSelect } from "./PickCorrection";
 
 const KINDS = new Set(["pick", "align", "place", "pick_and_place", "discard"]);
 
@@ -47,7 +49,7 @@ export function PlacementPanel({
   const [nozzle, setNozzle] = useState(description.nozzles[0]?.id ?? "");
   const [slot, setSlot] = useState("");
   const [feed, setFeed] = useState(true);
-  const [findPocket, setFindPocket] = useState(true);
+  const [correction, setCorrection] = useState<PickCorrection | null>(null);
   const [x, setX] = useState<number | null>(null);
   const [y, setY] = useState<number | null>(null);
   const [rotation, setRotation] = useState<number | null>(0);
@@ -107,7 +109,7 @@ export function PlacementPanel({
   const loads = placement?.loads ?? [];
   const load = loads.find((l) => l.nozzle === nozzle);
 
-  const pick = { slot_id: chosenSlot, nozzle_id: nozzle, feed, find_pocket: findPocket };
+  const pick = { slot_id: chosenSlot, nozzle_id: nozzle, feed, pick_correction: correction };
   const place = { nozzle_id: nozzle, x: x ?? 0, y: y ?? 0, rotation: rotation ?? 0 };
 
   const result =
@@ -151,15 +153,14 @@ export function PlacementPanel({
           <input type="checkbox" checked={feed} onChange={(e) => setFeed(e.target.checked)} />
           Feed first
         </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={findPocket}
-            onChange={(e) => setFindPocket(e.target.checked)}
-          />
-          Find the pocket
-        </label>
       </div>
+      <Field label="Keep picks centered with">
+        <PickCorrectionSelect
+          value={correction}
+          onChange={setCorrection}
+          configured={placement?.pick_correction}
+        />
+      </Field>
       <div className="placement-target">
         <Field label="X">
           <NumberInput value={x} onChange={setX} />

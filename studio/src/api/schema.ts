@@ -308,6 +308,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/feeders/learned/{source_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget Learned
+         * @description Forget what the bottom camera has learned of a slot's, strip's, or tray's picks.
+         */
+        delete: operations["forget_learned_api_v1_feeders_learned__source_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/feeders/scan": {
         parameters: {
             query?: never;
@@ -947,7 +967,8 @@ export interface paths {
         };
         /**
          * Placement State
-         * @description What each nozzle holds, and how it sits on the nozzle once aligned.
+         * @description What each nozzle holds, how it sits on the nozzle once aligned, and how picks are
+         *     corrected unless asked otherwise.
          */
         get: operations["placement_state_api_v1_placement_get"];
         put?: never;
@@ -1893,6 +1914,7 @@ export interface components {
             feeder: components["schemas"]["FixedFeeder-Output"];
             /** Id */
             id: string;
+            learned: components["schemas"]["PickLearning"] | null;
             next: components["schemas"]["Point"] | null;
             pocket: components["schemas"]["PocketCheck"] | null;
             /** Remaining */
@@ -2781,10 +2803,16 @@ export interface components {
             alignment: components["schemas"]["Alignment"] | null;
             /** Angle */
             angle: number;
+            base: components["schemas"]["Point"] | null;
+            /** Correction */
+            correction: ("top" | "bottom" | "off") | null;
             /** Nozzle */
             nozzle: string;
             /** Part Id */
             part_id: string | null;
+            /** Pick Angle */
+            pick_angle: number | null;
+            picked_at: components["schemas"]["Point"] | null;
             /** Slot Id */
             slot_id: string;
         };
@@ -3092,14 +3120,13 @@ export interface components {
              * @default true
              */
             feed: boolean;
-            /**
-             * Find Pocket
-             * @description Find the pocket from the sprocket holes before picking.
-             * @default true
-             */
-            find_pocket: boolean;
             /** Nozzle Id */
             nozzle_id: string;
+            /**
+             * Pick Correction
+             * @description How to keep picks centered: 'top', find each tape pocket with the top camera first; 'bottom', move each pick by what the bottom camera saw of the feeder's earlier picks; 'off', neither. Empty: the config's choice.
+             */
+            pick_correction?: ("top" | "bottom" | "off") | null;
             /**
              * Rotation
              * @default 0
@@ -3114,6 +3141,55 @@ export interface components {
             x: number;
             /** Y */
             y: number;
+        };
+        /**
+         * PickLearning
+         * @description What the bottom camera has seen of one feeder's picks.
+         */
+        PickLearning: {
+            /**
+             * Feeder
+             * @description Photon feeders: the ID of the feeder in the slot then. Learning from another feeder does not carry over.
+             */
+            feeder: string | null;
+            /**
+             * Misses
+             * @description How far off center its picks have been, by how they were corrected.
+             */
+            misses: {
+                [key: string]: components["schemas"]["PickMisses"];
+            };
+            /** @description Where its parts really lie, minus where the rest of the setup puts them. A pick with the bottom camera's correction goes there. */
+            offset: components["schemas"]["Point"];
+            /**
+             * Samples
+             * @description Picks it has learned from.
+             */
+            samples: number;
+        };
+        /**
+         * PickMisses
+         * @description How far off center the picks made one way have been.
+         */
+        PickMisses: {
+            /**
+             * Count
+             * @description Picks seen by the bottom camera.
+             * @default 0
+             */
+            count: number;
+            /**
+             * Last
+             * @description The latest pick's distance, in mm.
+             * @default 0
+             */
+            last: number;
+            /**
+             * Mean
+             * @description Mean distance in mm of the part's center from the nozzle's axis, over the last 20 picks at most.
+             * @default 0
+             */
+            mean: number;
         };
         /** PlaceRequest */
         PlaceRequest: {
@@ -3242,6 +3318,11 @@ export interface components {
         PlacementState: {
             /** Loads */
             loads: components["schemas"]["NozzleLoad"][];
+            /**
+             * Pick Correction
+             * @enum {string}
+             */
+            pick_correction: "top" | "bottom" | "off";
         };
         /** PlanRequest */
         PlanRequest: {
@@ -3409,11 +3490,6 @@ export interface components {
              * @description Why the run paused, if it did.
              */
             error: string | null;
-            /**
-             * Find Pockets
-             * @default true
-             */
-            find_pockets: boolean;
             /** Finished At */
             finished_at: string | null;
             fix: components["schemas"]["BoardFix"] | null;
@@ -3435,6 +3511,12 @@ export interface components {
              * @default false
              */
             pause_requested: boolean;
+            /**
+             * Pick Correction
+             * @default top
+             * @enum {string}
+             */
+            pick_correction: "top" | "bottom" | "off";
             /** Placed */
             readonly placed: number;
             plan: components["schemas"]["JobPlan"];
@@ -3511,6 +3593,7 @@ export interface components {
             /** Error */
             error: string | null;
             feeder: components["schemas"]["FeederState"] | null;
+            learned: components["schemas"]["PickLearning"] | null;
             pick: components["schemas"]["Point"];
             pocket: components["schemas"]["PocketCheck"] | null;
             slot: components["schemas"]["Slot"];
@@ -3569,14 +3652,13 @@ export interface components {
         };
         /** StartRequest */
         StartRequest: {
-            /**
-             * Find Pockets
-             * @description Find each pocket from the sprocket holes before picking.
-             * @default true
-             */
-            find_pockets: boolean;
             /** Job Id */
             job_id: string;
+            /**
+             * Pick Correction
+             * @description How to keep picks centered: 'top', find each tape pocket with the top camera first; 'bottom', move each pick by what the bottom camera saw of the feeder's earlier picks; 'off', neither. Empty: the config's choice.
+             */
+            pick_correction?: ("top" | "bottom" | "off") | null;
             /**
              * Skip Blocked
              * @description Start even if some placements are blocked, skipping them.
@@ -3766,14 +3848,13 @@ export interface components {
              * @default true
              */
             feed: boolean;
-            /**
-             * Find Pocket
-             * @description Find the pocket from the sprocket holes before picking.
-             * @default true
-             */
-            find_pocket: boolean;
             /** Nozzle Id */
             nozzle_id: string;
+            /**
+             * Pick Correction
+             * @description How to keep picks centered: 'top', find each tape pocket with the top camera first; 'bottom', move each pick by what the bottom camera saw of the feeder's earlier picks; 'off', neither. Empty: the config's choice.
+             */
+            pick_correction?: ("top" | "bottom" | "off") | null;
             /**
              * Slot Id
              * @description A feeder slot, or a strip or tray on the bed (T1, ...).
@@ -4537,6 +4618,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forget_learned_api_v1_feeders_learned__source_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedersState"];
                 };
             };
             /** @description Validation Error */

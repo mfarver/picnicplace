@@ -22,6 +22,7 @@ import { FixedFeederPanel } from "../components/FixedFeederPanel";
 import { Field, NumberInput } from "../components/Form";
 import { JogPanel } from "../components/JogPanel";
 import { Panel } from "../components/Panel";
+import { LearnedPicks } from "../components/PickCorrection";
 import { Placeholder } from "../components/Placeholder";
 import { MachineView } from "../components/machine/MachineView";
 
@@ -520,6 +521,7 @@ function SlotDetail(p: DetailProps) {
           {fmt(slot.pocket.across)} mm across ({slot.pocket.holes} sprocket holes).
         </p>
       )}
+      <LearnedPicks sourceId={slot.slot.id} learned={slot.learned} onChanged={p.onAssigned} />
       <div className="button-row">
         <button type="button" className="button" disabled={!p.canMove} onClick={p.onGoTo}>
           <MoveRight size={16} aria-hidden />

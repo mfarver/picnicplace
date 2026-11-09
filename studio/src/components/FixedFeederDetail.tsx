@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { useAction } from "../api/useAction";
 import type { FeedersState, FixedFeeder, FixedFeederState, Part, Point } from "../api/types";
 import { Field, NumberInput } from "./Form";
+import { LearnedPicks } from "./PickCorrection";
 import { remainingText } from "./machine/fixedFeederMath";
 
 export type TeachWhich = "first" | "row_end" | "last";
@@ -267,6 +268,7 @@ export function FixedFeederDetail(p: Props) {
           {fmt(state.pocket.across)} mm across ({state.pocket.holes} sprocket holes).
         </p>
       )}
+      <LearnedPicks sourceId={state.id} learned={state.learned} onChanged={p.onChanged} />
       <div className="button-row">
         <button
           type="button"

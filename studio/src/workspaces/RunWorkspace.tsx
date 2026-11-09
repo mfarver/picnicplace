@@ -6,12 +6,22 @@ import { useAction } from "../api/useAction";
 import { useCameras } from "../api/useCameras";
 import { useDescription } from "../api/useDescription";
 import { useFeeders } from "../api/useFeeders";
-import type { Job, JobLayout, JobPlan, JobSummary, RunItem, RunState } from "../api/types";
+import type {
+  Job,
+  JobLayout,
+  JobPlan,
+  JobSummary,
+  PickCorrection,
+  RunItem,
+  RunState,
+} from "../api/types";
 import { CameraView } from "../components/CameraView";
 import { JobOverlay } from "../components/job/JobOverlay";
 import { MachineView } from "../components/machine/MachineView";
 import { FixedFeederPanel } from "../components/FixedFeederPanel";
+import { Field } from "../components/Form";
 import { Panel } from "../components/Panel";
+import { PickCorrectionSelect } from "../components/PickCorrection";
 import { Placeholder } from "../components/Placeholder";
 
 const STATUS_LABEL: Record<RunItem["status"], string> = {
@@ -35,7 +45,8 @@ export function RunWorkspace() {
   const [plan, setPlan] = useState<JobPlan | null>(null);
   const [layout, setLayout] = useState<JobLayout | null>(null);
   const [run, setRun] = useState<RunState | null>(null);
-  const [findPockets, setFindPockets] = useState(true);
+  const [correction, setCorrection] = useState<PickCorrection | null>(null);
+  const [configured, setConfigured] = useState<PickCorrection>();
   const [skipBlocked, setSkipBlocked] = useState(false);
   const [checking, setChecking] = useState(0);
 
@@ -59,9 +70,14 @@ export function RunWorkspace() {
   useEffect(() => {
     if (status !== "open") return;
     let cancelled = false;
-    void Promise.all([api.GET("/api/v1/jobs"), api.GET("/api/v1/run")]).then(([j, r]) => {
+    void Promise.all([
+      api.GET("/api/v1/jobs"),
+      api.GET("/api/v1/run"),
+      api.GET("/api/v1/placement"),
+    ]).then(([j, r, p]) => {
       if (cancelled) return;
       if (j.data) setJobs(j.data);
+      if (p.data) setConfigured(p.data.pick_correction);
       if (r.data !== undefined) {
         setRun(r.data);
         if (r.data) setJobId((id) => id || r.data!.job_id);
@@ -122,7 +138,7 @@ export function RunWorkspace() {
   const start = async () => {
     const op = await act(() =>
       api.POST("/api/v1/run/start", {
-        body: { job_id: chosen, skip_blocked: skipBlocked, find_pockets: findPockets },
+        body: { job_id: chosen, skip_blocked: skipBlocked, pick_correction: correction },
       }),
     );
     if (op) await refresh();
@@ -191,14 +207,13 @@ export function RunWorkspace() {
 
           {startable && (
             <>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={findPockets}
-                  onChange={(e) => setFindPockets(e.target.checked)}
+              <Field label="Keep picks centered with">
+                <PickCorrectionSelect
+                  value={correction}
+                  onChange={setCorrection}
+                  configured={configured}
                 />
-                Find each pocket from the sprocket holes
-              </label>
+              </Field>
               {blocked > 0 && (
                 <label className="check">
                   <input

@@ -19,6 +19,7 @@ from picnicplace.api import feeders as feeder_routes
 from picnicplace.api import jobs as job_routes
 from picnicplace.api import library as library_routes
 from picnicplace.api import placement as placement_routes
+from picnicplace.api import recordings as recording_routes
 from picnicplace.api import routes, websocket
 from picnicplace.api import run as run_routes
 from picnicplace.api.context import AppContext
@@ -42,6 +43,7 @@ from picnicplace.machine.service import MachineService
 from picnicplace.operations import OperationManager
 from picnicplace.placement import PlacementService
 from picnicplace.presence import PresenceTracker
+from picnicplace.recorder import FlightRecorder
 from picnicplace.schemas import ClientMessage, ErrorResponse, ServerEvent
 
 TITLE = "PicnicPlace Core API"
@@ -55,8 +57,20 @@ def create_app(config: Config | None = None) -> FastAPI:
     profile = config.machine.machine_profile
     bundle = build_driver(config.machine)
     driver = bundle.driver
+    recorder = FlightRecorder(
+        config.data.recordings_dir,
+        bus,
+        keep=config.recorder.keep,
+        max_bytes=config.recorder.max_mb * 1_000_000,
+    )
     machine = MachineService(
-        profile, driver, bus, presence, operations, speed_scale=config.machine.speed_scale
+        profile,
+        driver,
+        bus,
+        presence,
+        operations,
+        speed_scale=config.machine.speed_scale,
+        recorder=recorder,
     )
     lease = LeaseManager(bus, presence)
     cameras = CameraManager(config, profile, machine.scene)
@@ -96,18 +110,22 @@ def create_app(config: Config | None = None) -> FastAPI:
         ctx.placement = PlacementService(
             machine, ctx.feeders, lambda: ctx.library, config.machine.pick_correction
         )
+        jobs = JobStore(config.data.jobs_dir)
         ctx.runner = JobRunner(
             machine,
             ctx.feeders,
             ctx.placement,
             lambda: ctx.library,
-            JobStore(config.data.jobs_dir),
+            jobs,
             config.machine.sim_board_error,
         )
+        ctx.runner.record_runs = config.recorder.record_runs
+        recorder.snapshot = recording_routes.snapshot_builder(ctx, jobs.get)
         await machine.start()
         try:
             yield
         finally:
+            recorder.stop("the core stopped")
             ctx.library.close()
             ctx.library = None
             ctx.feeders = None
@@ -130,6 +148,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(feeder_routes.router)
     app.include_router(placement_routes.router)
     app.include_router(run_routes.router)
+    app.include_router(recording_routes.router)
     app.include_router(websocket.router)
 
     @app.exception_handler(MachineError)

@@ -32,7 +32,7 @@ from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionE
 from picnicplace.machine.profile import Camera, Location, Nozzle, Point
 from picnicplace.machine.service import MachineService
 from picnicplace.schemas import Operation, WireModel
-from picnicplace.vision.part import find_part, nearest_angle, wrap
+from picnicplace.vision.part import nearest_angle, wrap
 
 log = logging.getLogger(__name__)
 
@@ -297,7 +297,7 @@ class PlacementService:
         correction: PickCorrection,
     ) -> NozzleLoad:
         nozzle_angle = self._machine.nozzle_angle(nozzle)
-        return NozzleLoad(
+        load = NozzleLoad(
             nozzle=nozzle.id,
             part_id=part.id if part else None,
             slot_id=source_id,
@@ -308,6 +308,8 @@ class PlacementService:
             pick_angle=nozzle_angle,
             correction=correction,
         )
+        self._machine.recorder.event("pick", load=load)
+        return load
 
     async def _take(self, nozzle: Nozzle, at: Point, height: float, label: str) -> None:
         """Lower onto a part, take it with suction, lift, and check it came up."""
@@ -347,7 +349,17 @@ class PlacementService:
         mm_per_px = camera.field_of_view.x / w
         size = pads[1] if pads else Point(x=1.6, y=0.8)
         search = (math.hypot(size.x, size.y) / 2 + SEARCH_MARGIN_MM) / mm_per_px
-        box = await asyncio.to_thread(find_part, frame.image, search)
+        box = await self._machine.recorder.vision(
+            "find_part",
+            frame.image,
+            search,
+            camera=camera.id,
+            position=dict(self._machine.driver.position),
+            mm_per_px=mm_per_px,
+            nozzle=nozzle.id,
+            part=load.part_id,
+            source=load.slot_id,
+        )
         await self._machine.raise_nozzles()
         if box is None:
             raise VisionError(f"the {camera.label.lower()} saw no part on {nozzle.id}")
@@ -373,6 +385,7 @@ class PlacementService:
             dx=round(offset.x, 4), dy=round(offset.y, 4), angle=wrap(angle - nozzle_angle)
         )
         self._loads[nozzle.id] = load.model_copy(update={"alignment": alignment})
+        self._machine.recorder.event("align", nozzle=nozzle.id, alignment=alignment)
         learned = self._learn(load, Point(x=dx, y=dy), nozzle_angle)
 
         seen = sorted((box.width * mm_per_px, box.height * mm_per_px))
@@ -407,6 +420,9 @@ class PlacementService:
         part_at = Point(x=load.picked_at.x + off.x, y=load.picked_at.y + off.y)
         miss = math.hypot(off.x, off.y)
         learning = self._feeders.learn_pick(source, load.base, part_at, miss, load.correction)
+        self._machine.recorder.event(
+            "learn", source=source, base=load.base, part_at=part_at, miss=miss, learned=learning
+        )
         if learning is None:
             return f" Too far off center to learn {source}'s pick place from."
         o = learning.offset
@@ -427,6 +443,9 @@ class PlacementService:
         if alignment is None:
             raise PlacementError(f"align the part on {nozzle.id} before placing it")
         height = self._place_height(load, board_height)
+        self._machine.recorder.event(
+            "place", nozzle=nozzle.id, target=target, rotation=rotation, height=height
+        )
         # Turn the nozzle so the part has the angle asked for, by the shortest way.
         current = self._machine.nozzle_angle(nozzle)
         turn = current + wrap(rotation - alignment.angle - current)

@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from picnicplace import __version__
 from picnicplace.api.app import create_app, openapi_json
 from picnicplace.config import Config, load_config
+from picnicplace.recorder import RecorderError, replay_vision
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -36,8 +37,34 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print the OpenAPI document as JSON and exit",
     )
+    p.add_argument(
+        "--replay",
+        type=Path,
+        metavar="RECORDING",
+        help=(
+            "run today's vision code on a flight recording's frames (its folder or zip), "
+            "say what answers changed, and exit"
+        ),
+    )
     p.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     return p
+
+
+def replay(source: Path) -> int:
+    """Print what changed between a recording's vision answers and today's; the count."""
+    checks = replay_vision(source)
+    changed = [c for c in checks if not c.same]
+    for c in changed:
+        what = (
+            "found nothing or a different count"
+            if c.difference is None
+            else (f"moved by up to {c.difference:.3g}")
+        )
+        print(f"{c.frame} ({c.fn}): {what}\n  then: {c.recorded}\n  now:  {c.now}")
+    print(
+        f"{len(checks)} vision calls: {len(checks) - len(changed)} the same, {len(changed)} changed"
+    )
+    return len(changed)
 
 
 def _build_config(args: argparse.Namespace) -> Config:
@@ -69,6 +96,11 @@ def main(argv: list[str] | None = None) -> None:
     if args.print_openapi:
         sys.stdout.write(openapi_json())
         return
+    if args.replay is not None:
+        try:
+            sys.exit(1 if replay(args.replay) else 0)
+        except (OSError, RecorderError, ValueError) as e:
+            sys.exit(f"picnicd: cannot replay {args.replay}: {e}")
     try:
         config = _build_config(args)
     except (ValidationError, OSError) as e:

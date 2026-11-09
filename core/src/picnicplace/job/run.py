@@ -165,6 +165,9 @@ class RunState(WireModel):
     stop_requested: bool = False
     pick_correction: PickCorrection = "top"
     """How picks are kept centered (see the config's machine.pick_correction)."""
+    recording: str | None = Field(
+        default=None, description="The flight recording this run is kept in, if any."
+    )
     held: dict[str, int] = Field(
         default_factory=dict[str, int],
         description="Nozzle ID to the item whose part it holds.",
@@ -456,6 +459,10 @@ class JobRunner:
         self._job: Job | None = None
         self._active = False
         self._step = False
+        self._recording: str | None = None
+        """The flight recording this runner started for the run, if any."""
+        self.record_runs = False
+        """Record every run (from the config)."""
         self._sim_error = sim_board_error if feeders.sim_parts is not None else None
         self._sim_board: BoardScene | None = None
         self._sim_fix: BoardFix | None = None
@@ -481,7 +488,11 @@ class JobRunner:
     # --- Control -----------------------------------------------------------------------
 
     def start(
-        self, job_id: str, skip_blocked: bool, pick_correction: PickCorrection | None = None
+        self,
+        job_id: str,
+        skip_blocked: bool,
+        pick_correction: PickCorrection | None = None,
+        record: bool = False,
     ) -> Operation:
         if self._active:
             raise MachineBusyError("a job is running: pause or stop it first")
@@ -517,6 +528,16 @@ class JobRunner:
         self._step = False
         if self._sim_error is not None:
             self._load_sim_board(job)
+        recorder = self._machine.recorder
+        active = recorder.active
+        if self._recording is not None and active is not None and active.id == self._recording:
+            recorder.stop("the run was left paused and a new one started")
+        self._recording = None
+        if (record or self.record_runs) and recorder.available and recorder.active is None:
+            info = recorder.start(f"run {job.name}", "run", job_id)
+            self._run.recording = info.id
+            self._recording = info.id
+        recorder.event("run.start", run=self._run)
         return self._start_task()
 
     def resume(self, step: bool = False) -> Operation:
@@ -582,6 +603,12 @@ class JobRunner:
         run.message = message
         run.pause_requested = run.stop_requested = False
         run.finished_at = datetime.now(UTC)
+        recorder = self._machine.recorder
+        recorder.event("run.end", run=run)
+        active = recorder.active
+        if self._recording is not None and active is not None and active.id == self._recording:
+            recorder.stop(message)
+        self._recording = None
 
     # --- The run itself ----------------------------------------------------------------
 
@@ -609,6 +636,7 @@ class JobRunner:
         except MachineError as e:
             run.status, run.error = "paused", str(e)
             run.pause_requested = False
+            self._machine.recorder.event("run.paused", error=str(e), code=e.code)
             if isinstance(e, FeederEmptyError):
                 run.error += await self._park()
                 if run.stop_requested:
@@ -765,6 +793,7 @@ class JobRunner:
             await self._placement.place(nozzle, target, item.rotation + run.fix.angle, job.board_z)
             del run.held[nozzle_id]
             item.status, item.note, item.nozzle = "placed", "", nozzle_id
+            self._machine.recorder.event("run.placed", ref=item.ref, index=index, at=target)
 
     async def _park(self) -> str:
         """Move the head out of the way of an operator refilling a strip or tray: to the

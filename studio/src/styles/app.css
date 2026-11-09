@@ -1957,3 +1957,101 @@ code,
   fill: none;
   stroke: none;
 }
+
+/* Strips and trays on the bed (fixed feeders) */
+
+.ff-outline {
+  fill: var(--surface-raised);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.ff-part {
+  fill: var(--ok);
+}
+
+.ff-low .ff-part {
+  fill: var(--warn);
+}
+
+.ff-part.ff-taken,
+.ff-low .ff-part.ff-taken {
+  fill: none;
+  stroke: var(--text-faint);
+  stroke-width: 0.4;
+}
+
+.ff-empty .ff-outline {
+  stroke: var(--danger);
+  stroke-width: 1.5;
+}
+
+.ff-off {
+  opacity: 0.5;
+}
+
+.ff-next {
+  fill: none;
+  stroke: var(--mv-camera);
+  stroke-width: 0.8;
+}
+
+.ff-selected .ff-outline {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.ff-label {
+  fill: var(--text);
+  font-weight: 600;
+}
+
+.ff-empty .ff-label {
+  fill: var(--danger);
+}
+
+.ff-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.ff-row > .item {
+  min-width: 0;
+}
+
+.ff-meter {
+  display: block;
+  height: 3px;
+  margin-top: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.ff-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+
+.ff-meter > .ff-meter-low {
+  background: var(--warn);
+}
+
+.ff-meter > .ff-meter-empty {
+  background: var(--danger);
+}
+
+.input-pair {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.input-pair .input {
+  min-width: 0;
+}
+
+.ff-form {
+  grid-template-columns: 1fr 1fr;
+}

@@ -10,8 +10,10 @@ import {
   useRef,
   useState,
 } from "react";
+import { FixedFeederShapes } from "./FixedFeeders";
 import type {
   FeederBank,
+  FixedFeederState,
   MachineProfile,
   MachineState,
   Point,
@@ -115,9 +117,20 @@ interface Props {
   onMoveTo?: (target: Point) => void;
   /** Extra drawing, in the map's coordinates: machine X, and machine Y negated. */
   overlay?: ReactNode;
+  /** Strips and trays on the bed, with the parts left in each. */
+  fixedFeeders?: FixedFeederState[];
+  selectedFixed?: string | null;
 }
 
-export function MachineView({ description, machine, canMove = false, onMoveTo, overlay }: Props) {
+export function MachineView({
+  description,
+  machine,
+  canMove = false,
+  onMoveTo,
+  overlay,
+  fixedFeeders,
+  selectedFixed,
+}: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [view, setView] = useState<ViewBox>(() => fitView(description));
   const [cursor, setCursor] = useState<Point | null>(null);
@@ -294,6 +307,9 @@ export function MachineView({ description, machine, canMove = false, onMoveTo, o
             {description.feeder_banks.map((bank) => (
               <FeederBankShape key={bank.id} bank={bank} />
             ))}
+            {fixedFeeders && fixedFeeders.length > 0 && (
+              <FixedFeederShapes fixed={fixedFeeders} selected={selectedFixed} />
+            )}
 
             {description.cameras
               .filter((c) => c.mount === "fixed")

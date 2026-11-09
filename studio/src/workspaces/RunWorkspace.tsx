@@ -5,10 +5,12 @@ import { hasControl, useCore } from "../api/core";
 import { useAction } from "../api/useAction";
 import { useCameras } from "../api/useCameras";
 import { useDescription } from "../api/useDescription";
+import { useFeeders } from "../api/useFeeders";
 import type { Job, JobLayout, JobPlan, JobSummary, RunItem, RunState } from "../api/types";
 import { CameraView } from "../components/CameraView";
 import { JobOverlay } from "../components/job/JobOverlay";
 import { MachineView } from "../components/machine/MachineView";
+import { FixedFeederPanel } from "../components/FixedFeederPanel";
 import { Panel } from "../components/Panel";
 import { Placeholder } from "../components/Placeholder";
 
@@ -26,6 +28,7 @@ export function RunWorkspace() {
   const { status, machine, operations } = core;
   const description = useDescription();
   const cameras = useCameras();
+  const [feeders, setFeeders] = useFeeders();
   const { run: act, pending, error } = useAction();
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [jobId, setJobId] = useState("");
@@ -319,14 +322,16 @@ export function RunWorkspace() {
                   <span className="item-id">{p.part_id ?? "no part number"}</span>
                   <span className="text-muted">×{p.count}</span>
                   <span className={p.problem ? "text-danger run-where" : "text-muted run-where"}>
-                    {p.slot_ids.length
-                      ? `slot ${p.slot_ids.join(", ")}`
-                      : (p.problem ?? "no feeder")}
+                    {p.slot_ids.length ? sources(p.slot_ids) : (p.problem ?? "no feeder")}
                   </span>
                 </li>
               ))}
             </ul>
           </Panel>
+        )}
+
+        {feeders && feeders.fixed.length > 0 && (
+          <FixedFeederPanel fixed={feeders.fixed} onChanged={setFeeders} />
         )}
 
         {items.length > 0 && (
@@ -388,6 +393,7 @@ export function RunWorkspace() {
                 <RunOverlay items={items} />
               </>
             }
+            fixedFeeders={feeders?.fixed}
           />
         ) : (
           <Placeholder
@@ -399,6 +405,17 @@ export function RunWorkspace() {
       </div>
     </div>
   );
+}
+
+/** "slots 3, 7 and T1": feeder slots by number, strips and trays by ID. */
+function sources(ids: string[]): string {
+  const slots = ids.filter((id) => /^\d+$/.test(id));
+  const fixed = ids.filter((id) => !/^\d+$/.test(id));
+  const parts = [
+    ...(slots.length ? [`slot${slots.length > 1 ? "s" : ""} ${slots.join(", ")}`] : []),
+    ...fixed,
+  ];
+  return parts.join(", ");
 }
 
 /** Each placement on the map, colored by how far the run has got with it. */

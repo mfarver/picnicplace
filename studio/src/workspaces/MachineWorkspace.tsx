@@ -5,6 +5,7 @@ import { hasControl, useCore } from "../api/core";
 import { useAction } from "../api/useAction";
 import { useCameras } from "../api/useCameras";
 import { useDescription } from "../api/useDescription";
+import { useFeeders } from "../api/useFeeders";
 import type { Operation } from "../api/types";
 import { BringUpPanel } from "../components/BringUpPanel";
 import { CalibrationPanel } from "../components/CalibrationPanel";
@@ -13,6 +14,7 @@ import { CapturePanel } from "../components/CapturePanel";
 import { JogPanel } from "../components/JogPanel";
 import { LeaseStatus } from "../components/LeaseStatus";
 import { Panel } from "../components/Panel";
+import { FixedFeederPanel } from "../components/FixedFeederPanel";
 import { HeadInset } from "../components/machine/HeadInset";
 import { MachineView } from "../components/machine/MachineView";
 import { PlacementPanel } from "../components/PlacementPanel";
@@ -26,6 +28,7 @@ export function MachineWorkspace() {
   const { run, pending, error } = useAction();
   const description = useDescription();
   const cameras = useCameras();
+  const [feeders, setFeeders] = useFeeders();
   const [lastOpId, setLastOpId] = useState<string | null>(null);
 
   const lastOp = lastOpId ? operations[lastOpId] : undefined;
@@ -150,6 +153,10 @@ export function MachineWorkspace() {
           />
         )}
 
+        {feeders && feeders.fixed.length > 0 && (
+          <FixedFeederPanel fixed={feeders.fixed} onChanged={setFeeders} />
+        )}
+
         <CapturePanel />
 
         {description && (
@@ -183,6 +190,7 @@ export function MachineWorkspace() {
               machine={machine}
               canMove={canMove && !!machine?.homed}
               onMoveTo={(p) => moveTo({ X: p.x, Y: p.y })}
+              fixedFeeders={feeders?.fixed}
             />
             <HeadInset
               description={description}

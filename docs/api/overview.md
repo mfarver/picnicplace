@@ -61,6 +61,9 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/feeders/slots/{id}/pocket` | Find the pick pocket from the tape's sprocket holes |
 | `POST /api/v1/feeders/slots/{id}/fiducial`, `POST /api/v1/feeders/calibrate` | Measure the feeder fiducial's offset; calibrate slots from their fiducials |
 | `PUT`, `DELETE /api/v1/feeders/assignments/{feeder_id}` | Which part a feeder holds |
+| `POST /api/v1/feeders/fixed`; `PUT`, `DELETE …/fixed/{id}` | Strips and trays held on the bed (T1, T2, ...): add, change, remove |
+| `PUT /api/v1/feeders/fixed/{id}/teach` | Teach a strip or tray's first part, end of its first row, or last part (at the camera) |
+| `POST /api/v1/feeders/fixed/{id}/refill`, `…/pocket` | Mark it refilled; find a strip's next pocket from its sprocket holes |
 | `GET`, `PUT /api/v1/bring-up` | The bring-up checklist's progress and findings |
 | `GET /api/v1/placement` | What each nozzle holds, and how it sits once aligned |
 | `POST /api/v1/placement/pick`, `…/align`, `…/place` | Pick from a feeder slot; find the part on the bottom camera; place it at a location and angle |

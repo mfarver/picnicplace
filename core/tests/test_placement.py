@@ -118,7 +118,7 @@ def test_alignment_corrects_an_off_center_pick(lumen: TestClient) -> None:
     (the simulator's error for slot 3); bottom vision must find and remove that."""
     with connect(lumen) as s:
         set_up(lumen, s, slots=("3",), calibrate=False)
-        pick = {"slot_id": "3", "nozzle_id": "N1", "feed": False, "find_pocket": False}
+        pick = {"slot_id": "3", "nozzle_id": "N1", "feed": False, "pick_correction": "off"}
         ok(s.wait(s.post("/api/v1/placement/pick", pick)))
         op = ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"})))
         alignment = lumen.get("/api/v1/placement").json()["loads"][0]["alignment"]

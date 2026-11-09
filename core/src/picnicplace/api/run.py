@@ -8,6 +8,7 @@ from pydantic import Field
 from picnicplace.api.context import Context, require, require_control
 from picnicplace.api.routes import MACHINE_ERRORS
 from picnicplace.auth import Permission
+from picnicplace.feeders.setup import PickCorrection
 from picnicplace.job.run import JobPlan, JobRunner, RunState
 from picnicplace.schemas import Operation, WireModel
 
@@ -34,8 +35,13 @@ class StartRequest(PlanRequest):
     skip_blocked: bool = Field(
         default=False, description="Start even if some placements are blocked, skipping them."
     )
-    find_pockets: bool = Field(
-        default=True, description="Find each pocket from the sprocket holes before picking."
+    pick_correction: PickCorrection | None = Field(
+        default=None,
+        description=(
+            "How to keep picks centered: 'top', find each tape pocket with the top camera "
+            "first; 'bottom', move each pick by what the bottom camera saw of the feeder's "
+            "earlier picks; 'off', neither. Empty: the config's choice."
+        ),
     )
 
 
@@ -65,7 +71,7 @@ async def plan(runner: Runner, body: PlanRequest) -> JobPlan:
 )
 async def start(runner: Runner, body: StartRequest) -> Operation:
     """Run a saved job: find the board's fiducials, then pick, align, and place every part."""
-    return runner.start(body.job_id, body.skip_blocked, body.find_pockets)
+    return runner.start(body.job_id, body.skip_blocked, body.pick_correction)
 
 
 @router.post(

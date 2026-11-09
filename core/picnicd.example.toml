@@ -25,6 +25,12 @@ sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times fast
 # sim_feeders = [1, 2, 3, 4, 5, 26]
 speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 when
                            # bringing up a machine. Homing speed is the firmware's.
+# How picks are kept centered on the parts (a run or a single pick can choose again):
+# "top": the top camera finds each tape pocket from its sprocket holes before the pick.
+# "bottom": no look first; each feeder's picks move by how far off the nozzle's center
+#           the bottom camera saw its earlier parts.
+# "off": pick where the feeder setup says.
+pick_correction = "top"
 
 # Places you choose for this machine: where rejected parts are dropped, and where the
 # head waits. These values are from one LumenPnP; set your own.

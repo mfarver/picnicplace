@@ -22,6 +22,9 @@ from picnicplace.feeders.setup import (
     FeederAssignment,
     FeederSetupStore,
     FixedFeeder,
+    PickCorrection,
+    PickLearning,
+    PickMisses,
     SlotCalibration,
 )
 from picnicplace.feeders.sim import SimulatedPhotonBus
@@ -74,6 +77,15 @@ SIM_PICK_RADIUS = 1.5
 SIM_FIXED_ERROR = Point(x=0.15, y=-0.1)
 """How far a simulated strip or tray really is from where its setup says."""
 
+LEARN_FIRST = 4
+"""A feeder's first picks are averaged evenly; after these, each counts for LEARN_GAIN."""
+LEARN_GAIN = 0.25
+LEARN_MAX_MISS_MM = 1.5
+"""A pick this far off center is not learned from: likely a part that tipped or slid."""
+LEARN_MAX_OFFSET_MM = 3.0
+"""The learned offset never moves a pick further than this."""
+MISS_WINDOW = 20
+
 
 class FeederState(WireModel):
     uuid: str
@@ -96,6 +108,8 @@ class SlotState(WireModel):
     pick: Point
     """Where to pick: nominal plus the correction, if any."""
     calibration: SlotCalibration | None
+    learned: PickLearning | None
+    """What the bottom camera has learned of this slot's picks, with its feeder now."""
     feeder: FeederState | None
     error: str | None
     pocket: PocketCheck | None
@@ -110,6 +124,7 @@ class FixedFeederState(WireModel):
     angle: float | None
     """The parts' machine angle, if known (a strip needs its part's tape rotation)."""
     pocket: PocketCheck | None
+    learned: PickLearning | None
 
 
 class FeedersState(WireModel):
@@ -221,6 +236,7 @@ class FeederService:
                     slot=slot,
                     pick=self.pick(slot),
                     calibration=setup.slots.get(slot.id),
+                    learned=self.learned(slot.id),
                     feeder=feeder,
                     error=self._errors.get(slot.id),
                     pocket=self._pockets.get(slot.id),
@@ -250,6 +266,7 @@ class FeederService:
             next=f.position(f.picked) if f.remaining else None,
             angle=self.fixed_angle(f),
             pocket=self._pockets.get(fixed_id),
+            learned=self.learned(fixed_id),
         )
 
     def slot(self, slot_id: str) -> Slot:
@@ -386,11 +403,13 @@ class FeederService:
             basis="taught",
         )
         self._store.setup.slots[slot.id] = cal
+        self._store.setup.learned.pop(slot.id, None)
         self._store.save()
         return cal
 
     def forget_pick(self, slot_id: str) -> None:
         self._store.setup.slots.pop(self.slot(slot_id).id, None)
+        self._store.setup.learned.pop(slot_id, None)
         self._store.save()
 
     # --- Fiducials -----------------------------------------------------------------------
@@ -477,6 +496,7 @@ class FeederService:
                     ),
                     basis="fiducial",
                 )
+                self._store.setup.learned.pop(slot.id, None)
                 done.append(slot.label)
             self._store.save()
             message = f"Calibrated {len(done)} slot{'' if len(done) == 1 else 's'}."
@@ -485,6 +505,64 @@ class FeederService:
             return message
 
         return self._machine.start_task("feeder_calibrate", work)
+
+    # --- Learning from the bottom camera ------------------------------------------------
+
+    def learned(self, source_id: str) -> PickLearning | None:
+        """What the bottom camera has learned of a slot's or a strip's or tray's picks. For a
+        slot, only while the same feeder is in it."""
+        learning = self._store.setup.learned.get(source_id)
+        if learning is None or self.is_fixed(source_id):
+            return learning
+        return learning if learning.feeder == self._found.get(source_id) else None
+
+    def learned_offset(self, source_id: str) -> Point:
+        learning = self.learned(source_id)
+        return learning.offset if learning is not None else Point(x=0, y=0)
+
+    def learn_pick(
+        self, source_id: str, base: Point, part_at: Point, miss: float, how: PickCorrection
+    ) -> PickLearning | None:
+        """The bottom camera saw a part picked from ``source_id`` that lay at ``part_at``
+        when it was picked, ``miss`` mm from the nozzle's axis; the setup put it at
+        ``base``. Returns what is learned now, or None when the pick was too far off center
+        to learn from."""
+        if miss > LEARN_MAX_MISS_MM:
+            return None
+        setup = self._store.setup
+        learning = self.learned(source_id)
+        if learning is None:
+            feeder = None if self.is_fixed(source_id) else self._found.get(source_id)
+            learning = PickLearning(feeder=feeder, offset=Point(x=0, y=0), samples=0)
+        seen = Point(x=part_at.x - base.x, y=part_at.y - base.y)
+        n = learning.samples
+        gain = 1 / (n + 1) if n < LEARN_FIRST else LEARN_GAIN
+        x = learning.offset.x + gain * (seen.x - learning.offset.x)
+        y = learning.offset.y + gain * (seen.y - learning.offset.y)
+        size = math.hypot(x, y)
+        if size > LEARN_MAX_OFFSET_MM:
+            x, y = x * LEARN_MAX_OFFSET_MM / size, y * LEARN_MAX_OFFSET_MM / size
+        stats = learning.misses.get(how, PickMisses())
+        count = stats.count + 1
+        mean = stats.mean + (miss - stats.mean) / min(count, MISS_WINDOW)
+        misses = dict(learning.misses)
+        misses[how] = PickMisses(count=count, mean=round(mean, 4), last=round(miss, 4))
+        learning = learning.model_copy(
+            update={
+                "offset": Point(x=round(x, 4), y=round(y, 4)),
+                "samples": n + 1,
+                "misses": misses,
+            }
+        )
+        setup.learned[source_id] = learning
+        self._store.save()
+        return learning
+
+    def forget_learned(self, source_id: str) -> None:
+        if not self.is_fixed(source_id):
+            self.slot(source_id)
+        self._store.setup.learned.pop(source_id, None)
+        self._store.save()
 
     # --- Fixed feeders: strips and trays on the bed -----------------------------------
 
@@ -513,6 +591,9 @@ class FeederService:
     def put_fixed(self, fixed_id: str, feeder: FixedFeeder) -> None:
         if fixed_id not in self._store.setup.fixed and not _is_fixed_id(fixed_id):
             raise InvalidTargetError(f"a strip or tray's ID is T and a number, not {fixed_id!r}")
+        old = self._store.setup.fixed.get(fixed_id)
+        if old is None or _geometry(old) != _geometry(feeder):
+            self._store.setup.learned.pop(fixed_id, None)
         self._store.setup.fixed[fixed_id] = feeder
         self._store.save()
         self._sim_fixed_taken[fixed_id] = set(range(feeder.picked))
@@ -522,6 +603,7 @@ class FeederService:
     def remove_fixed(self, fixed_id: str) -> None:
         self.fixed(fixed_id)
         del self._store.setup.fixed[fixed_id]
+        self._store.setup.learned.pop(fixed_id, None)
         self._store.save()
         self._invalidate()
 
@@ -570,6 +652,7 @@ class FeederService:
             }
         f = f.model_copy(update=update)
         self._store.setup.fixed[fixed_id] = f
+        self._store.setup.learned.pop(fixed_id, None)
         self._store.save()
         self._invalidate()
         return f
@@ -888,6 +971,11 @@ def _strip_direction(f: FixedFeeder) -> float:
     """A strip's tape direction (the EIA-481 view's +X) in machine degrees: the tape
     would feed opposite to the step from one pocket to the next one to pick."""
     return math.degrees(math.atan2(-f.step.y, -f.step.x))
+
+
+def _geometry(f: FixedFeeder) -> tuple[object, ...]:
+    """What says where a strip's or tray's parts lie."""
+    return (f.kind, f.first, f.step, f.columns, f.rows, f.row_step)
 
 
 def _is_fixed_id(fixed_id: str) -> bool:

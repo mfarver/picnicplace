@@ -2,12 +2,15 @@
 
 Each step is an operation, so a first run on a real machine can go one step at a time:
 
-- **Pick**: feed the slot's tape, find the pocket from the sprocket holes, put the nozzle
-  over it, lower it to the top of the part, turn suction on, lift, and check the vacuum
-  says a part is held. From a strip or tray on the bed (a fixed feeder, ID T1, T2, ...),
-  take the next part in order instead of feeding.
+- **Pick**: feed the slot's tape, put the nozzle over the pocket, lower it to the top of
+  the part, turn suction on, lift, and check the vacuum says a part is held. From a strip
+  or tray on the bed (a fixed feeder, ID T1, T2, ...), take the next part in order
+  instead of feeding. Where the pocket is comes from the pick correction chosen: 'top'
+  finds it from the sprocket holes with the top camera; 'bottom' moves the pick by what
+  the bottom camera saw of the feeder's earlier picks; 'off' trusts the feeder setup.
 - **Align**: carry the part over the bottom camera with its underside in focus, find it,
-  and record where it sits on the nozzle and at what angle.
+  and record where it sits on the nozzle and at what angle. How far it sits off center
+  says where the part really lay when it was picked: the feeder learns from that.
 - **Place**: turn the nozzle so the part has the angle asked for, put the part's center
   (not the nozzle's) over the target, lower it to the board, let go, lift, and check
   the part left the nozzle.
@@ -23,6 +26,7 @@ import math
 from collections.abc import Callable
 
 from picnicplace.feeders.service import FeederService, rotate
+from picnicplace.feeders.setup import PickCorrection
 from picnicplace.library import Library, Part
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
 from picnicplace.machine.profile import Camera, Location, Nozzle, Point
@@ -66,11 +70,21 @@ class NozzleLoad(WireModel):
     angle: float
     """The part's angle minus the nozzle's, as expected from the tape."""
     alignment: Alignment | None
+    picked_at: Point | None = None
+    """Where the nozzle's axis went down for the part."""
+    base: Point | None = None
+    """Where the feeder setup put the part, before any correction."""
+    pick_angle: float | None = None
+    """The nozzle's angle when it picked."""
+    correction: PickCorrection | None = None
+    """How the pick was corrected."""
 
 
 class PlacementState(WireModel):
     loads: list[NozzleLoad]
     """What each nozzle holds, as far as PicnicPlace knows."""
+    pick_correction: PickCorrection
+    """How picks are corrected unless a pick or run says otherwise, from the config."""
 
 
 def _footprint_center(part: Part | None, library: Library | None) -> tuple[Point, Point] | None:
@@ -94,14 +108,19 @@ class PlacementService:
         machine: MachineService,
         feeders: FeederService,
         library: Callable[[], Library | None],
+        pick_correction: PickCorrection = "top",
     ) -> None:
         self._machine = machine
         self._feeders = feeders
         self._library = library
+        self.pick_correction: PickCorrection = pick_correction
         self._loads: dict[str, NozzleLoad] = {}
 
     def state(self) -> PlacementState:
-        return PlacementState(loads=[self._loads[k] for k in sorted(self._loads)])
+        return PlacementState(
+            loads=[self._loads[k] for k in sorted(self._loads)],
+            pick_correction=self.pick_correction,
+        )
 
     # --- Operations ----------------------------------------------------------------------
 
@@ -122,14 +141,17 @@ class PlacementService:
         return self._feeders.part(slot), slot.label
 
     def start_pick(
-        self, slot_id: str, nozzle_id: str, feed: bool = True, find_pocket: bool = True
+        self,
+        slot_id: str,
+        nozzle_id: str,
+        feed: bool = True,
+        correction: PickCorrection | None = None,
     ) -> Operation:
         nozzle = self._machine.nozzle(nozzle_id)
         self._check_empty(nozzle)
         self._check_source(slot_id, feed)
-        return self._machine.start_task(
-            "pick", lambda: self.pick(slot_id, nozzle, feed, find_pocket)
-        )
+        how = correction or self.pick_correction
+        return self._machine.start_task("pick", lambda: self.pick(slot_id, nozzle, feed, how))
 
     def start_align(self, nozzle_id: str) -> Operation:
         nozzle = self._machine.nozzle(nozzle_id)
@@ -155,7 +177,7 @@ class PlacementService:
         y: float,
         rotation: float,
         feed: bool = True,
-        find_pocket: bool = True,
+        correction: PickCorrection | None = None,
     ) -> Operation:
         nozzle = self._machine.nozzle(nozzle_id)
         self._check_empty(nozzle)
@@ -165,7 +187,8 @@ class PlacementService:
         self._check_source(slot_id, feed)
 
         async def work() -> str:
-            steps = [await self.pick(slot_id, nozzle, feed, find_pocket)]
+            how = correction or self.pick_correction
+            steps = [await self.pick(slot_id, nozzle, feed, how)]
             steps.append(await self.align(nozzle))
             steps.append(await self.place(nozzle, Point(x=x, y=y), rotation))
             return " ".join(steps)
@@ -199,10 +222,12 @@ class PlacementService:
 
     # --- Steps ---------------------------------------------------------------------------
 
-    async def pick(self, slot_id: str, nozzle: Nozzle, feed: bool, find_pocket: bool) -> str:
+    async def pick(
+        self, slot_id: str, nozzle: Nozzle, feed: bool, correction: PickCorrection
+    ) -> str:
         """Pick from a feeder slot, or from a strip or tray on the bed by its ID."""
         if self._feeders.is_fixed(slot_id):
-            return await self._pick_fixed(slot_id, nozzle, find_pocket)
+            return await self._pick_fixed(slot_id, nozzle, correction)
         slot = self._feeders.slot(slot_id)
         bank = self._feeders.bank(slot)
         if bank.pick_height is None:
@@ -210,25 +235,23 @@ class PlacementService:
         part = self._feeders.part(slot)
         if feed:
             await self._feeders.feed(slot)
-        at = self._feeders.pick(slot)
-        found = ""
-        if find_pocket:
+        base = self._feeders.pick(slot)
+        at, found = base, ""
+        if correction == "top":
             check = await self._feeders.locate_pocket(slot)
             at = check.at
             found = f" (pocket {check.along:+.2f} mm along, {check.across:+.2f} mm across)"
+        elif correction == "bottom":
+            at, found = self._learned(slot.id, base)
         tape_angle = slot.rotation + (part.tape.rotation if part and part.tape else 0.0)
         await self._take(nozzle, at, bank.pick_height, slot.label)
-        self._loads[nozzle.id] = NozzleLoad(
-            nozzle=nozzle.id,
-            part_id=part.id if part else None,
-            slot_id=slot.id,
-            angle=wrap(tape_angle - self._machine.nozzle_angle(nozzle)),
-            alignment=None,
+        self._loads[nozzle.id] = self._picked(
+            nozzle, part, slot.id, tape_angle, at, base, correction
         )
         what = part.id if part else "a part"
         return f"{nozzle.id} picked {what} from {slot.label}{found}."
 
-    async def _pick_fixed(self, fixed_id: str, nozzle: Nozzle, find_pocket: bool) -> str:
+    async def _pick_fixed(self, fixed_id: str, nozzle: Nozzle, correction: PickCorrection) -> str:
         feeders = self._feeders
         f = feeders.fixed(fixed_id)
         label = feeders.fixed_label(fixed_id)
@@ -239,23 +262,52 @@ class PlacementService:
             raise PlacementError(
                 f"{label}: {f.part_id or 'its part'} has no tape rotation in the parts library"
             )
-        index, at = feeders.next_fixed(fixed_id)
-        found = ""
-        if find_pocket and f.kind == "strip":
+        index, base = feeders.next_fixed(fixed_id)
+        at, found = base, ""
+        if correction == "top" and f.kind == "strip":
             check = await feeders.locate_strip_pocket(fixed_id)
             at = check.at
             found = f" (pocket {check.along:+.2f} mm along, {check.across:+.2f} mm across)"
+        elif correction != "off":
+            # A tray has no sprocket holes: the bottom camera's learning is all there is.
+            at, found = self._learned(fixed_id, base)
+            correction = "bottom"
         feeders.took_fixed(fixed_id)  # tried or taken, that pocket is done with
         await self._take(nozzle, at, height, label)
-        self._loads[nozzle.id] = NozzleLoad(
-            nozzle=nozzle.id,
-            part_id=part.id if part else None,
-            slot_id=fixed_id,
-            angle=wrap(angle - self._machine.nozzle_angle(nozzle)),
-            alignment=None,
-        )
+        self._loads[nozzle.id] = self._picked(nozzle, part, fixed_id, angle, at, base, correction)
         what = part.id if part else "a part"
         return f"{nozzle.id} picked {what} number {index + 1} from {label}{found}."
+
+    def _learned(self, source_id: str, base: Point) -> tuple[Point, str]:
+        """Where to pick with the bottom camera's correction, and a note saying so."""
+        offset = self._feeders.learned_offset(source_id)
+        if offset.x == 0 and offset.y == 0:
+            return base, ""
+        at = Point(x=base.x + offset.x, y=base.y + offset.y)
+        return at, f" (moved {offset.x:+.2f}, {offset.y:+.2f} mm by what the bottom camera saw)"
+
+    def _picked(
+        self,
+        nozzle: Nozzle,
+        part: Part | None,
+        source_id: str,
+        part_angle: float,
+        at: Point,
+        base: Point,
+        correction: PickCorrection,
+    ) -> NozzleLoad:
+        nozzle_angle = self._machine.nozzle_angle(nozzle)
+        return NozzleLoad(
+            nozzle=nozzle.id,
+            part_id=part.id if part else None,
+            slot_id=source_id,
+            angle=wrap(part_angle - nozzle_angle),
+            alignment=None,
+            picked_at=at,
+            base=base,
+            pick_angle=nozzle_angle,
+            correction=correction,
+        )
 
     async def _take(self, nozzle: Nozzle, at: Point, height: float, label: str) -> None:
         """Lower onto a part, take it with suction, lift, and check it came up."""
@@ -321,6 +373,7 @@ class PlacementService:
             dx=round(offset.x, 4), dy=round(offset.y, 4), angle=wrap(angle - nozzle_angle)
         )
         self._loads[nozzle.id] = load.model_copy(update={"alignment": alignment})
+        learned = self._learn(load, Point(x=dx, y=dy), nozzle_angle)
 
         seen = sorted((box.width * mm_per_px, box.height * mm_per_px))
         want = sorted((size.x, size.y))
@@ -335,7 +388,34 @@ class PlacementService:
         return (
             f"{nozzle.id} holds its part {math.hypot(offset.x, offset.y):.2f} mm off center "
             f"and turned {wrap(angle - expected):+.1f} degrees from the tape's angle.{note}"
+            f"{learned}"
         )
+
+    def _learn(self, load: NozzleLoad, seen: Point, nozzle_angle: float) -> str:
+        """Tell the part's feeder where the part really lay when it was picked. ``seen``:
+        the part's center from the nozzle's axis, in machine directions, as the bottom
+        camera saw it with the nozzle at ``nozzle_angle``."""
+        if load.picked_at is None or load.base is None or load.correction is None:
+            return ""
+        source = load.slot_id
+        try:
+            name = self._source_name(source)
+        except InvalidTargetError:
+            return ""  # the strip or tray was removed since the pick
+        # The nozzle may have turned since the pick; the part turned with it.
+        off = rotate(seen, (load.pick_angle or 0.0) - nozzle_angle)
+        part_at = Point(x=load.picked_at.x + off.x, y=load.picked_at.y + off.y)
+        miss = math.hypot(off.x, off.y)
+        learning = self._feeders.learn_pick(source, load.base, part_at, miss, load.correction)
+        if learning is None:
+            return f" Too far off center to learn {source}'s pick place from."
+        o = learning.offset
+        return f" {name}'s parts lie {o.x:+.2f}, {o.y:+.2f} mm from where its setup says."
+
+    def _source_name(self, source_id: str) -> str:
+        if self._feeders.is_fixed(source_id):
+            return source_id
+        return self._feeders.slot(source_id).label
 
     async def place(
         self, nozzle: Nozzle, target: Point, rotation: float, board_height: float | None = None

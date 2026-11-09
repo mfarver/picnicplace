@@ -119,6 +119,17 @@ async def forget_pick(feeders: Feeders, slot_id: str) -> FeedersState:
     return feeders.state()
 
 
+@router.delete(
+    "/feeders/learned/{source_id}",
+    tags=["feeders"],
+    dependencies=[Depends(require(Permission.CONFIG))],
+)
+async def forget_learned(feeders: Feeders, source_id: str) -> FeedersState:
+    """Forget what the bottom camera has learned of a slot's, strip's, or tray's picks."""
+    feeders.forget_learned(source_id)
+    return feeders.state()
+
+
 @router.post(
     "/feeders/slots/{slot_id}/pocket",
     tags=["feeders"],

@@ -39,6 +39,7 @@ from pydantic import Field, computed_field
 
 from picnicplace.camera.synthetic import BoardScene
 from picnicplace.feeders.service import FeederService, FeedersState, rotate
+from picnicplace.feeders.setup import PickCorrection
 from picnicplace.job.layout import Issue, MachinePlacement, layout
 from picnicplace.job.models import Job
 from picnicplace.job.store import JobStore
@@ -162,7 +163,8 @@ class RunState(WireModel):
     error: str | None = Field(default=None, description="Why the run paused, if it did.")
     pause_requested: bool = False
     stop_requested: bool = False
-    find_pockets: bool = True
+    pick_correction: PickCorrection = "top"
+    """How picks are kept centered (see the config's machine.pick_correction)."""
     held: dict[str, int] = Field(
         default_factory=dict[str, int],
         description="Nozzle ID to the item whose part it holds.",
@@ -478,7 +480,9 @@ class JobRunner:
 
     # --- Control -----------------------------------------------------------------------
 
-    def start(self, job_id: str, skip_blocked: bool, find_pockets: bool) -> Operation:
+    def start(
+        self, job_id: str, skip_blocked: bool, pick_correction: PickCorrection | None = None
+    ) -> Operation:
         if self._active:
             raise MachineBusyError("a job is running: pause or stop it first")
         job = self._get_job(job_id)
@@ -507,7 +511,7 @@ class JobRunner:
             status="running",
             plan=plan,
             fix=None,
-            find_pockets=find_pockets,
+            pick_correction=pick_correction or self._placement.pick_correction,
             started_at=datetime.now(UTC),
         )
         self._step = False
@@ -717,7 +721,7 @@ class JobRunner:
             run.message = f"{nozzle_id} picking {item.ref} from {_source(item.slot_id)}"
             for attempt in range(1, PICK_ATTEMPTS + 1):
                 try:
-                    await self._placement.pick(item.slot_id, nozzle, True, run.find_pockets)
+                    await self._placement.pick(item.slot_id, nozzle, True, run.pick_correction)
                     break
                 except MispickError as e:
                     if attempt == PICK_ATTEMPTS:

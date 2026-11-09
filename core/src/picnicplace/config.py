@@ -8,6 +8,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
+from picnicplace.feeders.setup import PickCorrection
 from picnicplace.machine.profile import Location, MachineProfile, is_profile_path, load_profile
 
 
@@ -122,6 +123,18 @@ class MachineConfig(_Section):
     profile: str = Field(
         default="lumenpnp-v4.1",
         description="Built-in machine profile ID, or a path to a profile TOML file.",
+    )
+    pick_correction: PickCorrection = Field(
+        default="top",
+        description=(
+            "How picks are kept centered on the parts, unless a run or a pick says "
+            "otherwise. 'top': before each pick from tape, the top camera finds the pocket "
+            "from the sprocket holes. 'bottom': no camera before the pick; each feeder's "
+            "pick place moves by what the bottom camera saw of its earlier picks. 'off': "
+            "pick where the feeder setup says. The bottom camera learns from every pick "
+            "whatever the choice, and trays, which have no sprocket holes, use what it "
+            "learned unless this is 'off'."
+        ),
     )
     sim_time_scale: float = Field(
         default=1.0, gt=0, description="Simulator only: values above 1 run faster than real time."

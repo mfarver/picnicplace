@@ -11,6 +11,9 @@ architecture and the decisions behind it.
 | `studio/` | PicnicPlace Studio, the React + TypeScript GUI |
 | `docs/` | The website (picnicplace.org): specification, guides, hardware notes, and the generated OpenAPI document (`docs/api/openapi.json`). Preview it with `make docs-serve`. |
 
+The [code map](docs/developers/code-map.md) goes module by module, and
+[AGENTS.md](AGENTS.md) sums up the rules below for coding agents.
+
 ## Development setup
 
 You need [uv](https://docs.astral.sh/uv/) and Node.js 22 or newer. No machine is required:

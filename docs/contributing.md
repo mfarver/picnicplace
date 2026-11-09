@@ -7,6 +7,9 @@ built-in simulator, and a fake Marlin firmware exercises the real driver.
 
 - Read the [specification](SPEC.md) for the architecture and the decisions behind it.
 - Run it locally: see [Try the simulator](guide/try-the-simulator.md).
+- Find your way around the code: the [code map](developers/code-map.md) goes module by
+  module. Coding agents should also read
+  [AGENTS.md](https://github.com/mfarver/picnicplace/blob/main/AGENTS.md).
 - The full development workflow (setup, checks, changing the API, sign-off) is in
   [CONTRIBUTING.md](https://github.com/mfarver/picnicplace/blob/main/CONTRIBUTING.md) on
   GitHub.

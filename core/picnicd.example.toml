@@ -54,6 +54,13 @@ baud = 115200
 connect_wait_s = 3.0       # Wait after opening the port while the board boots.
 command_timeout_s = 10.0
 
+# The flight recorder keeps every frame vision looks at and what the machine does, to send
+# to PicnicPlace's developers (see the guide: Send a flight recording).
+[recorder]
+record_runs = false        # Record every job run (a run can also ask for it).
+keep = 10                  # Keep at most this many recordings,
+max_mb = 5000              # and at most this many megabytes of them; older ones go.
+
 # Cameras, by ID from the machine profile ("top" and "bottom" on the LumenPnP). Cameras
 # left out are simulated with the simulator and fake-marlin drivers, and off otherwise.
 # Find stable device paths with: ls /dev/v4l/by-id/ (or run picnicplace-probe).

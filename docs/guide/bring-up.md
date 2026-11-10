@@ -159,6 +159,9 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       the job once each way. Each feeder's detail in the Feeders workspace shows how far
       off the nozzle's center its parts sat, on average, for each way. Set the one you
       prefer as the default with `pick_correction` under `[machine]` in the config.
+      **Auto** combines them: the top camera on each feeder's first pick in a run and
+      after a bad pick, the bottom camera otherwise. Each pick's message says when auto
+      chose the top camera, and why.
 
 ## 8. Measure what the profile only estimates
 

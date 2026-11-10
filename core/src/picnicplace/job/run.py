@@ -482,6 +482,9 @@ class JobRunner:
         self._job: Job | None = None
         self._active = False
         self._step = False
+        self._picked: set[str] = set()
+        """Slots, strips, and trays picked from in this run, since the feeders were
+        scanned."""
         self._board_check: BoardCheck | None = None
         self._recording: str | None = None
         """The flight recording this runner started for the run, if any."""
@@ -559,6 +562,7 @@ class JobRunner:
         )
         self._run.pause_requested = step
         self._step = step
+        self._picked = set()
         if self._sim_error is not None:
             self._load_sim_board(job)
         recorder = self._machine.recorder
@@ -751,6 +755,7 @@ class JobRunner:
         run.message = "scanning the feeders"
         await self._feeders.scan()
         run.located = []
+        self._picked = set()
         plan = plan_job(
             run.job_id, job, self._machine.profile, self._feeders.state(), self._library()
         )
@@ -898,7 +903,14 @@ class JobRunner:
             run.message = f"{nozzle_id} picking {item.ref} from {_source(item.slot_id)}"
             for attempt in range(1, PICK_ATTEMPTS + 1):
                 try:
-                    await self._placement.pick(item.slot_id, nozzle, True, run.pick_correction)
+                    await self._placement.pick(
+                        item.slot_id,
+                        nozzle,
+                        True,
+                        run.pick_correction,
+                        first=item.slot_id not in self._picked,
+                    )
+                    self._picked.add(item.slot_id)
                     break
                 except MispickError as e:
                     if attempt == PICK_ATTEMPTS:

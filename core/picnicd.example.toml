@@ -33,6 +33,8 @@ speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 
 # "bottom": no look first; each feeder's picks move by how far off the nozzle's center
 #           the bottom camera saw its earlier parts.
 # "off": pick where the feeder setup says.
+# "auto": "bottom", with the top camera on each feeder's first pick in a run, until it
+#         has learned something, and after an empty pick or a part well off center.
 pick_correction = "top"
 
 # Places you choose for this machine: where rejected parts are dropped, and where the

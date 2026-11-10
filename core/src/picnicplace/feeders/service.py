@@ -23,8 +23,8 @@ from picnicplace.feeders.setup import (
     FeederAssignment,
     FeederSetupStore,
     FixedFeeder,
-    PickCorrection,
     PickLearning,
+    PickMethod,
     PickMisses,
     RailCalibration,
     RailPoint,
@@ -812,7 +812,7 @@ class FeederService:
         return learning.offset if learning is not None else Point(x=0, y=0)
 
     def learn_pick(
-        self, source_id: str, base: Point, part_at: Point, miss: float, how: PickCorrection
+        self, source_id: str, base: Point, part_at: Point, miss: float, how: PickMethod
     ) -> PickLearning | None:
         """The bottom camera saw a part picked from ``source_id`` that lay at ``part_at``
         when it was picked, ``miss`` mm from the nozzle's axis; the setup put it at

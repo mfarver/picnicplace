@@ -9,7 +9,10 @@ export function EStopButton() {
       type="button"
       className="estop"
       disabled={status !== "open"}
-      title="Emergency stop (software). Use the machine's physical E-stop in an emergency."
+      title={
+        "Emergency stop (software). In an emergency, switch the machine off (or use its " +
+        "E-stop, if it has one)."
+      }
       onClick={() => void api.POST("/api/v1/machine/estop")}
     >
       <OctagonX size={16} strokeWidth={2.5} aria-hidden />

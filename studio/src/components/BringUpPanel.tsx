@@ -72,12 +72,13 @@ const STEPS: Step[] = [
   },
   {
     id: "slow",
-    title: "Slow speed and a hand on the E-stop",
+    title: "Slow speed and a hand on the power switch",
     body: (c) => (
       <p>
         Set <code>speed_scale = 0.25</code> under <code>[machine]</code> while checking the
         machine. Now: {Math.round((c.machine?.speed_scale ?? 1) * 100)}%. Keep a hand on the
-        physical E-stop throughout.
+        machine's power switch throughout (or its E-stop, if it has one; the LumenPnP has
+        none).
       </p>
     ),
     check: (c) => (c.machine ? c.machine.speed_scale <= 0.25 : null),

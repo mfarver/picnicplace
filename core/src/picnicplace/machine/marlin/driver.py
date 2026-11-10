@@ -214,7 +214,8 @@ class MarlinDriver(MotionDriver):
         self._warn(
             "emergency_parser",
             "the firmware has no emergency parser: STOP takes effect only after the current "
-            "move finishes. Keep a hand on the machine's E-stop."
+            "move finishes. To stop a move at once, switch the machine off (or use its "
+            "E-stop, if it has one)."
             if no_parser
             else None,
         )

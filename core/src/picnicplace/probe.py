@@ -257,7 +257,7 @@ def summarize(report: ProbeReport, profile: MachineProfile) -> str:
 
 CHECKLIST = """
 First motion checklist
-  1. Keep a hand on the machine's physical E-stop.
+  1. Keep a hand on the machine's power switch (or its E-stop, if it has one).
   2. Start picnicd with machine.speed_scale = 0.25 (slow moves).
   3. Home, and watch that every axis reaches its switch.
   4. Jog X and Y by 1 mm, then 10 mm; check the direction matches the arrows.

@@ -38,7 +38,7 @@ A request goes **route → service → machine service → driver**:
 |---|---|
 | `core/` | The core: the `picnicd` command, its API, the machine service, drivers, vision, feeders, jobs |
 | `core/src/picnicplace/` | The Python package (the map below) |
-| `core/src/picnicplace/profiles/` | Built-in machine profiles (`lumenpnp-v4.1.toml`): the design facts of a machine |
+| `core/src/picnicplace/profiles/` | Built-in machine profiles (`lumenpnp-v4.1.toml`): the design facts of a machine model |
 | `core/tests/` | The core's tests, all against the simulator (no hardware needed) |
 | `core/picnicd.example.toml` | Every config setting, explained: copy it to make a config |
 | `studio/src/` | The Studio (the map below) |
@@ -67,7 +67,8 @@ A request goes **route → service → machine service → driver**:
 
 | Module | What it does |
 |---|---|
-| `machine/profile.py` | Machine profiles: axes, nozzles, cameras, feeder banks, locations, keep-outs. **Design facts only**; owner choices go in the config. |
+| `machine/profile.py` | Machine profiles: axes, nozzles, cameras, feeder banks, locations, keep-outs. Built-in profiles hold a model's **design facts only**, and can `extends` another. |
+| `machine/local.py` | The local profile: what is true of one machine (discard and park locations, measured keep-outs), laid over the built-in profile. Written by the Studio. |
 | `machine/service.py` | The machine service: the one owner of the machine, and where the safety rules live. Also camera frames and vision calls for tasks. |
 | `machine/driver.py` | The interface every motion driver implements |
 | `machine/simulator.py` | The simulated machine. Its errors are realistic (homing error, feeder steps, slot and board offsets), so calibration and vision have something to find. |

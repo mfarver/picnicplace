@@ -7,8 +7,8 @@
     brought up. The LumenPnP has no E-stop: keep a hand on its power switch throughout.
     STOP in the Studio waits for the current move to finish on its stock firmware.
 
-PicnicPlace runs on Linux for real machines. These steps are for a LumenPnP v4.1 with
-stock firmware; other machines need their own machine profile.
+PicnicPlace runs on Linux for real machines. These steps are for a LumenPnP v4.1 or v4.2
+with stock firmware; other machines need their own machine profile.
 
 ## 1. Probe the firmware
 
@@ -40,7 +40,7 @@ and set at least:
 ```toml
 [machine]
 driver = "marlin"
-profile = "lumenpnp-v4.1"
+profile = "lumenpnp-v4.1"   # or "lumenpnp-v4.2"
 speed_scale = 0.25         # quarter speed while you check the machine
 
 [machine.marlin]
@@ -85,6 +85,20 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
 - [ ] **Visual home** in the Calibration panel finds the datum fiducial and reports a
       correction of well under a millimeter.
 - [ ] **Camera scale** reports a size close to the profile's field of view.
+
+### Discard and park
+
+In the Machine workspace's **Calibration** panel:
+
+- [ ] Jog the top camera over the middle of the discard tray (or wherever rejected parts
+      should go) and click **Set discard here**. A run drops a part the bottom camera
+      cannot find there, then tries that placement again.
+- [ ] Jog it to a spot out of your way where the head can wait, and click **Set park
+      here**. A run that needs you (a strip or tray to refill, a part to take off a
+      nozzle) moves the head there first.
+
+Both are kept for this machine in its local profile, over the machine profile, and take
+effect at once. The reset button next to one forgets it.
 
 ## 5. Feeders
 
@@ -160,8 +174,8 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       removed**, and resume to pick it again.
 - [ ] With a part on a strip or tray, the run takes them in order and pauses when one is
       empty, with the nozzles up and the head moved out of the way: to the park
-      location, if `[[machine.locations]]` in the config has one (`kind = "park"`, its
-      position the head's X and Y), or else to the back of its travel. Refill it, click
+      location, if the machine has one (see **Discard and park** below), or else to the
+      back of its travel. Refill it, click
       **Refilled** (in the Run workspace's **Strips and trays** panel), and resume.
 - [ ] Compare the two ways of keeping picks centered. **Keep picks centered with** in
       the Run workspace offers the top camera (find each pocket from the sprocket holes
@@ -179,7 +193,10 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
 With the camera centered on each point, record it in the checklist's last steps: the
 corners of the datum board, the camera opening, the aiming fiducial's holder, and the
 rear staging plate. Points that share a first word become a keep-out rectangle in the
-suggested changes.
+suggested changes. **Save to this machine** keeps the suggested changes (axis directions
+and keep-outs) in the machine's local profile, over the built-in one; they take effect
+when the core restarts. **Copy** gives them as TOML, to offer for the built-in profile
+when they hold for every machine of the model.
 
 ## 9. Full speed
 

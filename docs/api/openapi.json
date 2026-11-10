@@ -2477,6 +2477,93 @@
         "title": "LibraryDocument",
         "type": "object"
       },
+      "LocalProfileState": {
+        "properties": {
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the local profile is kept.",
+            "title": "Path"
+          },
+          "profile": {
+            "additionalProperties": true,
+            "description": "What it holds: a partial machine profile, laid over the built-in one.",
+            "title": "Profile",
+            "type": "object"
+          },
+          "restart_needed": {
+            "description": "It has changes that take effect when the core next starts.",
+            "title": "Restart Needed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "profile",
+          "restart_needed"
+        ],
+        "title": "LocalProfileState",
+        "type": "object"
+      },
+      "LocalProfileUpdate": {
+        "additionalProperties": false,
+        "description": "Findings for the local profile, such as from the bring-up checklist. They take\neffect when the core next starts.",
+        "properties": {
+          "keep_outs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/KeepOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Added to the profile's, or replacing those with the same ID.",
+            "title": "Keep Outs"
+          },
+          "x_points": {
+            "anyOf": [
+              {
+                "enum": [
+                  "right",
+                  "left"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Points"
+          },
+          "y_points": {
+            "anyOf": [
+              {
+                "enum": [
+                  "back",
+                  "front"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y Points"
+          }
+        },
+        "title": "LocalProfileUpdate",
+        "type": "object"
+      },
       "Location": {
         "additionalProperties": false,
         "properties": {
@@ -2548,6 +2635,37 @@
           "style"
         ],
         "title": "Location",
+        "type": "object"
+      },
+      "LocationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where it is. Default: where the top camera is looking."
+          }
+        },
+        "title": "LocationRequest",
         "type": "object"
       },
       "MachineLocation-Input": {
@@ -2720,6 +2838,18 @@
             "title": "Cameras",
             "type": "array"
           },
+          "extends": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The profile this one builds on, if any (already merged in).",
+            "title": "Extends"
+          },
           "feeder_banks": {
             "items": {
               "$ref": "#/components/schemas/FeederBank"
@@ -2882,6 +3012,7 @@
         "required": [
           "id",
           "name",
+          "extends",
           "provisional",
           "bed",
           "work_area",
@@ -5571,8 +5702,12 @@
                 "type": "null"
               }
             ],
-            "description": "A round opening at the center (for a bottom camera); grid holes inside are left out.",
+            "description": "A round opening for a bottom camera; grid holes inside are left out.",
             "title": "Knockout Diameter"
+          },
+          "knockout_offset": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Where the knockout is, relative to the plate's center."
           },
           "label": {
             "title": "Label",
@@ -5595,6 +5730,7 @@
           "corner_holes",
           "corner_hole_diameter",
           "knockout_diameter",
+          "knockout_offset",
           "holes"
         ],
         "title": "StagingPlate",
@@ -9508,6 +9644,256 @@
           }
         ],
         "summary": "Jog",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/local-profile": {
+      "get": {
+        "description": "This machine's own profile: what is true of it beyond its model's design.",
+        "operationId": "get_local_profile_api_v1_machine_local_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalProfileState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Local Profile",
+        "tags": [
+          "machine"
+        ]
+      },
+      "put": {
+        "description": "Save findings to this machine's profile. They take effect when the core restarts.",
+        "operationId": "update_local_profile_api_v1_machine_local_profile_put",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalProfileState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The result is not a valid profile."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Local Profile",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/locations/{kind}": {
+      "delete": {
+        "description": "Forget this machine's own discard or park location: the profile's or the config's,\nif any, applies again.",
+        "operationId": "reset_location_api_v1_machine_locations__kind__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "discard",
+                "park"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reset Location",
+        "tags": [
+          "machine"
+        ]
+      },
+      "put": {
+        "description": "Set this machine's discard or park location, by default to where the top camera is\nlooking. It takes effect at once, and is kept in the local profile.",
+        "operationId": "set_location_api_v1_machine_locations__kind__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "discard",
+                "park"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Location",
         "tags": [
           "machine"
         ]

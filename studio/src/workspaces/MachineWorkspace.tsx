@@ -182,10 +182,12 @@ export function MachineWorkspace() {
           />
         )}
 
-        {description?.locations.some((loc) => loc.kind === "homing_fiducial") && (
+        {description && (
           <CalibrationPanel
+            description={description}
             operations={operations}
             canRun={canMove && !!machine?.homed}
+            canSet={status === "open" && !controlledElsewhere && !!machine?.homed}
             onVisualHome={() => void track(() => api.POST("/api/v1/machine/visual-home"))}
             onCameraScale={() => void track(() => api.POST("/api/v1/machine/camera-scale"))}
           />

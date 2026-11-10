@@ -1,0 +1,93 @@
+# LumenPnP v4.2 machine profile. It builds on the v4.1 profile and gives only what v4.2
+# changed: laser-cut metal staging plates (3 mm) with the bottom camera near the left end
+# of the camera plate instead of its center, the datum and calibration fiducials beside
+# it, and a standard discard tray. Everything else (axes, feeder rails, I/O, firmware)
+# is as on v4.1; see docs/hardware/lumenpnp-v4.md.
+#
+# Positions are from Opulo's stock OpenPnP configuration for v4.2 (machine.xml,
+# October 2026) and the plate design. They are a design's values, not one machine's:
+# calibration refines them.
+#
+# Still PROVISIONAL: not yet run on a v4.2. To check on a machine: the bottom camera's
+# focus height (taken from v4.1), the top camera's scale (v4.1's; Opulo's stock config
+# says about 0.0130 mm/pixel, uncalibrated), the calibration fiducial's height, the
+# plates' hole pattern, and the size of the discard tray.
+
+extends = "lumenpnp-v4.1"
+id = "lumenpnp-v4.2"
+name = "LumenPnP v4.2"
+
+# Opulo's stock nozzle offsets for v4.2.
+[[nozzles]]
+id = "N1"
+offset = { x = -23.544, y = -65.188 }
+
+[[nozzles]]
+id = "N2"
+offset = { x = 23.922, y = -64.393 }
+
+# The bottom camera sits in a 60 mm knockout 120 mm from the camera plate's left end.
+# 1920 x 1080 at about 0.0367 mm/pixel (Opulo's stock value).
+[[cameras]]
+id = "bottom"
+position = { x = 38.376, y = 154.632 }
+field_of_view = { x = 70.5, y = 40.0 }
+
+# The datum board, in front of the bottom camera as on v4.1 ("calibration primary
+# fiducial" in OpenPnP's config). Opulo's stock config leaves visual homing off; its
+# "homing fiducial" entry (218.1, 197.3) is not used, and is where v4.1's aiming
+# fiducial was.
+[[locations]]
+id = "homing_fiducial"
+position = { x = 37.366, y = 110.042 }
+
+# The separate calibration fiducial board (cal-fid), 26 mm to the right of the datum
+# ("calibration secondary fiducial"). Its height is assumed level with the datum, as
+# Opulo's config gives both the same Z; not measured.
+[[locations]]
+id = "aiming_fiducial"
+label = "Calibration fiducial"
+position = { x = 63.736, y = 109.892 }
+z = -27.5
+
+# v4.2 comes with a discard tray beside the bottom camera.
+[[locations]]
+id = "discard"
+label = "Discard tray"
+kind = "discard"
+position = { x = 82.452, y = 156.394 }
+
+# The metal plates have the same size and place as v4.1's PCB plates. Their mounting
+# holes are on a 30 mm grid; its exact layout has not been taken from the design yet, so
+# the grid here (19 x 3, square) is drawn as a placeholder.
+[[staging_plates]]
+id = "camera_plate"
+hole_pitch = 30
+hole_columns = 19
+hole_rows = 3
+checkerboard = false
+knockout_diameter = 60
+knockout_offset = { x = -179.36, y = 1.561 }
+
+[[staging_plates]]
+id = "rear_plate"
+hole_pitch = 30
+hole_columns = 19
+hole_rows = 3
+checkerboard = false
+
+# Boards cannot cover the datum board (80 x 35 mm, as on v4.1, moved with it), the
+# camera knockout, or the calibration fiducial's board and holder (estimated as 24 mm
+# square). The discard tray's size is not known yet.
+[[keep_outs]]
+id = "datum"
+area = { x_min = -2.63, y_min = 100.04, x_max = 77.37, y_max = 135.04 }
+
+[[keep_outs]]
+id = "bottom_camera"
+area = { x_min = 8.38, y_min = 124.63, x_max = 68.38, y_max = 184.63 }
+
+[[keep_outs]]
+id = "aiming_fiducial"
+label = "Calibration fiducial board"
+area = { x_min = 51.74, y_min = 97.89, x_max = 75.74, y_max = 121.89 }

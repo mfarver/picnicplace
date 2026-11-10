@@ -31,6 +31,8 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/health` | Is the core running |
 | `GET /api/v1/machine` | Live machine state: position, inputs, outputs, safe Z, E-stop |
 | `GET /api/v1/machine/description` | The machine profile: axes, nozzles, cameras, plates, I/O |
+| `GET`, `PUT /api/v1/machine/local-profile` | This machine's local profile; save bring-up findings to it (they take effect on restart) |
+| `PUT`, `DELETE /api/v1/machine/locations/{kind}` | Set the discard or park location (by default where the top camera looks), or reset it |
 | `POST /api/v1/machine/connect` | Connect to the machine's controller |
 | `POST /api/v1/machine/home` | Home, then visual home if the profile enables it |
 | `POST /api/v1/machine/move` | Move to a position, traveling at safe Z |

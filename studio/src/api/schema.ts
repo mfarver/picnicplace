@@ -922,6 +922,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/local-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Local Profile
+         * @description This machine's own profile: what is true of it beyond its model's design.
+         */
+        get: operations["get_local_profile_api_v1_machine_local_profile_get"];
+        /**
+         * Update Local Profile
+         * @description Save findings to this machine's profile. They take effect when the core restarts.
+         */
+        put: operations["update_local_profile_api_v1_machine_local_profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/machine/locations/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Location
+         * @description Set this machine's discard or park location, by default to where the top camera is
+         *     looking. It takes effect at once, and is kept in the local profile.
+         */
+        put: operations["set_location_api_v1_machine_locations__kind__put"];
+        post?: never;
+        /**
+         * Reset Location
+         * @description Forget this machine's own discard or park location: the profile's or the config's,
+         *     if any, applies again.
+         */
+        delete: operations["reset_location_api_v1_machine_locations__kind__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/move": {
         parameters: {
             query?: never;
@@ -2601,6 +2651,42 @@ export interface components {
              */
             version: 1;
         };
+        /** LocalProfileState */
+        LocalProfileState: {
+            /**
+             * Path
+             * @description Where the local profile is kept.
+             */
+            path: string | null;
+            /**
+             * Profile
+             * @description What it holds: a partial machine profile, laid over the built-in one.
+             */
+            profile: {
+                [key: string]: unknown;
+            };
+            /**
+             * Restart Needed
+             * @description It has changes that take effect when the core next starts.
+             */
+            restart_needed: boolean;
+        };
+        /**
+         * LocalProfileUpdate
+         * @description Findings for the local profile, such as from the bring-up checklist. They take
+         *     effect when the core next starts.
+         */
+        LocalProfileUpdate: {
+            /**
+             * Keep Outs
+             * @description Added to the profile's, or replacing those with the same ID.
+             */
+            keep_outs?: components["schemas"]["KeepOut"][] | null;
+            /** X Points */
+            x_points?: ("right" | "left") | null;
+            /** Y Points */
+            y_points?: ("back" | "front") | null;
+        };
         /** Location */
         Location: {
             /**
@@ -2630,6 +2716,13 @@ export interface components {
              * @description Height of the surface, where it matters (fiducials).
              */
             z: number | null;
+        };
+        /** LocationRequest */
+        LocationRequest: {
+            /** Label */
+            label?: string | null;
+            /** @description Where it is. Default: where the top camera is looking. */
+            position?: components["schemas"]["Point"] | null;
         };
         /** MachineLocation */
         "MachineLocation-Input": {
@@ -2723,6 +2816,11 @@ export interface components {
             board_height: number | null;
             /** Cameras */
             cameras: components["schemas"]["Camera"][];
+            /**
+             * Extends
+             * @description The profile this one builds on, if any (already merged in).
+             */
+            extends: string | null;
             /** Feeder Banks */
             feeder_banks: components["schemas"]["FeederBank"][];
             /**
@@ -4048,9 +4146,11 @@ export interface components {
             id: string;
             /**
              * Knockout Diameter
-             * @description A round opening at the center (for a bottom camera); grid holes inside are left out.
+             * @description A round opening for a bottom camera; grid holes inside are left out.
              */
             knockout_diameter: number | null;
+            /** @description Where the knockout is, relative to the plate's center. */
+            knockout_offset: components["schemas"]["Point"];
             /** Label */
             label: string;
             size: components["schemas"]["Point"];
@@ -6427,6 +6527,143 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_local_profile_api_v1_machine_local_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalProfileState"];
+                };
+            };
+        };
+    };
+    update_local_profile_api_v1_machine_local_profile_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalProfileState"];
+                };
+            };
+            /** @description The result is not a valid profile. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    set_location_api_v1_machine_locations__kind__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                kind: "discard" | "park";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineProfile"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_location_api_v1_machine_locations__kind__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                kind: "discard" | "park";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineProfile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

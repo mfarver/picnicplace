@@ -234,7 +234,7 @@ class PlacementService:
         bin_ = next((loc for loc in self._machine.profile.locations if loc.kind == "discard"), None)
         if bin_ is None:
             raise PlacementError(
-                "no discard location: add one under [[machine.locations]] in the config"
+                "no discard location: set one in the Calibration panel (Machine workspace)"
             )
         return bin_
 

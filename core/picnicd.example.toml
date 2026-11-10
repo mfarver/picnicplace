@@ -19,7 +19,8 @@ heartbeat_timeout_s = 6.0  # Silent clients are disconnected after this long.
 # "simulator": no hardware. "marlin": a real machine on marlin.port.
 # "fake-marlin": the real Marlin driver talking to a built-in fake LumenPnP firmware.
 driver = "simulator"
-profile = "lumenpnp-v4.1"    # Built-in profile ID, or a path to a profile TOML file.
+profile = "lumenpnp-v4.1"    # Built-in profile ID ("lumenpnp-v4.1", "lumenpnp-v4.2"), or a
+                             # path to a profile TOML file.
 sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times faster.
 # Simulator and fake firmware: the feeder slots (by number) that hold a Photon feeder.
 # sim_feeders = [1, 2, 3, 4, 5, 26]
@@ -38,7 +39,9 @@ speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 
 pick_correction = "top"
 
 # Places you choose for this machine: where rejected parts are dropped, and where the
-# head waits. These values are from one LumenPnP; set your own.
+# head waits. Easier: set them in the Studio (Machine workspace, Calibration panel) by
+# centering the top camera on them; the core keeps those in local-profile.json in its
+# data directory, and they win over these. These values are from one LumenPnP.
 # [[machine.locations]]
 # id = "discard"
 # label = "Discard"

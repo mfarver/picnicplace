@@ -6,7 +6,16 @@ outputs. Drivers, the machine service, and clients (through the machine descript
 endpoint) all work from the same profile.
 
 Profiles are TOML files. Built-in ones ship in ``picnicplace/profiles``; a config can also
-point at a profile file by path.
+point at a profile file by path. A profile can ``extends`` another (a built-in ID, or a
+path relative to its own file) and give only what differs: a later model of a machine,
+say, with its standard discard tray. Tables merge key by key, and lists of tables whose
+items have an ``id`` (locations, keep-outs, cameras, ...) merge item by item; anything
+else is replaced.
+
+Profiles hold what a machine is. Built-in ones describe a model's design; the *local
+profile* in the core's data directory (see ``machine/local.py``) is laid over it and
+holds what is true of one particular machine, such as where its owner put the discard
+tray, or keep-outs measured during bring-up.
 
 Coordinates are the machine's own, in millimeters, as its firmware reports them. Machines
 differ in where the origin is and which way the axes point; ``x_points`` and ``y_points``
@@ -16,11 +25,12 @@ picture, the map, and the jog arrows all agree with what the operator sees. The 
 X and Y axis positions) is the center of the top camera; nozzles are offsets from it.
 """
 
+import copy
 import math
 import tomllib
 from importlib import resources
 from pathlib import Path
-from typing import Literal, Self
+from typing import Any, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
@@ -250,9 +260,11 @@ class StagingPlate(ProfileModel):
     corner_hole_diameter: float = 5.3
     knockout_diameter: float | None = Field(
         default=None,
-        description=(
-            "A round opening at the center (for a bottom camera); grid holes inside are left out."
-        ),
+        description=("A round opening for a bottom camera; grid holes inside are left out."),
+    )
+    knockout_offset: Point = Field(
+        default_factory=lambda: Point(x=0, y=0),
+        description="Where the knockout is, relative to the plate's center.",
     )
 
     @computed_field
@@ -266,7 +278,11 @@ class StagingPlate(ProfileModel):
                 if self.checkerboard and (i + j) % 2:
                     continue
                 dx, dy = i * self.hole_pitch, j * self.hole_pitch
-                if self.knockout_diameter and math.hypot(dx, dy) < self.knockout_diameter / 2 + 3:
+                ko = self.knockout_offset
+                if (
+                    self.knockout_diameter
+                    and math.hypot(dx - ko.x, dy - ko.y) < self.knockout_diameter / 2 + 3
+                ):
                     continue
                 if any(math.hypot(dx - c.x, dy - c.y) < 10 for c in self.corner_holes):
                     continue
@@ -320,6 +336,9 @@ class Output(ProfileModel):
 class MachineProfile(ProfileModel):
     id: str
     name: str
+    extends: str | None = Field(
+        default=None, description="The profile this one builds on, if any (already merged in)."
+    )
     provisional: bool = Field(
         default=False,
         description="Dimensions are estimates that have not been measured on a real machine.",
@@ -553,17 +572,70 @@ def is_profile_path(ref: str) -> bool:
     return ref.endswith(".toml") or "/" in ref
 
 
-def load_profile(ref: str) -> MachineProfile:
-    """Load a profile by built-in ID (such as ``lumenpnp-v4.1``) or by path to a TOML file."""
+def merge_profile_data(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
+    """``over`` laid on ``base``: tables merge key by key, lists of tables with an ``id``
+    merge item by item (the same ID merges, a new one is added at the end), and anything
+    else in ``over`` replaces what ``base`` has. Neither argument is changed."""
+    merged = copy.deepcopy(base)
+    for key, value in over.items():
+        old = merged.get(key)
+        if isinstance(old, dict) and isinstance(value, dict):
+            merged[key] = merge_profile_data(cast(dict[str, Any], old), cast(dict[str, Any], value))
+        elif _by_id(cast(object, old)) and _by_id(cast(object, value)):
+            items = cast(list[dict[str, Any]], old)
+            index = {item["id"]: n for n, item in enumerate(items)}
+            for item in cast(list[dict[str, Any]], value):
+                n = index.get(item["id"])
+                if n is None:
+                    items.append(copy.deepcopy(item))
+                else:
+                    items[n] = merge_profile_data(items[n], item)
+        else:
+            merged[key] = copy.deepcopy(value)
+    return merged
+
+
+def _by_id(value: object) -> bool:
+    return isinstance(value, list) and all(
+        isinstance(item, dict) and "id" in item for item in cast(list[object], value)
+    )
+
+
+def _read_profile(ref: str, relative_to: Path | None) -> tuple[dict[str, Any], Path | None]:
     if is_profile_path(ref):
+        path = Path(ref)
+        if relative_to is not None and not path.is_absolute():
+            path = relative_to / path
         try:
-            data = tomllib.loads(Path(ref).read_text(encoding="utf-8"))
+            return tomllib.loads(path.read_text(encoding="utf-8")), path.resolve()
         except OSError as e:
             raise ValueError(f"cannot read machine profile {ref!r}: {e.strerror}") from e
-    else:
-        resource = resources.files("picnicplace") / "profiles" / f"{ref}.toml"
-        if not resource.is_file():
-            known = ", ".join(builtin_profiles())
-            raise ValueError(f"unknown machine profile {ref!r}; built-in profiles: {known}")
-        data = tomllib.loads(resource.read_text(encoding="utf-8"))
-    return MachineProfile.model_validate(data)
+    resource = resources.files("picnicplace") / "profiles" / f"{ref}.toml"
+    if not resource.is_file():
+        known = ", ".join(builtin_profiles())
+        raise ValueError(f"unknown machine profile {ref!r}; built-in profiles: {known}")
+    return tomllib.loads(resource.read_text(encoding="utf-8")), None
+
+
+def profile_data(
+    ref: str, relative_to: Path | None = None, _chain: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    """A profile's TOML data, with any profile it ``extends`` merged in under it."""
+    data, path = _read_profile(ref, relative_to)
+    name = str(path) if path else ref
+    if name in _chain:
+        raise ValueError(f"machine profile {ref!r} extends itself: {' > '.join([*_chain, ref])}")
+    parent = data.get("extends")
+    if parent is None:
+        return data
+    if not isinstance(parent, str):
+        raise ValueError(f"machine profile {ref!r}: extends must be a profile ID or path")
+    if "id" not in data:
+        raise ValueError(f"machine profile {ref!r} extends {parent!r}, so it needs its own id")
+    base = profile_data(parent, path.parent if path else None, (*_chain, name))
+    return merge_profile_data(base, data)
+
+
+def load_profile(ref: str) -> MachineProfile:
+    """Load a profile by built-in ID (such as ``lumenpnp-v4.1``) or by path to a TOML file."""
+    return MachineProfile.model_validate(profile_data(ref))

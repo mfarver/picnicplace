@@ -2264,3 +2264,28 @@ code,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* --- This machine's discard and park locations (Calibration panel) ----------------- */
+
+.machine-locations {
+  margin-top: var(--space-3);
+}
+
+.machine-location {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.machine-location-text {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: var(--text-sm);
+}
+
+.machine-location-name {
+  font-weight: 600;
+}

@@ -39,6 +39,7 @@ from picnicplace.lease import LeaseManager
 from picnicplace.library import Library
 from picnicplace.machine.errors import MachineError
 from picnicplace.machine.factory import build_driver
+from picnicplace.machine.local import LocalProfile, LocalProfileStore
 from picnicplace.machine.service import MachineService
 from picnicplace.operations import OperationManager
 from picnicplace.placement import PlacementService
@@ -54,6 +55,12 @@ def create_app(config: Config | None = None) -> FastAPI:
     bus = EventBus()
     presence = PresenceTracker(bus, config.presence.grace_period_s)
     operations = OperationManager(bus)
+    # This machine's own facts (its discard tray, measured keep-outs, ...), laid over the
+    # built-in profile before anything uses it.
+    local_store = LocalProfileStore(config.data.local_profile_path)
+    applied = local_store.get()
+    if applied:
+        config.machine.apply_local(applied)
     profile = config.machine.machine_profile
     bundle = build_driver(config.machine)
     driver = bundle.driver
@@ -95,6 +102,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         cameras=cameras,
         bring_up=BringUpStore(config.data.bringup_path),
         captures=CaptureStore(config.data.captures_dir),
+        local_profile=LocalProfile(local_store, config.machine.with_local, profile, applied),
     )
 
     @asynccontextmanager

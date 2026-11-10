@@ -464,3 +464,18 @@ def test_without_a_discard_location_the_operator_takes_the_part_off(lumen: TestC
         op = ok(s.wait(s.post("/api/v1/run/resume")))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
         assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
+
+
+def test_run_a_job_on_a_lumenpnp_v4_2() -> None:
+    """The v4.2 profile extends v4.1: its bottom camera, datum, and fiducials are near the
+    left end of the camera plate, and it has a standard discard tray."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.2"}, presence={"heartbeat_timeout_s": 300.0}
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        assert not any("discard" in i["message"] for i in plan["issues"]), plan["issues"]
+        op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        assert check_landed(client, client.get("/api/v1/run").json()) == 4

@@ -365,6 +365,23 @@ A declarative, data-driven model, loaded from config:
 - **Transforms**: camera-to-nozzle offsets, camera pixel scale (units per pixel at a given
   Z), lens distortion calibration, nonsquareness/skew compensation.
 
+The model comes in layers, merged in order (tables key by key, lists of tables item by
+item by their `id`, anything else replaced):
+
+1. **Built-in profile** for the machine model: its design facts. A later model
+   `extends` an earlier one and gives only what differs, such as a standard discard
+   tray.
+2. **`[[machine.locations]]` in the config**, for owners who keep places there.
+3. **Local profile** (`local-profile.json` in the core's data directory): what is true of
+   this one machine. The Studio writes it. The discard and park locations are set in
+   the Calibration panel by centering the top camera on them, and take effect at once.
+   Bring-up findings (axis directions, measured keep-outs) are saved there with **Save
+   to this machine** and take effect when the core restarts. A local value can be reset
+   to fall back to the layers under it.
+
+The config holds how the machine is run (serial port, cameras, speed, preferences), not
+what it is, and the core never writes it.
+
 ### 7.2 Drivers
 
 A `MotionDriver` interface with implementations:
@@ -758,7 +775,7 @@ refusing to connect.
 |---|---|
 | **M0 — Skeleton** | Repo layout, tooling, CI, `picnicd` with health endpoint, simulator driver, event socket, GUI shell with theme and status bar. |
 | **M1 — Manual control** | Machine description API and I/O state; machine view with head inset (built first, against the simulator); connect to LumenPnP, home, jog, actuators, vacuum readings, safe-Z interlock, MJPEG camera streams in the GUI, control lease, E-stop. |
-| **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. Started: fiducial finder, visual homing (after `G28`, center the top camera on the homing fiducial and correct X/Y with `G92`), and a camera scale measurement, all tested against the simulator, whose homing has a realistic error for visual homing to find. |
+| **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. Started: fiducial finder, visual homing (after `G28`, center the top camera on the homing fiducial and correct X/Y with `G92`), and a camera scale measurement, all tested against the simulator, whose homing has a realistic error for visual homing to find. Discard and park locations set by centering the top camera on them, kept in the machine's local profile (layered over the built-in profile, which can now extend another), along with bring-up findings. |
 | **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. Started: the parts library (footprints, parts with height and its source, tape packaging after EIA-481 with rotation in tape and pin-1 quadrant), merge-only imports, OpenPnP library import, and a library editor in the Studio. Photon feeders: discovery and initialization, part assignment by feeder ID, feeding, simulated feeders with drawn tape, slot pick locations taught by eye or found from each feeder's fiducial, and pockets found from the tape's sprocket holes; a Feeders workspace and a bring-up checklist in the Studio. Single placement: pick (feed, find the pocket, pick at the tape's part height, check the vacuum), align on the bottom camera (the part's offset and angle on the nozzle), and place at a given location and angle (with a part-off check), one step at a time or all three, in the simulator to within 0.05 mm; camera captures for tuning vision on real images. |
 | **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. Boards must lie inside the profile's placement area (where every nozzle can reach, on the staging plates) and clear of its keep-outs; import warns about any placement a nozzle cannot reach. Started: KiCad board import (footprints with pads, part numbers from the board or the schematic's BOM), panels recovered from a KiKit panel file, jobs placed on the bed with reach, camera, and keep-out checks and a search for a place that fits (parts within every nozzle's reach; empty rails may lie outside it), saved as job files, and a Prepare workspace. Runs: a planner that is also a dry run against the loaded feeders (blocked placements and why, parts only some nozzles reach, tape too wide for the feeders), board alignment from up to three fiducials (a rigid fit), batches with a part on every nozzle that can take one, lowest parts first, retries for empty picks, discard and retry after a failed alignment (with no discard location, the run parks the head and pauses for the operator to take the part off and click Part removed), pause, step, resume, stop, and skip, and a Run workspace filled by the job's steps, checked off and the one under way highlighted (the Machine workspace shows the map with a few of them under it, for remote viewers); in the simulator a whole board lands within 0.06 mm of where the misplaced board wants its parts. Strips and trays held on the bed as feeders, with refills (the run pauses and parks the head). Feeders scanned again at the start of each run, and each feeder's fiducial found on its first pick in the run (kept with the feeder, not the slot). Picks kept centered by the top camera (pockets from sprocket holes), the bottom camera (each feeder learns where its parts really lie from earlier picks), or auto (the bottom camera, with the top camera on first picks and after a bad pick), the owner's choice. A flight recorder for sending real frames and timelines to developers, with vision replay. Run history is to come. |
 | **M5 — 1.0 polish** | Installer/packaging, docs. The operations view and the engineering tools split (§8.2), the single job file, and parts counted on reels as well as strips and trays. Done early: strip and tray feeders (M4), OpenPnP library import (M3). |

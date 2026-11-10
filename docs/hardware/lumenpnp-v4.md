@@ -14,17 +14,27 @@ PicnicPlace's `lumenpnp-v4.1` profile is for **v4.1 and earlier v4** machines: P
 staging plates with the bottom camera in a knockout at the center of the front plate.
 The project lead's machine and the reference machine are both v4.1.
 
-**v4.2** switched to laser-cut metal staging plates (3 mm) and moved the camera. From
-Opulo's repository (OpenPnP configuration of October 2026 and the plate design), for a
-future `lumenpnp-v4.2` profile:
+**v4.2** switched to laser-cut metal staging plates (3 mm) and moved the camera. The
+`lumenpnp-v4.2` profile extends `lumenpnp-v4.1` with these, from Opulo's stock OpenPnP
+configuration for v4.2 (`machine.xml`, October 2026) and the plate design:
 
 - The camera plate is the same 600 × 120 mm size and position, but its knockout is
   60 mm across and 120 mm from the plate's −X end. Bottom camera at (38.38, 154.63),
-  homing fiducial at (37.37, 110.04).
+  about 0.0367 mm/pixel (70.5 × 40 mm), wider than v4.1's.
+- The datum board is in front of the camera as on v4.1, its fiducial at (37.37, 110.04)
+  (OpenPnP's "calibration primary fiducial"). The stock config has visual homing off;
+  its "homing fiducial" entry, (218.11, 197.30), is unused and is where v4.1's aiming
+  fiducial was.
 - The second calibration fiducial (the separate cal-fid board in its own holder) is at
-  (63.74, 109.89), level with the datum.
+  (63.74, 109.89), given the same Z as the datum.
+- A standard discard tray at (82.45, 156.39), beside the camera. Its size is not known.
 - Nozzle offsets N1 (−23.54, −65.19), N2 (23.92, −64.39).
+- The stock config parks the head at (42.33, 411.92). Park stays the owner's choice (set
+  it in the Calibration panel), so the profile leaves it out.
 - The plates' hole pattern is a 30 mm grid (not fully extracted; FreeCAD source only).
+  The profile draws a placeholder grid.
+- **To check on a v4.2:** the bottom camera's focus height and the top camera's scale
+  (the profile keeps v4.1's), and the calibration fiducial's height.
 
 **Also confirmed by Opulo's configuration:** the stock firmware reads the vacuum sensors
 as one byte (`M261 A109 B1 S2`, "request one byte back via decimal"); the connect

@@ -1932,6 +1932,178 @@ code,
   box-shadow: inset 0 0 0 1px var(--text-faint);
 }
 
+.run-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.run-step {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 26px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+.run-step-label {
+  flex: none;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.run-step-detail {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-steps-large .run-step {
+  gap: var(--space-3);
+  min-height: var(--run-step-h, 44px);
+  padding: 0 var(--space-3);
+  font-size: var(--run-step-font, var(--text-xl));
+}
+
+.run-steps-large .run-step-detail {
+  font-size: var(--run-step-detail-font, var(--text-lg));
+}
+
+.run-steps-large .run-step-icon {
+  width: var(--run-step-icon, 20px);
+  height: var(--run-step-icon, 20px);
+}
+
+/* The Run workspace: the operator's view, the job's steps filling it. */
+.run-canvas {
+  overflow-y: auto;
+}
+
+.run-main {
+  max-width: 820px;
+}
+
+.run-head {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.run-head h1 {
+  margin: 0;
+  font-size: var(--text-xl);
+}
+
+.run-count {
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-message {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+}
+
+.run-held {
+  margin-bottom: var(--space-3);
+  font-size: var(--text-lg);
+}
+
+/* The Machine workspace: the map, with a few of a run's steps under it. */
+.machine-split {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.machine-split > .machine-canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+.run-strip {
+  flex: none;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.run-strip-head {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  margin-bottom: var(--space-1);
+  overflow: hidden;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.run-strip-name {
+  font-weight: 600;
+}
+
+.run-step-icon {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.run-step-done .run-step-icon {
+  color: var(--accent);
+}
+
+.run-step-done .run-step-label {
+  color: var(--text-muted);
+}
+
+.run-step-failed .run-step-icon {
+  color: var(--danger);
+}
+
+.run-step-held {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.run-step-current {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+  font-weight: 600;
+}
+
+.run-step-current .run-step-icon,
+.run-step-current .run-step-detail {
+  color: var(--accent);
+}
+
+.run-step-problem {
+  background: var(--danger-soft);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+.run-step-problem .run-step-icon,
+.run-step-problem .run-step-detail {
+  color: var(--danger);
+}
+
+.run-step-icon.spin {
+  animation: spin 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .run-step-icon.spin {
+    animation: none;
+  }
+}
+
 .run-mark {
   stroke-width: 0.5;
   vector-effect: non-scaling-stroke;

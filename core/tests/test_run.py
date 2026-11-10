@@ -224,6 +224,7 @@ def test_pause_skip_and_resume(lumen: TestClient) -> None:
         run = lumen.get("/api/v1/run").json()
         # Paused before the first part, with the board found.
         assert run["status"] == "paused" and run["placed"] == 0 and run["fix"] is not None
+        assert run["current"] is None  # a clean pause: no step under way
 
         ok(s.wait(s.post("/api/v1/run/step")))
         run = lumen.get("/api/v1/run").json()
@@ -280,6 +281,11 @@ def test_a_jammed_feeder_pauses_the_run(lumen: TestClient) -> None:
         assert run["status"] == "paused" and run["error"] == op["error"]
         assert run["placed"] == 2
         c1 = next(i["index"] for i in run["plan"]["items"] if i["ref"] == "C1")
+        u2 = next(i["index"] for i in run["plan"]["items"] if i["ref"] == "U2")
+        # It shows where it stopped: picking U2, with C1 waiting on its nozzle.
+        current = run["current"]
+        assert (current["stage"], current["action"], current["index"]) == ("item", "picking", u2)
+        assert current["nozzle"] not in run["held"]
         assert list(run["held"].values()) == [c1]
         loads = lumen.get("/api/v1/placement").json()["loads"]
         assert [load["part_id"] for load in loads] == ["EX-C0805-1U"]
@@ -291,7 +297,8 @@ def test_a_jammed_feeder_pauses_the_run(lumen: TestClient) -> None:
         sim.feeders[5].jammed = False
         op = ok(s.wait(s.post("/api/v1/run/resume")))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
-        assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
+        run = lumen.get("/api/v1/run").json()
+        assert check_landed(lumen, run) == 4 and run["current"] is None
 
 
 def test_the_first_pick_from_each_feeder_finds_its_fiducial() -> None:
@@ -348,6 +355,12 @@ def test_a_run_pauses_when_a_part_is_no_longer_loaded(lumen: TestClient) -> None
         assert "feeders changed since the run was planned: U2 (no feeder holds" in op["error"]
         run = lumen.get("/api/v1/run").json()
         assert run["status"] == "paused" and run["placed"] == 0
+        assert run["current"] == {
+            "stage": "scan",
+            "action": "scanning",
+            "index": None,
+            "nozzle": None,
+        }
 
 
 def test_without_a_discard_location_the_operator_takes_the_part_off(lumen: TestClient) -> None:

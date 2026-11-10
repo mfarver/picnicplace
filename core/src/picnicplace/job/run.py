@@ -34,6 +34,10 @@ resume, or skip the placement. An empty strip or tray pauses the run too, with t
 moved to the park position out of the operator's way: refill it, mark it refilled, and
 resume. Pausing and stopping take effect after the batch in progress; a step resumes a
 paused run for one batch.
+
+**Progress.** The run state says which step is under way (scanning the feeders, finding
+the board, or finding a feeder's fiducial, picking, aligning, or placing one item), and
+keeps it when a problem pauses the run, so the Studio can show where it stopped.
 """
 
 import asyncio
@@ -162,6 +166,21 @@ class JobPlan(WireModel):
 
 RunStatus = Literal["running", "paused", "finished", "stopped"]
 
+StepAction = Literal[
+    "scanning", "finding_fiducials", "finding_feeder", "picking", "aligning", "placing"
+]
+
+
+class RunStep(WireModel):
+    """What the run is doing now, or was doing when it paused on a problem."""
+
+    stage: Literal["scan", "board", "item"] = Field(
+        description="Scanning the feeders, finding the board, or working on a placement."
+    )
+    action: StepAction
+    index: int | None = Field(default=None, description="The placement, for stage 'item'.")
+    nozzle: str | None = None
+
 
 class RunState(WireModel):
     job_id: str
@@ -185,6 +204,13 @@ class RunState(WireModel):
     held: dict[str, int] = Field(
         default_factory=dict[str, int],
         description="Nozzle ID to the item whose part it holds.",
+    )
+    current: RunStep | None = Field(
+        default=None,
+        description=(
+            "The step under way. Kept when the run pauses on a problem, to show where it "
+            "stopped; empty between batches and when the run ends."
+        ),
     )
     started_at: datetime
     finished_at: datetime | None = None
@@ -628,6 +654,8 @@ class JobRunner:
         operator = "skipped by the operator"
         if skip and item.status in ("pending", "failed"):
             item.status, item.note = "skipped", operator
+            if run.current is not None and run.current.index == index:
+                run.current = None
         elif not skip and (
             item.status == "failed" or (item.status == "skipped" and item.note == operator)
         ):
@@ -652,6 +680,7 @@ class JobRunner:
     def _finish(self, run: RunState, status: RunStatus, message: str) -> None:
         run.status = status
         run.message = message
+        run.current = None
         run.pause_requested = run.stop_requested = False
         run.finished_at = datetime.now(UTC)
         recorder = self._machine.recorder
@@ -670,13 +699,16 @@ class JobRunner:
                 if self._feeders.has_bus:
                     await self._rescan(run)
                 run.message = "finding the board's fiducials"
+                run.current = RunStep(stage="board", action="finding_fiducials")
                 run.fix = await self._find_board(run)
+                run.current = None
             while True:
                 if run.stop_requested:
                     self._finish(run, "stopped", f"stopped: {self._summary(run)}")
                     return run.message or ""
                 if run.pause_requested:
                     run.status, run.pause_requested = "paused", False
+                    run.current = None
                     run.message = f"paused: {self._summary(run)}"
                     return run.message
                 batch = self._next_batch(run)
@@ -684,6 +716,7 @@ class JobRunner:
                     self._finish(run, "finished", f"finished: {self._summary(run)}")
                     return run.message or ""
                 await self._do_batch(run, batch)
+                run.current = None
                 if self._step:
                     run.pause_requested = True
         except MachineError as e:
@@ -718,6 +751,7 @@ class JobRunner:
         job = self._job
         assert job is not None
         run.message = "scanning the feeders"
+        run.current = RunStep(stage="scan", action="scanning")
         await self._feeders.scan()
         run.located = []
         self._picked = set()
@@ -741,7 +775,7 @@ class JobRunner:
                 "skip those placements."
             )
 
-    async def _locate_feeder(self, run: RunState, slot_id: str) -> None:
+    async def _locate_feeder(self, run: RunState, slot_id: str, index: int) -> None:
         """Before the first pick from a feeder slot in this run, find its feeder's
         fiducial."""
         feeders = self._feeders
@@ -751,6 +785,7 @@ class JobRunner:
         if feeders.fiducial_offset(feeders.bank(slot))[0] is None:
             return  # feeders without a known fiducial: picks go where the setup says
         run.message = f"finding the feeder fiducial at {slot.label.lower()}"
+        run.current = RunStep(stage="item", action="finding_feeder", index=index)
         moved = await feeders.locate_feeder(slot)
         run.located.append(slot_id)
         self._machine.recorder.event("run.feeder", slot=slot_id, moved=round(moved, 4))
@@ -843,8 +878,9 @@ class JobRunner:
             item = items[index]
             nozzle = self._machine.nozzle(nozzle_id)
             assert item.slot_id is not None
-            await self._locate_feeder(run, item.slot_id)
+            await self._locate_feeder(run, item.slot_id, index)
             run.message = f"{nozzle_id} picking {item.ref} from {_source(item.slot_id)}"
+            run.current = RunStep(stage="item", action="picking", index=index, nozzle=nozzle_id)
             for attempt in range(1, PICK_ATTEMPTS + 1):
                 try:
                     await self._placement.pick(
@@ -875,6 +911,7 @@ class JobRunner:
                 continue
             nozzle = self._machine.nozzle(nozzle_id)
             run.message = f"{nozzle_id} aligning {item.ref}"
+            run.current = RunStep(stage="item", action="aligning", index=index, nozzle=nozzle_id)
             try:
                 await self._placement.align(nozzle)
             except VisionError as e:
@@ -904,6 +941,7 @@ class JobRunner:
             nozzle = self._machine.nozzle(nozzle_id)
             target = run.fix.apply(item.x, item.y)
             run.message = f"{nozzle_id} placing {item.ref}"
+            run.current = RunStep(stage="item", action="placing", index=index, nozzle=nozzle_id)
             await self._placement.place(nozzle, target, item.rotation + run.fix.angle, job.board_z)
             del run.held[nozzle_id]
             item.status, item.note, item.nozzle = "placed", "", nozzle_id

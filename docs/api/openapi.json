@@ -4999,6 +4999,17 @@
       },
       "RunState": {
         "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunStep"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The step under way. Kept when the run pauses on a problem, to show where it stopped; empty between batches and when the run ends."
+          },
           "error": {
             "anyOf": [
               {
@@ -5144,12 +5155,71 @@
           "located",
           "recording",
           "held",
+          "current",
           "started_at",
           "finished_at",
           "placed",
           "remaining"
         ],
         "title": "RunState",
+        "type": "object"
+      },
+      "RunStep": {
+        "description": "What the run is doing now, or was doing when it paused on a problem.",
+        "properties": {
+          "action": {
+            "enum": [
+              "scanning",
+              "finding_fiducials",
+              "finding_feeder",
+              "picking",
+              "aligning",
+              "placing"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The placement, for stage 'item'.",
+            "title": "Index"
+          },
+          "nozzle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nozzle"
+          },
+          "stage": {
+            "description": "Scanning the feeders, finding the board, or working on a placement.",
+            "enum": [
+              "scan",
+              "board",
+              "item"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "action",
+          "index",
+          "nozzle"
+        ],
+        "title": "RunStep",
         "type": "object"
       },
       "ServerEvent": {

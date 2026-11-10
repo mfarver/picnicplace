@@ -1,4 +1,4 @@
-import { Hand, Pause, Play, RefreshCw, SkipForward, Square, StepForward } from "lucide-react";
+import { Hand, Pause, Play, RefreshCw, Square, StepForward } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { hasControl, useCore } from "../api/core";
@@ -6,33 +6,21 @@ import { useAction } from "../api/useAction";
 import { useCameras } from "../api/useCameras";
 import { useDescription } from "../api/useDescription";
 import { useFeeders } from "../api/useFeeders";
-import type {
-  Job,
-  JobLayout,
-  JobPlan,
-  JobSummary,
-  PickCorrection,
-  RunItem,
-  RunState,
-} from "../api/types";
+import { useRun } from "../api/useRun";
+import type { JobPlan, JobSummary, PickCorrection, RunItem } from "../api/types";
 import { CameraView } from "../components/CameraView";
-import { JobOverlay } from "../components/job/JobOverlay";
-import { MachineView } from "../components/machine/MachineView";
 import { FixedFeederPanel } from "../components/FixedFeederPanel";
 import { Field } from "../components/Form";
 import { Panel } from "../components/Panel";
 import { PickCorrectionSelect } from "../components/PickCorrection";
+import { RunSteps } from "../components/RunSteps";
 import { Placeholder } from "../components/Placeholder";
 
-const STATUS_LABEL: Record<RunItem["status"], string> = {
-  pending: "to do",
-  placed: "placed",
-  skipped: "skipped",
-  failed: "failed",
-  blocked: "blocked",
-};
-
-/** Run a saved job: check it against the machine and its feeders, then place it. */
+/**
+ * Run a saved job: check it against the machine and its feeders, then place it. This is
+ * the operator's view, beside the machine: the job's steps fill it. Someone watching from
+ * elsewhere uses the Machine workspace, which shows the map with the steps under it.
+ */
 export function RunWorkspace() {
   const core = useCore();
   const { status, machine, operations } = core;
@@ -43,8 +31,7 @@ export function RunWorkspace() {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [jobId, setJobId] = useState("");
   const [plan, setPlan] = useState<JobPlan | null>(null);
-  const [layout, setLayout] = useState<JobLayout | null>(null);
-  const [run, setRun] = useState<RunState | null>(null);
+  const [run, setRun, refresh] = useRun();
   const [correction, setCorrection] = useState<PickCorrection | null>(null);
   const [configured, setConfigured] = useState<PickCorrection>();
   const [skipBlocked, setSkipBlocked] = useState(false);
@@ -71,51 +58,28 @@ export function RunWorkspace() {
   useEffect(() => {
     if (status !== "open") return;
     let cancelled = false;
-    void Promise.all([
-      api.GET("/api/v1/jobs"),
-      api.GET("/api/v1/run"),
-      api.GET("/api/v1/placement"),
-    ]).then(([j, r, p]) => {
-      if (cancelled) return;
-      if (j.data) setJobs(j.data);
-      if (p.data) setConfigured(p.data.pick_correction);
-      if (r.data !== undefined) {
-        setRun(r.data);
-        if (r.data) setJobId((id) => id || r.data!.job_id);
-      }
-    });
+    void Promise.all([api.GET("/api/v1/jobs"), api.GET("/api/v1/placement")]).then(
+      ([j, p]) => {
+        if (cancelled) return;
+        if (j.data) setJobs(j.data);
+        if (p.data) setConfigured(p.data.pick_correction);
+      },
+    );
     return () => {
       cancelled = true;
     };
   }, [status, finished]);
 
-  // While a run is going, follow it.
-  useEffect(() => {
-    if (!running) return;
-    const timer = window.setInterval(() => {
-      void api.GET("/api/v1/run").then(({ data }) => {
-        if (data !== undefined) setRun(data);
-      });
-    }, 600);
-    return () => window.clearInterval(timer);
-  }, [running]);
+  // The job that was run last, unless another one has been chosen.
+  const chosen = jobId || run?.job_id || jobs[0]?.id || "";
 
-  const chosen = jobId || jobs[0]?.id || "";
-
-  // The plan (a dry run) for the chosen job, and its outline for the map.
+  // The plan (a dry run) for the chosen job.
   useEffect(() => {
     if (status !== "open" || !chosen) return;
     let cancelled = false;
     void api.POST("/api/v1/run/plan", { body: { job_id: chosen } }).then(({ data }) => {
       if (!cancelled) setPlan(data ?? null);
     });
-    void api
-      .GET("/api/v1/jobs/{job_id}", { params: { path: { job_id: chosen } } })
-      .then(async ({ data }: { data?: Job }) => {
-        if (!data || cancelled) return;
-        const result = await api.POST("/api/v1/jobs/layout", { body: data });
-        if (!cancelled) setLayout(result.data ?? null);
-      });
     return () => {
       cancelled = true;
     };
@@ -132,10 +96,6 @@ export function RunWorkspace() {
   const todo = (counts.pending ?? 0) + (counts.placed ?? 0);
   const blocked = counts.blocked ?? 0;
 
-  const refresh = async () => {
-    const { data } = await api.GET("/api/v1/run");
-    if (data !== undefined) setRun(data);
-  };
   const start = async () => {
     const op = await act(() =>
       api.POST("/api/v1/run/start", {
@@ -318,32 +278,6 @@ export function RunWorkspace() {
           {!machine?.homed && status === "open" && (
             <p className="note text-muted">Home the machine (Machine tab) to run a job.</p>
           )}
-          {current?.message && (
-            <p className={`note ${current.error ? "text-danger" : "text-muted"}`}>
-              {current.error ?? current.message}
-            </p>
-          )}
-          {paused &&
-            Object.entries(current.held).map(([nozzle, index]) => (
-              <div key={nozzle} className="button-row">
-                <span className="note text-muted">
-                  {nozzle} holds {current.plan.items[index]?.ref ?? "a part"}.
-                </span>
-                <button
-                  type="button"
-                  className="button"
-                  disabled={!canSignal}
-                  title={
-                    "You took the part off the nozzle by hand (or it is empty): turn its " +
-                    "suction off and pick that placement again"
-                  }
-                  onClick={() => void removed(nozzle)}
-                >
-                  <Hand size={16} aria-hidden />
-                  Part removed
-                </button>
-              </div>
-            ))}
           {current?.fix && current.fix.fiducials.length > 0 && (
             <p className="note text-muted">
               Board found {Math.hypot(current.fix.dx, current.fix.dy).toFixed(2)} mm off, turned{" "}
@@ -390,45 +324,6 @@ export function RunWorkspace() {
           <FixedFeederPanel fixed={feeders.fixed} onChanged={setFeeders} />
         )}
 
-        {items.length > 0 && (
-          <Panel title="Placements" collapseId="run-items">
-            <ul className="item-list">
-              {items.map((i) => (
-                <li key={i.index} className="run-row" title={i.note || undefined}>
-                  <span className={`run-dot run-${i.status}`} aria-hidden />
-                  <span className="item-id">
-                    {i.ref}
-                    {i.copy_id ? <span className="text-muted"> ·{i.copy_id}</span> : null}
-                  </span>
-                  <span className="text-muted run-where">
-                    {STATUS_LABEL[i.status]}
-                    {i.nozzle ? ` by ${i.nozzle}` : ""}
-                    {i.note && i.status !== "placed" ? `: ${i.note}` : ""}
-                  </span>
-                  {current &&
-                    (i.status === "pending" ||
-                      i.status === "failed" ||
-                      (i.status === "skipped" && i.note === "skipped by the operator")) && (
-                      <button
-                        type="button"
-                        className="icon-button"
-                        disabled={!canSignal || Object.values(current.held).includes(i.index)}
-                        title={i.status === "skipped" ? `Place ${i.ref} after all` : `Skip ${i.ref}`}
-                        onClick={() => void skip(i, i.status !== "skipped")}
-                      >
-                        {i.status === "skipped" ? (
-                          <RefreshCw size={14} aria-label={`Place ${i.ref} after all`} />
-                        ) : (
-                          <SkipForward size={14} aria-label={`Skip ${i.ref}`} />
-                        )}
-                      </button>
-                    )}
-                </li>
-              ))}
-            </ul>
-          </Panel>
-        )}
-
         {topCamera && (
           <CameraView
             id={topCamera.id}
@@ -438,24 +333,62 @@ export function RunWorkspace() {
         )}
       </aside>
 
-      <div className="canvas machine-canvas">
-        {description ? (
-          <MachineView
-            description={description}
-            machine={machine}
-            overlay={
-              <>
-                {layout && <JobOverlay layout={layout} />}
-                <RunOverlay items={items} />
-              </>
-            }
-            fixedFeeders={feeders?.fixed}
-          />
+      <div className="canvas run-canvas">
+        {shownPlan ? (
+          <div className="run-main">
+            <header className="run-head">
+              <h1>
+                <span className="text-muted">Job:</span> {shownPlan.name}
+              </h1>
+              {current ? (
+                <span className="run-count">
+                  {counts.placed ?? 0} of {todo} placed
+                </span>
+              ) : (
+                <span className="text-muted">Not started</span>
+              )}
+            </header>
+            {current?.message && (
+              <p className={`run-message ${current.error ? "note note-danger" : "text-muted"}`}>
+                {current.error ?? current.message}
+              </p>
+            )}
+            {paused &&
+              Object.entries(current.held).map(([nozzle, index]) => (
+                <div key={nozzle} className="button-row run-held">
+                  <span>
+                    {nozzle} holds {current.plan.items[index]?.ref ?? "a part"}.
+                  </span>
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={!canSignal}
+                    title={
+                      "You took the part off the nozzle by hand (or it is empty): turn its " +
+                      "suction off and pick that placement again"
+                    }
+                    onClick={() => void removed(nozzle)}
+                  >
+                    <Hand size={16} aria-hidden />
+                    Part removed
+                  </button>
+                </div>
+              ))}
+            <RunSteps
+              items={items}
+              run={current}
+              fiducials={shownPlan.fiducials}
+              hasBus={!!feeders?.bus}
+              large
+              canSignal={canSignal}
+              onSkip={(item, value) => void skip(item, value)}
+            />
+          </div>
         ) : (
           <Placeholder
             icon={Play}
             title="Run"
-            description="Waiting for the machine description from the core."
+            description={jobs.length ? "Checking the job…" : "No saved jobs. Prepare one first."}
           />
         )}
       </div>
@@ -472,17 +405,4 @@ function sources(ids: string[]): string {
     ...fixed,
   ];
   return parts.join(", ");
-}
-
-/** Each placement on the map, colored by how far the run has got with it. */
-function RunOverlay({ items }: { items: RunItem[] }) {
-  return (
-    <g className="run-overlay">
-      {items.map((i) => (
-        <circle key={i.index} className={`run-mark run-${i.status}`} cx={i.x} cy={-i.y} r={1.1}>
-          <title>{`${i.ref} ${i.part_id ?? ""}: ${STATUS_LABEL[i.status]}${i.note ? ` (${i.note})` : ""}`}</title>
-        </circle>
-      ))}
-    </g>
-  );
 }

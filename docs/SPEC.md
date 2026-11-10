@@ -378,7 +378,10 @@ position and status, wait for motion completion, read sensors, issue immediate s
 - **Planner** orders placements to minimize travel and nozzle-tip changes, and to use
   multiple nozzles in parallel (pick N, align N, place N).
 - **Executor** runs the plan as a state machine with pause, resume, single step, skip, and
-  retry. Every step emits events. Errors (mis-pick, vacuum failure, vision failure) stop or
+  retry. A run can start in step mode: it finds the board, then pauses before the first
+  part, and each step places one batch. **Check fiducials** finds a job's board and shows
+  the fit, each fiducial's offset, and a button to look at each one, placing nothing (it
+  works with every placement turned off). Every step emits events. Errors (mis-pick, vacuum failure, vision failure) stop or
   retry according to policy and ask the operator through the API when needed.
 - **History**: each run records placements, timings, vision results, and errors in SQLite.
 

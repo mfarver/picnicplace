@@ -128,6 +128,60 @@ def test_replay_says_what_changed(tmp_path: Path) -> None:
     assert not check.same and check.difference == pytest.approx(0.5)
 
 
+def manifest(folder: Path) -> dict[str, Any]:
+    return json.loads((folder / "manifest.json").read_text())["recording"]
+
+
+def test_the_manifest_is_kept_up_to_date(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A recording copied while it is still open says what it holds."""
+    import asyncio
+
+    import numpy as np
+
+    import picnicplace.recorder
+
+    monkeypatch.setattr(picnicplace.recorder, "MANIFEST_EVERY_S", 0.0)
+    recorder = FlightRecorder(tmp_path)
+    info = recorder.start("open")
+    image = np.zeros((200, 300, 3), np.uint8)
+    asyncio.run(recorder.vision("find_part", image, 60.0, camera="bottom"))
+    recorder.event("note", text="still going")
+    seen = manifest(tmp_path / info.id)
+    assert seen["frames"] == 1 and seen["events"] == 3
+    assert seen["ended_at"] is None and seen["outcome"] is None
+    assert not (tmp_path / info.id / "manifest.json.part").exists()
+    recorder.stop("finished")
+    assert manifest(tmp_path / info.id)["outcome"] == "finished"
+
+
+def test_an_interrupted_recording_is_closed_at_startup(tmp_path: Path) -> None:
+    """The core stopped while recording (it crashed, or was killed): the next start
+    counts what the recording holds and marks it interrupted."""
+    import asyncio
+
+    import numpy as np
+
+    recorder = FlightRecorder(tmp_path)
+    info = recorder.start("crash")
+    image = np.zeros((200, 300, 3), np.uint8)
+    for _ in range(2):
+        asyncio.run(recorder.vision("find_part", image, 60.0, camera="bottom"))
+    # The core dies: nothing is stopped, and the last line is cut short.
+    current = recorder._current  # pyright: ignore[reportPrivateUsage]
+    assert current is not None
+    current.events.write('{"t": 9.5, "kind": "mo')
+    current.events.close()
+    assert manifest(tmp_path / info.id)["ended_at"] is None
+
+    again = FlightRecorder(tmp_path).get(info.id)
+    assert again.outcome == "interrupted" and not again.recording
+    assert again.frames == 2 and again.events == 3  # the start and two vision calls
+    assert again.ended_at is not None and again.ended_at >= info.started_at
+    # It can be downloaded and replayed like any other.
+    assert FlightRecorder(tmp_path).zip(info.id).is_file()
+    assert len(replay_vision(tmp_path / info.id)) == 2
+
+
 def test_differences() -> None:
     assert _difference({"x": 1.0, "y": [1, 2]}, {"x": 1.25, "y": [1, 2]}) == 0.25
     assert _difference(None, {"x": 1}) is None

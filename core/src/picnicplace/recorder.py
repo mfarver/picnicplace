@@ -2,7 +2,11 @@
 
 A recording is a folder in the data directory's ``recordings/``:
 
-- ``manifest.json``: what it is (format, version, PicnicPlace version, when, why);
+- ``manifest.json``: what it is (format, version, PicnicPlace version, when, why), and how
+  many frames and events it holds. It is kept up to date while recording (every few
+  seconds), so a copy taken then says what it holds; ``ended_at`` stays empty until the
+  recording stops. A recording the core never stopped (it crashed or was killed) is
+  closed when the core next starts, with the outcome ``interrupted``;
 - ``snapshot/``: the setup at the start: the config (without its token), the machine
   profile, the feeder setup, the parts and footprints in use, and the job, if any;
 - ``events.jsonl``: one JSON object a line, ``t`` seconds after the start: everything the
@@ -29,9 +33,9 @@ import time
 import zipfile
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import cv2
 import numpy as np
@@ -54,6 +58,9 @@ VISION_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "find_part": find_part,
 }
 """The vision functions a recording can hold calls of, by name, for replaying them."""
+
+MANIFEST_EVERY_S = 2.0
+"""While recording, the manifest is rewritten at most this often."""
 
 _ID = re.compile(r"^\d{8}-\d{6}(-[a-z0-9-]+)?$")
 
@@ -80,6 +87,8 @@ class _Recording:
         self.lock = threading.Lock()
         self.events = (folder / "events.jsonl").open("a", encoding="utf-8")
         self.task: asyncio.Task[None] | None = None
+        self.manifest_at = 0.0
+        """When the manifest was last written (monotonic)."""
 
     def t(self) -> float:
         return round(time.monotonic() - self.start, 3)
@@ -115,6 +124,7 @@ class FlightRecorder:
         self.snapshot: Callable[[str | None], dict[str, Any]] | None = None
         """Builds the setup to keep at the start, by file name (for a job ID, if any)."""
         self._frame_count = 0
+        self._close_interrupted()
 
     # --- Recording -------------------------------------------------------------------
 
@@ -206,6 +216,8 @@ class FlightRecorder:
                     rec.events.write(line + "\n")
                     rec.events.flush()
                     rec.info.events += 1
+                    if time.monotonic() - rec.manifest_at >= MANIFEST_EVERY_S:
+                        self._write_manifest(rec)
         except OSError as e:
             log.warning("could not write to the recording: %s", e)
 
@@ -320,13 +332,44 @@ class FlightRecorder:
         return rec.info.model_copy(update={"bytes": _size(rec.folder)})
 
     def _write_manifest(self, rec: _Recording) -> None:
-        manifest = {
-            "format": FORMAT,
-            "version": VERSION,
-            "picnicplace": __version__,
-            "recording": rec.info.model_dump(mode="json", exclude={"bytes", "recording"}),
-        }
-        (rec.folder / "manifest.json").write_text(json.dumps(manifest, indent=2), "utf-8")
+        rec.manifest_at = time.monotonic()
+        _save_manifest(rec.folder, rec.info)
+
+    def _close_interrupted(self) -> None:
+        """Close recordings the core never stopped: count what they hold, and say how
+        they ended."""
+        if self._root is None or not self._root.is_dir():
+            return
+        for folder in self._root.iterdir():
+            path = folder / "manifest.json"
+            if not path.is_file():
+                continue
+            try:
+                manifest = json.loads(path.read_text(encoding="utf-8"))
+                info = RecordingInfo.model_validate(manifest["recording"])
+            except (OSError, ValueError, KeyError) as e:
+                log.warning("could not read recording %s: %s", folder.name, e)
+                continue
+            if info.ended_at is not None:
+                continue
+            events, last_t = _count_events(folder / "events.jsonl")
+            frames = sum(1 for _ in (folder / "frames").glob("*.png"))
+            ended = info.started_at + timedelta(seconds=last_t)
+            info = info.model_copy(
+                update={
+                    "ended_at": ended,
+                    "outcome": "interrupted",
+                    "frames": frames,
+                    "events": events,
+                    "recording": False,
+                }
+            )
+            try:
+                _save_manifest(folder, info)
+            except OSError as e:
+                log.warning("could not close recording %s: %s", folder.name, e)
+                continue
+            log.info("closed recording %s, which was interrupted", folder.name)
 
     def _prune(self) -> None:
         """Keep the newest recordings, at most ``keep`` of them and ``max_bytes`` in all."""
@@ -342,6 +385,44 @@ class FlightRecorder:
 
 class RecorderError(Exception):
     pass
+
+
+def _save_manifest(folder: Path, info: RecordingInfo) -> None:
+    """Write a recording's manifest whole: to a new file, then renamed over the old one,
+    so whoever reads or copies it never sees half of it."""
+    manifest = {
+        "format": FORMAT,
+        "version": VERSION,
+        "picnicplace": __version__,
+        "recording": info.model_dump(mode="json", exclude={"bytes", "recording"}),
+    }
+    part = folder / "manifest.json.part"
+    part.write_text(json.dumps(manifest, indent=2), "utf-8")
+    part.replace(folder / "manifest.json")
+
+
+def _read_events(path: Path) -> Generator[dict[str, Any]]:
+    """A recording's timeline, skipping any line cut short when the core stopped."""
+    try:
+        with path.open(encoding="utf-8") as f:
+            for line in f:
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(event, dict):
+                    yield cast(dict[str, Any], event)
+    except OSError:
+        return
+
+
+def _count_events(path: Path) -> tuple[int, float]:
+    """How many whole events a recording's timeline holds, and the time of the last."""
+    count, last = 0, 0.0
+    for event in _read_events(path):
+        count += 1
+        last = max(last, float(event.get("t", 0.0)))
+    return count, last
 
 
 def _write_png(path: Path, image: np.ndarray) -> None:
@@ -393,15 +474,15 @@ def replay_vision(source: Path, tolerance: float = 0.01) -> list[VisionCheck]:
     code, and compare the answers."""
     with _opened(source) as folder:
         checks: list[VisionCheck] = []
-        lines = (folder / "events.jsonl").read_text(encoding="utf-8").splitlines()
-        for line in lines:
-            event = json.loads(line)
+        for event in _read_events(folder / "events.jsonl"):
             if event.get("kind") != "vision" or not event.get("frame"):
                 continue
             fn = VISION_FUNCTIONS.get(event["fn"])
             if fn is None:
                 continue
             image = cv2.imread(str(folder / event["frame"]), cv2.IMREAD_UNCHANGED)
+            if image is None:
+                continue  # not saved whole: the core stopped while writing it
             now = _jsonable(fn(image, *event["args"]))
             diff = _difference(event["result"], now)
             checks.append(

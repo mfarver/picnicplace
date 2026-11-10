@@ -28,6 +28,11 @@ make the simulator more like real machines.
   workspace's **Flight recorder** panel, type what it is for and click **Record**. Do the
   steps, then click **Stop**.
 
+If the core stops while recording (it crashed, or the computer was turned off), what was
+recorded until then is kept: the next time the core starts, the recording is closed and
+marked **interrupted**, and can be downloaded like any other. A recording copied out of the
+data folder while it is still going says how many frames and events it held when copied.
+
 Only one recording is made at a time. The core keeps the newest ten, and at most 5 GB in
 all, and deletes older ones; `keep` and `max_mb` under `[recorder]` change that.
 

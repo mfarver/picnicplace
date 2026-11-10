@@ -3,8 +3,10 @@ machine.
 
 It answers the way a real LumenPnP v4 does in a captured session (see
 docs/hardware/lumenpnp-v4.md): ``ok`` flow control, ``M114`` position reports, ``G28``
-homing that leaves A and B alone, I2C vacuum sensor reads behind a multiplexer in both the
-stock 8-bit and patched 24-bit forms, NeoPixel lights, RS-485 (always ``TIMEOUT``: no
+homing that leaves A and B alone and reports the nozzles level as Z = 31.5 (as one real
+v4.1's firmware does; another reports 0, see ``level_z``), ``G92`` renaming positions,
+I2C vacuum sensor reads behind a multiplexer in both the stock 8-bit and patched 24-bit
+forms, NeoPixel lights, RS-485 (always ``TIMEOUT``: no
 feeders), and dwell notifications. Motion takes simulated time, so ``M400`` really waits.
 
 It also models what the log could not show, as best guesses:
@@ -76,6 +78,10 @@ class _Segment:
 @dataclass
 class FakeSettings:
     time_scale: float = 1.0
+    level_z: float = 31.5
+    """What the firmware calls Z after G28, with the nozzles level. LumenPnP firmware builds
+    differ: one reports 31.5, another 0. The default is 31.5, the case that goes wrong if
+    a profile forgets to rename it with G92."""
     home_duration_s: float = 5.0
     reboot_delay_s: float = 1.0
     auto_reboot: bool = True
@@ -113,6 +119,11 @@ class FakeMarlin:
     def _boot(self) -> None:
         self.halted = False
         self.target: dict[str, float] = dict.fromkeys(AXES, 0.0)
+        """Where each axis is going, in the firmware's machine frame (not renamed by G92)."""
+        self.shift: dict[str, float] = dict.fromkeys(AXES, 0.0)
+        """G92 offsets: a reported position is the machine position minus its shift."""
+        # At power-up the nozzles are level and the firmware calls every position 0.
+        self.target["Z"] = self.shift["Z"] = self.settings.level_z
         self._segments: list[_Segment] = []
         self.fans: dict[int, int] = {}
         self.leds: dict[int, int] = {}
@@ -249,7 +260,7 @@ class FakeMarlin:
         for axis in AXES:
             if axis in args:
                 value = float(args[axis])
-                end[axis] = value if self.absolute else start[axis] + value
+                end[axis] = value + self.shift[axis] if self.absolute else start[axis] + value
         feed = float(args.get("F", "6000")) / 60.0  # mm/min to mm/s
         distance = math.sqrt(sum((end[a] - start[a]) ** 2 for a in AXES))
         t0 = max(self._now(), self._segments[-1].t1 if self._segments else 0.0)
@@ -270,15 +281,16 @@ class FakeMarlin:
         if not await self._sleep(self.settings.home_duration_s):
             return []
         for axis in axes:
-            self.target[axis] = 0.0
+            self.target[axis] = self.settings.level_z if axis == "Z" else 0.0
+            self.shift[axis] = 0.0
         self._segments.clear()
         return [self._position_report()]
 
-    async def _cmd_g92(self, _line: str, args: dict[str, str]) -> list[str]:
+    async def _cmd_g92(self, line: str, args: dict[str, str]) -> list[str]:
+        await self._cmd_m400(line, args)  # Marlin finishes moves before renaming
         for axis in AXES:
             if axis in args:
-                self.target[axis] = float(args[axis])
-        self._segments.clear()
+                self.shift[axis] = self.target[axis] - float(args[axis])
         return []
 
     async def _cmd_g4(self, _line: str, args: dict[str, str]) -> list[str]:
@@ -291,7 +303,8 @@ class FakeMarlin:
 
     async def _cmd_m119(self, _line: str, _args: dict[str, str]) -> list[str]:
         # Marlin's format. Which switches a LumenPnP reports is not known yet.
-        at_home = {a: abs(self.target[a]) < 1e-6 for a in HOMED_AXES}
+        home = {"X": 0.0, "Y": 0.0, "Z": self.settings.level_z}
+        at_home = {a: abs(self.target[a] - home[a]) < 1e-6 for a in HOMED_AXES}
         return ["Reporting endstop status"] + [
             f"{a.lower()}_min: {'TRIGGERED' if at_home[a] else 'open'}" for a in HOMED_AXES
         ]
@@ -379,7 +392,7 @@ class FakeMarlin:
         return dict(self.target)
 
     def _position_report(self) -> str:
-        pos = " ".join(f"{a}:{self.target[a]:.2f}" for a in AXES)
+        pos = " ".join(f"{a}:{self.target[a] - self.shift[a]:.2f}" for a in AXES)
         actual = self.actual()
         counts = " ".join(f"{a}:{round(actual[a] * STEPS_PER_UNIT[a])}" for a in AXES)
         return f"{pos} Count {counts}"
@@ -392,8 +405,8 @@ class FakeMarlin:
         now = self._now()
         dt = now - self._vacuum_time
         self._vacuum_time = now
-        z = self.actual()["Z"]
         s = self.settings
+        z = self.actual()["Z"] - s.level_z  # nozzle travel from level
         for ch in s.channels.values():
             if not self._suction(ch):
                 ch.held = False

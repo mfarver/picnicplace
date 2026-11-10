@@ -345,7 +345,11 @@ connect = [
   "M201 X20000 Y20000 Z15000 A30000 B30000",
   "M205 J0.02",
 ]
-home = ["G28"]
+# G28 lowers N1 until N2 reaches the Z switch, then brings the nozzles back to level. Some
+# firmware calls that Z = 0, and some Z = 31.5 (OpenPnP's LumenPnP frame: Z 0 to 63). This
+# profile calls level Z = 0, so G92 renames it, whichever the firmware reported. Without it, the lift to safe Z drives
+# N1 all the way down (seen on a real v4.1, November 2026); the core also checks home_z.
+home = ["G28", "G92 Z0"]
 # Send a Photon packet as hex; the reply comes back as "rs485-reply: <hex>" or
 # "rs485-reply: TIMEOUT".
 rs485 = "M485"

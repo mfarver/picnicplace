@@ -2585,6 +2585,12 @@ export interface components {
              * @description The feeders' bus: 'photon' for Opulo's Photon feeders over RS-485.
              */
             feeder_bus: "photon" | null;
+            /**
+             * Home Z
+             * @description Where Z reads right after homing, with the nozzles level. The core checks it and does not call the machine homed if Z reads anything else: a firmware that names level differently needs a G92 in the home commands.
+             * @default 0
+             */
+            home_z: number;
             /** Id */
             id: string;
             /** Inputs */

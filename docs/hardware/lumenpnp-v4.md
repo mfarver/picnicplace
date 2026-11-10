@@ -28,9 +28,12 @@ future `lumenpnp-v4.2` profile:
 
 **Also confirmed by Opulo's configuration:** the stock firmware reads the vacuum sensors
 as one byte (`M261 A109 B1 S2`, "request one byte back via decimal"); the connect
-sequence, outputs, and lights match v4.1; and OpenPnP renumbers Z after homing so both
-nozzles up reads 31.5 (with N2 mapped to 63 − Z), where the firmware itself reports 0.
-PicnicPlace uses the firmware's numbers. The repository does not contain the firmware.
+sequence, outputs, and lights match v4.1; and OpenPnP's Z runs 0 to 63 with both nozzles
+level at 31.5 (N2 mapped to 63 − Z). Firmware builds differ in what they report after
+`G28`: the reference machine's log shows Z = 0, and another v4.1 (Marlin bugfix-2.1.x,
+September 2024) reports Z = 31.5. PicnicPlace calls level Z = 0, so the profile follows
+`G28` with `G92 Z0`, which is right for both. The repository does not contain the
+firmware.
 
 ## Firmware
 
@@ -62,6 +65,14 @@ What OpenPnP sends after opening the port (and waiting 3 s for the board to rese
 
 - Home: `G28` homes X, Y, and Z (about 5 s) and reports the new position before `ok`.
   **A and B are not homed** and keep their positions (for example `A:-6300.00`).
+- Z after homing: `G28` lowers N1 until N2 reaches the Z switch, then brings both nozzles
+  back to level. Some firmware reports that as Z = 0 (the reference machine's log), some
+  as **Z = 31.5** (a v4.1 with the September 2024 bugfix-2.1.x build). The profile sends
+  `G92 Z0` after `G28` so it reads 0 either way. Without that, on the 31.5 firmware every
+  height is 31.5 mm off and the lift to safe Z drives N1 down: on a real v4.1 this
+  dragged N1 into the feeders. The
+  core now checks Z after homing against the profile's `home_z` (0) and does not call
+  the machine homed if it differs.
 - After `G28`, OpenPnP homes visually: it moves the top camera over the homing fiducial
   at (217, 106), finds it, and corrects the coordinates with `G92`.
 - Move: `M204 T<accel>` then `G0 X… Y… Z… A… B… F<feed>`. Feed is in mm/min (OpenPnP sends
@@ -230,7 +241,7 @@ a hole, and a fixed distance across it).
 - After `M112`, resetting the E-stop reconnects and waits up to 30 s for the firmware to
   answer again, asking for the board's reset button if it does not.
 - `core/src/picnicplace/machine/marlin/fake.py` is a fake firmware that answers like the
-  log above. Run `uv run picnicplace-fake-marlin` for one on a pseudo-terminal.
+  log above, including Z = 31.5 after `G28` and `G92` renaming positions. Run `uv run picnicplace-fake-marlin` for one on a pseudo-terminal.
 - Home sensors are not read yet (`M119` replies have not been captured).
 - Visual homing is on in the profile: after `G28` the top camera is centered on the
   homing fiducial at (217, 106) and X/Y are corrected with `G92`, as OpenPnP does. The

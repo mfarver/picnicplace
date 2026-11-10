@@ -3,6 +3,8 @@
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from importlib import resources
+from pathlib import Path
 
 import pytest
 
@@ -66,7 +68,17 @@ def test_fake_replies_like_the_lumenpnp() -> None:
 
         assert "MACHINE_TYPE:LumenPnP" in (await ask("M115"))[0]
         assert await ask("G90") == []
-        assert (await ask("G28"))[0].startswith("X:0.00 Y:0.00 Z:0.00 A:0.00 B:0.00 Count")
+        # The stock firmware calls the nozzles level Z = 31.5 after homing; G92 renames it,
+        # and G28 forgets the renaming.
+        assert (await ask("G28"))[0].startswith("X:0.00 Y:0.00 Z:31.50 A:0.00 B:0.00 Count")
+        await ask("G92 Z0")
+        assert (await ask("M114"))[0].startswith("X:0.00 Y:0.00 Z:0.00 A:0.00 B:0.00 Count")
+        await ask("G0 Z-2 F600")
+        await ask("M400")
+        assert fake.target["Z"] == pytest.approx(29.5)
+        await ask("G28")
+        assert (await ask("M114"))[0].startswith("X:0.00 Y:0.00 Z:31.50")
+        await ask("G92 Z0")
         await ask("G0 X10 Y20 F6000")
         await ask("M400")
         assert (await ask("M114"))[0].startswith("X:10.00 Y:20.00")
@@ -263,6 +275,61 @@ def test_core_with_fake_marlin() -> None:
         pos = s.state()["position"]
         assert (pos["X"], pos["Y"]) == pytest.approx((100, 200))
         assert s.put("/api/v1/machine/outputs/light_top", {"on": True}).status_code == 200
+
+
+def test_homing_renames_level_to_z_zero() -> None:
+    """The stock firmware calls level Z = 31.5; the profile's G92 makes it 0."""
+    from fastapi.testclient import TestClient
+
+    from picnicplace.api import create_app
+
+    from .conftest import connect, fast_config
+
+    config = fast_config(machine={"driver": "fake-marlin", "profile": "lumenpnp-v4.1"})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        s.home()
+        assert s.state()["position"]["Z"] == pytest.approx(0)
+        # A lift to safe Z from level leaves the nozzles where they are.
+        assert s.move(X=50)["status"] == "succeeded"
+        assert s.state()["position"]["Z"] == pytest.approx(0)
+
+
+def test_homing_works_with_firmware_that_reports_zero() -> None:
+    """Other LumenPnP firmware calls level Z = 0 after G28; the G92 changes nothing."""
+
+    async def scenario() -> None:
+        async with lumenpnp(level_z=0.0) as (driver, fake):
+            await driver.home()
+            assert driver.position["Z"] == pytest.approx(0)
+            assert fake.target["Z"] == pytest.approx(0)
+
+    run(scenario)
+
+
+def test_homing_in_another_z_frame_is_refused(tmp_path: Path) -> None:
+    """A profile without the G92 (the crash on a real v4.1): homing fails, nothing else
+    moves, and the machine is not homed, so nothing can move it until it is fixed."""
+    from fastapi.testclient import TestClient
+
+    from picnicplace.api import create_app
+
+    from .conftest import connect, fast_config
+
+    text = (resources.files("picnicplace") / "profiles" / "lumenpnp-v4.1.toml").read_text()
+    profile = tmp_path / "no-g92.toml"
+    profile.write_text(text.replace('home = ["G28", "G92 Z0"]', 'home = ["G28"]'))
+    config = fast_config(machine={"driver": "fake-marlin", "profile": str(profile)})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        op = s.wait(s.post("/api/v1/machine/home"))
+        assert op["status"] == "failed"
+        assert "Z = 31.5" in op["error"] and "G92 Z0" in op["error"]
+        state = s.state()
+        assert state["homed"] is False
+        assert state["position"]["Z"] == pytest.approx(31.5)
+        assert (state["position"]["X"], state["position"]["Y"]) == (0, 0)
+        assert s.post("/api/v1/machine/move", {"position": {"X": 50}}).json()["code"] == (
+            "not_homed"
+        )
 
 
 def test_core_starts_without_the_machine() -> None:

@@ -29,6 +29,7 @@ from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.errors import (
     ConnectFailedError,
     EmergencyStopActiveError,
+    HomingError,
     InvalidTargetError,
     MachineBusyError,
     MachineError,
@@ -60,6 +61,9 @@ _Work = Callable[[], Awaitable[str | None]]
 
 Grab = Callable[[str, float, float], Awaitable[Frame | None]]
 """Get a frame from a camera captured at or after a time: (camera ID, after, wait_s)."""
+
+HOME_Z_TOLERANCE_MM = 0.5
+"""How far Z may read from the profile's home_z right after homing."""
 
 VISUAL_TOLERANCE_MM = 0.02
 """Visual homing is done when the fiducial is this close to the camera center."""
@@ -604,6 +608,7 @@ class MachineService:
 
     async def _home(self) -> str | None:
         await self._driver.home()
+        self._check_home_z()
         if self._profile.safe_z_input is not None and not self.z_safe:
             raise SafeZFaultError(
                 "after homing, the safe-Z sensor reads not safe; check the sensor and the "
@@ -614,6 +619,22 @@ class MachineService:
             message = await self._visual_home()
         self._homed = True
         return message
+
+    def _check_home_z(self) -> None:
+        """Refuse a homing that leaves Z in another frame than the profile's: every height
+        the core moves to would be off by the difference, and the lift to safe Z could
+        drive a nozzle down instead."""
+        z = self._driver.position.get("Z")
+        expected = self._profile.home_z
+        if z is None or abs(z - expected) <= HOME_Z_TOLERANCE_MM:
+            return
+        raise HomingError(
+            f"after homing, the controller reports Z = {z:g}, but this machine's profile "
+            f"expects Z = {expected:g} with the nozzles level, so every height would be "
+            f"wrong and moving could drive a nozzle into the feeders or the bed. Nothing "
+            f"else was moved. Add G92 Z{expected:g} after G28 in the profile's home "
+            "commands, or fix the profile's home_z."
+        )
 
     def start_measure_camera_scale(self) -> Operation:
         """Measure the top camera's millimeters per pixel using the homing fiducial."""

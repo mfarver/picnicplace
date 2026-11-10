@@ -172,6 +172,9 @@ shows Python cannot hold target throughput.
     The core stops motion, reports a fault, and requires re-homing.
   - Machines without the input use a computed safe-Z state, and clients label it as
     computed rather than sensed.
+  - After homing, Z must read the profile's `home_z` (where the nozzles are level). If
+    the firmware calls level something else, every height would be off and the lift to
+    safe Z could drive a nozzle down, so homing fails and the machine stays unhomed.
   - The core can only check the input before sending a move. A firmware-level interlock
     (firmware refuses or halts X/Y motion while the input is unsafe) is the stronger
     guarantee and is recommended where firmware supports it.

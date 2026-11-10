@@ -48,6 +48,10 @@ port = "/dev/ttyACM0"
 If the probe showed vacuum readings only in the `vacuum-24bit` variant, also set
 `variant = "vacuum-24bit"` under `[machine.marlin]`.
 
+Start the core with the config: `uv run picnicd -c path/to/picnicd.toml`. Without `-c` it
+runs the built-in simulator instead: it says so when it starts, and the Studio's status
+bar shows **Simulator**.
+
 ## 3. First motion
 
 Start the core with your config and open the Studio. The **Bring-up** panel in the

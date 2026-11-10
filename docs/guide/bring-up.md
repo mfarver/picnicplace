@@ -1,9 +1,11 @@
 # Bring up a machine
 
-!!! warning "Not yet tested on a real machine"
+!!! warning "Tested on one real machine so far"
 
-    These steps have been run against the fake firmware only. The first real LumenPnP
-    bring-up will refine them. Keep a hand on the machine's physical E-stop throughout.
+    These steps have been run against the fake firmware and one real LumenPnP v4.1
+    (homing, jogging, and board fiducials), and will be refined as more machines are
+    brought up. The LumenPnP has no E-stop: keep a hand on its power switch throughout.
+    STOP in the Studio waits for the current move to finish on its stock firmware.
 
 PicnicPlace runs on Linux for real machines. These steps are for a LumenPnP v4.1 with
 stock firmware; other machines need their own machine profile.
@@ -56,7 +58,7 @@ them. It keeps your progress, notes, and findings in the core's data directory, 
 turns findings that differ from the machine profile (which way an axis points, measured
 keep-outs) into TOML you can copy into a profile. The same steps:
 
-- [ ] Keep a hand on the machine's physical E-stop.
+- [ ] Keep a hand on the machine's power switch (or its E-stop, if it has one).
 - [ ] Check the Studio shows the "Slow 25%" badge.
 - [ ] Home, and watch that every axis reaches its switch. After homing, Z should read 0
       with both nozzles level. If the firmware reports anything else, homing fails with

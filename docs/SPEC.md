@@ -160,8 +160,10 @@ shows Python cannot hold target throughput.
   client holds a live event-socket connection. See §5.3.
 - **Emergency stop** is a dedicated, highest-priority API call and WebSocket message that
   bypasses the command queue and sends the firmware's immediate stop (e.g. `M112` or
-  realtime reset). A physical E-stop remains the primary safety device; the software stop
-  is a convenience.
+  realtime reset). A physical E-stop, or the power switch on machines without one (such
+  as the LumenPnP), remains the primary safety device; the software stop is a
+  convenience. Firmware without an emergency parser acts on it only after the current
+  move.
 - **Safe-Z interlock.** A machine profile may declare a physical safe-Z input (a switch
   that reads true when every nozzle is at or above safe-travel height). When present it is
   authoritative:

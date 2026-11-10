@@ -104,7 +104,7 @@ assumptions. See the [LumenPnP notes](hardware/lumenpnp-v4.md).
 | M2: Calibration | Visual homing and camera scale (done); lens calibration, nozzle offsets and runout, guided wizards | In progress |
 | M3: Single placement | Parts library, Photon feeders (discovery, part assignment, feeding, slots calibrated from feeder fiducials, pockets found from sprocket holes), pick, bottom-camera alignment, and place: done in the simulator, to be tried on a real machine | In progress |
 | M4: Jobs | KiCad board and KiKit panel import, placing a job within every nozzle's reach, board fiducials, planner and dry run, running a whole job with pause, step, and skip, strips and trays on the bed, picks kept centered by the top or the bottom camera, and a flight recorder (done in the simulator); run history | In progress |
-| M5: 1.0 | Packaging and user documentation | Planned |
+| M5: 1.0 | Packaging and user documentation; a simple operations view apart from the job-creation tools, a single job file, and parts counted on every reel and tray | Planned |
 
 ## Get involved
 

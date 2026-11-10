@@ -138,10 +138,14 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       out of reach). Fix what you can; tick **Place the rest** to leave out the others.
       The workspace's main area lists what the run will do, in order: scan the feeders,
       find the board, then each placement.
-- [ ] **Start**, then **Pause** at once: the run scans the feeders (a feeder moved
-      since the checks is picked from where it is now), finds the board's fiducials, and
-      pauses before the first part. Check the reported offset and turn look right.
-      Before the first pick from each feeder, the camera visits that feeder's fiducial.
+- [ ] **Check fiducials** finds the board's fiducials and shows how the board sits,
+      placing nothing (it works even with every part turned off). Check the offset and
+      turn look right, and use the button beside each fiducial to look at it under the
+      camera's crosshair.
+- [ ] Tick **Start in step mode** and **Start**: the run scans the feeders (a feeder
+      moved since the checks is picked from where it is now), finds the board again,
+      and pauses before the first part. Before the first pick from each feeder, the
+      camera visits that feeder's fiducial.
 - [ ] As the run goes, the list checks off each step and highlights the one under way
       (finding a feeder's fiducial, picking, aligning, or placing, and on which nozzle).
       A part already picked and waiting on its nozzle has a thin bar beside it. When a

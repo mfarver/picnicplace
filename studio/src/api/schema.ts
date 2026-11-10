@@ -3849,6 +3849,8 @@ export interface components {
         };
         /** RunState */
         RunState: {
+            /** @description The step under way. Kept when the run pauses on a problem, to show where it stopped; empty between batches and when the run ends. */
+            current: components["schemas"]["RunStep"] | null;
             /**
              * Error
              * @description Why the run paused, if it did.
@@ -3911,6 +3913,30 @@ export interface components {
              * @default false
              */
             stop_requested: boolean;
+        };
+        /**
+         * RunStep
+         * @description What the run is doing now, or was doing when it paused on a problem.
+         */
+        RunStep: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "scanning" | "finding_fiducials" | "finding_feeder" | "picking" | "aligning" | "placing";
+            /**
+             * Index
+             * @description The placement, for stage 'item'.
+             */
+            index: number | null;
+            /** Nozzle */
+            nozzle: string | null;
+            /**
+             * Stage
+             * @description Scanning the feeders, finding the board, or working on a placement.
+             * @enum {string}
+             */
+            stage: "scan" | "board" | "item";
         };
         ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
         /** Size */

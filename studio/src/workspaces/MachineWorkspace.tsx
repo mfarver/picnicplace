@@ -6,6 +6,7 @@ import { useAction } from "../api/useAction";
 import { useCameras } from "../api/useCameras";
 import { useDescription } from "../api/useDescription";
 import { useFeeders } from "../api/useFeeders";
+import { useJobLayout, useRun } from "../api/useRun";
 import type { Operation } from "../api/types";
 import { BringUpPanel } from "../components/BringUpPanel";
 import { CalibrationPanel } from "../components/CalibrationPanel";
@@ -16,10 +17,12 @@ import { JogPanel } from "../components/JogPanel";
 import { LeaseStatus } from "../components/LeaseStatus";
 import { Panel } from "../components/Panel";
 import { FixedFeederPanel } from "../components/FixedFeederPanel";
+import { JobOverlay } from "../components/job/JobOverlay";
 import { HeadInset } from "../components/machine/HeadInset";
 import { MachineView } from "../components/machine/MachineView";
 import { PlacementPanel } from "../components/PlacementPanel";
 import { Placeholder } from "../components/Placeholder";
+import { RunOverlay, RunSteps } from "../components/RunSteps";
 
 export function MachineWorkspace() {
   const core = useCore();
@@ -30,6 +33,10 @@ export function MachineWorkspace() {
   const description = useDescription();
   const cameras = useCameras();
   const [feeders, setFeeders] = useFeeders();
+  // The job run, if any: shown on the map, and a few of its steps under it, for anyone
+  // watching from elsewhere (the operator at the machine uses the Run workspace).
+  const [jobRun] = useRun();
+  const jobLayout = useJobLayout(jobRun?.job_id);
   const [lastOpId, setLastOpId] = useState<string | null>(null);
 
   const lastOp = lastOpId ? operations[lastOpId] : undefined;
@@ -185,24 +192,52 @@ export function MachineWorkspace() {
         )}
       </aside>
 
-      <div className="canvas machine-canvas">
+      <div className="canvas machine-split">
         {description ? (
           <>
-            <MachineView
-              description={description}
-              machine={machine}
-              canMove={canMove && !!machine?.homed}
-              onMoveTo={(p) => moveTo({ X: p.x, Y: p.y })}
-              fixedFeeders={feeders?.fixed}
-            />
-            <HeadInset
-              description={description}
-              machine={machine}
-              canActuate={canActuate}
-              readOnly={controlledElsewhere}
-              busy={pending}
-              onSetOutput={setOutput}
-            />
+            <div className="machine-canvas">
+              <MachineView
+                description={description}
+                machine={machine}
+                canMove={canMove && !!machine?.homed}
+                onMoveTo={(p) => moveTo({ X: p.x, Y: p.y })}
+                fixedFeeders={feeders?.fixed}
+                overlay={
+                  jobRun && (
+                    <>
+                      {jobLayout && <JobOverlay layout={jobLayout} />}
+                      <RunOverlay items={jobRun.plan.items} />
+                    </>
+                  )
+                }
+              />
+              <HeadInset
+                description={description}
+                machine={machine}
+                canActuate={canActuate}
+                readOnly={controlledElsewhere}
+                busy={pending}
+                onSetOutput={setOutput}
+              />
+            </div>
+            {jobRun && (
+              <section className="run-strip" aria-label="Job run">
+                <header className="run-strip-head">
+                  <span className="run-strip-name">{jobRun.name}</span>
+                  <span className={jobRun.error ? "text-danger" : "text-muted"}>
+                    {jobRun.status} · {jobRun.placed} of {jobRun.placed + jobRun.remaining} placed
+                    {jobRun.error ? ` · ${jobRun.error}` : ""}
+                  </span>
+                </header>
+                <RunSteps
+                  items={jobRun.plan.items}
+                  run={jobRun}
+                  fiducials={jobRun.plan.fiducials}
+                  hasBus={!!feeders?.bus}
+                  around={2}
+                />
+              </section>
+            )}
           </>
         ) : (
           <Placeholder

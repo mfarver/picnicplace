@@ -1,4 +1,13 @@
-import { Pause, Play, RefreshCw, SkipForward, Square, StepForward } from "lucide-react";
+import {
+  Crosshair,
+  LocateFixed,
+  Pause,
+  Play,
+  RefreshCw,
+  SkipForward,
+  Square,
+  StepForward,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { hasControl, useCore } from "../api/core";
@@ -7,6 +16,8 @@ import { useCameras } from "../api/useCameras";
 import { useDescription } from "../api/useDescription";
 import { useFeeders } from "../api/useFeeders";
 import type {
+  BoardCheck,
+  BoardFix,
   Job,
   JobLayout,
   JobPlan,
@@ -49,6 +60,8 @@ export function RunWorkspace() {
   const [configured, setConfigured] = useState<PickCorrection>();
   const [skipBlocked, setSkipBlocked] = useState(false);
   const [record, setRecord] = useState(false);
+  const [stepMode, setStepMode] = useState(false);
+  const [boardCheck, setBoardCheck] = useState<BoardCheck | null>(null);
   const [checking, setChecking] = useState(0);
 
   const controlledElsewhere = !!core.lease?.holder && !hasControl(core);
@@ -75,9 +88,11 @@ export function RunWorkspace() {
       api.GET("/api/v1/jobs"),
       api.GET("/api/v1/run"),
       api.GET("/api/v1/placement"),
-    ]).then(([j, r, p]) => {
+      api.GET("/api/v1/run/board-check"),
+    ]).then(([j, r, p, b]) => {
       if (cancelled) return;
       if (j.data) setJobs(j.data);
+      if (b.data !== undefined) setBoardCheck(b.data);
       if (p.data) setConfigured(p.data.pick_correction);
       if (r.data !== undefined) {
         setRun(r.data);
@@ -144,11 +159,16 @@ export function RunWorkspace() {
           skip_blocked: skipBlocked,
           pick_correction: correction,
           record,
+          step: stepMode,
         },
       }),
     );
     if (op) await refresh();
   };
+  const checkBoard = () =>
+    void act(() => api.POST("/api/v1/run/check-board", { body: { job_id: chosen } }));
+  const goTo = (x: number, y: number) =>
+    void act(() => api.POST("/api/v1/machine/move", { body: { position: { X: x, Y: y } } }));
   const signal = async (path: "/api/v1/run/pause" | "/api/v1/run/stop") => {
     const state = await act(() => api.POST(path));
     if (state) setRun(state);
@@ -169,6 +189,8 @@ export function RunWorkspace() {
 
   const paused = current?.status === "paused";
   const startable = !current || current.status === "finished" || current.status === "stopped";
+  // While paused, the fiducials the run found, to look at before going on.
+  const pausedFix = paused && current?.fix?.fiducials.length ? current.fix : null;
   const errors = shownPlan?.issues.filter((i) => i.severity === "error") ?? [];
   const cautions = shownPlan?.issues.filter((i) => i.severity === "warning") ?? [];
   const topCamera = description?.cameras.find((c) => c.looking === "down");
@@ -228,6 +250,14 @@ export function RunWorkspace() {
                 />
                 Record it, to send to PicnicPlace's developers
               </label>
+              <label className="check" title="Then Step places one part on each nozzle at a time">
+                <input
+                  type="checkbox"
+                  checked={stepMode}
+                  onChange={(e) => setStepMode(e.target.checked)}
+                />
+                Start in step mode: pause once the board is found, before the first part
+              </label>
               {blocked > 0 && (
                 <label className="check">
                   <input
@@ -251,6 +281,18 @@ export function RunWorkspace() {
               >
                 <Play size={16} aria-hidden />
                 {current ? "Run again" : "Start"}
+              </button>
+            )}
+            {startable && (
+              <button
+                type="button"
+                className="button"
+                disabled={!canMove || !chosen || !shownPlan?.fiducials}
+                title="Find the board's fiducials and show how it sits, placing nothing"
+                onClick={checkBoard}
+              >
+                <Crosshair size={16} aria-hidden />
+                Check fiducials
               </button>
             )}
             {running && (
@@ -326,6 +368,26 @@ export function RunWorkspace() {
           )}
           {error && <p className="note note-danger">{error}</p>}
         </Panel>
+
+        {pausedFix ? (
+          <Panel title="Fiducials" collapseId="run-fiducials">
+            <FiducialList fix={pausedFix} canMove={canMove} onGoTo={goTo} />
+          </Panel>
+        ) : (
+          startable &&
+          boardCheck &&
+          boardCheck.job_id === chosen && (
+            <Panel title="Fiducial check" collapseId="run-fiducials">
+              <p className={`note ${boardCheck.ok ? "text-ok" : "text-danger"}`}>
+                {boardCheck.ok ? "Good: " : ""}
+                {boardCheck.message}
+              </p>
+              {boardCheck.fix && (
+                <FiducialList fix={boardCheck.fix} canMove={canMove} onGoTo={goTo} />
+              )}
+            </Panel>
+          )
+        )}
 
         {shownPlan && (errors.length > 0 || cautions.length > 0) && (
           <Panel title="Checks" collapseId="run-checks">
@@ -433,6 +495,43 @@ export function RunWorkspace() {
         )}
       </div>
     </div>
+  );
+}
+
+/** Each fiducial found: how far from where the job puts it, and a button to look at it. */
+function FiducialList({
+  fix,
+  canMove,
+  onGoTo,
+}: {
+  fix: BoardFix;
+  canMove: boolean;
+  onGoTo: (x: number, y: number) => void;
+}) {
+  return (
+    <ul className="item-list">
+      {fix.fiducials.map((f) => (
+        <li key={`${f.ref}-${f.copy_id ?? ""}`} className="run-row">
+          <span className="item-id">
+            {f.ref}
+            {f.copy_id ? <span className="text-muted"> ·{f.copy_id}</span> : null}
+          </span>
+          <span className="text-muted run-where" title="From where the job puts it">
+            {Math.hypot(f.found.x - f.expected.x, f.found.y - f.expected.y).toFixed(2)} mm off
+          </span>
+          <button
+            type="button"
+            className="icon-button"
+            disabled={!canMove}
+            title={`Move the camera over ${f.ref}`}
+            aria-label={`Go to ${f.ref}`}
+            onClick={() => onGoTo(f.found.x, f.found.y)}
+          >
+            <LocateFixed size={14} aria-hidden />
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -19,7 +19,8 @@ make setup     # install the core's and the Studio's dependencies
 make core      # build the Studio and start the core
 ```
 
-Open <http://127.0.0.1:7420> in a browser.
+Open <http://127.0.0.1:7420> in a browser. Started without a config file (`-c`), the core
+runs the simulator and says so; the Studio's status bar shows **Simulator**.
 
 ## Things to try
 

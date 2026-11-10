@@ -82,3 +82,24 @@ def test_machine_locations_are_added_to_the_profile() -> None:
                 }
             }
         )
+
+
+@pytest.mark.parametrize(
+    ("argv", "warned"),
+    [([], True), (["--driver", "simulator"], False), (["--driver", "fake-marlin"], False)],
+)
+def test_running_the_simulator_without_a_config_says_so(
+    argv: list[str],
+    warned: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Started without -c, picnicd quietly ran the simulator, and someone at a real
+    machine took a while to notice. Now it says so (unless a driver was chosen)."""
+    import picnicplace.cli as cli
+
+    monkeypatch.setattr(cli, "create_app", lambda config: config)  # pyright: ignore[reportUnknownLambdaType]
+    monkeypatch.setattr(cli.uvicorn, "run", lambda *a, **k: None)  # pyright: ignore[reportUnknownLambdaType]
+    cli.main(argv)
+    err = capsys.readouterr().err
+    assert ("SIMULATOR, not a real machine" in err) is warned

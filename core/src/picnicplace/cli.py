@@ -67,6 +67,13 @@ def replay(source: Path) -> int:
     return len(changed)
 
 
+SIMULATOR_NOTICE = """\
+picnicd: no config file given, so this is the built-in SIMULATOR, not a real machine.
+  To run your machine, give its config: picnicd -c ~/.config/picnicplace/picnicd.toml
+  (see core/picnicd.example.toml; set driver = "marlin" under [machine]).
+"""
+
+
 def _build_config(args: argparse.Namespace) -> Config:
     config = load_config(args.config)
     data = config.model_dump()
@@ -106,6 +113,8 @@ def main(argv: list[str] | None = None) -> None:
     except (ValidationError, OSError) as e:
         sys.exit(f"picnicd: invalid configuration: {e}")
 
+    if args.config is None and args.driver is None:
+        sys.stderr.write(SIMULATOR_NOTICE)
     app = create_app(config)
     uvicorn.run(app, host=config.server.host, port=config.server.port, log_config=None)
 

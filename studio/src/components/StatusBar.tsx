@@ -37,6 +37,17 @@ export function StatusBar() {
             Control <strong className={hasControl(core) ? "text-ok" : undefined}>{control}</strong>
           </span>
           {machine.estop && <span className="status-item badge-danger">E-STOP LATCHED</span>}
+          {machine.driver === "simulator" && (
+            <span
+              className="status-item badge-warn"
+              title={
+                "This core runs the built-in simulator, not a real machine. To run your " +
+                "machine, start picnicd with -c and a config whose [machine] driver is marlin."
+              }
+            >
+              Simulator
+            </span>
+          )}
           {machine.speed_scale < 1 && (
             <span
               className="status-item badge-warn"

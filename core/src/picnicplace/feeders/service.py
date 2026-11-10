@@ -434,7 +434,9 @@ class FeederService:
 
         async def work() -> str:
             low, high = self._fiducial_size(bank)
-            found = await self._machine.locate_circle(low, high, FIDUCIAL_SEARCH_MM)
+            found = await self._machine.locate_circle(
+                low, high, FIDUCIAL_SEARCH_MM, bank.fiducial_diameter
+            )
             if found is None:
                 raise FeederError(
                     "no fiducial found near the camera's center; center it within "
@@ -483,7 +485,9 @@ class FeederService:
                 guess = self.pick(slot)
                 await self._machine.move_camera_to(guess.x + turned.x, guess.y + turned.y)
                 low, high = self._fiducial_size(bank)
-                found = await self._machine.locate_circle(low, high, FIDUCIAL_SEARCH_MM)
+                found = await self._machine.locate_circle(
+                    low, high, FIDUCIAL_SEARCH_MM, bank.fiducial_diameter
+                )
                 if found is None:
                     failed.append(slot.label)
                     self._errors[slot.id] = "fiducial not found"

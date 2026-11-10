@@ -36,6 +36,45 @@ def test_find_circle_subpixel() -> None:
     assert find_circle(image, 60, 80) is None  # wrong size
 
 
+def _dot(image: np.ndarray, x: float, y: float, d: float) -> None:
+    cv2.circle(
+        image, (round(x * 16), round(y * 16)), round(d * 8), (230, 230, 230), -1, cv2.LINE_AA, 4
+    )
+
+
+def test_find_circle_prefers_the_expected_size() -> None:
+    """A smaller round mark nearer the center (a silkscreen letter) loses to the fiducial
+    when the expected size is known."""
+    image = np.full((400, 600, 3), 60, np.uint8)
+    _dot(image, 300, 200, 28)  # the decoy, at the center
+    _dot(image, 360, 240, 40)  # the fiducial
+    found = find_circle(image, 24, 60, 200, 40)
+    assert found is not None
+    assert (found.x, found.y) == pytest.approx((360, 240), abs=0.2)
+    # Without the expected size, the two are as strong, and the nearer one wins.
+    found = find_circle(image, 24, 60, 200)
+    assert found is not None and (found.x, found.y) == pytest.approx((300, 200), abs=0.2)
+
+
+def test_find_circle_takes_the_nearest_of_alike() -> None:
+    """Several marks alike, such as sprocket holes: the nearest the center wins."""
+    image = np.full((400, 600, 3), 60, np.uint8)
+    for x in (180, 330, 480):
+        _dot(image, x, 200, 40)
+    found = find_circle(image, 24, 60, 300, 40)
+    assert found is not None and found.x == pytest.approx(330, abs=0.2)
+
+
+def test_find_circle_prefers_marks_found_at_many_levels() -> None:
+    """A faint round mark, found at few threshold levels, loses to a crisp fiducial even
+    without the expected size."""
+    image = np.full((400, 600, 3), 60, np.uint8)
+    cv2.circle(image, (300, 200), 15, (80, 80, 80), -1, cv2.LINE_AA)  # faint, at center
+    _dot(image, 370, 230, 40)
+    found = find_circle(image, 24, 60, 200)
+    assert found is not None and (found.x, found.y) == pytest.approx((370, 230), abs=0.2)
+
+
 def visual_config(tmp_path: Path, **machine: Any) -> Any:
     profile = tmp_path / "visual.toml"
     profile.write_text(

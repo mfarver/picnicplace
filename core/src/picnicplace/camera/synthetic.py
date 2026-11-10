@@ -76,6 +76,8 @@ class BoardScene:
     """(x, y, diameter): copper dots in a solder mask opening twice as wide."""
     pads: tuple[tuple[float, float, float, float, float], ...] = ()
     """(x, y, width, height, angle) in machine coordinates."""
+    marks: tuple[tuple[float, float, float], ...] = ()
+    """(x, y, diameter): round silkscreen marks, such as the "O" or "D" of a label."""
 
 
 @dataclass(frozen=True)
@@ -198,6 +200,9 @@ def _job_board(c: _Canvas, img: Image, b: BoardScene) -> None:
         if c.visible(x, y, 2 * d):
             c.circle(img, x, y, d, FIDUCIAL_MASK)
             c.circle(img, x, y, d / 2, COPPER)
+    for x, y, d in b.marks:
+        if c.visible(x, y, d):
+            c.circle(img, x, y, d / 2, SILK)
 
 
 def _chip(canvas: _Canvas, img: Image, x: float, y: float, angle: float) -> None:

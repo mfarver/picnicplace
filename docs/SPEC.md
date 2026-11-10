@@ -439,6 +439,12 @@ correction. Implementations:
 - **Built-in pipelines**: fiducial locate, bottom-vision part alignment (rectangle/
   body/lead fit), sprocket hole detection, nozzle-tip runout calibration, camera
   calibration (checkerboard/ChArUco).
+- **Fiducial locate** sweeps many thresholds and keeps the round blobs found at several.
+  It ranks them by how many levels found them and, when the fiducial's size is known
+  (from its footprint, else 1 mm), how close they are to that size. Only among the
+  strongest does nearness to the camera's center decide. A round silkscreen letter near
+  a fiducial (the "D" of a "FID1" label fooled the first version on a real board) is
+  found at fewer levels and is the wrong size.
 - **Acceleration abstraction**: stages operate on an image type that maps to `cv2.UMat`
   (OpenCL) when available and to NumPy arrays otherwise. CUDA support is a later,
   optional backend. CPU must always work and is the reference for tests.

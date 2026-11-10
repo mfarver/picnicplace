@@ -482,9 +482,15 @@ class MachineService:
         return out
 
     async def locate_circle(
-        self, min_diameter: float, max_diameter: float, search_mm: float
+        self,
+        min_diameter: float,
+        max_diameter: float,
+        search_mm: float,
+        expected_diameter: float | None = None,
     ) -> Point | None:
-        """Find a round mark near the top camera's center: its machine position, or None."""
+        """Find a round mark near the top camera's center: its machine position, or None.
+        With its expected diameter, marks of other sizes (such as silkscreen letters) are
+        less likely to be taken for it."""
         camera = self.top_camera()
         if self._grab is None:
             raise VisionError("the cameras are not available")
@@ -500,6 +506,7 @@ class MachineService:
             min_diameter / mm_per_px,
             max_diameter / mm_per_px,
             search_mm / mm_per_px,
+            expected_diameter / mm_per_px if expected_diameter else None,
             camera=camera.id,
             position=dict(self._driver.position),
             mm_per_px=mm_per_px,
@@ -660,6 +667,7 @@ class MachineService:
             low / mm_per_px,
             high / mm_per_px,
             VISUAL_SEARCH_RADIUS_MM / mm_per_px,
+            expected / mm_per_px if expected else None,
             camera=camera.id,
             position=dict(self._driver.position),
             mm_per_px=mm_per_px,

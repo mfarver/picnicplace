@@ -7,8 +7,13 @@ matters for targets with more than two brightness levels, such as the LumenPnP d
 board: a bright copper dot inside a mid-gray ring of bare board inside darker solder
 mask. Any single threshold either finds the dot or merges it with its ring.
 
-The fiducial nearest the image center wins. Its center is the median of its detections,
-each from image moments, which gives subpixel accuracy.
+Of the blobs found, the strongest ones are kept: those found at many levels and, when
+the expected size is given, close to it. A silkscreen letter such as the "D" of a "FID1"
+label can be round enough and in the size range, but it is found at few levels and is
+smaller than the fiducial (seen on a real board). Of the strong ones, the one nearest the
+image center wins, which picks the right one of several alike, such as sprocket holes.
+Its center is the median of its detections, each from image moments, which gives
+subpixel accuracy.
 """
 
 import math
@@ -27,6 +32,14 @@ THRESHOLDS = range(16, 248, 8)
 
 MIN_HITS = 3
 """A fiducial must be found at this many threshold levels."""
+
+SIZE_TOLERANCE = 0.2
+"""How quickly a blob's strength falls as its size departs from the expected size: a blob
+this fraction off (on a log scale) keeps 1/e of its strength. Generous, because the camera
+scale may not be calibrated yet."""
+
+STRONG_FRACTION = 0.5
+"""Blobs weaker than this fraction of the strongest are not considered."""
 
 
 @dataclass(frozen=True)
@@ -84,10 +97,12 @@ def find_circle(
     min_diameter_px: float,
     max_diameter_px: float,
     max_offset_px: float | None = None,
+    expected_diameter_px: float | None = None,
 ) -> Circle | None:
-    """The round blob with a diameter in range that is nearest the image center, and
-    within ``max_offset_px`` of it if given. The limit keeps a search from locking onto
-    a neighboring fiducial when the one wanted is farther off than expected."""
+    """The round blob with a diameter in range that is nearest the image center, among
+    the strongest (see ``strength``), and within ``max_offset_px`` of the center if given.
+    The limit keeps a search from locking onto a neighboring fiducial when the one wanted
+    is farther off than expected."""
     h, w = image.shape[:2]
     circles = find_circles(image, min_diameter_px, max_diameter_px)
 
@@ -96,7 +111,20 @@ def find_circle(
 
     if max_offset_px is not None:
         circles = [c for c in circles if offset(c) <= max_offset_px]
-    return min(circles, key=offset, default=None)
+    if not circles:
+        return None
+    best = max(strength(c, expected_diameter_px) for c in circles)
+    strong = [c for c in circles if strength(c, expected_diameter_px) >= STRONG_FRACTION * best]
+    return min(strong, key=offset)
+
+
+def strength(circle: Circle, expected_diameter_px: float | None = None) -> float:
+    """How sure the finder is that a blob is the fiducial: the threshold levels it was
+    found at, less the further its size is from the expected one."""
+    if not expected_diameter_px:
+        return float(circle.hits)
+    off = math.log(circle.diameter / expected_diameter_px) / SIZE_TOLERANCE
+    return circle.hits * math.exp(-(off**2))
 
 
 def _round_blobs(mask: MatLike, w: int, h: int, min_d: float, max_d: float) -> list[Circle]:

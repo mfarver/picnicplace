@@ -12,13 +12,17 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from picnicplace.api import create_app
 from picnicplace.feeders.service import SIM_FIXED_ERROR, sim_slot_error
-from tests.conftest import Session, connect
+from tests.conftest import Session, connect, fast_config
 from tests.test_fixed_feeders import move_to_bed, tray
 from tests.test_placement import lumen, ok, set_up  # noqa: F401 (fixture)
 from tests.test_run import check_landed
 from tests.test_run import lumen as lumen_run  # noqa: F401 (fixture)
 from tests.test_run import set_up as set_up_job
+
+BIN = {"x": 157.751, "y": 112.758}
+"""A discard bin's place on one LumenPnP (the example config's)."""
 
 
 def load(client: TestClient, nozzle: str) -> dict[str, Any]:
@@ -156,3 +160,85 @@ def test_a_run_with_the_bottom_camera_only(lumen_run: TestClient) -> None:  # no
         slots = client.get("/api/v1/feeders").json()["slots"]
         assert all(x["pocket"] is None for x in slots)  # the top camera never looked
         assert any(x["learned"] is not None for x in slots)
+
+
+def pick_only(s: Session, source: str, nozzle: str, how: str, feed: bool = True) -> str:
+    pick = {"slot_id": source, "nozzle_id": nozzle, "feed": feed, "pick_correction": how}
+    return str(ok(s.wait(s.post("/api/v1/placement/pick", pick)))["message"])
+
+
+def align(s: Session, nozzle: str) -> None:
+    ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": nozzle})))
+
+
+def discard_both(s: Session) -> None:
+    for nozzle in ("N1", "N2"):
+        ok(s.wait(s.post("/api/v1/placement/discard", {"nozzle_id": nozzle})))
+
+
+def test_auto_looks_first_until_it_has_learned() -> None:
+    """Auto correction: the top camera until something is learned, then the bottom
+    camera. A part well off center (a feeder that stepped too far) sends the next few
+    picks back to the top camera, and so does an empty pick."""
+    discard = {"id": "discard", "label": "Discard", "kind": "discard", "position": BIN}
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_home_error": (0.3, -0.2),
+            "locations": [discard],
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s, slots=("3",), calibrate=False)
+        message = pick_only(s, "3", "N1", "auto", feed=False)
+        align(s, "N1")
+        assert load(client, "N1")["correction"] == "top"
+        assert "auto: top camera, nothing learned of it yet" in message
+        pick_and_align(s, "3", "N2", "auto")
+        assert load(client, "N2")["correction"] == "bottom" and miss(client, "N2") < 0.06
+        discard_both(s)
+
+        # The feeder steps 0.4 mm too far once: the bottom camera's pick misses by that.
+        sim = client.app.state.ctx.feeders._sim  # type: ignore[attr-defined]
+        sim.feeders[3].step_scale = 1.1
+        pick_and_align(s, "3", "N1", "auto")
+        sim.feeders[3].step_scale = 1.0
+        assert load(client, "N1")["correction"] == "bottom" and miss(client, "N1") > 0.3
+        message = pick_only(s, "3", "N2", "auto")
+        align(s, "N2")
+        assert load(client, "N2")["correction"] == "top" and miss(client, "N2") < 0.06
+        assert "auto: top camera, a part from it sat 0.4" in message
+        discard_both(s)
+        for _ in range(2):  # three looks in all
+            pick_and_align(s, "3", "N1", "auto")
+            assert load(client, "N1")["correction"] == "top"
+            ok(s.wait(s.post("/api/v1/placement/discard", {"nozzle_id": "N1"})))
+        # The top camera's picks taught it meanwhile: back to the bottom camera.
+        pick_and_align(s, "3", "N1", "auto")
+        assert load(client, "N1")["correction"] == "bottom" and miss(client, "N1") < 0.3
+
+        # The same pocket again without feeding: empty. The next pick looks first.
+        again = {"slot_id": "3", "nozzle_id": "N2", "feed": False, "pick_correction": "auto"}
+        assert s.wait(s.post("/api/v1/placement/pick", again))["status"] == "failed"
+        message = pick_only(s, "3", "N2", "auto")
+        assert "auto: top camera, after an empty pick" in message
+
+
+def test_a_run_with_auto_correction(lumen_run: TestClient) -> None:  # noqa: F811
+    """Each feeder's first pick in the run looks with the top camera, and so does a
+    second pick in the same batch, before the first part is aligned and anything is
+    learned. The demo job's four parts come in two batches, so every pick looks; the
+    switch to the bottom camera is tested above."""
+    client = lumen_run
+    with connect(client) as s:
+        set_up_job(client, s)
+        body = {"job_id": "demo", "skip_blocked": True, "pick_correction": "auto"}
+        ok(s.wait(s.post("/api/v1/run/start", body)))
+        run = client.get("/api/v1/run").json()
+        assert check_landed(client, run) == 4
+        counts = {"top": 0, "bottom": 0}
+        for slot in client.get("/api/v1/feeders").json()["slots"]:
+            for how, m in (slot["learned"] or {"misses": {}})["misses"].items():
+                counts[how] += m["count"]
+        assert counts == {"top": 4, "bottom": 0}, counts

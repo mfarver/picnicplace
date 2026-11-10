@@ -135,7 +135,10 @@ class MachineConfig(_Section):
             "otherwise. 'top': before each pick from tape, the top camera finds the pocket "
             "from the sprocket holes. 'bottom': no camera before the pick; each feeder's "
             "pick place moves by what the bottom camera saw of its earlier picks. 'off': "
-            "pick where the feeder setup says. The bottom camera learns from every pick "
+            "pick where the feeder setup says. 'auto': the bottom camera's correction, "
+            "with the top camera on each feeder's first pick in a run, before anything is "
+            "learned, after an empty pick, and for a few picks after a part sat well off "
+            "center. The bottom camera learns from every pick "
             "whatever the choice, and trays, which have no sprocket holes, use what it "
             "learned unless this is 'off'."
         ),

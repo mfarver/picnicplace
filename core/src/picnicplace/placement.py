@@ -8,6 +8,12 @@ Each step is an operation, so a first run on a real machine can go one step at a
   instead of feeding. Where the pocket is comes from the pick correction chosen: 'top'
   finds it from the sprocket holes with the top camera; 'bottom' moves the pick by what
   the bottom camera saw of the feeder's earlier picks; 'off' trusts the feeder setup.
+  'auto' picks with the bottom camera's correction, and looks with the top camera first
+  on a feeder's first pick in a run, while nothing is learned of it, after an empty pick
+  from it (the vacuum said no part was held) or a part the bottom camera could not
+  find, and for ``AUTO_LOOKS`` picks after a part from it sat more than
+  ``AUTO_MISS_MM`` off the nozzle's center (a feeder stepping unevenly, which learning
+  cannot follow). Trays have no sprocket holes, so they always use the bottom camera.
 - **Align**: carry the part over the bottom camera with its underside in focus, find it,
   and record where it sits on the nozzle and at what angle. How far it sits off center
   says where the part really lay when it was picked: the feeder learns from that.
@@ -26,7 +32,7 @@ import math
 from collections.abc import Callable
 
 from picnicplace.feeders.service import FeederService, rotate
-from picnicplace.feeders.setup import PickCorrection
+from picnicplace.feeders.setup import PickCorrection, PickMethod
 from picnicplace.library import Library, Part
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
 from picnicplace.machine.profile import Camera, Location, Nozzle, Point
@@ -43,6 +49,12 @@ PLACE_DWELL_S = 0.1
 VACUUM_TIMEOUT_S = 1.0
 SEARCH_MARGIN_MM = 3.0
 """Bottom vision looks this far around the part's expected size."""
+AUTO_MISS_MM = 0.3
+"""Auto correction: a part picked with the bottom camera's correction that sits further
+than this off the nozzle's center sends the next picks from its feeder to the top camera."""
+AUTO_LOOKS = 3
+"""How many picks then look with the top camera first, before trying the bottom camera's
+correction again (the top camera's picks keep teaching it meanwhile)."""
 SIZE_TOLERANCE = 0.35
 """A part seen more than this fraction larger or smaller than its pads is reported."""
 
@@ -76,7 +88,7 @@ class NozzleLoad(WireModel):
     """Where the feeder setup put the part, before any correction."""
     pick_angle: float | None = None
     """The nozzle's angle when it picked."""
-    correction: PickCorrection | None = None
+    correction: PickMethod | None = None
     """How the pick was corrected."""
 
 
@@ -115,6 +127,9 @@ class PlacementService:
         self._library = library
         self.pick_correction: PickCorrection = pick_correction
         self._loads: dict[str, NozzleLoad] = {}
+        self._look: dict[str, tuple[int, str]] = {}
+        """Auto correction: by slot or strip ID, how many more picks to look at with the
+        top camera first, and why."""
 
     def state(self) -> PlacementState:
         return PlacementState(
@@ -223,11 +238,17 @@ class PlacementService:
     # --- Steps ---------------------------------------------------------------------------
 
     async def pick(
-        self, slot_id: str, nozzle: Nozzle, feed: bool, correction: PickCorrection
+        self,
+        slot_id: str,
+        nozzle: Nozzle,
+        feed: bool,
+        correction: PickCorrection,
+        first: bool = False,
     ) -> str:
-        """Pick from a feeder slot, or from a strip or tray on the bed by its ID."""
+        """Pick from a feeder slot, or from a strip or tray on the bed by its ID.
+        ``first``: the first pick from it in a run (auto correction looks first)."""
         if self._feeders.is_fixed(slot_id):
-            return await self._pick_fixed(slot_id, nozzle, correction)
+            return await self._pick_fixed(slot_id, nozzle, correction, first)
         slot = self._feeders.slot(slot_id)
         bank = self._feeders.bank(slot)
         if bank.pick_height is None:
@@ -236,22 +257,23 @@ class PlacementService:
         if feed:
             await self._feeders.feed(slot)
         base = self._feeders.pick(slot)
+        how, why = self._method(slot.id, correction, first)
         at, found = base, ""
-        if correction == "top":
+        if how == "top":
             check = await self._feeders.locate_pocket(slot)
             at = check.at
             found = f" (pocket {check.along:+.2f} mm along, {check.across:+.2f} mm across)"
-        elif correction == "bottom":
+        elif how == "bottom":
             at, found = self._learned(slot.id, base)
         tape_angle = slot.rotation + (part.tape.rotation if part and part.tape else 0.0)
-        await self._take(nozzle, at, bank.pick_height, slot.label)
-        self._loads[nozzle.id] = self._picked(
-            nozzle, part, slot.id, tape_angle, at, base, correction
-        )
+        await self._take_counted(slot.id, how, nozzle, at, bank.pick_height, slot.label)
+        self._loads[nozzle.id] = self._picked(nozzle, part, slot.id, tape_angle, at, base, how)
         what = part.id if part else "a part"
-        return f"{nozzle.id} picked {what} from {slot.label}{found}."
+        return f"{nozzle.id} picked {what} from {slot.label}{found}{why}."
 
-    async def _pick_fixed(self, fixed_id: str, nozzle: Nozzle, correction: PickCorrection) -> str:
+    async def _pick_fixed(
+        self, fixed_id: str, nozzle: Nozzle, correction: PickCorrection, first: bool
+    ) -> str:
         feeders = self._feeders
         f = feeders.fixed(fixed_id)
         label = feeders.fixed_label(fixed_id)
@@ -263,20 +285,58 @@ class PlacementService:
                 f"{label}: {f.part_id or 'its part'} has no tape rotation in the parts library"
             )
         index, base = feeders.next_fixed(fixed_id)
+        how: PickMethod
+        why = ""
+        if correction == "off":
+            how = "off"
+        elif f.kind == "tray":
+            how = "bottom"  # no sprocket holes: the bottom camera's learning is all there is
+        else:
+            how, why = self._method(fixed_id, correction, first)
         at, found = base, ""
-        if correction == "top" and f.kind == "strip":
+        if how == "top":
             check = await feeders.locate_strip_pocket(fixed_id)
             at = check.at
             found = f" (pocket {check.along:+.2f} mm along, {check.across:+.2f} mm across)"
-        elif correction != "off":
-            # A tray has no sprocket holes: the bottom camera's learning is all there is.
+        elif how == "bottom":
             at, found = self._learned(fixed_id, base)
-            correction = "bottom"
         feeders.took_fixed(fixed_id)  # tried or taken, that pocket is done with
-        await self._take(nozzle, at, height, label)
-        self._loads[nozzle.id] = self._picked(nozzle, part, fixed_id, angle, at, base, correction)
+        await self._take_counted(fixed_id, how, nozzle, at, height, label)
+        self._loads[nozzle.id] = self._picked(nozzle, part, fixed_id, angle, at, base, how)
         what = part.id if part else "a part"
-        return f"{nozzle.id} picked {what} number {index + 1} from {label}{found}."
+        return f"{nozzle.id} picked {what} number {index + 1} from {label}{found}{why}."
+
+    def _method(
+        self, source_id: str, correction: PickCorrection, first: bool
+    ) -> tuple[PickMethod, str]:
+        """How to correct this pick, and for auto correction, a note saying why."""
+        if correction != "auto":
+            return correction, ""
+        if first:
+            return "top", " (auto: top camera, the first pick from it in this run)"
+        if self._feeders.learned(source_id) is None:
+            return "top", " (auto: top camera, nothing learned of it yet)"
+        looks, why = self._look.get(source_id, (0, ""))
+        if looks > 0:
+            return "top", f" (auto: top camera, {why})"
+        return "bottom", ""
+
+    async def _take_counted(
+        self, source_id: str, how: PickMethod, nozzle: Nozzle, at: Point, height: float, label: str
+    ) -> None:
+        """Take the part, and keep count for auto correction: after an empty pick, look
+        with the top camera next time; a part taken after a look uses one up."""
+        try:
+            await self._take(nozzle, at, height, label)
+        except MispickError:
+            self._look[source_id] = (1, "after an empty pick")
+            raise
+        if how == "top" and source_id in self._look:
+            looks, why = self._look[source_id]
+            if looks <= 1:
+                del self._look[source_id]
+            else:
+                self._look[source_id] = (looks - 1, why)
 
     def _learned(self, source_id: str, base: Point) -> tuple[Point, str]:
         """Where to pick with the bottom camera's correction, and a note saying so."""
@@ -294,7 +354,7 @@ class PlacementService:
         part_angle: float,
         at: Point,
         base: Point,
-        correction: PickCorrection,
+        correction: PickMethod,
     ) -> NozzleLoad:
         nozzle_angle = self._machine.nozzle_angle(nozzle)
         load = NozzleLoad(
@@ -362,6 +422,9 @@ class PlacementService:
         )
         await self._machine.raise_nozzles()
         if box is None:
+            # Likely a bad pick (nothing there, or a part on its side), even when the
+            # vacuum could not tell: auto correction looks first next time.
+            self._look[load.slot_id] = (1, "after the bottom camera saw no part")
             raise VisionError(f"the {camera.label.lower()} saw no part on {nozzle.id}")
 
         nozzle_at = self._machine.nozzle_position(nozzle)
@@ -423,6 +486,8 @@ class PlacementService:
         self._machine.recorder.event(
             "learn", source=source, base=load.base, part_at=part_at, miss=miss, learned=learning
         )
+        if load.correction == "bottom" and miss > AUTO_MISS_MM:
+            self._look[source] = (AUTO_LOOKS, f"a part from it sat {miss:.2f} mm off center")
         if learning is None:
             return f" Too far off center to learn {source}'s pick place from."
         o = learning.offset

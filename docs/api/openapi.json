@@ -4075,7 +4075,8 @@
                 "enum": [
                   "top",
                   "bottom",
-                  "off"
+                  "off",
+                  "auto"
                 ],
                 "type": "string"
               },
@@ -4413,7 +4414,8 @@
             "enum": [
               "top",
               "bottom",
-              "off"
+              "off",
+              "auto"
             ],
             "title": "Pick Correction",
             "type": "string"
@@ -5076,7 +5078,8 @@
             "enum": [
               "top",
               "bottom",
-              "off"
+              "off",
+              "auto"
             ],
             "title": "Pick Correction",
             "type": "string"
@@ -5509,7 +5512,8 @@
                 "enum": [
                   "top",
                   "bottom",
-                  "off"
+                  "off",
+                  "auto"
                 ],
                 "type": "string"
               },
@@ -5959,7 +5963,8 @@
                 "enum": [
                   "top",
                   "bottom",
-                  "off"
+                  "off",
+                  "auto"
                 ],
                 "type": "string"
               },

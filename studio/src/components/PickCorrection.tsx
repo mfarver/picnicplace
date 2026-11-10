@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { api } from "../api/client";
-import type { FeedersState, PickCorrection, PickLearning } from "../api/types";
+import type { FeedersState, PickCorrection, PickLearning, PickMethod } from "../api/types";
 
 const LABELS: Record<PickCorrection, string> = {
+  auto: "Auto: bottom camera, top camera when needed",
   top: "Top camera: find each pocket first",
   bottom: "Bottom camera: learn from earlier picks",
   off: "Neither: pick where the setup says",
 };
 
 const SHORT: Record<PickCorrection, string> = {
+  auto: "auto",
   top: "top camera",
   bottom: "bottom camera",
   off: "neither",
@@ -61,7 +63,7 @@ export function LearnedPicks({
     );
   }
   const fmt = (v: number) => (v >= 0 ? "+" : "") + v.toFixed(2);
-  const misses = (Object.keys(SHORT) as PickCorrection[]).flatMap((k) => {
+  const misses = (["top", "bottom", "off"] as PickMethod[]).flatMap((k) => {
     const m = learned.misses[k];
     if (!m) return [];
     return [`${SHORT[k]} ${m.mean.toFixed(2)} mm (${m.count} pick${m.count === 1 ? "" : "s"})`];

@@ -31,9 +31,14 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_serialization_defaults_required=True)
 
 
-PickCorrection = Literal["top", "bottom", "off"]
-"""How picks are kept centered: the top camera finds each pocket before the pick, or the
-bottom camera's view of earlier picks moves the pick place, or neither."""
+PickMethod = Literal["top", "bottom", "off"]
+"""How one pick was kept centered: the top camera found the pocket before the pick, or
+the bottom camera's view of earlier picks moved the pick place, or neither."""
+
+PickCorrection = Literal["top", "bottom", "off", "auto"]
+"""How picks are kept centered: one method for every pick, or 'auto': the bottom camera,
+with the top camera on a feeder's first pick in a run, before anything is learned, and
+after an empty pick or a part well off center."""
 
 
 class PickMisses(_Model):
@@ -62,8 +67,8 @@ class PickLearning(_Model):
         "them. A pick with the bottom camera's correction goes there."
     )
     samples: int = Field(ge=0, description="Picks it has learned from.")
-    misses: dict[PickCorrection, PickMisses] = Field(
-        default_factory=dict[PickCorrection, PickMisses],
+    misses: dict[PickMethod, PickMisses] = Field(
+        default_factory=dict[PickMethod, PickMisses],
         description="How far off center its picks have been, by how they were corrected.",
     )
 

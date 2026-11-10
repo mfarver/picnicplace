@@ -3279,7 +3279,7 @@ export interface components {
              * Pick Correction
              * @description How to keep picks centered: 'top', find each tape pocket with the top camera first; 'bottom', move each pick by what the bottom camera saw of the feeder's earlier picks; 'off', neither. Empty: the config's choice.
              */
-            pick_correction?: ("top" | "bottom" | "off") | null;
+            pick_correction?: ("top" | "bottom" | "off" | "auto") | null;
             /**
              * Rotation
              * @default 0
@@ -3475,7 +3475,7 @@ export interface components {
              * Pick Correction
              * @enum {string}
              */
-            pick_correction: "top" | "bottom" | "off";
+            pick_correction: "top" | "bottom" | "off" | "auto";
         };
         /** PlanRequest */
         PlanRequest: {
@@ -3804,7 +3804,7 @@ export interface components {
              * @default top
              * @enum {string}
              */
-            pick_correction: "top" | "bottom" | "off";
+            pick_correction: "top" | "bottom" | "off" | "auto";
             /** Placed */
             readonly placed: number;
             plan: components["schemas"]["JobPlan"];
@@ -3965,7 +3965,7 @@ export interface components {
              * Pick Correction
              * @description How to keep picks centered: 'top', find each tape pocket with the top camera first; 'bottom', move each pick by what the bottom camera saw of the feeder's earlier picks; 'off', neither. Empty: the config's choice.
              */
-            pick_correction?: ("top" | "bottom" | "off") | null;
+            pick_correction?: ("top" | "bottom" | "off" | "auto") | null;
             /**
              * Record
              * @description Keep a flight recording of the run (the frames vision looked at and what the machine did), if nothing else is being recorded. The config can record every run.
@@ -4167,7 +4167,7 @@ export interface components {
              * Pick Correction
              * @description How to keep picks centered: 'top', find each tape pocket with the top camera first; 'bottom', move each pick by what the bottom camera saw of the feeder's earlier picks; 'off', neither. Empty: the config's choice.
              */
-            pick_correction?: ("top" | "bottom" | "off") | null;
+            pick_correction?: ("top" | "bottom" | "off" | "auto") | null;
             /**
              * Slot Id
              * @description A feeder slot, or a strip or tray on the bed (T1, ...).

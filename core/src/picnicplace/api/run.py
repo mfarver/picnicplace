@@ -9,7 +9,7 @@ from picnicplace.api.context import Context, require, require_control
 from picnicplace.api.routes import MACHINE_ERRORS
 from picnicplace.auth import Permission
 from picnicplace.feeders.setup import PickCorrection
-from picnicplace.job.run import JobPlan, JobRunner, RunState
+from picnicplace.job.run import BoardCheck, JobPlan, JobRunner, RunState
 from picnicplace.schemas import Operation, WireModel
 
 router = APIRouter(
@@ -41,6 +41,13 @@ class StartRequest(PlanRequest):
             "How to keep picks centered: 'top', find each tape pocket with the top camera "
             "first; 'bottom', move each pick by what the bottom camera saw of the feeder's "
             "earlier picks; 'off', neither. Empty: the config's choice."
+        ),
+    )
+    step: bool = Field(
+        default=False,
+        description=(
+            "Pause once the board is found, before the first part; each step then places "
+            "one batch (a part on each nozzle that can take one)."
         ),
     )
     record: bool = Field(
@@ -79,7 +86,28 @@ async def plan(runner: Runner, body: PlanRequest) -> JobPlan:
 )
 async def start(runner: Runner, body: StartRequest) -> Operation:
     """Run a saved job: find the board's fiducials, then pick, align, and place every part."""
-    return runner.start(body.job_id, body.skip_blocked, body.pick_correction, body.record)
+    return runner.start(
+        body.job_id, body.skip_blocked, body.pick_correction, body.record, body.step
+    )
+
+
+@router.post(
+    "/check-board",
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=Control,
+)
+async def check_board(runner: Runner, body: PlanRequest) -> Operation:
+    """Find a saved job's board by its fiducials and fit it, placing nothing: to check the
+    board and the job's location before a run. Works even with no placements turned on.
+    The result is kept (``GET /api/v1/run/board-check``)."""
+    return runner.check_board(body.job_id)
+
+
+@router.get("/board-check")
+async def board_check(runner: Runner) -> BoardCheck | None:
+    """The last board check: the fiducials found, the fit, and whether it is good."""
+    return runner.board_check()
 
 
 @router.post(

@@ -10204,6 +10204,82 @@
         ]
       }
     },
+    "/api/v1/placement/release": {
+      "post": {
+        "operationId": "release_api_v1_placement_release_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NozzleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "A held part was taken off the nozzle by hand",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
     "/api/v1/presence": {
       "get": {
         "operationId": "get_presence_api_v1_presence_get",

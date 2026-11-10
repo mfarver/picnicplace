@@ -16,7 +16,7 @@ import { Field, NumberInput } from "./Form";
 import { Panel } from "./Panel";
 import { PickCorrectionSelect } from "./PickCorrection";
 
-const KINDS = new Set(["pick", "align", "place", "pick_and_place", "discard"]);
+const KINDS = new Set(["pick", "align", "place", "pick_and_place", "discard", "release"]);
 
 function describe(load: NozzleLoad): string {
   const what = load.part_id ?? "a part";
@@ -240,6 +240,22 @@ export function PlacementPanel({
           >
             <Trash2 size={16} aria-hidden />
             Discard
+          </button>
+        )}
+        {load && (
+          <button
+            type="button"
+            className="button"
+            disabled={!ready}
+            title="You took the part off the nozzle by hand (or it is empty): turn its suction off"
+            onClick={() =>
+              void start(() =>
+                api.POST("/api/v1/placement/release", { body: { nozzle_id: nozzle } }),
+              )
+            }
+          >
+            <Hand size={16} aria-hidden />
+            Part removed
           </button>
         )}
       </div>

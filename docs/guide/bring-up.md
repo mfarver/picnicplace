@@ -146,7 +146,10 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       camera visits that feeder's fiducial.
 - [ ] **Step** places one part on each nozzle and pauses again. Check them, then
       **Resume**. A jammed feeder or a failed pick pauses the run with the parts already
-      on the nozzles kept there; fix it and resume, or skip that placement.
+      on the nozzles kept there; fix it and resume, or skip that placement. A part the
+      bottom camera cannot find goes to the discard location; without one, the run moves
+      the head out of the way and pauses: take the part off the nozzle, click **Part
+      removed**, and resume to pick it again.
 - [ ] With a part on a strip or tray, the run takes them in order and pauses when one is
       empty, with the nozzles up and the head moved out of the way: to the park
       location, if `[[machine.locations]]` in the config has one (`kind = "park"`, its

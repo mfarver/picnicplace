@@ -99,3 +99,8 @@ async def pick_and_place(placement: Placement, body: PickAndPlaceRequest) -> Ope
 @_operation("/discard", "Drop a held part in the discard bin")
 async def discard(placement: Placement, body: NozzleRequest) -> Operation:
     return placement.start_discard(body.nozzle_id)
+
+
+@_operation("/release", "A held part was taken off the nozzle by hand")
+async def release(placement: Placement, body: NozzleRequest) -> Operation:
+    return placement.start_release(body.nozzle_id)

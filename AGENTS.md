@@ -24,9 +24,14 @@ needed: the tests and `make core` use the simulator.
 - **Sign off every commit** (`git commit -s`), under the Developer Certificate of Origin.
 - **No OpenPnP, Opulo, or LumenPnP code or artwork.** PicnicPlace is MPL-2.0 and written
   from scratch; facts and dimensions may be used, code may not.
-- **Profiles hold design facts; the config holds owner choices.** A machine's axes,
-  cameras, and feeder banks go in its profile (`core/src/picnicplace/profiles/`); a
-  discard or park location, or a preference, goes in the config.
+- **Profiles say what a machine is; the config says how to run it.** Three layers:
+  - a **built-in profile** (`core/src/picnicplace/profiles/`) holds a model's design facts
+    (axes, cameras, feeder banks); a later model `extends` it and gives what differs;
+  - the **local profile** (`local-profile.json` in the data directory, written by the
+    Studio) holds what is true of one machine: its discard and park locations, keep-outs
+    measured in bring-up. Never put one machine's values in a built-in profile;
+  - the **config** (TOML, edited by the owner and never by the core) holds how the
+    machine is run: serial port, cameras, speed, preferences such as pick correction.
 - **Say "footprints", not "packages"**, for the land patterns of parts.
 - **Safety lives in the machine service** (`core/src/picnicplace/machine/service.py`).
   Never move the machine around it, and never weaken a safety check to make a test pass.

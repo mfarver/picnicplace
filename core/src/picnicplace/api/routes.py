@@ -1,14 +1,17 @@
 """REST endpoints under /api/v1."""
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, ConfigDict, Field
 
 from picnicplace import __version__
 from picnicplace.api.context import Context, get_client_id, require, require_control
 from picnicplace.api.fingerprint import api_fingerprint
 from picnicplace.auth import Permission
-from picnicplace.machine.profile import MachineProfile
+from picnicplace.machine.errors import NotHomedError
+from picnicplace.machine.local import LocalProfileState, LocationKind
+from picnicplace.machine.profile import KeepOut, MachineProfile, Point
 from picnicplace.schemas import (
     PROTOCOL_VERSION,
     ErrorResponse,
@@ -57,6 +60,78 @@ async def get_machine(ctx: Context) -> MachineState:
 @router.get("/machine/description", tags=["machine"])
 async def get_machine_description(ctx: Context) -> MachineProfile:
     """The machine profile: geometry, nozzles, cameras, feeders, and the list of I/O."""
+    return ctx.machine.profile
+
+
+class LocationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    position: Point | None = Field(
+        default=None, description="Where it is. Default: where the top camera is looking."
+    )
+    label: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+class LocalProfileUpdate(BaseModel):
+    """Findings for the local profile, such as from the bring-up checklist. They take
+    effect when the core next starts."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x_points: Literal["right", "left"] | None = None
+    y_points: Literal["back", "front"] | None = None
+    keep_outs: list[KeepOut] | None = Field(
+        default=None, description="Added to the profile's, or replacing those with the same ID."
+    )
+
+
+@router.get("/machine/local-profile", tags=["machine"])
+async def get_local_profile(ctx: Context) -> LocalProfileState:
+    """This machine's own profile: what is true of it beyond its model's design."""
+    return ctx.local_profile.state()
+
+
+@router.put(
+    "/machine/local-profile",
+    tags=["machine"],
+    responses={422: {"model": ErrorResponse, "description": "The result is not a valid profile."}},
+    dependencies=[Depends(require_control)],
+)
+async def update_local_profile(ctx: Context, body: LocalProfileUpdate) -> LocalProfileState:
+    """Save findings to this machine's profile. They take effect when the core restarts."""
+    changes = body.model_dump(mode="json", exclude_none=True)
+    try:
+        ctx.local_profile.update(changes)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+    return ctx.local_profile.state()
+
+
+@router.put(
+    "/machine/locations/{kind}",
+    tags=["machine"],
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def set_location(ctx: Context, kind: LocationKind, body: LocationRequest) -> MachineProfile:
+    """Set this machine's discard or park location, by default to where the top camera is
+    looking. It takes effect at once, and is kept in the local profile."""
+    position = body.position
+    if position is None:
+        if not ctx.machine.state.homed:
+            raise NotHomedError("home the machine first, so the camera's position is known")
+        position = ctx.machine.camera_position()
+    ctx.local_profile.set_location(kind, position.x, position.y, body.label)
+    return ctx.machine.profile
+
+
+@router.delete(
+    "/machine/locations/{kind}", tags=["machine"], dependencies=[Depends(require_control)]
+)
+async def reset_location(ctx: Context, kind: LocationKind) -> MachineProfile:
+    """Forget this machine's own discard or park location: the profile's or the config's,
+    if any, applies again."""
+    ctx.local_profile.reset_location(kind)
     return ctx.machine.profile
 
 

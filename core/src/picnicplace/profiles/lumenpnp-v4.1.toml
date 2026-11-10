@@ -1,6 +1,6 @@
 # LumenPnP v4.1 machine profile (v4.1 and earlier v4): PCB staging plates, with the
 # bottom camera at the center of the front plate. v4.2 changed to metal plates with the
-# camera near one end; it needs its own profile (see docs/hardware/lumenpnp-v4.md).
+# camera near one end: its profile, lumenpnp-v4.2, extends this one.
 #
 # Geometry, speeds, and I/O come from a working v4.1 (its OpenPnP machine.xml and a
 # serial log, November 2026) and the plate and datum board designs; see

@@ -295,12 +295,10 @@ class TopRenderer:
                 x, y = plate.center.x + corner.x, plate.center.y + corner.y
                 if c.visible(x, y, 6):
                     c.circle(img, x, y, plate.corner_hole_diameter / 2, (10, 10, 10))
-            if plate.knockout_diameter and c.visible(
-                plate.center.x, plate.center.y, plate.knockout_diameter
-            ):
-                c.circle(
-                    img, plate.center.x, plate.center.y, plate.knockout_diameter / 2, (6, 6, 8)
-                )
+            kx = plate.center.x + plate.knockout_offset.x
+            ky = plate.center.y + plate.knockout_offset.y
+            if plate.knockout_diameter and c.visible(kx, ky, plate.knockout_diameter):
+                c.circle(img, kx, ky, plate.knockout_diameter / 2, (6, 6, 8))
 
     def _board(self, c: _Canvas, img: Image) -> None:
         b = self.board

@@ -307,8 +307,9 @@ def plan_job(
             Issue(
                 severity="warning",
                 message="there is no discard location: a part the bottom camera cannot find "
-                "pauses the run for you to take it off the nozzle (add one under "
-                "[[machine.locations]] in the config)",
+                "pauses the run for you to take it off the nozzle (set one in the Machine "
+                "workspace's Calibration panel: center the camera over the discard tray and "
+                "click Set discard here)",
             )
         )
     if not feeders.scanned and profile.feeder_bus is not None:
@@ -923,8 +924,8 @@ class JobRunner:
                         f"{item.ref}: {e}, and there is no discard location to drop it in."
                         f"{parked} Take whatever is on {nozzle_id} off it (it may be empty), "
                         "click Part removed, and resume to pick it again, or skip the "
-                        "placement. Add a discard location under [[machine.locations]] in the "
-                        "config, and the run will do this itself."
+                        "placement. Set a discard location (Calibration panel, Machine "
+                        "workspace), and the run will do this itself."
                     ) from e
                 await self._placement.discard(nozzle)
                 del run.held[nozzle_id]

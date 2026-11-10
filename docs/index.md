@@ -90,7 +90,9 @@ pumps, valves, and lights.
 ## Machines
 
 The first machine is the **LumenPnP v4.1**, with a machine profile built from the
-machine's published design files and real OpenPnP configurations. A
+machine's published design files and real OpenPnP configurations. The **v4.2** has
+its own profile, built on the v4.1's (its camera, datum, and discard tray are near the
+left end of the front plate); it has not been run on a real v4.2 yet. A
 [Quad 4c](SPEC.md#10-lumenpnp-target)
 conversion is planned next, and the driver and profile design avoid LumenPnP-only
 assumptions. See the [LumenPnP notes](hardware/lumenpnp-v4.md).
@@ -101,7 +103,7 @@ assumptions. See the [LumenPnP notes](hardware/lumenpnp-v4.md).
 |---|---|---|
 | M0: Skeleton | Core, simulator, event socket, Studio shell | Done |
 | M1: Manual control | Machine profiles, machine view, jogging, safe-Z interlock, control lease, Marlin driver, camera streams | Done, awaiting real-machine tests |
-| M2: Calibration | Visual homing and camera scale (done); lens calibration, nozzle offsets and runout, guided wizards | In progress |
+| M2: Calibration | Visual homing, camera scale, and discard and park locations set from the camera (done); lens calibration, nozzle offsets and runout, guided wizards | In progress |
 | M3: Single placement | Parts library, Photon feeders (discovery, part assignment, feeding, slots calibrated from feeder fiducials, pockets found from sprocket holes), pick, bottom-camera alignment, and place: done in the simulator, to be tried on a real machine | In progress |
 | M4: Jobs | KiCad board and KiKit panel import, placing a job within every nozzle's reach, board fiducials, planner and dry run, running a whole job with pause, step, and skip, strips and trays on the bed, feeders rescanned and each one's fiducial found on its first pick in a run, picks kept centered by the top or the bottom camera or both (auto), and a flight recorder (done in the simulator); run history | In progress |
 | M5: 1.0 | Packaging and user documentation; a simple operations view apart from the job-creation tools, a single job file, and parts counted on every reel and tray | Planned |

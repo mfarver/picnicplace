@@ -482,8 +482,8 @@ function PlateShape({ plate }: { plate: StagingPlate }) {
       {plate.knockout_diameter && (
         <circle
           className="mv-plate-knockout"
-          cx={center.x}
-          cy={-center.y}
+          cx={center.x + plate.knockout_offset.x}
+          cy={-(center.y + plate.knockout_offset.y)}
           r={plate.knockout_diameter / 2}
         />
       )}

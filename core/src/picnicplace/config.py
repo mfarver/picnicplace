@@ -9,7 +9,13 @@ from typing import Any, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from picnicplace.feeders.setup import PickCorrection
-from picnicplace.machine.profile import Location, MachineProfile, is_profile_path, load_profile
+from picnicplace.machine.profile import (
+    Location,
+    MachineProfile,
+    is_profile_path,
+    merge_profile_data,
+    profile_data,
+)
 
 
 class _Section(BaseModel):
@@ -92,6 +98,10 @@ class DataConfig(_Section):
     def recordings_dir(self) -> Path:
         return self.dir.expanduser() / "recordings"
 
+    @property
+    def local_profile_path(self) -> Path:
+        return self.dir.expanduser() / "local-profile.json"
+
 
 class MarlinConfig(_Section):
     port: str | None = Field(
@@ -120,8 +130,9 @@ class MachineConfig(_Section):
     locations: list[Location] = Field(
         default_factory=list[Location],
         description=(
-            "Places this machine's owner chooses, such as the discard and park positions. "
-            "Added to the machine profile's locations, which describe only the design."
+            "Places this machine's owner chooses, such as the discard and park positions, "
+            "added to the machine profile's. The Studio can set the discard and park "
+            "locations itself (in the local profile, which wins over these)."
         ),
     )
     profile: str = Field(
@@ -187,17 +198,19 @@ class MachineConfig(_Section):
     )
 
     _profile: MachineProfile | None = PrivateAttr(default=None)
+    _data: dict[str, Any] = PrivateAttr(default_factory=dict[str, Any])
 
     @model_validator(mode="after")
     def _load_profile(self) -> Self:
-        profile = load_profile(self.profile)
+        data = profile_data(self.profile)
         if self.locations:
-            # Re-validate so the merged locations get the profile's checks (unique IDs).
-            data = profile.model_dump(exclude_computed_fields=True)
-            data["marlin"] = profile.marlin
-            data["locations"] = [*profile.locations, *self.locations]
-            profile = MachineProfile.model_validate(data)
-        self._profile = profile
+            # Validated together, so the added locations get the profile's checks.
+            data["locations"] = [
+                *data.get("locations", []),
+                *(loc.model_dump(mode="json", exclude_defaults=True) for loc in self.locations),
+            ]
+        self._data = data
+        self._profile = MachineProfile.model_validate(data)
         if self.driver in ("marlin", "fake-marlin"):
             if self._profile.marlin is None:
                 raise ValueError(f"machine profile {self.profile!r} has no [marlin] settings")
@@ -210,6 +223,19 @@ class MachineConfig(_Section):
     def machine_profile(self) -> MachineProfile:
         assert self._profile is not None
         return self._profile
+
+    def with_local(self, local: dict[str, Any]) -> MachineProfile:
+        """The profile with a local profile (see ``machine/local.py``) laid over it."""
+        try:
+            return MachineProfile.model_validate(merge_profile_data(self._data, local))
+        except ValueError as e:
+            raise ValueError(
+                f"the local profile does not fit machine profile {self.profile!r}: {e}"
+            ) from e
+
+    def apply_local(self, local: dict[str, Any]) -> None:
+        """Use the profile with the local profile laid over it from now on."""
+        self._profile = self.with_local(local)
 
 
 class CameraConfig(_Section):

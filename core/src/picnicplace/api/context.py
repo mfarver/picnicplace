@@ -17,6 +17,7 @@ from picnicplace.feeders.service import FeederService
 from picnicplace.job.run import JobRunner
 from picnicplace.lease import LeaseManager
 from picnicplace.library import Library
+from picnicplace.machine.local import LocalProfile
 from picnicplace.machine.service import MachineService
 from picnicplace.operations import OperationManager
 from picnicplace.placement import PlacementService
@@ -36,6 +37,7 @@ class AppContext:
     cameras: CameraManager
     bring_up: BringUpStore
     captures: CaptureStore
+    local_profile: LocalProfile
     library: Library | None = None
     """Opened when the app starts, so building the app (as for the OpenAPI document)
     touches no files."""

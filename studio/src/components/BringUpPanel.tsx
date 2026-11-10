@@ -1,8 +1,23 @@
-import { Check, ChevronDown, ChevronRight, CircleAlert, Copy, MapPin, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CircleAlert,
+  Copy,
+  MapPin,
+  Save,
+  X,
+} from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { api } from "../api/client";
+import { api, errorMessage } from "../api/client";
 import { useCore } from "../api/core";
-import type { BringUpRecord, MachineProfile, MachineState, StepRecord } from "../api/types";
+import type {
+  BringUpRecord,
+  LocalProfileUpdate,
+  MachineProfile,
+  MachineState,
+  StepRecord,
+} from "../api/types";
 import { Panel } from "./Panel";
 
 type Status = StepRecord["status"];
@@ -324,33 +339,67 @@ const STATUS_LABEL: Record<Status, string> = {
   skipped: "Skipped",
 };
 
-/** TOML for what the checklist found that differs from the profile, for the owner to copy. */
-function suggestions(record: BringUpRecord, d: MachineProfile): string {
-  const lines: string[] = [];
-  const jog = record.steps.jog?.values ?? {};
-  if (jog.x_points && jog.x_points !== d.x_points) lines.push(`x_points = "${jog.x_points}"`);
-  if (jog.y_points && jog.y_points !== d.y_points) lines.push(`y_points = "${jog.y_points}"`);
-  const down = record.steps.nozzles?.values.down_nozzle;
-  const n1 = d.nozzles[0];
-  if (down && n1 && !n1.label.toLowerCase().startsWith(String(down))) {
-    lines.push(`# ${n1.id} is the ${down} nozzle: swap the nozzles' labels.`);
-  }
+type Findings = LocalProfileUpdate;
+
+/** Keep-out rectangles from recorded points: those whose labels share a first word. */
+function keepOuts(record: BringUpRecord): NonNullable<Findings["keep_outs"]> {
   const groups = new Map<string, { x: number; y: number }[]>();
   for (const p of record.points) {
     const key = p.label.trim().split(/\s+/)[0]!.toLowerCase();
     groups.set(key, [...(groups.get(key) ?? []), p]);
   }
-  for (const [key, points] of groups) {
-    if (points.length < 2) continue;
-    const xs = points.map((p) => p.x);
-    const ys = points.map((p) => p.y);
-    const r = (v: number) => Number(v.toFixed(2));
+  const r = (v: number) => Number(v.toFixed(2));
+  return [...groups]
+    .filter(([, points]) => points.length >= 2)
+    .map(([key, points]) => {
+      const xs = points.map((p) => p.x);
+      const ys = points.map((p) => p.y);
+      return {
+        id: key.replace(/[^a-z0-9_-]/g, "_"),
+        label: `${key[0]!.toUpperCase()}${key.slice(1)}`,
+        area: {
+          x_min: r(Math.min(...xs)),
+          y_min: r(Math.min(...ys)),
+          x_max: r(Math.max(...xs)),
+          y_max: r(Math.max(...ys)),
+        },
+      };
+    });
+}
+
+/** What the checklist found that differs from the profile, as profile values. */
+function findings(record: BringUpRecord, d: MachineProfile): Findings {
+  const jog = record.steps.jog?.values ?? {};
+  const found: Findings = {};
+  if (jog.x_points && jog.x_points !== d.x_points) {
+    found.x_points = jog.x_points as NonNullable<Findings["x_points"]>;
+  }
+  if (jog.y_points && jog.y_points !== d.y_points) {
+    found.y_points = jog.y_points as NonNullable<Findings["y_points"]>;
+  }
+  const areas = keepOuts(record);
+  if (areas.length) found.keep_outs = areas;
+  return found;
+}
+
+/** The findings as TOML, with notes, for the owner to copy into a profile. */
+function suggestions(record: BringUpRecord, d: MachineProfile, found: Findings): string {
+  const lines: string[] = [];
+  if (found.x_points) lines.push(`x_points = "${found.x_points}"`);
+  if (found.y_points) lines.push(`y_points = "${found.y_points}"`);
+  const down = record.steps.nozzles?.values.down_nozzle;
+  const n1 = d.nozzles[0];
+  if (down && n1 && !n1.label.toLowerCase().startsWith(String(down))) {
+    lines.push(`# ${n1.id} is the ${down} nozzle: swap the nozzles' labels.`);
+  }
+  for (const k of found.keep_outs ?? []) {
+    const a = k.area;
     lines.push(
       "",
       "[[keep_outs]]",
-      `id = "${key.replace(/[^a-z0-9_-]/g, "_")}"`,
-      `label = "${key[0]!.toUpperCase()}${key.slice(1)}"`,
-      `area = { x_min = ${r(Math.min(...xs))}, y_min = ${r(Math.min(...ys))}, x_max = ${r(Math.max(...xs))}, y_max = ${r(Math.max(...ys))} }`,
+      `id = "${k.id}"`,
+      `label = "${k.label}"`,
+      `area = { x_min = ${a.x_min}, y_min = ${a.y_min}, x_max = ${a.x_max}, y_max = ${a.y_max} }`,
     );
   }
   if (record.points.length) {
@@ -371,6 +420,7 @@ export function BringUpPanel({
   const [open, setOpen] = useState<string | null>(null);
   const [label, setLabel] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [applied, setApplied] = useState<string | null>(null);
 
   useEffect(() => {
     if (status !== "open") return;
@@ -423,7 +473,17 @@ export function BringUpPanel({
   };
 
   const done = STEPS.filter((s) => stepRecord(s.id).status === "done").length;
-  const changes = suggestions(record, description);
+  const found = findings(record, description);
+  const changes = suggestions(record, description, found);
+  const canApply = Object.keys(found).length > 0;
+  const apply = async () => {
+    const { error } = await api.PUT("/api/v1/machine/local-profile", { body: found });
+    setApplied(
+      error
+        ? `Could not save them: ${errorMessage(error)}`
+        : "Saved to this machine's local profile. Restart the core to use them.",
+    );
+  };
 
   return (
     <Panel title={`Bring-up (${done}/${STEPS.length})`} collapseId="bring-up">
@@ -531,14 +591,29 @@ export function BringUpPanel({
         <details className="bringup-changes">
           <summary>Suggested profile changes</summary>
           <pre className="mono">{changes}</pre>
-          <button
-            type="button"
-            className="button"
-            onClick={() => void navigator.clipboard?.writeText(changes)}
-          >
-            <Copy size={16} aria-hidden />
-            Copy
-          </button>
+          <div className="button-row">
+            {canApply && (
+              <button
+                type="button"
+                className="button"
+                title="Keep them in this machine's local profile, over the built-in one"
+                onClick={() => void apply()}
+              >
+                <Save size={16} aria-hidden />
+                Save to this machine
+              </button>
+            )}
+            <button
+              type="button"
+              className="button"
+              title="Copy them, to offer in a profile for every machine like this one"
+              onClick={() => void navigator.clipboard?.writeText(changes)}
+            >
+              <Copy size={16} aria-hidden />
+              Copy
+            </button>
+          </div>
+          {applied && <p className="note text-muted">{applied}</p>}
         </details>
       )}
     </Panel>

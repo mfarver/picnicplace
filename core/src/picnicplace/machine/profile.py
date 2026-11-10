@@ -338,6 +338,14 @@ class MachineProfile(ProfileModel):
         default="back",
         description="Which way +Y points for an operator facing the machine.",
     )
+    home_z: float = Field(
+        default=0.0,
+        description=(
+            "Where Z reads right after homing, with the nozzles level. The core checks it "
+            "and does not call the machine homed if Z reads anything else: a firmware that "
+            "names level differently needs a G92 in the home commands."
+        ),
+    )
     visual_homing: bool = Field(
         default=False,
         description=(

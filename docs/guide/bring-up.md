@@ -58,7 +58,10 @@ keep-outs) into TOML you can copy into a profile. The same steps:
 
 - [ ] Keep a hand on the machine's physical E-stop.
 - [ ] Check the Studio shows the "Slow 25%" badge.
-- [ ] Home, and watch that every axis reaches its switch. After homing, Z should read 0.
+- [ ] Home, and watch that every axis reaches its switch. After homing, Z should read 0
+      with both nozzles level. If the firmware reports anything else, homing fails with
+      a message saying so: the profile's home commands need a `G92` (the LumenPnP
+      profile sends `G92 Z0`, because its firmware calls level 31.5).
 - [ ] Jog X and Y by 1 mm, then 10 mm. Check the head moves the way the arrows point:
       +X to the right and +Y toward the back on a LumenPnP v4.1.
 - [ ] Jog Z down 1 mm and back up. The left nozzle (N1) should go down.

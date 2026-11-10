@@ -64,6 +64,12 @@ class SafeZFaultError(MachineError):
     code = "safe_z_fault"
 
 
+class HomingError(MachineError):
+    """Homing ended somewhere the profile does not expect, so positions cannot be trusted."""
+
+    code = "homing_failed"
+
+
 class ConnectFailedError(MachineError):
     """The machine could not be reached."""
 

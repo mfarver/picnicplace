@@ -308,7 +308,9 @@ on the reference machine read them as uncompressed YUYV through V4L2, ran the to
 5 frames per second, and flipped both images (top: X and Y, bottom: X). PicnicPlace asks
 for MJPEG first, since USB 2 cannot carry uncompressed 1080p quickly; whether these
 cameras offer MJPEG is not known yet (`v4l2-ctl --list-formats-ext -d /dev/videoN` shows
-it). Image flips are not applied yet.
+it). PicnicPlace flips images as the config says (`flip_x`, `flip_y`): a real v4.1
+needed both flips for the top camera, the same as OpenPnP's, and `flip_y` for the bottom
+camera (not yet checked), so the images look like the machine seen from the front.
 
 ## Bringing up a machine
 

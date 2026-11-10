@@ -66,6 +66,8 @@ FIDUCIAL_SEARCH_MM = 3.0
 """How far from where the job says a fiducial is, the camera looks for it."""
 FIDUCIAL_DIAMETER_MM = 1.0
 """For fiducials whose footprint is not in the library."""
+SIM_DECOY_SIZE = 0.7
+"""A simulated decoy's size, as a fraction of its fiducial's (see ``sim_decoys``)."""
 FIDUCIAL_RESIDUAL_MM = 0.25
 """Fiducials found further than this from the fit mean the board, or one of them, is
 not where the job says: the run stops before placing anything."""
@@ -464,6 +466,11 @@ class JobRunner:
         self.record_runs = False
         """Record every run (from the config)."""
         self._sim_error = sim_board_error if feeders.sim_parts is not None else None
+        self.sim_decoys = False
+        """In the simulator, print a round silkscreen mark smaller than each fiducial
+        where the job expects the fiducial, nearer the camera's center than the fiducial
+        itself (which is off by the board's error): a fiducial finder that takes the
+        nearest round blob is fooled by it, as one was by a label's "D" on a real board."""
         self._sim_board: BoardScene | None = None
         self._sim_fix: BoardFix | None = None
         if self._sim_error is not None:
@@ -677,7 +684,7 @@ class JobRunner:
             if footprint and footprint.pads:
                 d = min(footprint.pads[0].width, footprint.pads[0].height)
             await self._machine.move_camera_to(f.x, f.y)
-            found = await self._machine.locate_circle(d * 0.6, d * 1.5, FIDUCIAL_SEARCH_MM)
+            found = await self._machine.locate_circle(d * 0.6, d * 1.5, FIDUCIAL_SEARCH_MM, d)
             where = f"{f.ref}{f' on board {f.copy_id}' if f.copy_id else ''}"
             if found is None:
                 raise VisionError(
@@ -837,6 +844,7 @@ class JobRunner:
 
         pads: list[tuple[float, float, float, float, float]] = []
         fiducials: list[tuple[float, float, float]] = []
+        marks: list[tuple[float, float, float]] = []
         for p in result.placements:
             footprint = library.find_footprint(p.footprint_id) if library else None
             if p.kind == "fiducial":
@@ -844,6 +852,8 @@ class JobRunner:
                 if footprint and footprint.pads:
                     d = min(footprint.pads[0].width, footprint.pads[0].height)
                 fiducials.append((*at(p.x, p.y), d))
+                if self.sim_decoys:
+                    marks.append((p.x, p.y, d * SIM_DECOY_SIZE))
                 continue
             if footprint is None:
                 continue
@@ -853,7 +863,9 @@ class JobRunner:
                 x, y = at(p.x, p.y)
                 pads.append((x + off.x, y + off.y, pad.width, pad.height, a + pad.rotation))
         outline = tuple(at(c.x, c.y) for c in result.outline)
-        self._sim_board = BoardScene(outline=outline, fiducials=tuple(fiducials), pads=tuple(pads))
+        self._sim_board = BoardScene(
+            outline=outline, fiducials=tuple(fiducials), pads=tuple(pads), marks=tuple(marks)
+        )
 
     def sim_target(self, item: RunItem) -> tuple[Point, float] | None:
         """Where the simulated board really wants an item's part, and at what angle."""

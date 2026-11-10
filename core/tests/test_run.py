@@ -174,6 +174,26 @@ def test_plan_says_what_it_can_and_cannot_do(lumen: TestClient) -> None:
         assert r.status_code == 409 and "1 placement is blocked" in r.json()["detail"]
 
 
+def test_fiducials_are_not_fooled_by_a_smaller_round_mark() -> None:
+    """A round silkscreen mark where the job expects each fiducial, smaller than it and
+    nearer the camera's center (as a label's "D" was on a real board, 2 mm from the dot):
+    the run still finds the fiducials and the board's true position."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_board_error": (1.6, -1.2, 0.5)},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        runner(client).sim_decoys = True
+        set_up(client, s)
+        op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        run = client.get("/api/v1/run").json()
+        fix = run["fix"]
+        assert len(fix["fiducials"]) == 3 and fix["residual"] < 0.05
+        assert (fix["dx"], fix["dy"], fix["angle"]) == pytest.approx((1.6, -1.2, 0.5), abs=0.05)
+        assert check_landed(client, run) == 4
+
+
 def test_run_a_job(lumen: TestClient) -> None:
     with connect(lumen) as s:
         set_up(lumen, s)

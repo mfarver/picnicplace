@@ -26,13 +26,14 @@ tall part never stands next to where a nozzle must still go), then by feeder slo
 consecutive picks come from the same tape.
 
 **Problems.** A pick that comes up empty is tried again, feeding the next part, up to
-``PICK_ATTEMPTS`` times. A part bottom vision cannot find goes to the discard bin, if
-there is one, and its placement is tried again later. Anything else pauses the run,
-with the parts already picked left on their nozzles: fix the cause, then resume, or
-skip the placement. An empty strip or tray pauses the run too, with the head moved to
-the park position out of the operator's way: refill it, mark it refilled, and resume.
-Pausing and stopping take effect after the batch in progress; a step resumes a paused
-run for one batch.
+``PICK_ATTEMPTS`` times. A part bottom vision cannot find goes to the discard bin, and
+its placement is tried again later; with no discard location, the run parks the head and
+pauses for the operator to take the part off and say so (Part removed). Anything else
+pauses the run, with the parts already picked left on their nozzles: fix the cause, then
+resume, or skip the placement. An empty strip or tray pauses the run too, with the head
+moved to the park position out of the operator's way: refill it, mark it refilled, and
+resume. Pausing and stopping take effect after the batch in progress; a step resumes a
+paused run for one batch.
 """
 
 import asyncio
@@ -273,6 +274,17 @@ def plan_job(
             issues.append(Issue(severity="warning", message=f"{f.id} is not used: {problem}"))
             continue
         loaded.setdefault(f.feeder.part_id, []).append((f.id, f.feeder.corners()))
+    if any(c.looking == "up" for c in profile.cameras) and not any(
+        loc.kind == "discard" for loc in profile.locations
+    ):
+        issues.append(
+            Issue(
+                severity="warning",
+                message="there is no discard location: a part the bottom camera cannot find "
+                "pauses the run for you to take it off the nozzle (add one under "
+                "[[machine.locations]] in the config)",
+            )
+        )
     if not feeders.scanned and profile.feeder_bus is not None:
         issues.append(
             Issue(severity="warning", message="the feeders have not been scanned since start")
@@ -491,7 +503,17 @@ class JobRunner:
             machine.scene_boards = self._scene_boards
 
     def state(self) -> RunState | None:
-        return self._run
+        run = self._run
+        if run is not None and not self._active:
+            self._forget_removed(run)
+        return run
+
+    def _forget_removed(self, run: RunState) -> None:
+        """Forget the parts taken off their nozzles (discarded, or by hand) while paused:
+        their placements are picked again."""
+        for nozzle_id in list(run.held):
+            if self._placement.holds(nozzle_id) is None:
+                del run.held[nozzle_id]
 
     def _get_job(self, job_id: str) -> Job:
         try:
@@ -533,7 +555,10 @@ class JobRunner:
             raise RunError("the job has nothing to place")
         held = [load.nozzle for load in self._placement.state().loads]
         if held:
-            raise RunError(f"{held[0]} holds a part: place or discard it first")
+            raise RunError(
+                f"{held[0]} holds a part: place or discard it first, or take it off by hand "
+                "and click Part removed"
+            )
         if any(c.looking == "up" for c in self._machine.profile.cameras):
             self._placement.bottom_camera()  # raises if it has no focus height
         self._job = job
@@ -594,8 +619,12 @@ class JobRunner:
         if not 0 <= index < len(run.plan.items):
             raise InvalidTargetError(f"no placement {index} in the run")
         item = run.plan.items[index]
+        self._forget_removed(run)
         if index in run.held.values():
-            raise RunError(f"{item.ref}'s part is on a nozzle: place or discard it first")
+            raise RunError(
+                f"{item.ref}'s part is on a nozzle: place or discard it first, or take it "
+                "off by hand and click Part removed"
+            )
         operator = "skipped by the operator"
         if skip and item.status in ("pending", "failed"):
             item.status, item.note = "skipped", operator
@@ -787,7 +816,8 @@ class JobRunner:
         # Parts still held from before a pause come first.
         for nozzle_id, index in list(run.held.items()):
             if self._placement.holds(nozzle_id) is None:
-                del run.held[nozzle_id]  # discarded, or placed by hand, while paused
+                # Discarded, or taken off by hand, while paused: pick it again.
+                del run.held[nozzle_id]
             else:
                 batch[nozzle_id] = index
         busy = set(run.held.values())
@@ -849,7 +879,16 @@ class JobRunner:
                 await self._placement.align(nozzle)
             except VisionError as e:
                 if not self._placement.can_discard():
-                    raise
+                    item.discards += 1
+                    item.note = f"bottom vision failed ({e}): take the part off {nozzle_id}"
+                    parked = await self._park()
+                    raise RunError(
+                        f"{item.ref}: {e}, and there is no discard location to drop it in."
+                        f"{parked} Take whatever is on {nozzle_id} off it (it may be empty), "
+                        "click Part removed, and resume to pick it again, or skip the "
+                        "placement. Add a discard location under [[machine.locations]] in the "
+                        "config, and the run will do this itself."
+                    ) from e
                 await self._placement.discard(nozzle)
                 del run.held[nozzle_id]
                 del batch[nozzle_id]

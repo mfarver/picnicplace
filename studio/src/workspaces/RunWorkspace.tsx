@@ -1,4 +1,4 @@
-import { Pause, Play, RefreshCw, SkipForward, Square, StepForward } from "lucide-react";
+import { Hand, Pause, Play, RefreshCw, SkipForward, Square, StepForward } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { hasControl, useCore } from "../api/core";
@@ -155,6 +155,12 @@ export function RunWorkspace() {
   };
   const resume = async (path: "/api/v1/run/resume" | "/api/v1/run/step") => {
     const op = await act(() => api.POST(path));
+    if (op) await refresh();
+  };
+  const removed = async (nozzle: string) => {
+    const op = await act(() =>
+      api.POST("/api/v1/placement/release", { body: { nozzle_id: nozzle } }),
+    );
     if (op) await refresh();
   };
   const skip = async (item: RunItem, value: boolean) => {
@@ -317,6 +323,27 @@ export function RunWorkspace() {
               {current.error ?? current.message}
             </p>
           )}
+          {paused &&
+            Object.entries(current.held).map(([nozzle, index]) => (
+              <div key={nozzle} className="button-row">
+                <span className="note text-muted">
+                  {nozzle} holds {current.plan.items[index]?.ref ?? "a part"}.
+                </span>
+                <button
+                  type="button"
+                  className="button"
+                  disabled={!canSignal}
+                  title={
+                    "You took the part off the nozzle by hand (or it is empty): turn its " +
+                    "suction off and pick that placement again"
+                  }
+                  onClick={() => void removed(nozzle)}
+                >
+                  <Hand size={16} aria-hidden />
+                  Part removed
+                </button>
+              </div>
+            ))}
           {current?.fix && current.fix.fiducials.length > 0 && (
             <p className="note text-muted">
               Board found {Math.hypot(current.fix.dx, current.fix.dy).toFixed(2)} mm off, turned{" "}

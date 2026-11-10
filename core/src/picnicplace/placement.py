@@ -215,6 +215,18 @@ class PlacementService:
         self._discard_location()
         return self._machine.start_task("discard", lambda: self.discard(nozzle))
 
+    def start_release(self, nozzle_id: str) -> Operation:
+        """The operator took the part off the nozzle by hand (or found it empty)."""
+        nozzle = self._machine.nozzle(nozzle_id)
+        self._load(nozzle)
+        return self._machine.start_task("release", lambda: self.release(nozzle))
+
+    async def release(self, nozzle: Nozzle) -> str:
+        """Turn the nozzle's suction off and forget its part: taken off by hand."""
+        await self._machine.suction(nozzle, False)
+        self._loads.pop(nozzle.id, None)
+        return f"{nozzle.id}: suction off, and its part taken as removed by hand."
+
     def can_discard(self) -> bool:
         return any(loc.kind == "discard" for loc in self._machine.profile.locations)
 

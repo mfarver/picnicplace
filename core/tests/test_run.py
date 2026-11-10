@@ -348,3 +348,42 @@ def test_a_run_pauses_when_a_part_is_no_longer_loaded(lumen: TestClient) -> None
         assert "feeders changed since the run was planned: U2 (no feeder holds" in op["error"]
         run = lumen.get("/api/v1/run").json()
         assert run["status"] == "paused" and run["placed"] == 0
+
+
+def test_without_a_discard_location_the_operator_takes_the_part_off(lumen: TestClient) -> None:
+    """Bottom vision cannot find R1's part, and there is no bin to drop it in: the run
+    parks the head and pauses with the part held. Skip is refused while it is on the
+    nozzle; after the operator takes it off and says so, resuming picks R1 again."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        assert any("no discard location" in i["message"] for i in plan["issues"])
+
+        recorder = lumen.app.state.ctx.machine.recorder  # type: ignore[attr-defined]
+        vision = recorder.vision
+        blind = {"left": 1}
+
+        async def fails_once(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "find_part" and blind["left"] > 0:
+                blind["left"] -= 1
+                return None
+            return await vision(name, *args, **kwargs)
+
+        recorder.vision = fails_once
+        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        assert op["status"] == "failed"
+        assert "saw no part on N1, and there is no discard location" in op["error"]
+        assert "The head moved to the back" in op["error"]
+        run = lumen.get("/api/v1/run").json()
+        assert run["status"] == "paused" and "N1" in run["held"]
+        index = run["held"]["N1"]
+        r = s.put(f"/api/v1/run/items/{index}", {"skip": True})
+        assert r.status_code == 409 and "Part removed" in r.json()["detail"]
+
+        ok(s.wait(s.post("/api/v1/placement/release", {"nozzle_id": "N1"})))
+        loads = lumen.get("/api/v1/placement").json()["loads"]
+        assert [x["nozzle"] for x in loads] == ["N2"]
+
+        op = ok(s.wait(s.post("/api/v1/run/resume")))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4

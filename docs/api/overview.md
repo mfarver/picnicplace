@@ -60,6 +60,7 @@ generate a client from it, as the Studio does.
 | `PUT`, `DELETE /api/v1/feeders/slots/{id}/pick` | Teach a slot's pick location (at the camera), or forget it |
 | `POST /api/v1/feeders/slots/{id}/pocket` | Find the pick pocket from the tape's sprocket holes |
 | `POST /api/v1/feeders/slots/{id}/fiducial`, `POST /api/v1/feeders/calibrate` | Measure the feeder fiducial's offset; calibrate slots from their fiducials |
+| `POST /api/v1/feeders/rails/calibrate`, `POST /api/v1/feeders/slots/{id}/rail-fiducial`, `DELETE /api/v1/feeders/rails/{bank}` | Find where each feeder rail really is from its end feeders' fiducials (or one the operator centered the camera on); go back to the profile's place |
 | `PUT`, `DELETE /api/v1/feeders/assignments/{feeder_id}` | Which part a feeder holds |
 | `POST /api/v1/feeders/fixed`; `PUT`, `DELETE …/fixed/{id}` | Strips and trays held on the bed (T1, T2, ...): add, change, remove |
 | `PUT /api/v1/feeders/fixed/{id}/teach` | Teach a strip or tray's first part, end of its first row, or last part (at the camera) |

@@ -165,6 +165,14 @@ class MachineConfig(_Section):
             "alignment finds and corrects it."
         ),
     )
+    sim_rail_error: dict[str, tuple[float, float, float]] = Field(
+        default_factory=dict[str, tuple[float, float, float]],
+        description=(
+            "Simulator only: how far each feeder rail really is from the profile's place, "
+            "by feeder bank ID, as X and Y in mm and a turn in degrees about its first "
+            "slot. Rail calibration finds and corrects it."
+        ),
+    )
     speed_scale: float = Field(
         default=1.0,
         gt=0,

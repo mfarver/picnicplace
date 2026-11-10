@@ -52,5 +52,6 @@ export type RunState = Schemas["RunState"];
 export type RecordingInfo = Schemas["RecordingInfo"];
 export type FixedFeeder = Schemas["FixedFeeder-Output"];
 export type FixedFeederState = Schemas["FixedFeederState"];
+export type RailState = Schemas["RailState"];
 export type PickLearning = Schemas["PickLearning"];
 export type PickCorrection = PlacementState["pick_correction"];

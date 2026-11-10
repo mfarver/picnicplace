@@ -23,6 +23,9 @@ profile = "lumenpnp-v4.1"    # Built-in profile ID, or a path to a profile TOML 
 sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times faster.
 # Simulator and fake firmware: the feeder slots (by number) that hold a Photon feeder.
 # sim_feeders = [1, 2, 3, 4, 5, 26]
+# Simulator: feeder rails off the profile's place, to try rail calibration (by feeder bank
+# ID: X and Y in mm, and a turn in degrees about its first slot).
+# sim_rail_error = { front = [4.0, -2.5, 0.4], back = [-3.0, 5.0, -0.3] }
 speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 when
                            # bringing up a machine. Homing speed is the firmware's.
 # How picks are kept centered on the parts (a run or a single pick can choose again):

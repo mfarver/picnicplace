@@ -107,6 +107,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             lambda: ctx.library,
             bundle.photon_sim,
         )
+        ctx.feeders.sim_rail_errors = dict(config.machine.sim_rail_error)
         ctx.placement = PlacementService(
             machine, ctx.feeders, lambda: ctx.library, config.machine.pick_correction
         )

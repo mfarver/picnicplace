@@ -18,6 +18,7 @@ from typing import Literal
 from picnicplace.camera.synthetic import TapeScene
 from picnicplace.feeders.photon import PhotonBus
 from picnicplace.feeders.pocket import pocket_from_holes
+from picnicplace.feeders.rails import fit_rail, residual
 from picnicplace.feeders.setup import (
     FeederAssignment,
     FeederSetupStore,
@@ -25,6 +26,8 @@ from picnicplace.feeders.setup import (
     PickCorrection,
     PickLearning,
     PickMisses,
+    RailCalibration,
+    RailPoint,
     SlotCalibration,
 )
 from picnicplace.feeders.sim import SimulatedPhotonBus
@@ -50,6 +53,21 @@ DEFAULT_PITCH = 4.0
 """Feed distance when neither the feeder nor its part says: the most common pitch."""
 
 FIDUCIAL_SEARCH_MM = 3.0
+
+RAIL_SEARCH_ACROSS_MM = 7.0
+"""Searching for a rail's end fiducial, the camera also looks this far to either side of
+where it is expected, across the rail."""
+RAIL_SEARCH_ALONG_MM = 5.0
+"""And this far along the rail. A fiducial found more than half a slot along the rail
+from where it was expected may be the next feeder's, so it is not taken."""
+RAIL_SEARCH_RADIUS_MM = 5.0
+"""How far from each frame's center a fiducial is looked for: within the top camera's
+view."""
+RAIL_MIN_SPAN = 1 / 3
+"""A rail is fitted to fiducials at least this fraction of its length apart."""
+RAIL_RESIDUAL_MM = 1.0
+"""A rail fitted to more than two fiducials that misses one by more than this is
+suspect: a fiducial was mistaken, or a rail is bent."""
 """Look for a feeder's fiducial this far from where it should be."""
 
 FIDUCIAL_DIAMETERS = (0.5, 2.5)
@@ -127,6 +145,15 @@ class FixedFeederState(WireModel):
     learned: PickLearning | None
 
 
+class RailState(WireModel):
+    bank: str
+    label: str
+    first_slot: str
+    last_slot: str
+    calibration: RailCalibration | None
+    """Fiducials found on the rail, and the rail fitted to them, if any."""
+
+
 class FeedersState(WireModel):
     bus: Literal["photon"] | None
     scanned: bool
@@ -138,6 +165,8 @@ class FeedersState(WireModel):
     """Every feeder the setup knows, by ID, found or not."""
     fixed: list[FixedFeederState]
     """Strips and trays on the bed."""
+    rails: list[RailState]
+    """Each feeder rail, and where it really is, if calibrated."""
 
 
 def rotate(p: Point, degrees: float) -> Point:
@@ -166,9 +195,16 @@ class FeederService:
         self._store = store
         self._library = library
         self._profile = machine.profile
-        self._slots = machine_slots(self._profile)
-        self._by_id = {s.id: s for s in self._slots}
+        self._nominal = machine_slots(self._profile)
+        """The slots where the profile puts them."""
         self._banks: dict[str, FeederBank] = {b.id: b for b in self._profile.feeder_banks}
+        self._slots: list[Slot] = []
+        """The slots where their rails really are (see ``_apply_rails``)."""
+        self._by_id: dict[str, Slot] = {}
+        self._apply_rails()
+        self.sim_rail_errors: dict[str, tuple[float, float, float]] = {}
+        """Simulated rails: how far each bank really is from the profile, by bank ID: a
+        shift (x, y) in mm and a turn in degrees about its first slot."""
         self._bus = (
             PhotonBus(machine.driver.rs485) if self._profile.feeder_bus == "photon" else None
         )
@@ -255,6 +291,7 @@ class FeederService:
             fiducial_offset_source=source,  # type: ignore[arg-type]
             assignments=dict(setup.feeders),
             fixed=[self.fixed_state(i) for i in sorted(setup.fixed, key=_fixed_order)],
+            rails=[self._rail_state(bank) for bank in self._profile.feeder_banks],
         )
 
     def fixed_state(self, fixed_id: str) -> FixedFeederState:
@@ -509,6 +546,220 @@ class FeederService:
             return message
 
         return self._machine.start_task("feeder_calibrate", work)
+
+    # --- Rails -------------------------------------------------------------------------
+
+    def _apply_rails(self) -> None:
+        """Place the slots where their rails really are: the profile's places, moved by
+        each rail's calibration."""
+        rails = self._store.setup.rails
+        slots: list[Slot] = []
+        for nominal in self._nominal:
+            rail = rails.get(nominal.bank)
+            if rail is None or not rail.fitted:
+                slots.append(nominal)
+                continue
+            slots.append(
+                nominal.model_copy(
+                    update={
+                        "pick": rail.apply(nominal.pick),
+                        "rotation": round(nominal.rotation + rail.angle, 4),
+                    }
+                )
+            )
+        self._slots = slots
+        self._by_id = {s.id: s for s in slots}
+
+    def _rail_state(self, bank: FeederBank) -> RailState:
+        mine = [s for s in self._nominal if s.bank == bank.id]
+        return RailState(
+            bank=bank.id,
+            label=bank.label,
+            first_slot=mine[0].id,
+            last_slot=mine[-1].id,
+            calibration=self._store.setup.rails.get(bank.id),
+        )
+
+    def _bank(self, bank_id: str) -> FeederBank:
+        bank = self._banks.get(bank_id)
+        if bank is None:
+            raise InvalidTargetError(f"no feeder rail {bank_id!r}")
+        return bank
+
+    def _expected_fiducial(self, slot: Slot) -> Point:
+        """Where the profile's rail puts a slot's feeder fiducial."""
+        nominal = self._nominal[slot.number - 1]
+        offset, _ = self.fiducial_offset(self._banks[nominal.bank])
+        assert offset is not None
+        turned = self._fiducial_vector(nominal, offset)
+        return Point(x=nominal.pick.x + turned.x, y=nominal.pick.y + turned.y)
+
+    def _need_fiducial_offset(self, bank: FeederBank) -> None:
+        if self.fiducial_offset(bank)[0] is None:
+            raise FeederError(
+                "the feeder fiducial's place on a feeder is not known: the machine profile "
+                "does not give it. Teach one slot's pick location, then measure its fiducial"
+            )
+
+    def _min_span(self, bank: FeederBank) -> int:
+        return max(2, round((bank.count - 1) * RAIL_MIN_SPAN))
+
+    def start_calibrate_rails(self, bank_ids: list[str] | None = None) -> Operation:
+        """Find where each rail really is: the fiducials of the two feeders farthest apart
+        on it, and the profile's rail fitted to them. Every slot on the rail moves with
+        it, and the rail's slot corrections and what was learned of its picks are
+        cleared, since they were measured from the old places."""
+        banks = [self._bank(b) for b in bank_ids] if bank_ids else list(self._profile.feeder_banks)
+        if not banks:
+            raise FeederError("this machine has no feeder rails")
+        if not self._scanned and self._bus is not None:
+            raise FeederError("scan the feeders first, so the core knows where they are")
+        plans: list[tuple[FeederBank, list[Slot]]] = []
+        for bank in banks:
+            self._need_fiducial_offset(bank)
+            mine = [s for s in self._nominal if s.bank == bank.id]
+            fitted = [s for s in mine if s.id in self._found]
+            if len(fitted) < 2 or fitted[-1].number - fitted[0].number < self._min_span(bank):
+                raise FeederError(
+                    f"the {bank.label.lower()} needs feeders in two slots far apart to find "
+                    f"where it is: put feeders in {mine[0].label.lower()} and "
+                    f"{mine[-1].label.lower()} (the ends), scan, and try again"
+                )
+            plans.append((bank, [fitted[0], fitted[-1]]))
+
+        async def work() -> str:
+            notes: list[str] = []
+            missing: list[str] = []
+            for bank, ends in plans:
+                points: dict[str, RailPoint] = {}
+                for slot in ends:
+                    expected = self._expected_fiducial(slot)
+                    found = await self._search_rail_fiducial(bank, slot, expected)
+                    if found is None:
+                        missing.append(slot.label.lower())
+                        self._errors[slot.id] = "feeder fiducial not found near its rail place"
+                        continue
+                    self._errors.pop(slot.id, None)
+                    points[slot.id] = RailPoint(expected=expected, found=found, basis="found")
+                notes.append(self._fit(bank, points))
+            self._store.save()
+            message = " ".join(notes)
+            if missing:
+                message += (
+                    f" No feeder fiducial was found at {', '.join(missing)}: jog the camera "
+                    "onto it and use Fiducial is here."
+                )
+            return message
+
+        return self._machine.start_task("rail_calibrate", work)
+
+    def start_rail_fiducial_here(self, slot_id: str) -> Operation:
+        """The operator has centered the top camera on a slot's feeder fiducial (when the
+        search did not find it): find it there and fit its rail again with it."""
+        slot = self.slot(slot_id)
+        bank = self._banks[slot.bank]
+        self._need_fiducial_offset(bank)
+
+        async def work() -> str:
+            low, high = self._fiducial_size(bank)
+            found = await self._machine.locate_circle(
+                low, high, FIDUCIAL_SEARCH_MM, bank.fiducial_diameter
+            )
+            if found is None:
+                raise FeederError(
+                    "no feeder fiducial near the camera's center: center the camera on the "
+                    f"small round dot on the feeder's nose, within {FIDUCIAL_SEARCH_MM:g} mm"
+                )
+            self._errors.pop(slot.id, None)
+            rail = self._store.setup.rails.get(bank.id)
+            points = dict(rail.points) if rail else {}
+            points[slot.id] = RailPoint(
+                expected=self._expected_fiducial(slot), found=found, basis="taught"
+            )
+            message = self._fit(bank, points)
+            self._store.save()
+            return message
+
+        return self._machine.start_task("rail_fiducial", work)
+
+    def forget_rail(self, bank_id: str) -> None:
+        """Go back to the profile's place for a rail."""
+        bank = self._bank(bank_id)
+        if self._store.setup.rails.pop(bank.id, None) is not None:
+            self._clear_bank(bank)
+            self._store.save()
+            self._apply_rails()
+            self._invalidate()
+
+    def _fit(self, bank: FeederBank, points: dict[str, RailPoint]) -> str:
+        """Fit a rail to the points found on it, keep it, and move its slots. Returns
+        what happened, for the operator."""
+        numbers = sorted(int(s) for s in points)
+        if len(numbers) < 2 or numbers[-1] - numbers[0] < self._min_span(bank):
+            self._store.setup.rails[bank.id] = RailCalibration(points=points)
+            return (
+                f"{bank.label}: {len(points)} feeder fiducial{'' if len(points) == 1 else 's'} "
+                "found, not enough far apart to place the rail yet."
+            )
+        rail = fit_rail(points)
+        worst = residual(rail)
+        if worst > RAIL_RESIDUAL_MM:
+            raise FeederError(
+                f"the {bank.label.lower()}'s feeder fiducials do not lie on one straight rail "
+                f"(one is {worst:.1f} mm off): check that each feeder is seated, and that the "
+                "camera was on the right fiducial"
+            )
+        self._store.setup.rails[bank.id] = rail
+        self._clear_bank(bank)
+        self._apply_rails()
+        self._invalidate()
+        moved = math.hypot(rail.shift.x, rail.shift.y)
+        stretch = (rail.scale - 1) * 100
+        return (
+            f"{bank.label} placed: {moved:.2f} mm from the profile's place, turned "
+            f"{rail.angle:+.2f} degrees, slots {abs(stretch):.2f}% "
+            f"{'farther apart' if stretch >= 0 else 'closer'}. Its slots' corrections were "
+            "cleared: calibrate them again."
+        )
+
+    def _clear_bank(self, bank: FeederBank) -> None:
+        for slot in self._nominal:
+            if slot.bank == bank.id:
+                self._store.setup.slots.pop(slot.id, None)
+                self._store.setup.learned.pop(slot.id, None)
+                self._pockets.pop(slot.id, None)
+
+    async def _search_rail_fiducial(
+        self, bank: FeederBank, slot: Slot, expected: Point
+    ) -> Point | None:
+        """Look for a slot's feeder fiducial around where it is expected (moved by the
+        rail's calibration, if any), frame by frame, nearest first. A fiducial more than
+        half a slot along the rail from where it was expected is not taken: it may be
+        the next feeder's."""
+        rail = self._store.setup.rails.get(bank.id)
+        guess = rail.apply(expected) if rail is not None else expected
+        length = math.hypot(bank.pitch.x, bank.pitch.y)
+        ux, uy = (bank.pitch.x / length, bank.pitch.y / length) if length else (1.0, 0.0)
+        steps = [
+            (along, across)
+            for along in (0.0, -RAIL_SEARCH_ALONG_MM, RAIL_SEARCH_ALONG_MM)
+            for across in (0.0, -RAIL_SEARCH_ACROSS_MM, RAIL_SEARCH_ACROSS_MM)
+        ]
+        steps.sort(key=lambda s: math.hypot(*s))
+        low, high = self._fiducial_size(bank)
+        for along, across in steps:
+            x = guess.x + ux * along - uy * across
+            y = guess.y + uy * along + ux * across
+            await self._machine.move_camera_to(x, y)
+            found = await self._machine.locate_circle(
+                low, high, RAIL_SEARCH_RADIUS_MM, bank.fiducial_diameter
+            )
+            if found is None:
+                continue
+            off_along = (found.x - guess.x) * ux + (found.y - guess.y) * uy
+            if abs(off_along) <= length * 0.45:
+                return found
+        return None
 
     # --- Learning from the bottom camera ------------------------------------------------
 
@@ -815,8 +1066,16 @@ class FeederService:
         self._tapes = None
 
     def _sim_true_pick(self, slot: Slot) -> Point:
+        nominal = self._nominal[slot.number - 1]
+        dx, dy, angle = self.sim_rail_errors.get(nominal.bank, (0.0, 0.0, 0.0))
+        first = self._banks[nominal.bank].first_pick
+        turned = rotate(Point(x=nominal.pick.x - first.x, y=nominal.pick.y - first.y), angle)
         error = sim_slot_error(slot.number)
-        return Point(x=slot.pick.x + error.x, y=slot.pick.y + error.y)
+        return Point(x=first.x + turned.x + dx + error.x, y=first.y + turned.y + dy + error.y)
+
+    def _sim_true_rotation(self, slot: Slot) -> float:
+        nominal = self._nominal[slot.number - 1]
+        return nominal.rotation + self.sim_rail_errors.get(nominal.bank, (0.0, 0.0, 0.0))[2]
 
     def _take_from_tape(self, x: float, y: float) -> tuple[PartShape, float, float, float] | None:
         """The part in the pocket under (x, y), taken out of its tape: its shape, true
@@ -875,7 +1134,7 @@ class FeederService:
         library = self._library()
         tapes: list[TapeScene] = []
         self._tape_at = {}
-        by_address = {s.address: s for s in self._slots if s.address is not None}
+        by_address = {s.address: s for s in self._nominal if s.address is not None}
         for address, feeder in sorted(self._sim.feeders.items()):
             slot = by_address.get(address)
             if slot is None:
@@ -892,15 +1151,16 @@ class FeederService:
             pitch = tape.pitch if tape is not None and tape.pitch else DEFAULT_PITCH
             offset = bank.fiducial_offset or SIM_FIDUCIAL_OFFSET
             line = _pocket_line_for(width)
-            fid = rotate(Point(x=offset.x, y=offset.y + line), slot.rotation)
-            side = rotate(Point(x=0, y=SIM_FIDUCIAL_MARKS), slot.rotation)
+            turn = self._sim_true_rotation(slot)
+            fid = rotate(Point(x=offset.x, y=offset.y + line), turn)
+            side = rotate(Point(x=0, y=SIM_FIDUCIAL_MARKS), turn)
             marks = tuple(
                 (pick.x + fid.x + k * side.x, pick.y + fid.y + k * side.y) for k in (-1, 1)
             )
             tapes.append(
                 TapeScene(
                     pick=(pick.x, pick.y),
-                    rotation=slot.rotation,
+                    rotation=turn,
                     width=width,
                     pitch=pitch,
                     pocket_line=_pocket_line_for(width),

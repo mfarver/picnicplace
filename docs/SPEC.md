@@ -403,9 +403,26 @@ correction. Implementations:
     and each slot's bus address). The owner's feeder setup (`feeders.json` in the data
     directory) holds which part each feeder holds, by feeder ID, so the part follows the
     feeder and its reel to another slot, and each slot's pick correction.
-  - Pick corrections are taught by eye, or found from the feeder's alignment fiducial:
-    its offset from the pick location is measured once, then every slot is calibrated
-    by finding its feeder's fiducial with the top camera.
+  - Pick corrections are taught by eye, or found from the feeder's alignment fiducial,
+    which sits at a fixed place on the feeder's design (in the profile; it can also be
+    measured once by eye): every slot is calibrated by finding its feeder's fiducial
+    with the top camera.
+  - **Rails are calibrated first**, once, at setup: where each rail really is depends
+    on how the machine was assembled. The core finds the fiducials of the two feeders
+    farthest apart on a rail (the feeders already mounted; only if a rail has fewer
+    than two, far enough apart, does it ask for feeders at its ends). Fitting the
+    profile's rail to them (a shift, a turn, and a stretch) places every slot between.
+    It searches about 10 mm around where it expects each fiducial; if that fails, it
+    asks the operator to jog the camera onto it. Feeder corrections that all come out
+    alike later say the rail has moved.
+  - Planned next: at the start of a job, the feeders are scanned, and on the first pick
+    from each, its fiducial is found (near where the calibrated rail puts it) and the
+    pocket found from the sprocket holes, so feeders the job does not use cost nothing.
+    The fiducial's place belongs to the feeder (its ID), not the slot, since each
+    feeder's fiducial board sits a little differently. After that first pick an
+    **auto** pick correction keeps picks centered with the bottom camera and goes back to
+    the top camera only when a pick fails, or the bottom camera's misses grow (a feeder
+    stepping unevenly, which learning cannot follow).
   - Feeders do not step exactly and their errors add up, so the pick pocket can be found
     at pick time from the tape's sprocket holes: EIA-481 fixes each pocket's place
     relative to them (2 mm along the tape, F across). Errors over 2 mm along the tape
@@ -519,7 +536,7 @@ In order, since each needs the ones before it:
 | 7 | **Nozzle runout**: how far each tip's center wanders as it turns | Turn the tip over the bottom camera and fit a circle to the tip's center | None (again after each tip change) | Planned |
 | 8 | **Heights**: the board's top surface, the top of parts in each feeder bank, and each strip and tray | Lower a nozzle slowly with the vacuum on: when the open tip seals against a flat surface the vacuum jumps, which marks contact (OpenPnP finds heights this way). Part heights from the library are added. | Measure by jogging down where the vacuum cannot tell (a pocketed tray) | Planned. Jogged down by hand today (strips and trays) or from the profile. |
 | 9 | **Vacuum levels** for each nozzle tip: open, sealed, and holding a part | Read the vacuum open, and holding a part during step 6 | None | Planned. One threshold from the profile today. |
-| 10 | **Feeder pick locations** | Each Photon feeder's fiducial gives its slot's pick location once the fiducial's offset from a pocket is known; the pocket is then found by its sprocket holes. Picks are kept centered by the top or bottom camera (§7.4). | Load the feeders. Teach one slot by eye (center the camera on a pocket, then its fiducial), which could be found by vision instead. | Done, apart from finding the first pocket by vision |
+| 10 | **Feeder rails and pick locations** | Rails first: find the fiducials of the two feeders farthest apart on each rail and fit the rail to them, which places every slot between. Then each feeder's fiducial gives its pick location (the design offset), and the pocket is found by its sprocket holes; planned, on the first pick from each feeder in a job. Picks are then kept centered by the top or bottom camera (§7.4). | Load the feeders. Jog the camera onto a rail's end fiducial only if the search does not find it; put feeders at a rail's ends only if it has fewer than two far apart. | Rail calibration being built; slots from fiducials done |
 | 11 | **Strips and trays** | Teach the first part, the end of the first row, and the last part | Center the camera on each one; give the part count and pick height (step 8 will measure the height) | Done |
 | 12 | **Each board** | Its fiducials, at the start of every run (or **Check fiducials**) | Fasten the board where the map shows it | Done |
 

@@ -328,6 +328,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/feeders/rails/calibrate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Calibrate Rails
+         * @description Find where each rail really is, from the fiducials of the two feeders farthest
+         *     apart on it, and move its slots there. Its slot corrections are cleared.
+         */
+        post: operations["calibrate_rails_api_v1_feeders_rails_calibrate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/rails/{bank_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget Rail
+         * @description Go back to the profile's place for a rail.
+         */
+        delete: operations["forget_rail_api_v1_feeders_rails__bank_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/feeders/scan": {
         parameters: {
             query?: never;
@@ -447,6 +488,27 @@ export interface paths {
          * @description Find the pick pocket from the tape's sprocket holes, and center the camera on it.
          */
         post: operations["locate_pocket_api_v1_feeders_slots__slot_id__pocket_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeders/slots/{slot_id}/rail-fiducial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rail Fiducial Here
+         * @description The top camera is centered on this slot's feeder fiducial (the rail search did not
+         *     find it): find it there, and fit the slot's rail with it.
+         */
+        post: operations["rail_fiducial_here_api_v1_feeders_slots__slot_id__rail_fiducial_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1837,6 +1899,8 @@ export interface components {
             fiducial_offset_source: ("measured" | "profile") | null;
             /** Fixed */
             fixed: components["schemas"]["FixedFeederState"][];
+            /** Rails */
+            rails: components["schemas"]["RailState"][];
             /** Scanned */
             scanned: boolean;
             /** Slots */
@@ -3484,6 +3548,88 @@ export interface components {
             present: boolean;
         };
         /**
+         * RailCalibration
+         * @description Where a feeder rail (a profile's feeder bank) really is. Its slots are moved from
+         *     the profile's places by turning them by ``angle`` and stretching them by ``scale``
+         *     about ``about``, then shifting them by ``shift``.
+         */
+        RailCalibration: {
+            /**
+             * @default {
+             *       "x": 0,
+             *       "y": 0
+             *     }
+             */
+            about: components["schemas"]["Point"];
+            /**
+             * Angle
+             * @description Degrees counterclockwise.
+             * @default 0
+             */
+            angle: number;
+            /**
+             * Fitted
+             * @description Whether enough points were found to fit.
+             * @default false
+             */
+            fitted: boolean;
+            /**
+             * Points
+             * @description Fiducials found, by slot ID.
+             */
+            points: {
+                [key: string]: components["schemas"]["RailPoint"];
+            };
+            /**
+             * Scale
+             * @default 1
+             */
+            scale: number;
+            /**
+             * @default {
+             *       "x": 0,
+             *       "y": 0
+             *     }
+             */
+            shift: components["schemas"]["Point"];
+        };
+        /**
+         * RailPoint
+         * @description A feeder fiducial found on a rail, to fit the rail to.
+         */
+        RailPoint: {
+            /**
+             * Basis
+             * @description Found by searching, or the operator centered the camera on it.
+             * @enum {string}
+             */
+            basis: "found" | "taught";
+            /** @description Where the profile's rail puts the fiducial. */
+            expected: components["schemas"]["Point"];
+            /** @description Where it really is. */
+            found: components["schemas"]["Point"];
+        };
+        /** RailState */
+        RailState: {
+            /** Bank */
+            bank: string;
+            calibration: components["schemas"]["RailCalibration"] | null;
+            /** First Slot */
+            first_slot: string;
+            /** Label */
+            label: string;
+            /** Last Slot */
+            last_slot: string;
+        };
+        /** RailsRequest */
+        RailsRequest: {
+            /**
+             * Bank Ids
+             * @description Rails (feeder bank IDs) to calibrate. Empty: every rail.
+             */
+            bank_ids?: string[];
+        };
+        /**
          * RecordedPoint
          * @description A place on the machine, recorded by centering the top camera on it.
          */
@@ -4819,6 +4965,82 @@ export interface operations {
             };
         };
     };
+    calibrate_rails_api_v1_feeders_rails_calibrate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RailsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forget_rail_api_v1_feeders_rails__bank_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bank_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedersState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     scan_api_v1_feeders_scan_post: {
         parameters: {
             query?: never;
@@ -5072,6 +5294,49 @@ export interface operations {
         };
     };
     locate_pocket_api_v1_feeders_slots__slot_id__pocket_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rail_fiducial_here_api_v1_feeders_slots__slot_id__rail_fiducial_post: {
         parameters: {
             query?: never;
             header?: {

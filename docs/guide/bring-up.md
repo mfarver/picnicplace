@@ -91,6 +91,10 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
 - [ ] **Scan feeders** in the Feeders workspace. Each feeder found is initialized and
       listed under its slot.
 - [ ] Give each feeder its part, and feed one. Check it moves one part's pitch.
+- [ ] **Calibrate rails** (under **Rails**): with feeders near both ends of each rail (the
+      core uses the two farthest apart), it finds their fiducials and moves the rail's
+      slots to where the rail really is. If it cannot find one, jog the camera onto that
+      feeder's fiducial, select its slot, and click **Rail fiducial is here**.
 - [ ] On one slot, center the camera over the pocket and click **Pick is here**. Then
       center it on the feeder's alignment fiducial and click **Measure fiducial here**.
 - [ ] **Calibrate all slots**: the camera visits every feeder's fiducial and corrects

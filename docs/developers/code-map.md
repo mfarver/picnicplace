@@ -92,9 +92,10 @@ A request goes **route → service → machine service → driver**:
 | `library/` | The parts library (SQLite): footprints, parts, and tape packaging per EIA-481 (`tape.py`); OpenPnP library import (`openpnp.py`) |
 | `feeders/slots.py` | Feeder slots, from the profile's feeder banks |
 | `feeders/photon.py`, `feeders/sim.py` | The Photon feeder protocol (RS-485), and simulated Photon feeders |
-| `feeders/setup.py` | The owner's feeder setup (`feeders.json`): parts in feeders, slot calibrations, strips and trays, what the bottom camera learned |
+| `feeders/setup.py` | The owner's feeder setup (`feeders.json`): parts in feeders, rail and slot calibrations, strips and trays, what the bottom camera learned |
 | `feeders/service.py` | The feeder service: scanning, feeding, where to pick, fiducial calibration, pocket finding, strips and trays, pick learning |
 | `feeders/pocket.py` | Where the pocket is, from the sprocket holes seen |
+| `feeders/rails.py` | Fitting a feeder rail to the feeder fiducials found on it |
 | `placement.py` | Pick, align, and place one part; pick correction (top or bottom camera) |
 | `simparts.py` | The simulator's parts: which nozzle holds what, and where placed parts landed |
 | `board/` | Boards and panels, and reading them from KiCad (`kicad.py`, with a small S-expression reader) and KiKit panels |

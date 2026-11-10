@@ -1,7 +1,7 @@
 # PicnicPlace — Specification (Draft 0.1)
 
 > Status: **Draft**. Sections marked **[OPEN]** need a decision before work in that area starts.
-> Last updated: 2026-11-07
+> Last updated: 2026-11-09
 
 ## 1. Summary
 
@@ -28,6 +28,14 @@ The first-class hardware target is the **Opulo LumenPnP**.
    outside of driver and camera backends, so macOS and Windows can be added later (see §9).
 6. **Approachable for contributors.** A popular language, conventional tooling, a
    simulator so most work needs no hardware, and good tests.
+7. **Reliable operation that lowers the operator's load.** A primary reason for the
+   rewrite. The machine handles routine trouble itself: it finds pockets and fiducials
+   by vision, learns where feeders really put their parts, retries, and counts what is
+   left. It asks the operator only for what needs a person (loading parts, clearing a
+   jam, a decision it cannot make), in a dialog that says plainly what is wrong and what
+   to do, and warns before a run runs short rather than during it. Calibration is as
+   hands-off as running a job. The operator's screen shows only
+   what running the machine needs (§8.2).
 
 ## 3. Non-goals (for 1.0)
 
@@ -509,6 +517,50 @@ Device):
 | **Machine** | Machine view (§8.3), camera views in the sidebar, jog controls, actuators, guided calibration wizards, machine settings. |
 | **Vision** | Pipeline editor with live preview of each stage. |
 
+#### Operating and engineering are separate
+
+Running a machine and preparing a job are different work, often by different people.
+The interface is split along that line:
+
+- **The operations view**, for the operator at the machine, holds the minimum needed to
+  run it: the job controls (load a job, start, pause, step, stop, and the prompts a run
+  raises), the camera views, the machine view, and what is loaded on the machine and how
+  much of it is left. Large, touch-friendly controls; nothing that changes a job's
+  design.
+- **The engineering tools**, a separate page (or site), hold everything for creating a
+  job: importing boards and panels, placements, parts and footprints, fiducials, and
+  vision settings. They produce a single **job file** that holds everything needed to
+  run the job, so what the engineer prepared is exactly what the operator runs, and a
+  job can be moved between machines or kept with the board's design files.
+- **Inventory on the machine.** When the operator loads a reel or a tray, they enter how
+  many parts it holds. The core takes one off each time it feeds (or, for a strip or
+  tray, each time a part is taken), keeps the count with the feeder (a Photon feeder's
+  count follows it to another slot, like its part), and shows what is left on the
+  machine view. The planner warns before a run if a feeder will run short, and the run
+  asks for a refill when one runs out. Strips and trays already count their parts
+  (§7.4); reels on feeders are next.
+- **When the machine needs help, it asks.** Whatever stops the machine and needs a
+  person (a feeder out of parts, a part that will not pick, a fiducial not found, a
+  nozzle tip to change) opens a dialog over the operator's screen. It says plainly what
+  is wrong, what the operator needs to do, step by step, and what will happen after
+  (for example, "Load a new reel of 10 kΩ 0603 in slot 12, enter its count, then press
+  Continue; the run carries on from the next part"). Its buttons are the choices that
+  make sense there (Continue, Skip this part, Stop the run), and the camera view or
+  machine map shows where to look. The operator should never have to read a log or
+  find a status line to learn why the machine stopped.
+- **Calibration is an advanced part of the operations view**, not a separate tool. It
+  is as hands-off as the machine can make it: the machine moves, looks, measures, and
+  checks its own results, and asks with the same kind of dialog only when it needs a
+  person (put the calibration board down, fit a nozzle tip, confirm what the camera
+  shows). Teaching feeders works the same way.
+
+[OPEN] The job file's format (one archive with
+the boards, placements, parts, footprints, and vision settings, or a single TOML or JSON
+document), and whether the engineering tools need a core at all, or can run without a
+machine as a static site.
+
+The workspaces below are today's Studio; they will be regrouped into the two views.
+
 Design principles:
 
 - **Guided first, advanced available.** Calibration and setup are wizards with
@@ -632,7 +684,7 @@ refusing to connect.
 | **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. Started: fiducial finder, visual homing (after `G28`, center the top camera on the homing fiducial and correct X/Y with `G92`), and a camera scale measurement, all tested against the simulator, whose homing has a realistic error for visual homing to find. |
 | **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. Started: the parts library (footprints, parts with height and its source, tape packaging after EIA-481 with rotation in tape and pin-1 quadrant), merge-only imports, OpenPnP library import, and a library editor in the Studio. Photon feeders: discovery and initialization, part assignment by feeder ID, feeding, simulated feeders with drawn tape, slot pick locations taught by eye or found from each feeder's fiducial, and pockets found from the tape's sprocket holes; a Feeders workspace and a bring-up checklist in the Studio. Single placement: pick (feed, find the pocket, pick at the tape's part height, check the vacuum), align on the bottom camera (the part's offset and angle on the nozzle), and place at a given location and angle (with a part-off check), one step at a time or all three, in the simulator to within 0.05 mm; camera captures for tuning vision on real images. |
 | **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. Boards must lie inside the profile's placement area (where every nozzle can reach, on the staging plates) and clear of its keep-outs; import warns about any placement a nozzle cannot reach. Started: KiCad board import (footprints with pads, part numbers from the board or the schematic's BOM), panels recovered from a KiKit panel file, jobs placed on the bed with reach, camera, and keep-out checks and a search for a place that fits (parts within every nozzle's reach; empty rails may lie outside it), saved as job files, and a Prepare workspace. Runs: a planner that is also a dry run against the loaded feeders (blocked placements and why, parts only some nozzles reach, tape too wide for the feeders), board alignment from up to three fiducials (a rigid fit), batches with a part on every nozzle that can take one, lowest parts first, retries for empty picks, discard and retry after a failed alignment, pause, step, resume, stop, and skip, and a Run workspace; in the simulator a whole board lands within 0.06 mm of where the misplaced board wants its parts. Strips and trays held on the bed as feeders, with refills (the run pauses and parks the head). Picks kept centered by the top camera (pockets from sprocket holes) or the bottom camera (each feeder learns where its parts really lie from earlier picks), the owner's choice. A flight recorder for sending real frames and timelines to developers, with vision replay. Run history is to come. |
-| **M5 — 1.0 polish** | Installer/packaging, docs. Done early: strip and tray feeders (M4), OpenPnP library import (M3). |
+| **M5 — 1.0 polish** | Installer/packaging, docs. The operations view and the engineering tools split (§8.2), the single job file, and parts counted on reels as well as strips and trays. Done early: strip and tray feeders (M4), OpenPnP library import (M3). |
 
 ## 12. Repository layout
 

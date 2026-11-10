@@ -239,7 +239,10 @@ a hole, and a fixed distance across it).
   `M400` is in progress; without it they would wait their turn. Whether the LumenPnP
   firmware has it enabled is not known yet.
 - After `M112`, resetting the E-stop reconnects and waits up to 30 s for the firmware to
-  answer again, asking for the board's reset button if it does not.
+  answer again, asking for the board's reset button if it does not. A halted controller
+  stops reading, and closing its port then waits for unsent output to drain (up to 30 s
+  on Linux): on a real v4.1 that froze the core for about a minute. The core now drops
+  unsent output and closes the port in the background, so it stays responsive.
 - `core/src/picnicplace/machine/marlin/fake.py` is a fake firmware that answers like the
   log above, including Z = 31.5 after `G28` and `G92` renaming positions. Run `uv run picnicplace-fake-marlin` for one on a pseudo-terminal.
 - Home sensors are not read yet (`M119` replies have not been captured).

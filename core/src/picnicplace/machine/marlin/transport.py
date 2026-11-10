@@ -123,8 +123,13 @@ class SerialTransport:
         fd, self._fd = self._fd, None
         self._loop.remove_reader(fd)
         self._lines.put_nowait(None)
+        # A controller that stopped reading (halted after M112) leaves our output unsent,
+        # and closing a serial port waits for that to drain: on Linux up to 30 s. Drop it,
+        # and close in a thread, so a slow close never freezes the core.
+        with contextlib.suppress(OSError, termios.error):
+            termios.tcflush(fd, termios.TCOFLUSH)
         with contextlib.suppress(OSError):
-            os.close(fd)
+            await asyncio.to_thread(os.close, fd)
 
 
 class MemoryTransport:

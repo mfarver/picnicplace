@@ -410,3 +410,41 @@ def test_unanswered_command_drops_the_link() -> None:
         await host.stop()
 
     run(scenario)
+
+
+def test_a_slow_serial_close_does_not_freeze_the_core(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After M112 the controller stops reading, and closing its port can wait up to 30 s
+    for unsent output: the core must keep running meanwhile (Reset blocked it for about
+    a minute on a real LumenPnP)."""
+    import os
+    import time
+    import tty
+
+    real_close = os.close
+
+    def slow_close(fd: int) -> None:
+        time.sleep(0.5)  # as if waiting for output to drain
+        real_close(fd)
+
+    async def scenario() -> None:
+        master, slave = os.openpty()
+        tty.setraw(slave)
+        transport = await SerialTransport.open(os.ttyname(slave), 115200)
+        ticks = 0
+
+        async def tick() -> None:
+            nonlocal ticks
+            while True:
+                await asyncio.sleep(0.01)
+                ticks += 1
+
+        ticker = asyncio.create_task(tick())
+        monkeypatch.setattr(os, "close", slow_close)
+        await transport.close()
+        monkeypatch.setattr(os, "close", real_close)
+        ticker.cancel()
+        os.close(master)
+        os.close(slave)
+        assert ticks >= 20  # the event loop ran throughout
+
+    asyncio.run(scenario())

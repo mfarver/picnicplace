@@ -5,7 +5,8 @@ Kept in the data directory as ``feeders.json``:
 - which part each feeder holds, by the feeder's own ID (a Photon feeder keeps its part
   when it moves to another slot, as its reel goes with it);
 - each slot's pick correction: how far the true pick location is from the profile's
-  nominal one, taught by eye or found from the feeder's fiducial;
+  nominal one, taught by eye or found from the feeder's fiducial (kept with that feeder:
+  another feeder in the slot does not use it);
 - the feeder fiducial's offset from the pick location, once measured;
 - where each feeder rail really is: feeder fiducials found on it, and the rail fitted
   to them (a shift, a turn, and a stretch of the profile's rail);
@@ -82,6 +83,12 @@ class SlotCalibration(_Model):
     correction: Point = Field(description="True pick location minus the nominal one.")
     basis: Literal["taught", "fiducial"] = Field(
         description="Taught by eye over the pocket, or found from the feeder's fiducial."
+    )
+    feeder: str | None = Field(
+        default=None,
+        description="Found from a fiducial: the ID of the feeder whose fiducial it was. "
+        "Each feeder sits a little differently, so another feeder in the slot does not "
+        "use it.",
     )
 
 

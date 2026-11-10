@@ -247,8 +247,16 @@ class FeederService:
             return bank.fiducial_offset, "profile"
         return None, None
 
-    def pick(self, slot: Slot) -> Point:
+    def calibration(self, slot: Slot) -> SlotCalibration | None:
+        """The slot's pick correction, if it applies to the feeder in it now: one found
+        from another feeder's fiducial does not."""
         cal = self._store.setup.slots.get(slot.id)
+        if cal is None or cal.feeder is None or cal.feeder == self._found.get(slot.id):
+            return cal
+        return None
+
+    def pick(self, slot: Slot) -> Point:
+        cal = self.calibration(slot)
         if cal is None:
             return slot.pick
         return Point(x=slot.pick.x + cal.correction.x, y=slot.pick.y + cal.correction.y)
@@ -271,7 +279,7 @@ class FeederService:
                 SlotState(
                     slot=slot,
                     pick=self.pick(slot),
-                    calibration=setup.slots.get(slot.id),
+                    calibration=self.calibration(slot),
                     learned=self.learned(slot.id),
                     feeder=feeder,
                     error=self._errors.get(slot.id),
@@ -326,37 +334,42 @@ class FeederService:
 
     def start_scan(self) -> Operation:
         """Ask every slot for its feeder, and initialize each feeder found."""
-        bus = self._need_bus()
+        self._need_bus()
         self._machine.check_can_actuate()
+        return self._operations.start("feeder_scan", self.scan)
 
-        async def work() -> str:
-            found: dict[str, str] = {}
-            initialized: set[str] = set()
-            errors: dict[str, str] = {}
-            for slot in self._slots:
-                if slot.address is None:
+    @property
+    def has_bus(self) -> bool:
+        return self._bus is not None
+
+    async def scan(self) -> str:
+        """Ask every slot for its feeder, and initialize each feeder found."""
+        bus = self._need_bus()
+        found: dict[str, str] = {}
+        initialized: set[str] = set()
+        errors: dict[str, str] = {}
+        for slot in self._slots:
+            if slot.address is None:
+                continue
+            try:
+                uuid = await bus.feeder_id(slot.address)
+                if uuid is None:
                     continue
-                try:
-                    uuid = await bus.feeder_id(slot.address)
-                    if uuid is None:
-                        continue
-                    found[slot.id] = uuid
-                    await bus.initialize(slot.address, uuid)
-                    initialized.add(slot.id)
-                except FeederError as e:
-                    errors[slot.id] = str(e)
-            self._found, self._initialized, self._errors = found, initialized, errors
-            self._scanned = True
-            self._invalidate()
-            new = [u for u in found.values() if u not in self._store.setup.feeders]
-            parts = [f"Found {len(found)} feeder{'' if len(found) == 1 else 's'}"]
-            if new:
-                parts.append(f"{len(new)} new")
-            if errors:
-                parts.append(f"{len(errors)} with errors")
-            return ", ".join(parts) + "."
-
-        return self._operations.start("feeder_scan", work)
+                found[slot.id] = uuid
+                await bus.initialize(slot.address, uuid)
+                initialized.add(slot.id)
+            except FeederError as e:
+                errors[slot.id] = str(e)
+        self._found, self._initialized, self._errors = found, initialized, errors
+        self._scanned = True
+        self._invalidate()
+        new = [u for u in found.values() if u not in self._store.setup.feeders]
+        parts = [f"Found {len(found)} feeder{'' if len(found) == 1 else 's'}"]
+        if new:
+            parts.append(f"{len(new)} new")
+        if errors:
+            parts.append(f"{len(errors)} with errors")
+        return ", ".join(parts) + "."
 
     def feed_distance(self, slot: Slot) -> float:
         uuid = self._found.get(slot.id)
@@ -515,37 +528,63 @@ class FeederService:
             done: list[str] = []
             failed: list[str] = []
             for slot in targets:
-                bank = self._banks[slot.bank]
-                offset, _ = self.fiducial_offset(bank)
-                assert offset is not None
-                turned = self._fiducial_vector(slot, offset)
-                guess = self.pick(slot)
-                await self._machine.move_camera_to(guess.x + turned.x, guess.y + turned.y)
-                low, high = self._fiducial_size(bank)
-                found = await self._machine.locate_circle(
-                    low, high, FIDUCIAL_SEARCH_MM, bank.fiducial_diameter
-                )
-                if found is None:
+                try:
+                    await self.locate_feeder(slot)
+                except FeederError:
                     failed.append(slot.label)
-                    self._errors[slot.id] = "fiducial not found"
                     continue
-                self._errors.pop(slot.id, None)
-                pick = Point(x=found.x - turned.x, y=found.y - turned.y)
-                self._store.setup.slots[slot.id] = SlotCalibration(
-                    correction=Point(
-                        x=round(pick.x - slot.pick.x, 3), y=round(pick.y - slot.pick.y, 3)
-                    ),
-                    basis="fiducial",
-                )
-                self._store.setup.learned.pop(slot.id, None)
                 done.append(slot.label)
-            self._store.save()
             message = f"Calibrated {len(done)} slot{'' if len(done) == 1 else 's'}."
             if failed:
                 message += f" No fiducial found at: {', '.join(failed)}."
             return message
 
         return self._machine.start_task("feeder_calibrate", work)
+
+    async def locate_feeder(self, slot: Slot) -> float:
+        """Find the fiducial of the feeder in a slot, near where its last fix (or else its
+        rail) puts it, and set the slot's pick location from it: the fiducial, less the
+        feeder's design offset. The fix is kept with that feeder. Returns how far the pick
+        location moved, in mm. For use inside a machine task."""
+        bank = self._banks[slot.bank]
+        offset, _ = self.fiducial_offset(bank)
+        if offset is None:
+            raise FeederError(
+                "the feeder fiducial's offset is not known yet: teach one slot's pick "
+                "location, then measure its fiducial"
+            )
+        turned = self._fiducial_vector(slot, offset)
+        before = self.pick(slot)
+        guess = Point(x=before.x + turned.x, y=before.y + turned.y)
+        await self._machine.move_camera_to(guess.x, guess.y)
+        low, high = self._fiducial_size(bank)
+        found = await self._machine.locate_circle(
+            low, high, FIDUCIAL_SEARCH_MM, bank.fiducial_diameter
+        )
+        if found is None:
+            found = await self._search_fiducial(bank, guess)
+        if found is None:
+            self._errors[slot.id] = "feeder fiducial not found"
+            raise FeederError(
+                f"{slot.label}: its feeder's fiducial was not found near "
+                f"({guess.x:.1f}, {guess.y:.1f}). Check that the feeder is seated, then "
+                "calibrate its slot (or teach its pick location) and resume."
+            )
+        self._errors.pop(slot.id, None)
+        pick = Point(x=found.x - turned.x, y=found.y - turned.y)
+        feeder = self._found.get(slot.id)
+        setup = self._store.setup
+        old = setup.slots.get(slot.id)
+        if old is None or old.basis != "fiducial" or old.feeder != feeder:
+            # What the bottom camera learned was from another starting point.
+            setup.learned.pop(slot.id, None)
+        setup.slots[slot.id] = SlotCalibration(
+            correction=Point(x=round(pick.x - slot.pick.x, 3), y=round(pick.y - slot.pick.y, 3)),
+            basis="fiducial",
+            feeder=feeder,
+        )
+        self._store.save()
+        return math.hypot(pick.x - before.x, pick.y - before.y)
 
     # --- Rails -------------------------------------------------------------------------
 
@@ -634,7 +673,9 @@ class FeederService:
                 points: dict[str, RailPoint] = {}
                 for slot in ends:
                     expected = self._expected_fiducial(slot)
-                    found = await self._search_rail_fiducial(bank, slot, expected)
+                    rail = self._store.setup.rails.get(bank.id)
+                    guess = rail.apply(expected) if rail is not None else expected
+                    found = await self._search_fiducial(bank, guess)
                     if found is None:
                         missing.append(slot.label.lower())
                         self._errors[slot.id] = "feeder fiducial not found near its rail place"
@@ -729,15 +770,10 @@ class FeederService:
                 self._store.setup.learned.pop(slot.id, None)
                 self._pockets.pop(slot.id, None)
 
-    async def _search_rail_fiducial(
-        self, bank: FeederBank, slot: Slot, expected: Point
-    ) -> Point | None:
-        """Look for a slot's feeder fiducial around where it is expected (moved by the
-        rail's calibration, if any), frame by frame, nearest first. A fiducial more than
-        half a slot along the rail from where it was expected is not taken: it may be
-        the next feeder's."""
-        rail = self._store.setup.rails.get(bank.id)
-        guess = rail.apply(expected) if rail is not None else expected
+    async def _search_fiducial(self, bank: FeederBank, guess: Point) -> Point | None:
+        """Look for a feeder fiducial around where it is expected, frame by frame, nearest
+        first. A fiducial more than half a slot along the rail from where it was expected
+        is not taken: it may be the next feeder's."""
         length = math.hypot(bank.pitch.x, bank.pitch.y)
         ux, uy = (bank.pitch.x / length, bank.pitch.y / length) if length else (1.0, 0.0)
         steps = [

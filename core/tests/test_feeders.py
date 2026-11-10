@@ -418,14 +418,11 @@ def sim_truth(client: TestClient, number: int) -> tuple[Point, Point]:
 def test_rails_are_found_from_their_end_feeders() -> None:
     """Rails a few millimeters off the profile and a little turned: the end feeders'
     fiducials place every slot between, close enough for slot calibration to find each
-    feeder's fiducial, which a 3 mm search from the profile's places could not."""
+    feeder's fiducial at its first look."""
     with rails_client() as client, connect(client) as s:
         service(client).sim_rail_errors = dict(RAIL_ERRORS)
         s.home()
         succeeded(s.wait(s.post("/api/v1/feeders/scan")))
-        op = s.wait(s.post("/api/v1/feeders/calibrate", {}))
-        assert op["status"] == "succeeded" and "No fiducial found" in op["message"]
-
         op = succeeded(s.wait(s.post("/api/v1/feeders/rails/calibrate", {})))
         assert op["message"].startswith("Front rail placed:")
         assert "Back rail placed:" in op["message"]
@@ -492,3 +489,29 @@ def test_the_operator_shows_a_fiducial_the_search_missed() -> None:
         pick, _ = sim_truth(client, 13)
         middle = slot_state(s, "13")
         assert math.hypot(middle["pick"]["x"] - pick.x, middle["pick"]["y"] - pick.y) < 0.8
+
+
+def test_a_slot_fix_is_kept_with_its_feeder(lumen: TestClient) -> None:
+    """A pick location found from a feeder's fiducial is that feeder's: after two feeders
+    trade slots, neither slot uses the other's fix until it is found again."""
+    with connect(lumen) as s:
+        s.home()
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        succeeded(s.wait(s.post("/api/v1/feeders/calibrate", {"slot_ids": ["1", "2"]})))
+        first = slot_state(s, "1")
+        assert first["calibration"]["feeder"] == first["feeder"]["uuid"]
+
+        sim = service(lumen)._sim  # pyright: ignore[reportPrivateUsage]
+        assert sim is not None
+        sim.feeders[1].uuid, sim.feeders[2].uuid = sim.feeders[2].uuid, sim.feeders[1].uuid
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        for slot_id in ("1", "2"):
+            state = slot_state(s, slot_id)
+            assert state["calibration"] is None
+            assert state["pick"] == state["slot"]["pick"]
+
+        succeeded(s.wait(s.post("/api/v1/feeders/calibrate", {"slot_ids": ["1"]})))
+        state = slot_state(s, "1")
+        want = true_pick(state)
+        assert state["calibration"]["feeder"] == state["feeder"]["uuid"]
+        assert (state["pick"]["x"], state["pick"]["y"]) == pytest.approx((want.x, want.y), abs=0.05)

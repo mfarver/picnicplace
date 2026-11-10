@@ -98,7 +98,9 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
 - [ ] On one slot, center the camera over the pocket and click **Pick is here**. Then
       center it on the feeder's alignment fiducial and click **Measure fiducial here**.
 - [ ] **Calibrate all slots**: the camera visits every feeder's fiducial and corrects
-      each slot's pick location.
+      each slot's pick location. This is optional before a run: a run finds each
+      feeder's fiducial on its first pick anyway. A correction belongs to the feeder it
+      was found from; put another feeder in the slot and it is found again.
 - [ ] Feed a few times, then **Find pocket**. It finds the sprocket holes and centers the
       camera on the next part's pocket.
 - [ ] For parts held on the bed (a cut strip of 24 mm tape in a holder, or a tray), use
@@ -138,8 +140,10 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       placing nothing (it works even with every part turned off). Check the offset and
       turn look right, and use the button beside each fiducial to look at it under the
       camera's crosshair.
-- [ ] Tick **Start in step mode** and **Start**: the run finds the board again and pauses
-      before the first part.
+- [ ] Tick **Start in step mode** and **Start**: the run scans the feeders (a feeder
+      moved since the checks is picked from where it is now), finds the board again,
+      and pauses before the first part. Before the first pick from each feeder, the
+      camera visits that feeder's fiducial.
 - [ ] **Step** places one part on each nozzle and pauses again. Check them, then
       **Resume**. A jammed feeder or a failed pick pauses the run with the parts already
       on the nozzles kept there; fix it and resume, or skip that placement.

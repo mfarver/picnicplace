@@ -13,6 +13,13 @@ fiducials (the panel's own if it has two or more, else the boards'). A rigid fit
 and turn) of where they were found to where the job says they are corrects every
 placement. Without fiducials, the job's location is used as it is.
 
+**Feeders.** On a machine with a feeder bus, the run scans the feeders before it finds
+the board, in case one was moved or swapped since the job was planned; a placement whose
+part is no longer loaded pauses the run. The first pick from each feeder slot in a run
+finds that feeder's fiducial first, near where its last fix or its calibrated rail puts
+it, and takes the pick location from it (unless picks are not corrected at all): each
+feeder sits a little differently in its slot, and the fix is kept with the feeder.
+
 **Batches.** Every nozzle that can takes a part: all of them pick, then all of them
 align, then all of them place. Items go in order of part height (lowest first, so a
 tall part never stands next to where a nozzle must still go), then by feeder slot, so
@@ -177,6 +184,10 @@ class RunState(WireModel):
     stop_requested: bool = False
     pick_correction: PickCorrection = "top"
     """How picks are kept centered (see the config's machine.pick_correction)."""
+    located: list[str] = Field(
+        default_factory=list[str],
+        description="Feeder slots whose feeder's fiducial has been found in this run.",
+    )
     recording: str | None = Field(
         default=None, description="The flight recording this run is kept in, if any."
     )
@@ -678,6 +689,8 @@ class JobRunner:
         try:
             found: str | None = None
             if run.fix is None:
+                if self._feeders.has_bus:
+                    await self._rescan(run)
                 run.message = "finding the board's fiducials"
                 run.fix = await self._find_board(run)
                 found = run.message
@@ -729,6 +742,48 @@ class JobRunner:
         order = ("placed", "pending", "failed", "blocked", "skipped")
         names = {"pending": "to go"}
         return ", ".join(f"{counts[k]} {names.get(k, k)}" for k in order if counts.get(k))
+
+    async def _rescan(self, run: RunState) -> None:
+        """Scan the feeders, and take each placement still to do from wherever its part is
+        now. Pauses the run if some part is no longer loaded."""
+        job = self._job
+        assert job is not None
+        run.message = "scanning the feeders"
+        await self._feeders.scan()
+        run.located = []
+        plan = plan_job(
+            run.job_id, job, self._machine.profile, self._feeders.state(), self._library()
+        )
+        now = {(i.copy_id, i.ref): i for i in plan.items}
+        lost: list[str] = []
+        for item in run.plan.items:
+            if item.status != "pending" or item.index in run.held.values():
+                continue
+            new = now.get((item.copy_id, item.ref))
+            if new is None or new.status != "pending":
+                lost.append(f"{item.ref} ({new.note if new else 'not in the job'})")
+                continue
+            item.slot_id, item.nozzles = new.slot_id, new.nozzles
+        if lost:
+            raise RunError(
+                f"the feeders changed since the run was planned: {', '.join(lost[:5])}"
+                f"{' and more' if len(lost) > 5 else ''}. Load the parts and resume, or "
+                "skip those placements."
+            )
+
+    async def _locate_feeder(self, run: RunState, slot_id: str) -> None:
+        """Before the first pick from a feeder slot in this run, find its feeder's
+        fiducial."""
+        feeders = self._feeders
+        if run.pick_correction == "off" or slot_id in run.located or feeders.is_fixed(slot_id):
+            return
+        slot = feeders.slot(slot_id)
+        if feeders.fiducial_offset(feeders.bank(slot))[0] is None:
+            return  # feeders without a known fiducial: picks go where the setup says
+        run.message = f"finding the feeder fiducial at {slot.label.lower()}"
+        moved = await feeders.locate_feeder(slot)
+        run.located.append(slot_id)
+        self._machine.recorder.event("run.feeder", slot=slot_id, moved=round(moved, 4))
 
     async def _find_board(self, run: RunState) -> BoardFix:
         job = self._job
@@ -839,6 +894,7 @@ class JobRunner:
             item = items[index]
             nozzle = self._machine.nozzle(nozzle_id)
             assert item.slot_id is not None
+            await self._locate_feeder(run, item.slot_id)
             run.message = f"{nozzle_id} picking {item.ref} from {_source(item.slot_id)}"
             for attempt in range(1, PICK_ATTEMPTS + 1):
                 try:

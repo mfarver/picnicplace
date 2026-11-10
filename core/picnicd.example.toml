@@ -66,11 +66,12 @@ max_mb = 5000              # and at most this many megabytes of them; older ones
 # Find stable device paths with: ls /dev/v4l/by-id/ (or run picnicplace-probe).
 #
 # PicnicPlace shows camera images as you see the machine from the front, like the
-# machine view. On a LumenPnP that is turned 180 degrees from OpenPnP's images (+Y up),
-# so the values below are OpenPnP's flips turned 180 degrees: the top camera needs no
-# flip (OpenPnP: X and Y), the bottom camera flip_y (OpenPnP: X). Check yours: jog with
-# the Right arrow and the picture should slide left (the head moves right over a still
-# bed); jog Back and it should slide down.
+# machine view. On a real LumenPnP v4.1 the top camera needed flip_x and flip_y (checked
+# by jogging, and board fiducials then fit to 0.06 mm), and the bottom camera flip_y (not
+# yet checked). Check yours: with the top camera, jog with the Right arrow and the
+# picture should slide left (the head moves right over a still bed); jog Back and it
+# should slide down. The bottom camera looks up at a nozzle: jog Right and the nozzle
+# should move right in the picture, and Back, up.
 #
 # [cameras.top]
 # source = "device"          # "device", "synthetic", or "none"
@@ -78,6 +79,8 @@ max_mb = 5000              # and at most this many megabytes of them; older ones
 # width = 1920
 # height = 1080
 # fps = 30
+# flip_x = true
+# flip_y = true
 # rotation = 0.37            # degrees counterclockwise, after flips
 #
 # [cameras.bottom]

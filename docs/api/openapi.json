@@ -172,6 +172,49 @@
         "title": "Board",
         "type": "object"
       },
+      "BoardCheck": {
+        "description": "The last check of a job's board: its fiducials found and fitted, nothing placed.",
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "fix": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BoardFix"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The fit, if the fiducials were found."
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "ok": {
+            "description": "Every fiducial was found and they fit the job's layout.",
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job_id",
+          "checked_at",
+          "fix",
+          "ok",
+          "message"
+        ],
+        "title": "BoardCheck",
+        "type": "object"
+      },
       "BoardCopy-Input": {
         "additionalProperties": false,
         "properties": {
@@ -5741,6 +5784,12 @@
             "description": "Start even if some placements are blocked, skipping them.",
             "title": "Skip Blocked",
             "type": "boolean"
+          },
+          "step": {
+            "default": false,
+            "description": "Pause once the board is found, before the first part; each step then places one batch (a part on each nozzle that can take one).",
+            "title": "Step",
+            "type": "boolean"
           }
         },
         "required": [
@@ -11093,6 +11142,118 @@
           }
         ],
         "summary": "Run State",
+        "tags": [
+          "run"
+        ]
+      }
+    },
+    "/api/v1/run/board-check": {
+      "get": {
+        "description": "The last board check: the fiducials found, the fit, and whether it is good.",
+        "operationId": "board_check_api_v1_run_board_check_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/BoardCheck"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Board Check Api V1 Run Board Check Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Board Check",
+        "tags": [
+          "run"
+        ]
+      }
+    },
+    "/api/v1/run/check-board": {
+      "post": {
+        "description": "Find a saved job's board by its fiducials and fit it, placing nothing: to check the\nboard and the job's location before a run. Works even with no placements turned on.\nThe result is kept (``GET /api/v1/run/board-check``).",
+        "operationId": "check_board_api_v1_run_check_board_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Check Board",
         "tags": [
           "run"
         ]

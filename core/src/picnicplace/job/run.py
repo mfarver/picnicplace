@@ -143,6 +143,16 @@ class BoardFix(WireModel):
         return Point(x=p.x + self.about.x + self.dx, y=p.y + self.about.y + self.dy)
 
 
+class BoardCheck(WireModel):
+    """The last check of a job's board: its fiducials found and fitted, nothing placed."""
+
+    job_id: str
+    checked_at: datetime
+    fix: BoardFix | None = Field(default=None, description="The fit, if the fiducials were found.")
+    ok: bool = Field(description="Every fiducial was found and they fit the job's layout.")
+    message: str
+
+
 class JobPlan(WireModel):
     job_id: str
     name: str
@@ -514,6 +524,7 @@ class JobRunner:
         self._picked: set[str] = set()
         """Slots, strips, and trays picked from in this run, since the feeders were
         scanned."""
+        self._board_check: BoardCheck | None = None
         self._recording: str | None = None
         """The flight recording this runner started for the run, if any."""
         self.record_runs = False
@@ -563,7 +574,10 @@ class JobRunner:
         skip_blocked: bool,
         pick_correction: PickCorrection | None = None,
         record: bool = False,
+        step: bool = False,
     ) -> Operation:
+        """Start a run. With ``step``, it pauses once the board is found, before the first
+        part, and each step then places one batch."""
         if self._active:
             raise MachineBusyError("a job is running: pause or stop it first")
         job = self._get_job(job_id)
@@ -598,7 +612,8 @@ class JobRunner:
             pick_correction=pick_correction or self._placement.pick_correction,
             started_at=datetime.now(UTC),
         )
-        self._step = False
+        self._run.pause_requested = step
+        self._step = step
         self._picked = set()
         if self._sim_error is not None:
             self._load_sim_board(job)
@@ -613,6 +628,45 @@ class JobRunner:
             self._recording = info.id
         recorder.event("run.start", run=self._run)
         return self._start_task()
+
+    def check_board(self, job_id: str) -> Operation:
+        """Find a job's board by its fiducials and show how it sits, placing nothing.
+        Works whatever the job's placements are, even with none to place."""
+        if self._active:
+            raise MachineBusyError("a job is running: pause or stop it first")
+        if self._run is not None and self._run.status == "paused":
+            raise RunError("a run is paused: resume or stop it before checking a board")
+        job = self._get_job(job_id)
+        if job.location is None:
+            raise RunError("the job has no location on the machine: place it first")
+        if not self._chosen_fiducials(job):
+            raise RunError("the job has no fiducials turned on to check")
+        if self._sim_error is not None:
+            self._load_sim_board(job)
+
+        async def work() -> str:
+            now = datetime.now(UTC)
+            try:
+                fix = await self._locate_board(job)
+            except MachineError as e:
+                self._board_check = BoardCheck(
+                    job_id=job_id, checked_at=now, ok=False, message=str(e)
+                )
+                raise
+            ok = fix.residual <= FIDUCIAL_RESIDUAL_MM
+            message = self._describe_fix(fix) if ok else self._misfit(fix.residual)
+            self._board_check = BoardCheck(
+                job_id=job_id, checked_at=now, fix=fix, ok=ok, message=message
+            )
+            if not ok:
+                raise RunError(message)
+            return message
+
+        return self._machine.start_task("board_check", work)
+
+    def board_check(self) -> BoardCheck | None:
+        """The last board check, if any."""
+        return self._board_check
 
     def resume(self, step: bool = False) -> Operation:
         """Carry on with a paused run; with ``step``, for one batch only."""
@@ -696,6 +750,7 @@ class JobRunner:
     async def _work(self) -> str:
         run = self._need_run()
         try:
+            found: str | None = None
             if run.fix is None:
                 if self._feeders.has_bus:
                     await self._rescan(run)
@@ -703,6 +758,7 @@ class JobRunner:
                 run.current = RunStep(stage="board", action="finding_fiducials")
                 run.fix = await self._find_board(run)
                 run.current = None
+                found = run.message
             while True:
                 if run.stop_requested:
                     self._finish(run, "stopped", f"stopped: {self._summary(run)}")
@@ -710,8 +766,16 @@ class JobRunner:
                 if run.pause_requested:
                     run.status, run.pause_requested = "paused", False
                     run.current = None
-                    run.message = f"paused: {self._summary(run)}"
+                    if found is not None:
+                        # Started in step mode: the board is found, nothing placed yet.
+                        run.message = (
+                            f"paused before the first part: {found}. Step places the first "
+                            "parts, one on each nozzle; Resume places the rest."
+                        )
+                    else:
+                        run.message = f"paused: {self._summary(run)}"
                     return run.message
+                found = None
                 batch = self._next_batch(run)
                 if not batch:
                     self._finish(run, "finished", f"finished: {self._summary(run)}")
@@ -793,11 +857,44 @@ class JobRunner:
 
     async def _find_board(self, run: RunState) -> BoardFix:
         job = self._job
-        assert job is not None and job.location is not None
+        assert job is not None
+        fix = await self._locate_board(job)
+        if fix.residual > FIDUCIAL_RESIDUAL_MM:
+            raise RunError(self._misfit(fix.residual))
+        run.message = (
+            self._describe_fix(fix)
+            if fix.fiducials
+            else "the job has no fiducials turned on: the board is taken to be where the job says"
+        )
+        log.info("%s", run.message)
+        return fix
+
+    def _chosen_fiducials(self, job: Job) -> list[MachinePlacement]:
         result = layout(job, self._machine.profile)
-        chosen = choose_fiducials(
+        return choose_fiducials(
             [p for p in result.placements if p.kind == "fiducial" and p.enabled]
         )
+
+    @staticmethod
+    def _misfit(residual: float) -> str:
+        return (
+            f"the fiducials are up to {residual:.2f} mm from where the job's layout puts "
+            "them relative to each other: check that the right board is loaded, the "
+            "side facing up, and the fiducials in the design"
+        )
+
+    @staticmethod
+    def _describe_fix(fix: BoardFix) -> str:
+        return (
+            f"board found {math.hypot(fix.dx, fix.dy):.2f} mm from its location in the job, "
+            f"turned {fix.angle:+.2f} degrees ({len(fix.fiducials)} fiducials, fit to "
+            f"{fix.residual:.2f} mm)"
+        )
+
+    async def _locate_board(self, job: Job) -> BoardFix:
+        """Find the job's chosen fiducials and fit the board to them."""
+        assert job.location is not None
+        chosen = self._chosen_fiducials(job)
         about = Point(x=job.location.x, y=job.location.y)
         if not chosen:
             return BoardFix(dx=0, dy=0, angle=0, about=about, residual=0, fiducials=[])
@@ -832,17 +929,6 @@ class JobRunner:
         )
         fix.residual = round(residual, 4)
         fix.dx, fix.dy, fix.angle = round(dx, 4), round(dy, 4), round(angle, 4)
-        if residual > FIDUCIAL_RESIDUAL_MM:
-            raise RunError(
-                f"the fiducials are up to {residual:.2f} mm from where the job's layout puts "
-                "them relative to each other: check that the right board is loaded, the "
-                "side facing up, and the fiducials in the design"
-            )
-        run.message = (
-            f"board found {math.hypot(dx, dy):.2f} mm from its location in the job, "
-            f"turned {angle:+.2f} degrees ({len(checks)} fiducials)"
-        )
-        log.info("%s", run.message)
         return fix
 
     def _next_batch(self, run: RunState) -> dict[str, int]:

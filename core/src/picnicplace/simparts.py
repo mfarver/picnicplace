@@ -4,7 +4,8 @@ The simulator's nozzles pick a part only where there is one: a ``source`` (the f
 service, with its simulated tapes) says what lies under the nozzle and takes it out of
 its pocket. The part is held where it really was relative to the nozzle, at the angle
 it really had, so bottom vision has a true offset and rotation to find. A part dropped
-low enough lands on the board where it was, so a test can check where it went.
+low enough over an empty pocket goes back into it (``restore``); one dropped low
+enough anywhere else lands on the board where it was, so a test can check where it went.
 """
 
 import math
@@ -40,6 +41,9 @@ class PlacedPart:
 Source = Callable[[float, float], tuple[PartShape, float, float, float] | None]
 """Take the part under a point, if any: its shape, true center, and angle."""
 
+Restore = Callable[[float, float], bool]
+"""Put a part back in the empty pocket under a point, if there is one; say if it did."""
+
 PLACED_BELOW = -10.0
 """A part dropped with the nozzle lower than this lands on the board; higher, it is lost."""
 
@@ -53,6 +57,7 @@ def _turn(x: float, y: float, degrees: float) -> tuple[float, float]:
 @dataclass
 class SimulatedParts:
     source: Source
+    restore: Restore | None = None
     held: dict[str, HeldPart] = field(default_factory=dict[str, HeldPart])
     placed: list[PlacedPart] = field(default_factory=list[PlacedPart])
 
@@ -72,6 +77,8 @@ class SimulatedParts:
         if part is None or height > PLACED_BELOW:
             return
         ox, oy = _turn(part.dx, part.dy, nozzle_angle)
+        if self.restore is not None and self.restore(x + ox, y + oy):
+            return
         self.placed.append(PlacedPart(part.shape, x + ox, y + oy, nozzle_angle + part.angle))
 
     def scene(self) -> tuple[tuple[tuple[str, HeldPart], ...], tuple[PlacedPart, ...]]:

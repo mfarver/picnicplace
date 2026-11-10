@@ -174,3 +174,47 @@ def test_captures_are_saved_with_the_machine_state(lumen: TestClient) -> None:
         assert image.status_code == 200
         assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
         assert lumen.get("/api/v1/cameras/captures/../../etc/passwd.png").status_code == 404
+
+
+def test_recycle_puts_the_part_back_for_the_next_pick(lumen: TestClient) -> None:
+    """Recycled, the part goes back in its pocket; the next pick takes it again
+    without feeding, so the tape does not move."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        sim = feeders(lumen)._sim  # type: ignore[attr-defined]
+        assert sim is not None
+        ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "1", "nozzle_id": "N1"})))
+        ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"})))
+        fed = sim.feeders[1].fed_mm
+
+        op = ok(s.wait(s.post("/api/v1/placement/recycle", {"nozzle_id": "N1"})))
+        assert op["message"] == (
+            "N1 put its part back in Slot 1. "
+            "The next pick from Slot 1 takes it again, without feeding."
+        )
+        assert lumen.get("/api/v1/placement").json()["loads"] == []
+        assert placed(lumen) == []  # in its pocket, not on the bed
+
+        ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "1", "nozzle_id": "N2"})))
+        assert sim.feeders[1].fed_mm == fed
+
+
+def test_discard_drops_the_part_in_the_bin() -> None:
+    bin_ = {
+        "id": "discard",
+        "label": "Discard bin",
+        "kind": "discard",
+        "position": {"x": 380, "y": 120},
+    }
+    config = fast_config(machine={"profile": "lumenpnp-v4.1", "locations": [bin_]})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        assert client.get("/api/v1/placement").json()["can_discard"]
+        ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "1", "nozzle_id": "N1"})))
+        op = ok(s.wait(s.post("/api/v1/placement/discard", {"nozzle_id": "N1"})))
+        assert op["message"] == "N1: dropped its part in the discard bin."
+        assert client.get("/api/v1/placement").json()["loads"] == []
+        position = client.get("/api/v1/machine").json()["position"]
+        nozzle = client.app.state.ctx.machine.profile.nozzles[0]  # type: ignore[attr-defined]
+        assert position["X"] + nozzle.offset.x == pytest.approx(380)
+        assert position["Y"] + nozzle.offset.y == pytest.approx(120)

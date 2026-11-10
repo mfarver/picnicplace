@@ -178,6 +178,9 @@ class FeederService:
         self._errors: dict[str, str] = {}
         self._scanned = False
         self._pockets: dict[str, PocketCheck] = {}
+        self._returned: set[str] = set()
+        """Slots whose picked part was put back in its pocket: the next pick takes it
+        again without feeding."""
 
         self._sim = simulated
         self._sim_full: dict[int, bool] = {}
@@ -191,7 +194,7 @@ class FeederService:
             machine.scene_tapes = self._scene_tapes
             driver = machine.driver
             if isinstance(driver, SimulatorDriver):
-                parts = SimulatedParts(self._take_from_tape)
+                parts = SimulatedParts(self._take_from_tape, self._return_to_pocket)
                 self.sim_parts = parts
                 driver.pick_source = lambda nozzle, x, y, angle: parts.pick(nozzle, x, y, angle)
                 driver.on_drop = parts.drop
@@ -350,6 +353,8 @@ class FeederService:
             self._errors[slot.id] = str(e)
             raise
         self._errors.pop(slot.id, None)
+        if mm != 0:
+            self._returned.discard(slot.id)
         if mm > 0:
             self._sim_full[address] = True
         self._invalidate()
@@ -700,6 +705,32 @@ class FeederService:
         self._pockets.pop(fixed_id, None)
         self._invalidate()
 
+    def returned(self, source_id: str, pocket: int | None) -> str:
+        """A picked part was put back in the pocket it came from: pick it again next.
+        ``pocket``: for a strip or tray, which of its parts it was. Says what happens
+        next, for the operator."""
+        if self.is_fixed(source_id):
+            f = self.fixed(source_id)
+            label = self.fixed_label(source_id)
+            if pocket is None or f.picked != pocket + 1:
+                return f" {label} has picked past it since, so it stays there until a refill."
+            self._store.setup.fixed[source_id] = f.model_copy(update={"picked": pocket})
+            self._store.save()
+            self._pockets.pop(source_id, None)
+            self._invalidate()
+            return f" {label} picks it again next."
+        slot = self.slot(source_id)
+        self._returned.add(slot.id)
+        return f" The next pick from {slot.label} takes it again, without feeding."
+
+    def take_returned(self, slot_id: str) -> bool:
+        """Whether a part was put back in the slot's pocket since its last feed; the
+        pick about to happen takes it, so this forgets it."""
+        if slot_id in self._returned:
+            self._returned.discard(slot_id)
+            return True
+        return False
+
     async def locate_strip_pocket(self, fixed_id: str) -> PocketCheck:
         """Find a strip's next pocket from its sprocket holes. For use inside a machine
         task."""
@@ -819,11 +850,7 @@ class FeederService:
         center, and angle. None if no full pocket is there."""
         self._scene_tapes()
         for address, tape in self._tape_at.items():
-            a = math.radians(tape.rotation)
-            phase = tape.advance % tape.pitch
-            along = phase if phase <= tape.pitch / 2 else phase - tape.pitch
-            px = tape.pick[0] + math.cos(a) * along
-            py = tape.pick[1] + math.sin(a) * along
+            px, py = _pocket_under_pick(tape)
             if math.hypot(px - x, py - y) > SIM_PICK_RADIUS:
                 continue
             if not tape.pick_full:
@@ -859,6 +886,26 @@ class FeederService:
                 )
                 return shape, px, py, self.fixed_angle(f) or 0.0
         return None
+
+    def _return_to_pocket(self, x: float, y: float) -> bool:
+        """A part let go low at (x, y): put it back in the empty pocket there, if any."""
+        self._scene_tapes()
+        for address, tape in self._tape_at.items():
+            px, py = _pocket_under_pick(tape)
+            if math.hypot(px - x, py - y) <= SIM_PICK_RADIUS and not tape.pick_full:
+                self._sim_full[address] = True
+                self._invalidate()
+                return True
+        for fixed_id, f in self._store.setup.fixed.items():
+            taken = self._sim_fixed_taken.setdefault(fixed_id, set(range(f.picked)))
+            for n in sorted(taken):
+                at = f.position(n)
+                px, py = at.x + SIM_FIXED_ERROR.x, at.y + SIM_FIXED_ERROR.y
+                if math.hypot(px - x, py - y) <= SIM_PICK_RADIUS:
+                    taken.discard(n)
+                    self._invalidate()
+                    return True
+        return False
 
     def _scene_tapes(self) -> tuple[TapeScene, ...]:
         if self._tapes is None:
@@ -965,6 +1012,14 @@ class FeederService:
                 )
             )
         return out
+
+
+def _pocket_under_pick(tape: TapeScene) -> tuple[float, float]:
+    """Where a simulated tape's pocket nearest its pick place really is."""
+    a = math.radians(tape.rotation)
+    phase = tape.advance % tape.pitch
+    along = phase if phase <= tape.pitch / 2 else phase - tape.pitch
+    return tape.pick[0] + math.cos(a) * along, tape.pick[1] + math.sin(a) * along
 
 
 def _strip_direction(f: FixedFeeder) -> float:

@@ -1,4 +1,4 @@
-import { ArrowDownToLine, Crosshair, Hand, ScanEye, Trash2, Zap } from "lucide-react";
+import { ArrowDownToLine, Crosshair, Hand, ScanEye, Trash2, Undo2, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useCore } from "../api/core";
@@ -16,7 +16,7 @@ import { Field, NumberInput } from "./Form";
 import { Panel } from "./Panel";
 import { PickCorrectionSelect } from "./PickCorrection";
 
-const KINDS = new Set(["pick", "align", "place", "pick_and_place", "discard"]);
+const KINDS = new Set(["pick", "align", "place", "pick_and_place", "discard", "recycle"]);
 
 function describe(load: NozzleLoad): string {
   const what = load.part_id ?? "a part";
@@ -240,6 +240,22 @@ export function PlacementPanel({
           >
             <Trash2 size={16} aria-hidden />
             Discard
+          </button>
+        )}
+        {load && (
+          <button
+            type="button"
+            className="button"
+            disabled={!ready}
+            title="Put it back in the pocket it came from, to be picked again"
+            onClick={() =>
+              void start(() =>
+                api.POST("/api/v1/placement/recycle", { body: { nozzle_id: nozzle } }),
+              )
+            }
+          >
+            <Undo2 size={16} aria-hidden />
+            Recycle
           </button>
         )}
       </div>

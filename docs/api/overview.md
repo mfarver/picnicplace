@@ -70,7 +70,7 @@ generate a client from it, as the Studio does.
 | `GET`, `PUT /api/v1/bring-up` | The bring-up checklist's progress and findings |
 | `GET /api/v1/placement` | What each nozzle holds, how it sits once aligned, and the configured pick correction |
 | `POST /api/v1/placement/pick`, `…/align`, `…/place` | Pick from a feeder slot; find the part on the bottom camera; place it at a location and angle |
-| `POST /api/v1/placement/pick-and-place`, `…/discard` | All three steps at once; drop a held part in the discard bin |
+| `POST /api/v1/placement/pick-and-place`, `…/discard`, `…/recycle` | All three steps at once; drop a held part in the discard bin; put a held part back in the pocket it was picked from, to be picked again next |
 | `POST /api/v1/run/plan` | A dry run of a saved job: each placement's feeder and nozzles, and what blocks any |
 | `POST /api/v1/run/start`, `…/pause`, `…/step`, `…/resume`, `…/stop`; `GET /api/v1/run` | Run a job (board fiducials, then batches of pick, align, and place); its progress |
 | `PUT /api/v1/run/items/{index}` | Skip a placement, or take back a skip |

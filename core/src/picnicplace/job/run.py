@@ -25,7 +25,9 @@ with the parts already picked left on their nozzles: fix the cause, then resume,
 skip the placement. An empty strip or tray pauses the run too, with the head moved to
 the park position out of the operator's way: refill it, mark it refilled, and resume.
 Pausing and stopping take effect after the batch in progress; a step resumes a paused
-run for one batch.
+run for one batch. A part left on a nozzle by a paused or stopped run can be discarded,
+or recycled into the pocket it came from (see ``placement.py``); a paused run then picks
+that placement's part again.
 """
 
 import asyncio
@@ -470,7 +472,12 @@ class JobRunner:
             machine.scene_boards = self._scene_boards
 
     def state(self) -> RunState | None:
-        return self._run
+        run = self._run
+        if run is not None and not self._active:
+            # Parts discarded or recycled while the run was paused or stopped.
+            for nozzle_id in [n for n in run.held if self._placement.holds(n) is None]:
+                del run.held[nozzle_id]
+        return run
 
     def _get_job(self, job_id: str) -> Job:
         try:
@@ -512,7 +519,7 @@ class JobRunner:
             raise RunError("the job has nothing to place")
         held = [load.nozzle for load in self._placement.state().loads]
         if held:
-            raise RunError(f"{held[0]} holds a part: place or discard it first")
+            raise RunError(f"{held[0]} holds a part: discard or recycle it first")
         if any(c.looking == "up" for c in self._machine.profile.cameras):
             self._placement.bottom_camera()  # raises if it has no focus height
         self._job = job
@@ -568,12 +575,15 @@ class JobRunner:
         return run
 
     def skip(self, index: int, skip: bool) -> RunState:
+        self.state()
         run = self._need_run()
         if not 0 <= index < len(run.plan.items):
             raise InvalidTargetError(f"no placement {index} in the run")
         item = run.plan.items[index]
         if index in run.held.values():
-            raise RunError(f"{item.ref}'s part is on a nozzle: place or discard it first")
+            raise RunError(
+                f"{item.ref}'s part is on a nozzle: discard or recycle it first, or resume"
+            )
         operator = "skipped by the operator"
         if skip and item.status in ("pending", "failed"):
             item.status, item.note = "skipped", operator

@@ -1064,6 +1064,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/placement/recycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put a held part back in the pocket it was picked from
+         * @description The nozzle goes back to where it picked the part, turned as it was, lowers it to
+         *     the pick height, and lets go. That feeder's next pick takes the part again instead
+         *     of feeding (a Photon feeder) or moving to the next part (a strip or tray).
+         */
+        post: operations["recycle_api_v1_placement_recycle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/presence": {
         parameters: {
             query?: never;
@@ -2896,6 +2918,8 @@ export interface components {
             /** Pick Angle */
             pick_angle: number | null;
             picked_at: components["schemas"]["Point"] | null;
+            /** Pocket */
+            pocket: number | null;
             /** Slot Id */
             slot_id: string;
         };
@@ -3399,6 +3423,8 @@ export interface components {
         };
         /** PlacementState */
         PlacementState: {
+            /** Can Discard */
+            can_discard: boolean;
             /** Loads */
             loads: components["schemas"]["NozzleLoad"][];
             /**
@@ -6464,6 +6490,51 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PlaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recycle_api_v1_placement_recycle_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NozzleRequest"];
             };
         };
         responses: {

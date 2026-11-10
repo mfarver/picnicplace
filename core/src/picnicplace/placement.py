@@ -15,6 +15,11 @@ Each step is an operation, so a first run on a real machine can go one step at a
   (not the nozzle's) over the target, lower it to the board, let go, lift, and check
   the part left the nozzle.
 
+A part that is not to be placed (a run stopped with it on the nozzle, say) can be
+**discarded**, dropped in the discard bin, or **recycled**: put back in the pocket it
+came from, with the nozzle where and as it was when it picked, so that feeder's next
+pick takes it again instead of a new one.
+
 Angles: a part's angle is the machine angle of its footprint's 0 degree direction. In a
 tape it is the slot's tape direction plus the part's rotation in the tape (EIA-481). A
 held part keeps its angle relative to the nozzle, so turning the nozzle turns the part.
@@ -78,6 +83,8 @@ class NozzleLoad(WireModel):
     """The nozzle's angle when it picked."""
     correction: PickCorrection | None = None
     """How the pick was corrected."""
+    pocket: int | None = None
+    """For a part from a strip or tray, which of its parts it is (0 first)."""
 
 
 class PlacementState(WireModel):
@@ -85,6 +92,8 @@ class PlacementState(WireModel):
     """What each nozzle holds, as far as PicnicPlace knows."""
     pick_correction: PickCorrection
     """How picks are corrected unless a pick or run says otherwise, from the config."""
+    can_discard: bool
+    """The config gives a discard location."""
 
 
 def _footprint_center(part: Part | None, library: Library | None) -> tuple[Point, Point] | None:
@@ -120,6 +129,7 @@ class PlacementService:
         return PlacementState(
             loads=[self._loads[k] for k in sorted(self._loads)],
             pick_correction=self.pick_correction,
+            can_discard=self.can_discard(),
         )
 
     # --- Operations ----------------------------------------------------------------------
@@ -220,6 +230,48 @@ class PlacementService:
         self._loads.pop(nozzle.id, None)
         return f"{nozzle.id}: dropped its part in the {bin_.label.lower()}."
 
+    def start_recycle(self, nozzle_id: str) -> Operation:
+        nozzle = self._machine.nozzle(nozzle_id)
+        self._return_place(self._load(nozzle))
+        return self._machine.start_task("recycle", lambda: self.recycle(nozzle))
+
+    def _return_place(self, load: NozzleLoad) -> tuple[Point, float, str]:
+        """Where the nozzle picked ``load``, how low, and the source's name; raises if
+        the part cannot go back."""
+        try:
+            name = self._source_name(load.slot_id)
+        except InvalidTargetError as e:
+            raise PlacementError(
+                f"{load.nozzle}'s part cannot go back: its feeder is gone ({e}). Discard it."
+            ) from e
+        if load.picked_at is None:
+            raise PlacementError(
+                f"{load.nozzle}'s part cannot go back: where it was picked is not known. "
+                "Discard it."
+            )
+        if self._feeders.is_fixed(load.slot_id):
+            f = self._feeders.fixed(load.slot_id)
+            height = self._feeders.fixed_pick_height(f, name)
+        else:
+            bank = self._feeders.bank(self._feeders.slot(load.slot_id))
+            if bank.pick_height is None:
+                raise PlacementError(f"the machine profile gives no pick height for {name}")
+            height = bank.pick_height
+        return load.picked_at, height, name
+
+    async def recycle(self, nozzle: Nozzle) -> str:
+        """Put the part on ``nozzle`` back in the pocket it came from: over where the
+        nozzle picked it, turned as it was, down to the pick height, and let go. The
+        part's feeder picks it again next instead of a new one."""
+        load = self._load(nozzle)
+        at, height, name = self._return_place(load)
+        await self._machine.move_nozzle_over(nozzle, at.x, at.y, load.pick_angle)
+        await self._machine.lower_nozzle(nozzle, height)
+        await self._release(nozzle, load, f"putting it back in {name}", "the pick height")
+        self._machine.recorder.event("recycle", nozzle=nozzle.id, source=load.slot_id, at=at)
+        then = self._feeders.returned(load.slot_id, load.pocket)
+        return f"{nozzle.id} put its part back in {name}.{then}"
+
     # --- Steps ---------------------------------------------------------------------------
 
     async def pick(
@@ -233,7 +285,7 @@ class PlacementService:
         if bank.pick_height is None:
             raise PlacementError(f"the machine profile gives no pick height for {slot.label}")
         part = self._feeders.part(slot)
-        if feed:
+        if feed and not self._feeders.take_returned(slot.id):
             await self._feeders.feed(slot)
         base = self._feeders.pick(slot)
         at, found = base, ""
@@ -274,7 +326,9 @@ class PlacementService:
             correction = "bottom"
         feeders.took_fixed(fixed_id)  # tried or taken, that pocket is done with
         await self._take(nozzle, at, height, label)
-        self._loads[nozzle.id] = self._picked(nozzle, part, fixed_id, angle, at, base, correction)
+        self._loads[nozzle.id] = self._picked(
+            nozzle, part, fixed_id, angle, at, base, correction, index
+        )
         what = part.id if part else "a part"
         return f"{nozzle.id} picked {what} number {index + 1} from {label}{found}."
 
@@ -295,6 +349,7 @@ class PlacementService:
         at: Point,
         base: Point,
         correction: PickCorrection,
+        pocket: int | None = None,
     ) -> NozzleLoad:
         nozzle_angle = self._machine.nozzle_angle(nozzle)
         load = NozzleLoad(
@@ -307,6 +362,7 @@ class PlacementService:
             base=base,
             pick_angle=nozzle_angle,
             correction=correction,
+            pocket=pocket,
         )
         self._machine.recorder.event("pick", load=load)
         return load
@@ -453,6 +509,14 @@ class PlacementService:
         over = Point(x=target.x - offset.x, y=target.y - offset.y)
         await self._machine.move_nozzle_over(nozzle, over.x, over.y, turn)
         await self._machine.lower_nozzle(nozzle, height)
+        await self._release(nozzle, load, "placing it", "the place height")
+        return (
+            f"{nozzle.id} placed its part at ({target.x:.3f}, {target.y:.3f}), "
+            f"{rotation:g} degrees."
+        )
+
+    async def _release(self, nozzle: Nozzle, load: NozzleLoad, doing: str, height: str) -> None:
+        """Let go of the part on the lowered ``nozzle``, lift, and check it is gone."""
         await self._machine.suction(nozzle, False)
         await asyncio.sleep(PLACE_DWELL_S)
         await self._machine.raise_nozzles()
@@ -463,13 +527,7 @@ class PlacementService:
         await self._machine.suction(nozzle, False)
         if still:
             self._loads[nozzle.id] = load
-            raise PlacementError(
-                f"the part is still on {nozzle.id} after placing it; check the place height"
-            )
-        return (
-            f"{nozzle.id} placed its part at ({target.x:.3f}, {target.y:.3f}), "
-            f"{rotation:g} degrees."
-        )
+            raise PlacementError(f"the part is still on {nozzle.id} after {doing}; check {height}")
 
     # --- Checks --------------------------------------------------------------------------
 
@@ -485,7 +543,9 @@ class PlacementService:
 
     def _check_empty(self, nozzle: Nozzle) -> None:
         if nozzle.id in self._loads:
-            raise PlacementError(f"{nozzle.id} already holds a part: place or discard it first")
+            raise PlacementError(
+                f"{nozzle.id} already holds a part: place, discard, or recycle it first"
+            )
 
     def _load(self, nozzle: Nozzle) -> NozzleLoad:
         load = self._loads.get(nozzle.id)

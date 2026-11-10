@@ -3434,6 +3434,17 @@
               }
             ]
           },
+          "pocket": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pocket"
+          },
           "slot_id": {
             "title": "Slot Id",
             "type": "string"
@@ -3448,7 +3459,8 @@
           "picked_at",
           "base",
           "pick_angle",
-          "correction"
+          "correction",
+          "pocket"
         ],
         "title": "NozzleLoad",
         "type": "object"
@@ -4387,6 +4399,10 @@
       },
       "PlacementState": {
         "properties": {
+          "can_discard": {
+            "title": "Can Discard",
+            "type": "boolean"
+          },
           "loads": {
             "items": {
               "$ref": "#/components/schemas/NozzleLoad"
@@ -4406,7 +4422,8 @@
         },
         "required": [
           "loads",
-          "pick_correction"
+          "pick_correction",
+          "can_discard"
         ],
         "title": "PlacementState",
         "type": "object"
@@ -9769,6 +9786,83 @@
           }
         ],
         "summary": "Place an aligned part",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/v1/placement/recycle": {
+      "post": {
+        "description": "The nozzle goes back to where it picked the part, turned as it was, lowers it to\nthe pick height, and lets go. That feeder's next pick takes the part again instead\nof feeding (a Photon feeder) or moving to the next part (a strip or tray).",
+        "operationId": "recycle_api_v1_placement_recycle_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NozzleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put a held part back in the pocket it was picked from",
         "tags": [
           "placement"
         ]

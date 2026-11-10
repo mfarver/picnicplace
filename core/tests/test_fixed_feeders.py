@@ -188,3 +188,17 @@ def test_an_empty_tray_parks_the_head() -> None:
         profile = client.app.state.ctx.machine.profile  # type: ignore[attr-defined]
         for nozzle in profile.nozzles:
             assert position[nozzle.z_axis] == pytest.approx(0)
+
+
+def test_recycle_into_a_tray(lumen: TestClient) -> None:  # noqa: F811
+    """A part put back in a tray is the next one picked: the count goes back one."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        move_to_bed(lumen, s, "EX-MCU-8", tray())
+        ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "T1", "nozzle_id": "N1"})))
+        assert lumen.get("/api/v1/feeders").json()["fixed"][0]["remaining"] == 11
+        op = ok(s.wait(s.post("/api/v1/placement/recycle", {"nozzle_id": "N1"})))
+        assert op["message"].endswith("T1 (SOIC tray) picks it again next.")
+        assert lumen.get("/api/v1/feeders").json()["fixed"][0]["remaining"] == 12
+        op = ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "T1", "nozzle_id": "N2"})))
+        assert "number 1 from T1" in op["message"]

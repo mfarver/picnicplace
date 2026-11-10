@@ -99,3 +99,11 @@ async def pick_and_place(placement: Placement, body: PickAndPlaceRequest) -> Ope
 @_operation("/discard", "Drop a held part in the discard bin")
 async def discard(placement: Placement, body: NozzleRequest) -> Operation:
     return placement.start_discard(body.nozzle_id)
+
+
+@_operation("/recycle", "Put a held part back in the pocket it was picked from")
+async def recycle(placement: Placement, body: NozzleRequest) -> Operation:
+    """The nozzle goes back to where it picked the part, turned as it was, lowers it to
+    the pick height, and lets go. That feeder's next pick takes the part again instead
+    of feeding (a Photon feeder) or moving to the next part (a strip or tray)."""
+    return placement.start_recycle(body.nozzle_id)

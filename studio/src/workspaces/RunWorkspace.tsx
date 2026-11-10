@@ -1,4 +1,13 @@
-import { Pause, Play, RefreshCw, SkipForward, Square, StepForward } from "lucide-react";
+import {
+  Pause,
+  Play,
+  RefreshCw,
+  SkipForward,
+  Square,
+  StepForward,
+  Trash2,
+  Undo2,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { hasControl, useCore } from "../api/core";
@@ -12,6 +21,7 @@ import type {
   JobPlan,
   JobSummary,
   PickCorrection,
+  PlacementState,
   RunItem,
   RunState,
 } from "../api/types";
@@ -47,6 +57,7 @@ export function RunWorkspace() {
   const [run, setRun] = useState<RunState | null>(null);
   const [correction, setCorrection] = useState<PickCorrection | null>(null);
   const [configured, setConfigured] = useState<PickCorrection>();
+  const [placement, setPlacement] = useState<PlacementState | null>(null);
   const [skipBlocked, setSkipBlocked] = useState(false);
   const [record, setRecord] = useState(false);
   const [checking, setChecking] = useState(0);
@@ -78,7 +89,10 @@ export function RunWorkspace() {
     ]).then(([j, r, p]) => {
       if (cancelled) return;
       if (j.data) setJobs(j.data);
-      if (p.data) setConfigured(p.data.pick_correction);
+      if (p.data) {
+        setConfigured(p.data.pick_correction);
+        setPlacement(p.data);
+      }
       if (r.data !== undefined) {
         setRun(r.data);
         if (r.data) setJobId((id) => id || r.data!.job_id);
@@ -157,6 +171,12 @@ export function RunWorkspace() {
     const op = await act(() => api.POST(path));
     if (op) await refresh();
   };
+  const release = async (
+    path: "/api/v1/placement/discard" | "/api/v1/placement/recycle",
+    nozzle: string,
+  ) => {
+    await act(() => api.POST(path, { body: { nozzle_id: nozzle } }));
+  };
   const skip = async (item: RunItem, value: boolean) => {
     const state = await act(() =>
       api.PUT("/api/v1/run/items/{index}", {
@@ -168,6 +188,8 @@ export function RunWorkspace() {
   };
 
   const paused = current?.status === "paused";
+  // Parts a paused or stopped run left on the nozzles: drop them, or put them back.
+  const leftOn = current && !running ? (placement?.loads ?? []) : [];
   const startable = !current || current.status === "finished" || current.status === "stopped";
   const errors = shownPlan?.issues.filter((i) => i.severity === "error") ?? [];
   const cautions = shownPlan?.issues.filter((i) => i.severity === "warning") ?? [];
@@ -317,6 +339,45 @@ export function RunWorkspace() {
               {current.error ?? current.message}
             </p>
           )}
+          {leftOn.map((l) => {
+            const index = current?.held[l.nozzle];
+            const ref = index !== undefined ? items[index]?.ref : undefined;
+            const from = /^\d+$/.test(l.slot_id) ? `slot ${l.slot_id}` : l.slot_id;
+            return (
+              <div key={l.nozzle} className="run-held">
+                <p className="note text-muted">
+                  <strong>{l.nozzle}</strong> holds {ref ? `${ref}'s part` : "a part"} (
+                  {l.part_id ?? "no part number"}) from {from}.
+                </p>
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={!canMove || !placement?.can_discard}
+                    title={
+                      placement?.can_discard
+                        ? "Drop it in the discard bin"
+                        : "No discard location: add one under [[machine.locations]] in the config"
+                    }
+                    onClick={() => void release("/api/v1/placement/discard", l.nozzle)}
+                  >
+                    <Trash2 size={16} aria-hidden />
+                    Discard
+                  </button>
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={!canMove}
+                    title="Put it back in the pocket it came from, to be picked again"
+                    onClick={() => void release("/api/v1/placement/recycle", l.nozzle)}
+                  >
+                    <Undo2 size={16} aria-hidden />
+                    Recycle
+                  </button>
+                </div>
+              </div>
+            );
+          })}
           {current?.fix && current.fix.fiducials.length > 0 && (
             <p className="note text-muted">
               Board found {Math.hypot(current.fix.dx, current.fix.dy).toFixed(2)} mm off, turned{" "}

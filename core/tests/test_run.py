@@ -270,3 +270,27 @@ def test_a_jammed_feeder_pauses_the_run(lumen: TestClient) -> None:
         op = ok(s.wait(s.post("/api/v1/run/resume")))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
         assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
+
+
+def test_recycle_a_part_left_by_a_paused_run(lumen: TestClient) -> None:
+    """Paused by a jam with C1 on a nozzle: recycled, C1's part goes back in slot 1's
+    pocket, and on resuming the run picks it again from there without feeding."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        sim = lumen.app.state.ctx.feeders._sim  # type: ignore[attr-defined]
+        sim.feeders[5].jammed = True
+        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        assert op["status"] == "failed"
+        nozzle = lumen.get("/api/v1/placement").json()["loads"][0]["nozzle"]
+        fed = sim.feeders[1].fed_mm
+
+        ok(s.wait(s.post("/api/v1/placement/recycle", {"nozzle_id": nozzle})))
+        run = lumen.get("/api/v1/run").json()
+        assert run["held"] == {} and run["status"] == "paused"
+        assert len(placed(lumen)) == 2
+
+        sim.feeders[5].jammed = False
+        op = ok(s.wait(s.post("/api/v1/run/resume")))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
+        assert sim.feeders[1].fed_mm == fed

@@ -92,6 +92,17 @@ export function MachineWorkspace() {
           />
         ))}
 
+        {/* Right under the cameras, so jogging and watching fit on one screen. */}
+        {description && (
+          <JogPanel
+            description={description}
+            machine={machine}
+            canMove={canMove}
+            onJog={jog}
+            onSafeZ={safeZ}
+          />
+        )}
+
         <Panel title="Control">
           <LeaseStatus busy={pending} onTake={takeControl} onRelease={releaseControl} />
           {machine?.warnings.map((warning) => (
@@ -135,16 +146,6 @@ export function MachineWorkspace() {
             {statusLine.text}
           </p>
         </Panel>
-
-        {description && (
-          <JogPanel
-            description={description}
-            machine={machine}
-            canMove={canMove}
-            onJog={jog}
-            onSafeZ={safeZ}
-          />
-        )}
 
         {description && (
           <PlacementPanel

@@ -56,8 +56,9 @@ def placed(client: TestClient) -> list[PlacedPart]:
     return list(parts.placed)
 
 
-def set_up(client: TestClient, s: Session) -> None:
-    """The demo board as a saved job, with its parts in the library and on feeders."""
+def set_up(client: TestClient, s: Session, calibrate: bool = True) -> None:
+    """The demo board as a saved job, with its parts in the library and on feeders (with
+    their slots calibrated, unless not)."""
     result = read_kicad_pcb((DATA / "picnic-demo.kicad_pcb").read_text(), "picnic-demo")
     library = client.app.state.ctx.library  # type: ignore[attr-defined]
     for footprint in result.footprints:
@@ -84,7 +85,8 @@ def set_up(client: TestClient, s: Session) -> None:
             uuid = slot["feeder"]["uuid"]
             r = s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": part_id})
             assert r.status_code == 200, r.json()
-    ok(s.wait(s.post("/api/v1/feeders/calibrate", {"slot_ids": list(slots)})))
+    if calibrate:
+        ok(s.wait(s.post("/api/v1/feeders/calibrate", {"slot_ids": list(slots)})))
 
     job = Job.for_board(result.board).model_dump(mode="json")
     location = client.post("/api/v1/jobs/find-location", json=job)
@@ -290,3 +292,59 @@ def test_a_jammed_feeder_pauses_the_run(lumen: TestClient) -> None:
         op = ok(s.wait(s.post("/api/v1/run/resume")))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
         assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
+
+
+def test_the_first_pick_from_each_feeder_finds_its_fiducial() -> None:
+    """Rails a little off the profile, and no slot calibrated: the first pick from each
+    feeder in the run finds its fiducial (searching around where the rail puts it), and
+    the fix is kept with the feeder."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_rail_error": {"front": (2.0, -1.5, 0.3)}},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s, calibrate=False)
+        op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        run = client.get("/api/v1/run").json()
+        used = {i["slot_id"] for i in run["plan"]["items"] if i["status"] == "placed"}
+        assert sorted(run["located"]) == sorted(used) and len(used) == 3
+        assert check_landed(client, run) == 4
+        feeders = client.get("/api/v1/feeders").json()["slots"]
+        for slot in feeders:
+            if slot["slot"]["id"] in run["located"]:
+                cal = slot["calibration"]
+                assert cal["basis"] == "fiducial" and cal["feeder"] == slot["feeder"]["uuid"]
+
+
+def test_a_run_follows_feeders_moved_since_planning(lumen: TestClient) -> None:
+    """The feeders in slots 2 and 3 trade places (reels and all) after the job is
+    planned: the run scans before it starts, picks each part from where it is now, and
+    does not use the other feeder's fix in either slot."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        before = {
+            i["ref"]: i["slot_id"]
+            for i in s.post("/api/v1/run/plan", {"job_id": "demo"}).json()["items"]
+            if i["slot_id"] in ("2", "3")
+        }
+        sim = lumen.app.state.ctx.feeders._sim  # type: ignore[attr-defined]
+        sim.feeders[2].uuid, sim.feeders[3].uuid = sim.feeders[3].uuid, sim.feeders[2].uuid
+        op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        run = lumen.get("/api/v1/run").json()
+        after = {i["ref"]: i["slot_id"] for i in run["plan"]["items"] if i["ref"] in before}
+        assert after == {ref: "3" if slot == "2" else "2" for ref, slot in before.items()}
+        assert check_landed(lumen, run) == 4
+
+
+def test_a_run_pauses_when_a_part_is_no_longer_loaded(lumen: TestClient) -> None:
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        sim = lumen.app.state.ctx.feeders._sim  # type: ignore[attr-defined]
+        del sim.feeders[5]
+        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        assert op["status"] == "failed"
+        assert "feeders changed since the run was planned: U2 (no feeder holds" in op["error"]
+        run = lumen.get("/api/v1/run").json()
+        assert run["status"] == "paused" and run["placed"] == 0

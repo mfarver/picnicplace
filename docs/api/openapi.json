@@ -5043,6 +5043,14 @@
             "title": "Job Id",
             "type": "string"
           },
+          "located": {
+            "description": "Feeder slots whose feeder's fiducial has been found in this run.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Located",
+            "type": "array"
+          },
           "message": {
             "anyOf": [
               {
@@ -5130,6 +5138,7 @@
           "pause_requested",
           "stop_requested",
           "pick_correction",
+          "located",
           "recording",
           "held",
           "started_at",
@@ -5282,11 +5291,24 @@
           "correction": {
             "$ref": "#/components/schemas/Point",
             "description": "True pick location minus the nominal one."
+          },
+          "feeder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Found from a fiducial: the ID of the feeder whose fiducial it was. Each feeder sits a little differently, so another feeder in the slot does not use it.",
+            "title": "Feeder"
           }
         },
         "required": [
           "correction",
-          "basis"
+          "basis",
+          "feeder"
         ],
         "title": "SlotCalibration",
         "type": "object"

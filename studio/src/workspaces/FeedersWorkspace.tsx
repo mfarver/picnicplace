@@ -575,7 +575,7 @@ function SlotDetail(p: DetailProps) {
         ({fmt(slot.pick.x)}, {fmt(slot.pick.y)}){" "}
         <span className="text-muted">
           {cal
-            ? `${cal.basis === "taught" ? "taught" : "from the fiducial"}, ${fmt(cal.correction.x)}, ${fmt(cal.correction.y)} from nominal`
+            ? `${cal.basis === "taught" ? "taught" : "from its feeder's fiducial"}, ${fmt(cal.correction.x)}, ${fmt(cal.correction.y)} from nominal`
             : "nominal, from the machine profile"}
         </span>
       </p>

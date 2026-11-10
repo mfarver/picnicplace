@@ -73,7 +73,7 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/placement/pick`, `…/align`, `…/place` | Pick from a feeder slot; find the part on the bottom camera; place it at a location and angle |
 | `POST /api/v1/placement/pick-and-place`, `…/discard` | All three steps at once; drop a held part in the discard bin |
 | `POST /api/v1/run/plan` | A dry run of a saved job: each placement's feeder and nozzles, and what blocks any |
-| `POST /api/v1/run/start`, `…/pause`, `…/step`, `…/resume`, `…/stop`; `GET /api/v1/run` | Run a job (board fiducials, then batches of pick, align, and place); its progress |
+| `POST /api/v1/run/start`, `…/pause`, `…/step`, `…/resume`, `…/stop`; `GET /api/v1/run` | Run a job (a feeder scan, board fiducials, then batches of pick, align, and place, each feeder's fiducial found on its first pick); its progress |
 | `PUT /api/v1/run/items/{index}` | Skip a placement, or take back a skip |
 | `POST`, `GET /api/v1/cameras/captures`; `GET …/captures/{id}.png` | Save full-resolution frames with the machine's state; list and fetch them |
 

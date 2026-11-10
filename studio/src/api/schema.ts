@@ -3785,6 +3785,11 @@ export interface components {
             };
             /** Job Id */
             job_id: string;
+            /**
+             * Located
+             * @description Feeder slots whose feeder's fiducial has been found in this run.
+             */
+            located: string[];
             /** Message */
             message: string | null;
             /** Name */
@@ -3874,6 +3879,11 @@ export interface components {
             basis: "taught" | "fiducial";
             /** @description True pick location minus the nominal one. */
             correction: components["schemas"]["Point"];
+            /**
+             * Feeder
+             * @description Found from a fiducial: the ID of the feeder whose fiducial it was. Each feeder sits a little differently, so another feeder in the slot does not use it.
+             */
+            feeder: string | null;
         };
         /** SlotState */
         SlotState: {

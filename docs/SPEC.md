@@ -494,6 +494,44 @@ correction. Implementations:
 - Calibration results are stored separately from hand-written config so recalibration does
   not rewrite user edits.
 
+### 7.7 Calibration from scratch
+
+The built-in LumenPnP profile was drawn from one machine's OpenPnP configuration, so its
+per-machine values (nozzle offsets, the bottom camera's position and focus, feeder pick
+locations, heights) are close but not exact for any other machine. Without an OpenPnP
+configuration to start from, they are found on the machine. The profile's values are where
+each search starts; its design facts (axes, travel, feeder geometry, the datum board)
+are not calibrated.
+
+Each calibration below is done by the machine where it can be (§8.2): it moves, looks,
+measures, checks its own result against the last one and the profile's, and asks the
+operator, in a dialog, only for what needs a person. Results are kept apart from the
+config (§7.6) with when they were measured, so the Studio can show what is stale (after a
+crash, a nozzle tip change, or a camera knocked).
+
+In order, since each needs the ones before it:
+
+| # | Calibration | How | Operator | Status |
+|---|---|---|---|---|
+| 1 | **Machine frame**: homing, Z reading 0 with the nozzles level, which way each axis and nozzle moves, which output is each pump and valve, the vacuum sensors' format | Home and check Z against the profile. Jog over the bed and watch the top camera's picture move to find the axes' directions. Switch each output and watch the vacuum readings to tell pumps from valves. The probe reads the firmware and sensor format. | Watch the first homing and first moves with a hand on the power switch, until the machine has checked itself | Z check done. Directions and outputs are checked by hand (the bring-up checklist) today. |
+| 2 | **Top camera orientation**: flips and rotation | Jog the head by known distances and track the bed's texture or a fiducial; the direction and angle of the motion give the flips and the rotation | None | Planned. Set by hand in the config today. |
+| 3 | **Homing fiducial** (the datum board's dot) | Search around the profile's position after homing (the datum board's place varies with assembly) | Confirm, once, that the mark found is the datum board's center dot (a dialog with the picture) | Visual homing done. The search and confirmation are planned. |
+| 4 | **Top camera scale and lens**: millimeters per pixel at board height and at feeder height, and lens distortion | Move a fiducial to many places in the view by known distances | None | Scale at one height done; heights and distortion planned |
+| 5 | **Bottom camera**: where it is, its focus height, scale, and rotation | Bring a nozzle tip over it, center the tip by vision, step Z for the sharpest image, and step X and Y by known distances | Fit nozzle tips | Planned. Position and focus come from the profile today. |
+| 6 | **Nozzle offsets**: where each nozzle tip is from the top camera | With the round calibration token a LumenPnP ships with (a tiny round PCB, or a paper hole punch) on the datum board: find it with the top camera, pick it with the nozzle, turn it, put it down, and find it again. Where it lands against where the nozzle was sent gives the offset, and how it moves as it turns separates the tip's runout from the offset. Repeat until it stops changing. | Put the token on the datum board | Planned. From the profile today. |
+| 7 | **Nozzle runout**: how far each tip's center wanders as it turns | Turn the tip over the bottom camera and fit a circle to the tip's center | None (again after each tip change) | Planned |
+| 8 | **Heights**: the board's top surface, the top of parts in each feeder bank, and each strip and tray | Lower a nozzle slowly with the vacuum on: when the open tip seals against a flat surface the vacuum jumps, which marks contact (OpenPnP finds heights this way). Part heights from the library are added. | Measure by jogging down where the vacuum cannot tell (a pocketed tray) | Planned. Jogged down by hand today (strips and trays) or from the profile. |
+| 9 | **Vacuum levels** for each nozzle tip: open, sealed, and holding a part | Read the vacuum open, and holding a part during step 6 | None | Planned. One threshold from the profile today. |
+| 10 | **Feeder pick locations** | Each Photon feeder's fiducial gives its slot's pick location once the fiducial's offset from a pocket is known; the pocket is then found by its sprocket holes. Picks are kept centered by the top or bottom camera (§7.4). | Load the feeders. Teach one slot by eye (center the camera on a pocket, then its fiducial), which could be found by vision instead. | Done, apart from finding the first pocket by vision |
+| 11 | **Strips and trays** | Teach the first part, the end of the first row, and the last part | Center the camera on each one; give the part count and pick height (step 8 will measure the height) | Done |
+| 12 | **Each board** | Its fiducials, at the start of every run (or **Check fiducials**) | Fasten the board where the map shows it | Done |
+
+Physical preparation the machine cannot do for itself: the datum board fitted, nozzle tips
+in, feeders on the rails with reels loaded, the calibration token on the datum board for
+step 6, and boards fastened down.
+Everything else should come down to a sequence the operator starts and then answers
+dialogs for.
+
 ## 8. GUI — PicnicPlace Studio
 
 ### 8.1 Technology
@@ -539,9 +577,20 @@ The interface is split along that line:
   many parts it holds. The core takes one off each time it feeds (or, for a strip or
   tray, each time a part is taken), keeps the count with the feeder (a Photon feeder's
   count follows it to another slot, like its part), and shows what is left on the
-  machine view. The planner warns before a run if a feeder will run short, and the run
-  asks for a refill when one runs out. Strips and trays already count their parts
-  (§7.4); reels on feeders are next.
+  machine view. The run asks for a refill when one runs out. Strips and trays already
+  count their parts (§7.4); reels on feeders are next.
+- **An inventory check before every run.** Starting a run first compares what the job
+  takes with what is loaded. If anything is short (a part with no feeder or tray on the
+  machine, or one with fewer parts left than the job needs), the operator sees a dialog
+  listing each short part: its part number, how many the job needs, how many are
+  loaded, and where. They choose one of:
+  - **Cancel**, and load what is missing before starting;
+  - **Run, and pause when a part runs out**, to load more then (the run asks for it,
+    as for any empty feeder);
+  - **Run without the missing parts**, leaving those placements unplaced. This one asks
+    again ("Really leave out these N placements? The boards will be missing …"), since
+    it makes boards that are not complete.
+  A run with nothing short starts without asking.
 - **When the machine needs help, it asks.** Whatever stops the machine and needs a
   person (a feeder out of parts, a part that will not pick, a fiducial not found, a
   nozzle tip to change) opens a dialog over the operator's screen. It says plainly what

@@ -194,6 +194,70 @@ def test_fiducials_are_not_fooled_by_a_smaller_round_mark() -> None:
         assert check_landed(client, run) == 4
 
 
+def test_check_the_board_without_placing(lumen: TestClient) -> None:
+    """Check fiducials: the board is found and fitted with every part turned off, and
+    nothing is picked or placed."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        job = lumen.get("/api/v1/jobs/demo").json()
+        for p in job["board"]["placements"]:
+            if p["kind"] == "part":
+                p["enabled"] = False
+        assert s.put("/api/v1/jobs/demo", job).status_code == 200
+        r = s.post("/api/v1/run/start", {"job_id": "demo"})
+        assert r.status_code == 409 and "nothing to place" in r.json()["detail"]
+
+        assert lumen.get("/api/v1/run/board-check").json() is None
+        op = ok(s.wait(s.post("/api/v1/run/check-board", {"job_id": "demo"})))
+        assert op["kind"] == "board_check" and "3 fiducials" in op["message"]
+        check = lumen.get("/api/v1/run/board-check").json()
+        assert check["job_id"] == "demo" and check["ok"]
+        fix = check["fix"]
+        assert len(fix["fiducials"]) == 3 and fix["residual"] < 0.05
+        assert (fix["dx"], fix["dy"], fix["angle"]) == pytest.approx((0.6, -0.4, 0.5), abs=0.05)
+        assert placed(lumen) == []
+        assert lumen.get("/api/v1/placement").json()["loads"] == []
+        assert lumen.get("/api/v1/run").json() is None  # no run was started
+
+
+def test_check_needs_fiducials_and_a_location(lumen: TestClient) -> None:
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        job = lumen.get("/api/v1/jobs/demo").json()
+        for p in job["board"]["placements"]:
+            if p["kind"] == "fiducial":
+                p["enabled"] = False
+        assert s.put("/api/v1/jobs/demo", job).status_code == 200
+        r = s.post("/api/v1/run/check-board", {"job_id": "demo"})
+        assert r.status_code == 409 and "no fiducials" in r.json()["detail"]
+        job["location"] = None
+        assert s.put("/api/v1/jobs/demo", job).status_code == 200
+        r = s.post("/api/v1/run/check-board", {"job_id": "demo"})
+        assert r.status_code == 409 and "no location" in r.json()["detail"]
+
+
+def test_start_in_step_mode(lumen: TestClient) -> None:
+    """Started in step mode, the run finds the board and pauses before the first part;
+    each step places one batch, and resume places the rest."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        body = {"job_id": "demo", "skip_blocked": True, "step": True}
+        op = ok(s.wait(s.post("/api/v1/run/start", body)))
+        run = lumen.get("/api/v1/run").json()
+        assert run["status"] == "paused" and run["fix"] is not None
+        assert op["message"].startswith("paused before the first part: board found")
+        assert run["placed"] == 0 and placed(lumen) == []
+
+        ok(s.wait(s.post("/api/v1/run/step")))
+        run = lumen.get("/api/v1/run").json()
+        assert run["status"] == "paused" and 1 <= run["placed"] <= 2
+        assert run["message"].startswith("paused: ")
+
+        op = ok(s.wait(s.post("/api/v1/run/resume")))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
+
+
 def test_run_a_job(lumen: TestClient) -> None:
     with connect(lumen) as s:
         set_up(lumen, s)

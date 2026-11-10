@@ -1246,6 +1246,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/run/board-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Board Check
+         * @description The last board check: the fiducials found, the fit, and whether it is good.
+         */
+        get: operations["board_check_api_v1_run_board_check_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/run/check-board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Board
+         * @description Find a saved job's board by its fiducials and fit it, placing nothing: to check the
+         *     board and the job's location before a run. Works even with no placements turned on.
+         *     The result is kept (``GET /api/v1/run/board-check``).
+         */
+        post: operations["check_board_api_v1_run_check_board_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/run/items/{index}": {
         parameters: {
             query?: never;
@@ -1473,6 +1515,28 @@ export interface components {
              * @description Board thickness, mm.
              */
             thickness: number | null;
+        };
+        /**
+         * BoardCheck
+         * @description The last check of a job's board: its fiducials found and fitted, nothing placed.
+         */
+        BoardCheck: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** @description The fit, if the fiducials were found. */
+            fix: components["schemas"]["BoardFix"] | null;
+            /** Job Id */
+            job_id: string;
+            /** Message */
+            message: string;
+            /**
+             * Ok
+             * @description Every fiducial was found and they fit the job's layout.
+             */
+            ok: boolean;
         };
         /** BoardCopy */
         "BoardCopy-Input": {
@@ -3968,6 +4032,12 @@ export interface components {
              * @default false
              */
             skip_blocked: boolean;
+            /**
+             * Step
+             * @description Pause once the board is found, before the first part; each step then places one batch (a part on each nozzle that can take one).
+             * @default false
+             */
+            step: boolean;
         };
         /** StepRecord */
         "StepRecord-Input": {
@@ -7036,6 +7106,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunState"] | null;
+                };
+            };
+        };
+    };
+    board_check_api_v1_run_board_check_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardCheck"] | null;
+                };
+            };
+        };
+    };
+    check_board_api_v1_run_check_board_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

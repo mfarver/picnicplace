@@ -5,6 +5,7 @@ import {
   Map as MapIcon,
   MoveRight,
   Radar,
+  Ruler,
   ScanSearch,
   StepBack,
   StepForward,
@@ -15,7 +16,7 @@ import { api } from "../api/client";
 import { useDescription } from "../api/useDescription";
 import { useCameras } from "../api/useCameras";
 import { useMachineControl } from "../api/useMachineControl";
-import type { FeedersState, MachineProfile, Part, SlotState } from "../api/types";
+import type { FeedersState, MachineProfile, Part, RailState, SlotState } from "../api/types";
 import { CameraView } from "../components/CameraView";
 import { FixedFeederDetail, type TeachWhich } from "../components/FixedFeederDetail";
 import { FixedFeederPanel } from "../components/FixedFeederPanel";
@@ -167,6 +168,16 @@ export function FeedersWorkspace() {
     void track(() => api.POST("/api/v1/feeders/fixed/{fixed_id}/pocket", fixedPath(id)));
   const calibrate = () =>
     void track(() => api.POST("/api/v1/feeders/calibrate", { body: { slot_ids: [] } }));
+  const calibrateRails = () =>
+    void track(() => api.POST("/api/v1/feeders/rails/calibrate", { body: { bank_ids: [] } }));
+  const railFiducialHere = (id: string) =>
+    void track(() => api.POST("/api/v1/feeders/slots/{slot_id}/rail-fiducial", slotPath(id)));
+  const forgetRail = async (bankId: string) => {
+    const data = await run(() =>
+      api.DELETE("/api/v1/feeders/rails/{bank_id}", { params: { path: { bank_id: bankId } } }),
+    );
+    if (data) setState(data);
+  };
 
   const statusLine = ctl.error
     ? { text: ctl.error, danger: true }
@@ -234,6 +245,46 @@ export function FeedersWorkspace() {
             {statusLine.text}
           </p>
         </Panel>
+
+        {state && state.rails.length > 0 && (
+          <Panel title="Rails" collapseId="feeder-rails">
+            <ul className="item-list">
+              {state.rails.map((r) => (
+                <li key={r.bank} className="run-row">
+                  <span className="item-id">{r.label}</span>
+                  <span className="text-muted run-where">{railStatus(r)}</span>
+                  {r.calibration && (
+                    <button
+                      type="button"
+                      className="button button-sm"
+                      disabled={ctl.pending}
+                      title="Go back to where the machine profile puts this rail"
+                      onClick={() => void forgetRail(r.bank)}
+                    >
+                      Use profile
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="button-row">
+              <button
+                type="button"
+                className="button"
+                disabled={!canMove || !machine?.homed || !state.scanned}
+                onClick={calibrateRails}
+              >
+                <Ruler size={16} aria-hidden />
+                Calibrate rails
+              </button>
+            </div>
+            <p className="text-muted note">
+              Finds the fiducials of the two feeders farthest apart on each rail and moves its
+              slots to where the rail really is. Do it once after setting up the machine, then
+              <strong> Calibrate all slots</strong>.
+            </p>
+          </Panel>
+        )}
 
         <Panel title="Slots">
           <label className="check">
@@ -339,12 +390,23 @@ export function FeedersWorkspace() {
             onPocket={() => findPocket(slot.slot.id)}
             onFiducial={() => measureFiducial(slot.slot.id)}
             onCalibrate={calibrate}
+            onRailFiducial={() => railFiducialHere(slot.slot.id)}
             onAssigned={(next) => setState(next)}
           />
         )}
       </div>
     </div>
   );
+}
+
+/** Where a rail is: the profile's place, or how far it was found from it. */
+function railStatus(r: RailState): string {
+  const c = r.calibration;
+  if (!c) return "where the profile puts it";
+  const found = Object.keys(c.points).length;
+  if (!c.fitted) return `${found} fiducial${found === 1 ? "" : "s"} found; needs two far apart`;
+  const moved = Math.hypot(c.shift.x, c.shift.y).toFixed(2);
+  return `placed: ${moved} mm off the profile, turned ${c.angle.toFixed(2)}°`;
 }
 
 function slotClass(s: SlotState): string {
@@ -392,6 +454,7 @@ interface DetailProps {
   onPocket: () => void;
   onFiducial: () => void;
   onCalibrate: () => void;
+  onRailFiducial: () => void;
   onAssigned: (state: FeedersState) => void;
 }
 
@@ -405,6 +468,7 @@ function SlotDetail(p: DetailProps) {
   const step = pitch ?? part?.tape?.pitch ?? 4;
   const cal = slot.calibration;
   const offset = state.fiducial_offset;
+  const rail = state.rails.find((r) => r.bank === slot.slot.bank);
   const fmt = (v: number) => v.toFixed(2);
 
   const save = async () => {
@@ -568,6 +632,25 @@ function SlotDetail(p: DetailProps) {
           Calibrate all slots
         </button>
       </div>
+      {rail && !rail.calibration?.fitted && (
+        <>
+          <p className="text-muted note">
+            If <strong>Calibrate rails</strong> could not find this feeder's fiducial, jog the
+            camera onto it and click <strong>Rail fiducial is here</strong>.
+          </p>
+          <div className="button-row">
+            <button
+              type="button"
+              className="button"
+              disabled={!p.canMove}
+              onClick={p.onRailFiducial}
+            >
+              <Ruler size={16} aria-hidden />
+              Rail fiducial is here
+            </button>
+          </div>
+        </>
+      )}
     </section>
   );
 }

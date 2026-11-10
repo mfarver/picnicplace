@@ -46,6 +46,13 @@ class PickRequest(WireModel):
     )
 
 
+class RailsRequest(WireModel):
+    bank_ids: list[str] = Field(
+        default_factory=list[str],
+        description="Rails (feeder bank IDs) to calibrate. Empty: every rail.",
+    )
+
+
 class CalibrateRequest(WireModel):
     slot_ids: list[str] = Field(
         default_factory=list[str],
@@ -165,6 +172,43 @@ async def measure_fiducial(feeders: Feeders, slot_id: str) -> Operation:
 async def calibrate(feeders: Feeders, body: CalibrateRequest) -> Operation:
     """Find each slot's feeder fiducial and correct the slot's pick location."""
     return feeders.start_calibrate(body.slot_ids or None)
+
+
+@router.post(
+    "/feeders/rails/calibrate",
+    tags=["feeders"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def calibrate_rails(feeders: Feeders, body: RailsRequest) -> Operation:
+    """Find where each rail really is, from the fiducials of the two feeders farthest
+    apart on it, and move its slots there. Its slot corrections are cleared."""
+    return feeders.start_calibrate_rails(body.bank_ids or None)
+
+
+@router.post(
+    "/feeders/slots/{slot_id}/rail-fiducial",
+    tags=["feeders"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def rail_fiducial_here(feeders: Feeders, slot_id: str) -> Operation:
+    """The top camera is centered on this slot's feeder fiducial (the rail search did not
+    find it): find it there, and fit the slot's rail with it."""
+    return feeders.start_rail_fiducial_here(slot_id)
+
+
+@router.delete(
+    "/feeders/rails/{bank_id}",
+    tags=["feeders"],
+    dependencies=[Depends(require(Permission.CONFIG))],
+)
+async def forget_rail(feeders: Feeders, bank_id: str) -> FeedersState:
+    """Go back to the profile's place for a rail."""
+    feeders.forget_rail(bank_id)
+    return feeders.state()
 
 
 @router.put(

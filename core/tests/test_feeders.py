@@ -1,6 +1,7 @@
 """Photon feeders: the protocol, simulated feeders, and the feeder service end to end."""
 
 import asyncio
+import math
 from collections.abc import Iterator
 from itertools import pairwise
 from typing import Any
@@ -373,3 +374,121 @@ def test_bring_up_record_round_trips(lumen: TestClient) -> None:
     again = lumen.get("/api/v1/bring-up").json()
     assert again["steps"]["jog"]["values"] == {"x_points": "right"}
     assert again["points"][0]["label"] == "Datum corner"
+
+
+# --- Rails ---------------------------------------------------------------------------
+
+RAIL_FEEDERS = [1, 13, 25, 26, 38, 50]
+RAIL_ERRORS = {"front": (4.0, -2.5, 0.4), "back": (-3.0, 5.0, -0.3)}
+
+
+def rails_client(**machine: Any) -> TestClient:
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_home_error": (0.3, -0.2),
+            "sim_feeders": RAIL_FEEDERS,
+            **machine,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    return TestClient(create_app(config))
+
+
+def sim_truth(client: TestClient, number: int) -> tuple[Point, Point]:
+    """Where the simulator really put a slot's pick location and its feeder fiducial
+    (8 mm tape): the profile's place, moved with its rail, plus the slot's own error."""
+    from picnicplace.feeders.slots import machine_slots
+
+    feeders = service(client)
+    nominal = machine_slots(feeders._profile)[number - 1]  # pyright: ignore[reportPrivateUsage]
+    bank = next(b for b in feeders._profile.feeder_banks if b.id == nominal.bank)  # pyright: ignore[reportPrivateUsage]
+    dx, dy, angle = feeders.sim_rail_errors.get(bank.id, (0.0, 0.0, 0.0))
+    turned = rotate(
+        Point(x=nominal.pick.x - bank.first_pick.x, y=nominal.pick.y - bank.first_pick.y), angle
+    )
+    error = sim_slot_error(number)
+    pick = Point(
+        x=bank.first_pick.x + turned.x + dx + error.x, y=bank.first_pick.y + turned.y + dy + error.y
+    )
+    fid = rotate(Point(x=19.15, y=-4.1 + 3.5), nominal.rotation + angle)
+    return pick, Point(x=pick.x + fid.x, y=pick.y + fid.y)
+
+
+def test_rails_are_found_from_their_end_feeders() -> None:
+    """Rails a few millimeters off the profile and a little turned: the end feeders'
+    fiducials place every slot between, close enough for slot calibration to find each
+    feeder's fiducial, which a 3 mm search from the profile's places could not."""
+    with rails_client() as client, connect(client) as s:
+        service(client).sim_rail_errors = dict(RAIL_ERRORS)
+        s.home()
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        op = s.wait(s.post("/api/v1/feeders/calibrate", {}))
+        assert op["status"] == "succeeded" and "No fiducial found" in op["message"]
+
+        op = succeeded(s.wait(s.post("/api/v1/feeders/rails/calibrate", {})))
+        assert op["message"].startswith("Front rail placed:")
+        assert "Back rail placed:" in op["message"]
+        rails = {r["bank"]: r for r in client.get("/api/v1/feeders").json()["rails"]}
+        front = rails["front"]["calibration"]
+        assert front["fitted"] and set(front["points"]) == {"1", "25"}
+        # Each end feeder carries its slot's own error (up to 0.5 mm), so over the 378 mm
+        # rail the angle can be off by up to about 0.15 degrees.
+        assert front["angle"] == pytest.approx(0.4, abs=0.15)
+        assert set(rails["back"]["calibration"]["points"]) == {"26", "50"}
+
+        # The slot between, before its own calibration, is within its own small error.
+        middle = slot_state(s, "13")
+        pick, _ = sim_truth(client, 13)
+        assert math.hypot(middle["pick"]["x"] - pick.x, middle["pick"]["y"] - pick.y) < 0.8
+
+        op = succeeded(s.wait(s.post("/api/v1/feeders/calibrate", {})))
+        assert op["message"] == "Calibrated 6 slots."
+        for number in RAIL_FEEDERS:
+            state = slot_state(s, str(number))
+            pick, _ = sim_truth(client, number)
+            assert (state["pick"]["x"], state["pick"]["y"]) == pytest.approx(
+                (pick.x, pick.y), abs=0.05
+            ), number
+
+        # Back to the profile's places.
+        r = s.delete("/api/v1/feeders/rails/front")
+        assert r.status_code == 200
+        assert next(x for x in r.json()["rails"] if x["bank"] == "front")["calibration"] is None
+        assert slot_state(s, "13")["calibration"] is None
+
+
+def test_a_rail_needs_two_feeders_far_apart(lumen: TestClient) -> None:
+    with connect(lumen) as s:
+        s.home()
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))  # slots 1-5 and 26
+        r = s.post("/api/v1/feeders/rails/calibrate", {"bank_ids": ["front"]})
+        assert r.status_code == 409
+        assert "put feeders in slot 1 and slot 25" in r.json()["detail"]
+        r = s.post("/api/v1/feeders/rails/calibrate", {"bank_ids": ["back"]})
+        assert "slot 26 and slot 50" in r.json()["detail"]
+
+
+def test_the_operator_shows_a_fiducial_the_search_missed() -> None:
+    """A rail more than half a slot along from the profile's place: the search will not
+    take a fiducial that far along (it could be the next feeder's), so it asks; the
+    operator centers the camera on it."""
+    with rails_client() as client, connect(client) as s:
+        service(client).sim_rail_errors = {"front": (10.0, 0.0, 0.0)}
+        s.home()
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        op = succeeded(s.wait(s.post("/api/v1/feeders/rails/calibrate", {"bank_ids": ["front"]})))
+        assert "No feeder fiducial was found at slot 1, slot 25" in op["message"]
+        assert "Fiducial is here" in op["message"]
+        assert not client.get("/api/v1/feeders").json()["rails"][0]["calibration"]["fitted"]
+
+        for number in (1, 25):
+            _, fid = sim_truth(client, number)
+            succeeded(s.move(X=fid.x + 0.7, Y=fid.y - 0.5))  # roughly, by jogging
+            op = succeeded(s.wait(s.post(f"/api/v1/feeders/slots/{number}/rail-fiducial")))
+        assert op["message"].startswith("Front rail placed: ")
+        shift = client.get("/api/v1/feeders").json()["rails"][0]["calibration"]["shift"]
+        assert (shift["x"], shift["y"]) == pytest.approx((10, 0), abs=0.6)
+        pick, _ = sim_truth(client, 13)
+        middle = slot_state(s, "13")
+        assert math.hypot(middle["pick"]["x"] - pick.x, middle["pick"]["y"] - pick.y) < 0.8

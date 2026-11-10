@@ -7,12 +7,15 @@ Kept in the data directory as ``feeders.json``:
 - each slot's pick correction: how far the true pick location is from the profile's
   nominal one, taught by eye or found from the feeder's fiducial;
 - the feeder fiducial's offset from the pick location, once measured;
+- where each feeder rail really is: feeder fiducials found on it, and the rail fitted
+  to them (a shift, a turn, and a stretch of the profile's rail);
 - fixed feeders: strips of tape and trays held on the bed, with how many parts have
   been taken from each;
 - what the bottom camera has learned of each feeder's picks: how far its parts really
   lie from where the rest of the setup says, and how far off center its picks have been.
 """
 
+import math
 import threading
 from pathlib import Path
 from typing import Literal
@@ -80,6 +83,42 @@ class SlotCalibration(_Model):
     basis: Literal["taught", "fiducial"] = Field(
         description="Taught by eye over the pocket, or found from the feeder's fiducial."
     )
+
+
+class RailPoint(_Model):
+    """A feeder fiducial found on a rail, to fit the rail to."""
+
+    expected: Point = Field(description="Where the profile's rail puts the fiducial.")
+    found: Point = Field(description="Where it really is.")
+    basis: Literal["found", "taught"] = Field(
+        description="Found by searching, or the operator centered the camera on it."
+    )
+
+
+class RailCalibration(_Model):
+    """Where a feeder rail (a profile's feeder bank) really is. Its slots are moved from
+    the profile's places by turning them by ``angle`` and stretching them by ``scale``
+    about ``about``, then shifting them by ``shift``."""
+
+    points: dict[str, RailPoint] = Field(
+        default_factory=dict[str, RailPoint], description="Fiducials found, by slot ID."
+    )
+    about: Point = Point(x=0, y=0)
+    shift: Point = Point(x=0, y=0)
+    angle: float = Field(default=0.0, description="Degrees counterclockwise.")
+    scale: float = 1.0
+    fitted: bool = Field(default=False, description="Whether enough points were found to fit.")
+
+    def apply(self, p: Point) -> Point:
+        if not self.fitted:
+            return p
+        a = math.radians(self.angle)
+        dx, dy = p.x - self.about.x, p.y - self.about.y
+        c, s = math.cos(a) * self.scale, math.sin(a) * self.scale
+        return Point(
+            x=self.about.x + self.shift.x + dx * c - dy * s,
+            y=self.about.y + self.shift.y + dx * s + dy * c,
+        )
 
 
 class FixedFeeder(_Model):
@@ -162,6 +201,9 @@ class FeederSetup(_Model):
             "Measured offset of a feeder's fiducial from its pick location, in the tape's "
             "frame. Replaces the profile's value."
         ),
+    )
+    rails: dict[str, RailCalibration] = Field(
+        default_factory=dict[str, RailCalibration], description="By feeder bank ID."
     )
     fixed: dict[str, FixedFeeder] = Field(
         default_factory=dict[str, FixedFeeder],

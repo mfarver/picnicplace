@@ -1103,6 +1103,13 @@
             "title": "Fixed",
             "type": "array"
           },
+          "rails": {
+            "items": {
+              "$ref": "#/components/schemas/RailState"
+            },
+            "title": "Rails",
+            "type": "array"
+          },
           "scanned": {
             "title": "Scanned",
             "type": "boolean"
@@ -1122,7 +1129,8 @@
           "fiducial_offset",
           "fiducial_offset_source",
           "assignments",
-          "fixed"
+          "fixed",
+          "rails"
         ],
         "title": "FeedersState",
         "type": "object"
@@ -4601,6 +4609,144 @@
         "title": "PresenceState",
         "type": "object"
       },
+      "RailCalibration": {
+        "additionalProperties": false,
+        "description": "Where a feeder rail (a profile's feeder bank) really is. Its slots are moved from\nthe profile's places by turning them by ``angle`` and stretching them by ``scale``\nabout ``about``, then shifting them by ``shift``.",
+        "properties": {
+          "about": {
+            "$ref": "#/components/schemas/Point",
+            "default": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "angle": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise.",
+            "title": "Angle",
+            "type": "number"
+          },
+          "fitted": {
+            "default": false,
+            "description": "Whether enough points were found to fit.",
+            "title": "Fitted",
+            "type": "boolean"
+          },
+          "points": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/RailPoint"
+            },
+            "description": "Fiducials found, by slot ID.",
+            "title": "Points",
+            "type": "object"
+          },
+          "scale": {
+            "default": 1.0,
+            "title": "Scale",
+            "type": "number"
+          },
+          "shift": {
+            "$ref": "#/components/schemas/Point",
+            "default": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          }
+        },
+        "required": [
+          "points",
+          "about",
+          "shift",
+          "angle",
+          "scale",
+          "fitted"
+        ],
+        "title": "RailCalibration",
+        "type": "object"
+      },
+      "RailPoint": {
+        "additionalProperties": false,
+        "description": "A feeder fiducial found on a rail, to fit the rail to.",
+        "properties": {
+          "basis": {
+            "description": "Found by searching, or the operator centered the camera on it.",
+            "enum": [
+              "found",
+              "taught"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "expected": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Where the profile's rail puts the fiducial."
+          },
+          "found": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Where it really is."
+          }
+        },
+        "required": [
+          "expected",
+          "found",
+          "basis"
+        ],
+        "title": "RailPoint",
+        "type": "object"
+      },
+      "RailState": {
+        "properties": {
+          "bank": {
+            "title": "Bank",
+            "type": "string"
+          },
+          "calibration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RailCalibration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "first_slot": {
+            "title": "First Slot",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_slot": {
+            "title": "Last Slot",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bank",
+          "label",
+          "first_slot",
+          "last_slot",
+          "calibration"
+        ],
+        "title": "RailState",
+        "type": "object"
+      },
+      "RailsRequest": {
+        "properties": {
+          "bank_ids": {
+            "description": "Rails (feeder bank IDs) to calibrate. Empty: every rail.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Bank Ids",
+            "type": "array"
+          }
+        },
+        "title": "RailsRequest",
+        "type": "object"
+      },
       "RecordedPoint": {
         "additionalProperties": false,
         "description": "A place on the machine, recorded by centering the top camera on it.",
@@ -7211,6 +7357,131 @@
         ]
       }
     },
+    "/api/v1/feeders/rails/calibrate": {
+      "post": {
+        "description": "Find where each rail really is, from the fiducials of the two feeders farthest\napart on it, and move its slots there. Its slot corrections are cleared.",
+        "operationId": "calibrate_rails_api_v1_feeders_rails_calibrate_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RailsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Calibrate Rails",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/rails/{bank_id}": {
+      "delete": {
+        "description": "Go back to the profile's place for a rail.",
+        "operationId": "forget_rail_api_v1_feeders_rails__bank_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bank_id",
+            "required": true,
+            "schema": {
+              "title": "Bank Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedersState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Forget Rail",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
     "/api/v1/feeders/scan": {
       "post": {
         "description": "Ask every slot on the feeder bus for its feeder, and initialize the ones found.",
@@ -7719,6 +7990,82 @@
           }
         ],
         "summary": "Locate Pocket",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/slots/{slot_id}/rail-fiducial": {
+      "post": {
+        "description": "The top camera is centered on this slot's feeder fiducial (the rail search did not\nfind it): find it there, and fit the slot's rail with it.",
+        "operationId": "rail_fiducial_here_api_v1_feeders_slots__slot_id__rail_fiducial_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "title": "Slot Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rail Fiducial Here",
         "tags": [
           "feeders"
         ]

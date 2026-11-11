@@ -55,7 +55,7 @@ from picnicplace.feeders.setup import PickCorrection
 from picnicplace.job.layout import Issue, MachinePlacement, layout
 from picnicplace.job.models import Job
 from picnicplace.job.store import JobStore
-from picnicplace.library import Library, Part
+from picnicplace.library import Library, Part, Tape
 from picnicplace.machine.errors import (
     FeederEmptyError,
     InvalidTargetError,
@@ -250,9 +250,13 @@ def _inside(rect: Rect, x: float, y: float) -> bool:
     return rect.x_min <= x <= rect.x_max and rect.y_min <= y <= rect.y_max
 
 
-def _too_wide(part: Part, profile: MachineProfile) -> str | None:
+def _is_tray(feeders: FeedersState, slot_id: str) -> bool:
+    return any(f.id == slot_id and f.feeder.kind == "tray" for f in feeders.fixed)
+
+
+def _too_wide(part: Part, tape: Tape | None, profile: MachineProfile) -> str | None:
     """Why no feeder on the machine can take the part's tape, if none can."""
-    width = part.tape.width if part.tape else None
+    width = tape.width if tape else None
     widths = {w for b in profile.feeder_banks for w in b.tape_widths}
     if width is None or not profile.feeder_banks or not widths:
         return None
@@ -353,7 +357,11 @@ def plan_job(
                 note = f"{p.part_id} is not in the parts library"
             elif what.height is None:
                 note = f"{p.part_id} has no height in the parts library"
-            elif p.part_id not in on_bed and (wide := _too_wide(what, profile)) is not None:
+            elif (
+                p.part_id not in on_bed
+                and (wide := _too_wide(what, library.tape_of(what) if library else None, profile))
+                is not None
+            ):
                 note = wide
             elif p.part_id not in loaded:
                 note = f"no feeder holds {p.part_id}"
@@ -418,6 +426,35 @@ def plan_job(
                 ),
             )
         )
+    # Parts on tape whose rotation in tape is not known are picked as if it were 0.
+    turned: list[str] = []
+    for item in items:
+        what = part(item.part_id) if item.status == "pending" and item.part_id else None
+        tape = library.tape_of(what) if library and what else None
+        unknown = tape is None or tape.rotation is None
+        on_tape = item.slot_id is not None and not _is_tray(feeders, item.slot_id)
+        if what is not None and what.id not in turned and unknown and on_tape:
+            turned.append(what.id)
+    if turned:
+        issues.append(
+            Issue(
+                severity="warning",
+                message=(
+                    f"the rotation in tape is not known for {', '.join(turned[:6])}"
+                    f"{' and more' if len(turned) > 6 else ''}: they are placed as if it "
+                    "were 0 degrees. Give each part its tape in the Parts workspace."
+                ),
+            )
+        )
+    # Feeders whose tape width does not match their part's tape.
+    used = {i.part_id for i in items if i.status == "pending" and i.part_id}
+    for slot in feeders.slots:
+        a = slot.feeder.assignment if slot.feeder else None
+        if slot.warning and a is not None and a.part_id in used:
+            issues.append(Issue(severity="warning", message=slot.warning))
+    for f in feeders.fixed:
+        if f.warning and f.feeder.part_id in used:
+            issues.append(Issue(severity="warning", message=f.warning))
     # Strips and trays that will run out.
     for f in feeders.fixed:
         takes = sum(1 for i in items if i.status == "pending" and i.slot_id == f.id)

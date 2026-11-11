@@ -50,6 +50,7 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/cameras/{id}/stream.mjpg` | A live MJPEG stream |
 | `GET`, `PUT`, `DELETE /api/v1/library/parts/{id}` | Parts (and `GET /library/parts` to list) |
 | `GET`, `PUT`, `DELETE /api/v1/library/footprints/{id}` | Footprints (and `GET /library/footprints`) |
+| `GET`, `PUT`, `DELETE /api/v1/library/tapes/{id}` | Tapes, which parts link to by `tape_id` (and `GET /library/tapes`); a tape in use cannot be deleted |
 | `GET /api/v1/library/export`, `POST /api/v1/library/import` | The library as one JSON document |
 | `POST /api/v1/library/import/openpnp` | Merge OpenPnP `packages.xml` and `parts.xml` |
 | `POST /api/v1/boards/import/kicad` | Read a KiCad board (and panel, and BOM) into a board, its library entries, and a new job |

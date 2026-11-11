@@ -277,7 +277,8 @@ class PlacementService:
             found = f" (pocket {check.along:+.2f} mm along, {check.across:+.2f} mm across)"
         elif how == "bottom":
             at, found = self._learned(slot.id, base)
-        tape_angle = slot.rotation + (part.tape.rotation if part and part.tape else 0.0)
+        tape = self._feeders.tape_of(part)
+        tape_angle = slot.rotation + (tape.rotation or 0.0 if tape else 0.0)
         await self._take_counted(slot.id, how, nozzle, at, bank.pick_height, slot.label)
         self._loads[nozzle.id] = self._picked(nozzle, part, slot.id, tape_angle, at, base, how)
         what = part.id if part else "a part"

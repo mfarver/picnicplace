@@ -24,10 +24,10 @@ from picnicplace.feeders.service import (
     sim_slot_error,
 )
 from picnicplace.feeders.sim import SimulatedPhotonBus, simulated_uuid
-from picnicplace.library import Footprint, Pad, Part, Size, Tape
+from picnicplace.library import Footprint, Pad, Part, Size
 from picnicplace.machine.errors import FeederError
 from picnicplace.machine.profile import Point
-from tests.conftest import Session, connect, fast_config
+from tests.conftest import Session, connect, fast_config, put_taped
 
 # --- Protocol ------------------------------------------------------------------------
 
@@ -200,13 +200,13 @@ def add_part(client: TestClient) -> None:
             ],
         )
     )
-    library.put_part(
-        Part(
-            id="RC0603-10K",
-            footprint_id="R0603",
-            height=0.45,
-            tape=Tape(kind="paper", width=8, pitch=4, rotation=90),
-        )
+    put_taped(
+        library,
+        Part(id="RC0603-10K", footprint_id="R0603", height=0.45),
+        "paper",
+        8,
+        4,
+        90,
     )
 
 
@@ -291,13 +291,7 @@ def test_calibrating_a_12mm_feeder(lumen: TestClient) -> None:
     must allow for that."""
     library = lumen.app.state.ctx.library  # type: ignore[attr-defined]
     add_part(lumen)
-    library.put_part(
-        Part(
-            id="BIG-12",
-            footprint_id="R0603",
-            tape=Tape(kind="embossed", width=12, pitch=8, rotation=0),
-        )
-    )
+    put_taped(library, Part(id="BIG-12", footprint_id="R0603"), "embossed", 12, 8, 0)
     with connect(lumen) as s:
         s.home()
         succeeded(s.wait(s.post("/api/v1/feeders/scan")))

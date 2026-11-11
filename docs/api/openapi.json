@@ -730,6 +730,7 @@
           "kind": {
             "enum": [
               "footprint",
+              "tape",
               "part"
             ],
             "title": "Kind",
@@ -841,6 +842,19 @@
             ],
             "description": "Distance from one part to the next. Empty: the part's tape pitch.",
             "title": "Part Pitch"
+          },
+          "tape_width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The width of tape this feeder takes, mm (8, 12, ...), if known. A part whose tape is another width is flagged: the wrong feeder, or the wrong tape.",
+            "title": "Tape Width"
           }
         },
         "title": "FeederAssignment",
@@ -883,11 +897,25 @@
             ],
             "description": "Distance from one part to the next. Empty: the part's tape pitch.",
             "title": "Part Pitch"
+          },
+          "tape_width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The width of tape this feeder takes, mm (8, 12, ...), if known. A part whose tape is another width is flagged: the wrong feeder, or the wrong tape.",
+            "title": "Tape Width"
           }
         },
         "required": [
           "part_id",
           "part_pitch",
+          "tape_width",
           "enabled",
           "note"
         ],
@@ -1185,6 +1213,7 @@
           "kind": {
             "enum": [
               "footprint",
+              "tape",
               "part"
             ],
             "title": "Kind",
@@ -1285,6 +1314,19 @@
           "step": {
             "$ref": "#/components/schemas/Point",
             "description": "From one part to the next along a row, in mm. On a strip, from one pocket to the next one to pick: against the direction the tape would feed."
+          },
+          "tape_width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Strips: the width of tape the holder takes, mm, if known.",
+            "title": "Tape Width"
           }
         },
         "required": [
@@ -1382,6 +1424,19 @@
           "step": {
             "$ref": "#/components/schemas/Point",
             "description": "From one part to the next along a row, in mm. On a strip, from one pocket to the next one to pick: against the direction the tape would feed."
+          },
+          "tape_width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Strips: the width of tape the holder takes, mm, if known.",
+            "title": "Tape Width"
           }
         },
         "required": [
@@ -1396,6 +1451,7 @@
           "part_angle",
           "pick_height",
           "picked",
+          "tape_width",
           "enabled"
         ],
         "title": "FixedFeeder",
@@ -1454,6 +1510,17 @@
           "remaining": {
             "title": "Remaining",
             "type": "integer"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
           }
         },
         "required": [
@@ -1463,7 +1530,8 @@
           "next",
           "angle",
           "pocket",
-          "learned"
+          "learned",
+          "warning"
         ],
         "title": "FixedFeederState",
         "type": "object"
@@ -1694,7 +1762,7 @@
       "ImportReport": {
         "properties": {
           "added": {
-            "description": "'footprint:ID' or 'part:ID' for new entries.",
+            "description": "'footprint:ID', 'tape:ID', or 'part:ID' for new entries.",
             "items": {
               "type": "string"
             },
@@ -2427,9 +2495,19 @@
             "title": "Parts",
             "type": "array"
           },
+          "tapes": {
+            "items": {
+              "$ref": "#/components/schemas/Tape-Input"
+            },
+            "title": "Tapes",
+            "type": "array"
+          },
           "version": {
-            "const": 1,
-            "default": 1,
+            "default": 2,
+            "enum": [
+              1,
+              2
+            ],
             "title": "Version",
             "type": "integer"
           }
@@ -2461,9 +2539,19 @@
             "title": "Parts",
             "type": "array"
           },
+          "tapes": {
+            "items": {
+              "$ref": "#/components/schemas/Tape-Output"
+            },
+            "title": "Tapes",
+            "type": "array"
+          },
           "version": {
-            "const": 1,
-            "default": 1,
+            "default": 2,
+            "enum": [
+              1,
+              2
+            ],
             "title": "Version",
             "type": "integer"
           }
@@ -2472,6 +2560,7 @@
           "format",
           "version",
           "footprints",
+          "tapes",
           "parts"
         ],
         "title": "LibraryDocument",
@@ -3842,6 +3931,12 @@
             "title": "Name",
             "type": "string"
           },
+          "pin1": {
+            "default": false,
+            "description": "The pad drawn as pin 1. Drawing only: vision ignores it.",
+            "title": "Pin1",
+            "type": "boolean"
+          },
           "rotation": {
             "default": 0.0,
             "description": "Degrees counterclockwise.",
@@ -3896,6 +3991,12 @@
             "title": "Name",
             "type": "string"
           },
+          "pin1": {
+            "default": false,
+            "description": "The pad drawn as pin 1. Drawing only: vision ignores it.",
+            "title": "Pin1",
+            "type": "boolean"
+          },
           "rotation": {
             "default": 0.0,
             "description": "Degrees counterclockwise.",
@@ -3933,7 +4034,8 @@
           "width",
           "height",
           "rotation",
-          "roundness"
+          "roundness",
+          "pin1"
         ],
         "title": "Pad",
         "type": "object"
@@ -4069,15 +4171,17 @@
             "title": "Speed",
             "type": "number"
           },
-          "tape": {
+          "tape_id": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Tape-Input"
+                "type": "string"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The tape it comes in, if known.",
+            "title": "Tape Id"
           }
         },
         "required": [
@@ -4159,15 +4263,17 @@
             "title": "Speed",
             "type": "number"
           },
-          "tape": {
+          "tape_id": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Tape-Output"
+                "type": "string"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The tape it comes in, if known.",
+            "title": "Tape Id"
           }
         },
         "required": [
@@ -4179,7 +4285,7 @@
           "height",
           "height_basis",
           "height_source",
-          "tape",
+          "tape_id",
           "speed"
         ],
         "title": "Part",
@@ -5618,6 +5724,17 @@
           },
           "slot": {
             "$ref": "#/components/schemas/Slot"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
           }
         },
         "required": [
@@ -5627,7 +5744,8 @@
           "learned",
           "feeder",
           "error",
-          "pocket"
+          "pocket",
+          "warning"
         ],
         "title": "SlotState",
         "type": "object"
@@ -5914,7 +6032,7 @@
       },
       "Tape-Input": {
         "additionalProperties": false,
-        "description": "How a part is packaged in carrier tape (EIA-481).",
+        "description": "How parts are packaged in carrier tape (EIA-481). Parts link to it by ID.",
         "properties": {
           "basis": {
             "default": "unknown",
@@ -5929,6 +6047,12 @@
             "title": "Basis",
             "type": "string"
           },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
           "kind": {
             "default": "unknown",
             "enum": [
@@ -5939,109 +6063,17 @@
             "title": "Kind",
             "type": "string"
           },
-          "pin1_quadrant": {
-            "anyOf": [
-              {
-                "enum": [
-                  "Q1",
-                  "Q2",
-                  "Q3",
-                  "Q4"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Pin 1's quadrant in the tape frame, as in tape-and-reel datasheets: Q1 top left, Q2 top right, Q3 bottom left, Q4 bottom right.",
-            "title": "Pin1 Quadrant"
-          },
-          "pitch": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Pocket pitch (P1), mm: 2, 4, 8, ... None if not known.",
-            "title": "Pitch"
-          },
-          "rotation": {
-            "default": 0.0,
-            "description": "The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right).",
-            "title": "Rotation",
-            "type": "number"
-          },
-          "source": {
+          "name": {
             "default": "",
-            "title": "Source",
+            "description": "A short name, such as '8 mm paper, 4 mm'.",
+            "title": "Name",
             "type": "string"
           },
-          "width": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Tape width, mm: 8, 12, 16, 24, ... None if not known.",
-            "title": "Width"
-          }
-        },
-        "title": "Tape",
-        "type": "object"
-      },
-      "Tape-Output": {
-        "additionalProperties": false,
-        "description": "How a part is packaged in carrier tape (EIA-481).",
-        "properties": {
-          "basis": {
-            "default": "unknown",
-            "enum": [
-              "datasheet",
-              "standard",
-              "observed",
-              "measured",
-              "estimated",
-              "unknown"
-            ],
-            "title": "Basis",
+          "notes": {
+            "default": "",
+            "description": "Free text. Feeders use only the values above.",
+            "title": "Notes",
             "type": "string"
-          },
-          "kind": {
-            "default": "unknown",
-            "enum": [
-              "paper",
-              "embossed",
-              "unknown"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
-          "pin1_quadrant": {
-            "anyOf": [
-              {
-                "enum": [
-                  "Q1",
-                  "Q2",
-                  "Q3",
-                  "Q4"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Pin 1's quadrant in the tape frame, as in tape-and-reel datasheets: Q1 top left, Q2 top right, Q3 bottom left, Q4 bottom right.",
-            "title": "Pin1 Quadrant"
           },
           "pitch": {
             "anyOf": [
@@ -6057,10 +6089,16 @@
             "title": "Pitch"
           },
           "rotation": {
-            "default": 0.0,
-            "description": "The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right).",
-            "title": "Rotation",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right). None if not known.",
+            "title": "Rotation"
           },
           "source": {
             "default": "",
@@ -6082,13 +6120,110 @@
           }
         },
         "required": [
+          "id"
+        ],
+        "title": "Tape",
+        "type": "object"
+      },
+      "Tape-Output": {
+        "additionalProperties": false,
+        "description": "How parts are packaged in carrier tape (EIA-481). Parts link to it by ID.",
+        "properties": {
+          "basis": {
+            "default": "unknown",
+            "enum": [
+              "datasheet",
+              "standard",
+              "observed",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "unknown",
+            "enum": [
+              "paper",
+              "embossed",
+              "unknown"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "description": "A short name, such as '8 mm paper, 4 mm'.",
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "description": "Free text. Feeders use only the values above.",
+            "title": "Notes",
+            "type": "string"
+          },
+          "pitch": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pocket pitch (P1), mm: 2, 4, 8, ... None if not known.",
+            "title": "Pitch"
+          },
+          "rotation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right). None if not known.",
+            "title": "Rotation"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tape width, mm: 8, 12, 16, 24, ... None if not known.",
+            "title": "Width"
+          }
+        },
+        "required": [
+          "id",
+          "name",
           "kind",
           "width",
           "pitch",
           "rotation",
-          "pin1_quadrant",
           "basis",
-          "source"
+          "source",
+          "notes"
         ],
         "title": "Tape",
         "type": "object"
@@ -9255,7 +9390,7 @@
         ]
       },
       "put": {
-        "description": "Create or replace a part. Its footprint must already be in the library.",
+        "description": "Create or replace a part. Its footprint, and its tape if it names one, must\nalready be in the library.",
         "operationId": "put_part_api_v1_library_parts__part_id__put",
         "parameters": [
           {
@@ -9316,6 +9451,208 @@
           }
         ],
         "summary": "Put Part",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/tapes": {
+      "get": {
+        "operationId": "list_tapes_api_v1_library_tapes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Tape-Output"
+                  },
+                  "title": "Response List Tapes Api V1 Library Tapes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Tapes",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/tapes/{tape_id}": {
+      "delete": {
+        "description": "Delete a tape. Refused while any part comes in it.",
+        "operationId": "delete_tape_api_v1_library_tapes__tape_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tape_id",
+            "required": true,
+            "schema": {
+              "title": "Tape Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No entry with this ID."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The change would break the library."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Tape",
+        "tags": [
+          "library"
+        ]
+      },
+      "get": {
+        "operationId": "get_tape_api_v1_library_tapes__tape_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tape_id",
+            "required": true,
+            "schema": {
+              "title": "Tape Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tape-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No entry with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Tape",
+        "tags": [
+          "library"
+        ]
+      },
+      "put": {
+        "description": "Create or replace a tape. Every part that comes in it changes with it.",
+        "operationId": "put_tape_api_v1_library_tapes__tape_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tape_id",
+            "required": true,
+            "schema": {
+              "title": "Tape Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Tape-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tape-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Tape",
         "tags": [
           "library"
         ]

@@ -772,12 +772,55 @@ export interface paths {
         get: operations["get_part_api_v1_library_parts__part_id__get"];
         /**
          * Put Part
-         * @description Create or replace a part. Its footprint must already be in the library.
+         * @description Create or replace a part. Its footprint, and its tape if it names one, must
+         *     already be in the library.
          */
         put: operations["put_part_api_v1_library_parts__part_id__put"];
         post?: never;
         /** Delete Part */
         delete: operations["delete_part_api_v1_library_parts__part_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/tapes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Tapes */
+        get: operations["list_tapes_api_v1_library_tapes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/tapes/{tape_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Tape */
+        get: operations["get_tape_api_v1_library_tapes__tape_id__get"];
+        /**
+         * Put Tape
+         * @description Create or replace a tape. Every part that comes in it changes with it.
+         */
+        put: operations["put_tape_api_v1_library_tapes__tape_id__put"];
+        post?: never;
+        /**
+         * Delete Tape
+         * @description Delete a tape. Refused while any part comes in it.
+         */
+        delete: operations["delete_tape_api_v1_library_tapes__tape_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1879,7 +1922,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "footprint" | "part";
+            kind: "footprint" | "tape" | "part";
         };
         /** ErrorEvent */
         ErrorEvent: {
@@ -1928,6 +1971,11 @@ export interface components {
              * @description Distance from one part to the next. Empty: the part's tape pitch.
              */
             part_pitch?: number | null;
+            /**
+             * Tape Width
+             * @description The width of tape this feeder takes, mm (8, 12, ...), if known. A part whose tape is another width is flagged: the wrong feeder, or the wrong tape.
+             */
+            tape_width?: number | null;
         };
         /** FeederAssignment */
         "FeederAssignment-Output": {
@@ -1951,6 +1999,11 @@ export interface components {
              * @description Distance from one part to the next. Empty: the part's tape pitch.
              */
             part_pitch: number | null;
+            /**
+             * Tape Width
+             * @description The width of tape this feeder takes, mm (8, 12, ...), if known. A part whose tape is another width is flagged: the wrong feeder, or the wrong tape.
+             */
+            tape_width: number | null;
         };
         /**
          * FeederBank
@@ -2059,7 +2112,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "footprint" | "part";
+            kind: "footprint" | "tape" | "part";
         };
         /**
          * FixedFeeder
@@ -2122,6 +2175,11 @@ export interface components {
             rows: number;
             /** @description From one part to the next along a row, in mm. On a strip, from one pocket to the next one to pick: against the direction the tape would feed. */
             step: components["schemas"]["Point"];
+            /**
+             * Tape Width
+             * @description Strips: the width of tape the holder takes, mm, if known.
+             */
+            tape_width?: number | null;
         };
         /**
          * FixedFeeder
@@ -2184,6 +2242,11 @@ export interface components {
             rows: number;
             /** @description From one part to the next along a row, in mm. On a strip, from one pocket to the next one to pick: against the direction the tape would feed. */
             step: components["schemas"]["Point"];
+            /**
+             * Tape Width
+             * @description Strips: the width of tape the holder takes, mm, if known.
+             */
+            tape_width: number | null;
         };
         /** FixedFeederState */
         FixedFeederState: {
@@ -2197,6 +2260,8 @@ export interface components {
             pocket: components["schemas"]["PocketCheck"] | null;
             /** Remaining */
             remaining: number;
+            /** Warning */
+            warning: string | null;
         };
         /**
          * Footprint
@@ -2308,7 +2373,7 @@ export interface components {
         ImportReport: {
             /**
              * Added
-             * @description 'footprint:ID' or 'part:ID' for new entries.
+             * @description 'footprint:ID', 'tape:ID', or 'part:ID' for new entries.
              */
             added: string[];
             /** Conflicts */
@@ -2622,12 +2687,14 @@ export interface components {
             format: "picnicplace-library";
             /** Parts */
             parts?: components["schemas"]["Part-Input"][];
+            /** Tapes */
+            tapes?: components["schemas"]["Tape-Input"][];
             /**
              * Version
-             * @default 1
-             * @constant
+             * @default 2
+             * @enum {integer}
              */
-            version: 1;
+            version: 1 | 2;
         };
         /**
          * LibraryDocument
@@ -2644,12 +2711,14 @@ export interface components {
             format: "picnicplace-library";
             /** Parts */
             parts: components["schemas"]["Part-Output"][];
+            /** Tapes */
+            tapes: components["schemas"]["Tape-Output"][];
             /**
              * Version
-             * @default 1
-             * @constant
+             * @default 2
+             * @enum {integer}
              */
-            version: 1;
+            version: 1 | 2;
         };
         /** LocalProfileState */
         LocalProfileState: {
@@ -3243,6 +3312,12 @@ export interface components {
              */
             name: string;
             /**
+             * Pin1
+             * @description The pad drawn as pin 1. Drawing only: vision ignores it.
+             * @default false
+             */
+            pin1: boolean;
+            /**
              * Rotation
              * @description Degrees counterclockwise.
              * @default 0
@@ -3279,6 +3354,12 @@ export interface components {
              * @description Pad number or name, such as '1' or 'EP'.
              */
             name: string;
+            /**
+             * Pin1
+             * @description The pad drawn as pin 1. Drawing only: vision ignores it.
+             * @default false
+             */
+            pin1: boolean;
             /**
              * Rotation
              * @description Degrees counterclockwise.
@@ -3376,7 +3457,11 @@ export interface components {
              * @default 1
              */
             speed: number;
-            tape?: components["schemas"]["Tape-Input"] | null;
+            /**
+             * Tape Id
+             * @description The tape it comes in, if known.
+             */
+            tape_id?: string | null;
         };
         /**
          * Part
@@ -3428,7 +3513,11 @@ export interface components {
              * @default 1
              */
             speed: number;
-            tape: components["schemas"]["Tape-Output"] | null;
+            /**
+             * Tape Id
+             * @description The tape it comes in, if known.
+             */
+            tape_id: string | null;
         };
         /**
          * PartNeed
@@ -4100,6 +4189,8 @@ export interface components {
             pick: components["schemas"]["Point"];
             pocket: components["schemas"]["PocketCheck"] | null;
             slot: components["schemas"]["Slot"];
+            /** Warning */
+            warning: string | null;
         };
         /**
          * StagingPlate
@@ -4240,7 +4331,7 @@ export interface components {
         };
         /**
          * Tape
-         * @description How a part is packaged in carrier tape (EIA-481).
+         * @description How parts are packaged in carrier tape (EIA-481). Parts link to it by ID.
          */
         "Tape-Input": {
             /**
@@ -4249,6 +4340,8 @@ export interface components {
              * @enum {string}
              */
             basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /** Id */
+            id: string;
             /**
              * Kind
              * @default unknown
@@ -4256,10 +4349,17 @@ export interface components {
              */
             kind: "paper" | "embossed" | "unknown";
             /**
-             * Pin1 Quadrant
-             * @description Pin 1's quadrant in the tape frame, as in tape-and-reel datasheets: Q1 top left, Q2 top right, Q3 bottom left, Q4 bottom right.
+             * Name
+             * @description A short name, such as '8 mm paper, 4 mm'.
+             * @default
              */
-            pin1_quadrant?: ("Q1" | "Q2" | "Q3" | "Q4") | null;
+            name: string;
+            /**
+             * Notes
+             * @description Free text. Feeders use only the values above.
+             * @default
+             */
+            notes: string;
             /**
              * Pitch
              * @description Pocket pitch (P1), mm: 2, 4, 8, ... None if not known.
@@ -4267,10 +4367,9 @@ export interface components {
             pitch?: number | null;
             /**
              * Rotation
-             * @description The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right).
-             * @default 0
+             * @description The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right). None if not known.
              */
-            rotation: number;
+            rotation?: number | null;
             /**
              * Source
              * @default
@@ -4284,7 +4383,7 @@ export interface components {
         };
         /**
          * Tape
-         * @description How a part is packaged in carrier tape (EIA-481).
+         * @description How parts are packaged in carrier tape (EIA-481). Parts link to it by ID.
          */
         "Tape-Output": {
             /**
@@ -4293,6 +4392,8 @@ export interface components {
              * @enum {string}
              */
             basis: "datasheet" | "standard" | "observed" | "measured" | "estimated" | "unknown";
+            /** Id */
+            id: string;
             /**
              * Kind
              * @default unknown
@@ -4300,10 +4401,17 @@ export interface components {
              */
             kind: "paper" | "embossed" | "unknown";
             /**
-             * Pin1 Quadrant
-             * @description Pin 1's quadrant in the tape frame, as in tape-and-reel datasheets: Q1 top left, Q2 top right, Q3 bottom left, Q4 bottom right.
+             * Name
+             * @description A short name, such as '8 mm paper, 4 mm'.
+             * @default
              */
-            pin1_quadrant: ("Q1" | "Q2" | "Q3" | "Q4") | null;
+            name: string;
+            /**
+             * Notes
+             * @description Free text. Feeders use only the values above.
+             * @default
+             */
+            notes: string;
             /**
              * Pitch
              * @description Pocket pitch (P1), mm: 2, 4, 8, ... None if not known.
@@ -4311,10 +4419,9 @@ export interface components {
             pitch: number | null;
             /**
              * Rotation
-             * @description The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right).
-             * @default 0
+             * @description The footprint frame's angle in the tape frame, degrees counterclockwise (sprocket holes along the top, feeding left to right). None if not known.
              */
-            rotation: number;
+            rotation: number | null;
             /**
              * Source
              * @default
@@ -6297,6 +6404,148 @@ export interface operations {
             };
             /** @description No entry with this ID. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tapes_api_v1_library_tapes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tape-Output"][];
+                };
+            };
+        };
+    };
+    get_tape_api_v1_library_tapes__tape_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tape_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tape-Output"];
+                };
+            };
+            /** @description No entry with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_tape_api_v1_library_tapes__tape_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tape_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Tape-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tape-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_tape_api_v1_library_tapes__tape_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tape_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No entry with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The change would break the library. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,7 +1,8 @@
 import { Camera, CameraOff } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { mediaUrl } from "../api/client";
 import { useCore } from "../api/core";
+import { readMjpeg } from "../mjpeg";
 import type { CameraInfo } from "../api/types";
 import { Panel } from "./Panel";
 
@@ -75,7 +76,7 @@ function CameraFeed({ id, info }: { id: string; info?: CameraInfo }) {
   return (
     <div className="camera-view camera-live" style={{ aspectRatio: aspect }}>
       {!failed && (
-        <img src={src} alt={`${id} camera`} onError={() => setFailed(true)} draggable={false} />
+        <StreamImage src={src} alt={`${id} camera`} onError={() => setFailed(true)} />
       )}
       {failed && (
         <span className="camera-message">
@@ -90,4 +91,33 @@ function CameraFeed({ id, info }: { id: string; info?: CameraInfo }) {
       {info?.source === "synthetic" && <span className="camera-badge">simulated</span>}
     </div>
   );
+}
+
+/** An MJPEG stream, read with fetch so its connection closes when it goes away. */
+function StreamImage({ src, alt, onError }: { src: string; alt: string; onError: () => void }) {
+  const ref = useRef<HTMLImageElement>(null);
+  const failed = useRef(onError);
+  useEffect(() => {
+    failed.current = onError;
+  }, [onError]);
+  useEffect(() => {
+    const img = ref.current;
+    if (!img) return;
+    const abort = new AbortController();
+    let shown: string | null = null;
+    readMjpeg(src, abort.signal, (jpeg) => {
+      const url = URL.createObjectURL(jpeg);
+      img.src = url;
+      if (shown) URL.revokeObjectURL(shown);
+      shown = url;
+    }).then(
+      () => abort.signal.aborted || failed.current(),
+      () => failed.current(),
+    );
+    return () => {
+      abort.abort();
+      if (shown) URL.revokeObjectURL(shown);
+    };
+  }, [src]);
+  return <img ref={ref} alt={alt} draggable={false} />;
 }

@@ -20,10 +20,10 @@ from picnicplace.api import create_app
 from picnicplace.board.kicad import read_kicad_pcb
 from picnicplace.job.models import Job
 from picnicplace.job.run import JobRunner, RunItem, fit_board, machine_angle
-from picnicplace.library import Part, Tape
+from picnicplace.library import Part
 from picnicplace.machine.profile import Point, load_profile
 from picnicplace.simparts import PlacedPart
-from tests.conftest import Session, connect, fast_config
+from tests.conftest import Session, connect, fast_config, put_taped
 
 DATA = Path(__file__).parent / "data" / "kicad"
 
@@ -68,13 +68,13 @@ def set_up(client: TestClient, s: Session, calibrate: bool = True) -> None:
             library.put_part(Part(id=p.part_id, footprint_id=p.footprint_id))
     footprints = {p.part_id: p.footprint_id for p in result.board.placements if p.part_id}
     for part_id, (height, width, pitch, rotation, _) in PARTS.items():
-        library.put_part(
-            Part(
-                id=part_id,
-                footprint_id=footprints[part_id],
-                height=height,
-                tape=Tape(kind="embossed", width=width, pitch=pitch, rotation=rotation),
-            )
+        put_taped(
+            library,
+            Part(id=part_id, footprint_id=footprints[part_id], height=height),
+            "embossed",
+            width,
+            pitch,
+            rotation,
         )
     s.home()
     ok(s.wait(s.post("/api/v1/feeders/scan")))
@@ -159,9 +159,9 @@ def test_plan_says_what_it_can_and_cannot_do(lumen: TestClient) -> None:
         # Tape no feeder on the machine takes.
         library = lumen.app.state.ctx.library  # type: ignore[attr-defined]
         mcu = library.find_part("EX-MCU-8")
-        assert mcu is not None and mcu.tape is not None
-        wide = mcu.tape.model_copy(update={"width": 24.0})
-        library.put_part(mcu.model_copy(update={"tape": wide}))
+        tape = library.tape_of(mcu)
+        assert mcu is not None and tape is not None
+        put_taped(library, mcu, tape.kind, 24.0, tape.pitch, tape.rotation)
         items = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()["items"]
         u2 = next(i for i in items if i["ref"] == "U2")
         assert u2["status"] == "blocked"

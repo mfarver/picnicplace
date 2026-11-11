@@ -10,7 +10,7 @@ in as unknown.
 
 import xml.etree.ElementTree as ET
 
-from picnicplace.library.models import Footprint, Pad, Part, Size, Tape
+from picnicplace.library.models import Footprint, Pad, Part, Size, Tape, standard_tape, with_pin1
 from picnicplace.library.store import LibraryDocument
 
 MM_PER_UNIT = {
@@ -94,15 +94,17 @@ def read_packages(text: str) -> list[Footprint]:
                 description="" if description == package_id else description,
                 body=body,
                 body_basis="unknown" if body is None else "estimated",
-                pads=pads,
+                pads=with_pin1(pads),
                 source="OpenPnP packages.xml",
             )
         )
     return footprints
 
 
-def read_parts(text: str) -> list[Part]:
+def read_parts(text: str) -> tuple[list[Part], list[Tape]]:
+    """Parts, and the tapes they come in (from a build of OpenPnP that records them)."""
     parts: list[Part] = []
+    tapes: dict[str, Tape] = {}
     for element in _root(text, "openpnp-parts").iter("part"):
         part_id = element.get("id")
         package_id = element.get("package-id")
@@ -112,11 +114,14 @@ def read_parts(text: str) -> list[Part]:
         tape: Tape | None = None
         if element.get("tape-rotation") is not None or element.get("tape-pitch") is not None:
             pitch = _float(element, "tape-pitch")
-            tape = Tape(
-                rotation=_float(element, "tape-rotation"),
-                pitch=pitch if pitch > 0 else None,
-                source="OpenPnP parts.xml (tape-orientation build)",
-            )
+            rotation = element.get("tape-rotation")
+            tape = standard_tape(
+                "unknown",
+                None,
+                pitch if pitch > 0 else None,
+                _float(element, "tape-rotation") if rotation is not None else None,
+            ).model_copy(update={"source": "OpenPnP parts.xml (tape-orientation build)"})
+            tapes.setdefault(tape.id, tape)
         speed = _float(element, "speed", 1.0)
         name = element.get("name", "")
         parts.append(
@@ -126,15 +131,17 @@ def read_parts(text: str) -> list[Part]:
                 footprint_id=package_id,
                 height=height if height > 0 else None,
                 height_source="OpenPnP parts.xml" if height > 0 else "",
-                tape=tape,
+                tape_id=tape.id if tape else None,
                 speed=speed if 0 < speed <= 1 else 1.0,
             )
         )
-    return parts
+    return parts, list(tapes.values())
 
 
 def read_library(packages_xml: str | None, parts_xml: str | None) -> LibraryDocument:
+    parts, tapes = read_parts(parts_xml) if parts_xml else ([], [])
     return LibraryDocument(
         footprints=read_packages(packages_xml) if packages_xml else [],
-        parts=read_parts(parts_xml) if parts_xml else [],
+        tapes=tapes,
+        parts=parts,
     )

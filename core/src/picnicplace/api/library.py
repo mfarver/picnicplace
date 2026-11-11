@@ -1,4 +1,4 @@
-"""Parts library endpoints: footprints, parts, import and export."""
+"""Parts library endpoints: footprints, tapes, parts, import and export."""
 
 from typing import Annotated, Any
 
@@ -15,6 +15,7 @@ from picnicplace.library import (
     LibraryError,
     NotFound,
     Part,
+    Tape,
 )
 from picnicplace.library.openpnp import OpenPnpFormatError, read_library
 from picnicplace.schemas import ErrorResponse
@@ -92,6 +93,44 @@ def delete_footprint(library: Lib, footprint_id: str) -> None:
         raise _http(e) from e
 
 
+# --- Tapes --------------------------------------------------------------------------------
+
+
+@router.get("/tapes")
+def list_tapes(library: Lib) -> list[Tape]:
+    return library.tapes()
+
+
+@router.get("/tapes/{tape_id:path}", responses=NOT_FOUND)
+def get_tape(library: Lib, tape_id: str) -> Tape:
+    try:
+        return library.tape(tape_id)
+    except LibraryError as e:
+        raise _http(e) from e
+
+
+@router.put("/tapes/{tape_id:path}", dependencies=[CanEdit])
+def put_tape(library: Lib, tape_id: str, tape: Tape) -> Tape:
+    """Create or replace a tape. Every part that comes in it changes with it."""
+    _same_id(tape_id, tape.id)
+    library.put_tape(tape)
+    return tape
+
+
+@router.delete(
+    "/tapes/{tape_id:path}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={**NOT_FOUND, **CONFLICT},
+    dependencies=[CanEdit],
+)
+def delete_tape(library: Lib, tape_id: str) -> None:
+    """Delete a tape. Refused while any part comes in it."""
+    try:
+        library.delete_tape(tape_id)
+    except LibraryError as e:
+        raise _http(e) from e
+
+
 # --- Parts --------------------------------------------------------------------------------
 
 
@@ -110,7 +149,8 @@ def get_part(library: Lib, part_id: str) -> Part:
 
 @router.put("/parts/{part_id:path}", responses=CONFLICT, dependencies=[CanEdit])
 def put_part(library: Lib, part_id: str, part: Part) -> Part:
-    """Create or replace a part. Its footprint must already be in the library."""
+    """Create or replace a part. Its footprint, and its tape if it names one, must
+    already be in the library."""
     _same_id(part_id, part.id)
     try:
         library.put_part(part)

@@ -2,9 +2,10 @@ import { Crosshair, MoveRight, RefreshCw, ScanSearch, Trash2 } from "lucide-reac
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useAction } from "../api/useAction";
-import type { FeedersState, FixedFeeder, FixedFeederState, Part, Point } from "../api/types";
+import type { FeedersState, FixedFeeder, FixedFeederState, Part, Point, Tape } from "../api/types";
 import { Field, NumberInput } from "./Form";
 import { LearnedPicks } from "./PickCorrection";
+import { WidthSelect, WidthWarning } from "./TapeWidth";
 import { remainingText } from "./machine/fixedFeederMath";
 
 export type TeachWhich = "first" | "row_end" | "last";
@@ -12,6 +13,7 @@ export type TeachWhich = "first" | "row_end" | "last";
 interface Props {
   state: FixedFeederState;
   parts: Part[];
+  tapes: Tape[];
   canMove: boolean;
   canActuate: boolean;
   onGoTo: (p: Point) => void;
@@ -23,7 +25,7 @@ interface Props {
 
 /** One strip or tray on the bed: what it holds, where its parts are, and refilling it. */
 export function FixedFeederDetail(p: Props) {
-  const { state, parts } = p;
+  const { state, parts, tapes } = p;
   const [draft, setDraft] = useState<FixedFeeder>(state.feeder);
   const [used, setUsed] = useState<number | null>(0);
   const { run, pending, error } = useAction();
@@ -34,6 +36,7 @@ export function FixedFeederDetail(p: Props) {
   const changed = JSON.stringify({ ...draft, picked: f.picked }) !== JSON.stringify(f);
   const strip = draft.kind === "strip";
   const part = parts.find((x) => x.id === draft.part_id);
+  const tape = tapes.find((t) => t.id === part?.tape_id);
   const fmt = (v: number) => v.toFixed(2);
 
   const refresh = async () => {
@@ -117,6 +120,11 @@ export function FixedFeederDetail(p: Props) {
             onChange={(e) => set({ part_id: e.target.value || null })}
           />
         </Field>
+        {strip && (
+          <Field label="Takes tape (mm)">
+            <WidthSelect value={draft.tape_width} onChange={(v) => set({ tape_width: v })} />
+          </Field>
+        )}
         <Field label="Pick height">
           <NumberInput value={draft.pick_height} onChange={(v) => set({ pick_height: v })} />
         </Field>
@@ -186,6 +194,9 @@ export function FixedFeederDetail(p: Props) {
           <option key={x.id} value={x.id} />
         ))}
       </datalist>
+      {strip && (
+        <WidthWarning where="This holder" width={draft.tape_width} part={part} tape={tape} />
+      )}
       <label className="check">
         <input
           type="checkbox"
@@ -196,7 +207,7 @@ export function FixedFeederDetail(p: Props) {
       </label>
       <p className="text-muted note">
         {strip
-          ? `A strip's parts take their angle from the part's tape${part?.tape ? ` (${part.tape.rotation}° in ${part.tape.width ?? "?"} mm tape)` : ", which the library does not give yet"}. Pick from the end where the cover film is peeled back.`
+          ? `A strip's parts take their angle from the part's tape${tape ? ` (${tape.rotation ?? "not known, taken as 0"}° in ${tape.width ?? "?"} mm tape)` : ", which the library does not give yet"}. Pick from the end where the cover film is peeled back.`
           : "Part angle: the machine angle of the part's 0° direction, the same for every part."}{" "}
         Empty pick height: the board height plus the part's height, right only for parts lying
         on the plates themselves.

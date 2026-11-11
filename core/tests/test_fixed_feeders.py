@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from picnicplace.api import create_app
 from picnicplace.feeders.setup import FixedFeeder
 from picnicplace.machine.profile import Point
-from tests.conftest import Session, connect, fast_config
+from tests.conftest import Session, connect, fast_config, put_taped
 from tests.test_run import check_landed, lumen, ok, set_up  # noqa: F401 (fixture)
 
 
@@ -95,8 +95,7 @@ def test_a_wide_part_from_a_strip(lumen: TestClient) -> None:  # noqa: F811
         set_up(lumen, s)
         library = lumen.app.state.ctx.library  # type: ignore[attr-defined]
         mcu = library.find_part("EX-MCU-8")
-        wide = mcu.tape.model_copy(update={"width": 24.0, "pitch": 12.0})
-        library.put_part(mcu.model_copy(update={"tape": wide}))
+        put_taped(library, mcu, "embossed", 24.0, 12.0, library.tape_of(mcu).rotation)
         strip = {
             "label": "24 mm holder",
             "kind": "strip",
@@ -188,3 +187,27 @@ def test_an_empty_tray_parks_the_head() -> None:
         profile = client.app.state.ctx.machine.profile  # type: ignore[attr-defined]
         for nozzle in profile.nozzles:
             assert position[nozzle.z_axis] == pytest.approx(0)
+
+
+def test_teaching_positions_never_changes_a_rotation(lumen: TestClient) -> None:  # noqa: F811
+    """A camera has no rotation to capture: teaching a tray's corners, or a slot's pick
+    location, takes the camera's X and Y and leaves every angle as it was."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        move_to_bed(lumen, s, "EX-MCU-8", tray(part_angle=-90))
+        fixed_id = lumen.get("/api/v1/feeders").json()["fixed"][0]["id"]
+        for which in ("first", "last", "row_end"):
+            r = s.put(f"/api/v1/feeders/fixed/{fixed_id}/teach", {"which": which, "at": None})
+            assert r.status_code == 200, r.json()
+        f = lumen.get("/api/v1/feeders").json()["fixed"][0]
+        assert f["feeder"]["part_angle"] == -90 and f["angle"] == -90
+
+        slot = next(
+            x for x in lumen.get("/api/v1/feeders").json()["slots"] if x["slot"]["id"] == "2"
+        )
+        before = slot["slot"]["rotation"]
+        assert s.put("/api/v1/feeders/slots/2/pick", {"at": None}).status_code == 200
+        slot = next(
+            x for x in lumen.get("/api/v1/feeders").json()["slots"] if x["slot"]["id"] == "2"
+        )
+        assert slot["slot"]["rotation"] == before

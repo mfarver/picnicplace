@@ -463,6 +463,7 @@
                   "visual_home",
                   "camera_scale",
                   "bottom_camera",
+                  "nozzle_offsets",
                   "calibrate_feeders"
                 ],
                 "type": "string"
@@ -4149,6 +4150,55 @@
           "correction"
         ],
         "title": "NozzleLoad",
+        "type": "object"
+      },
+      "NozzleOffsetsRequest": {
+        "properties": {
+          "disc_diameter": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 20.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The disc's diameter in mm. Empty: 2 to 12 mm.",
+            "title": "Disc Diameter"
+          },
+          "disc_thickness": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The disc's thickness in mm. Empty: paper's, 0.1.",
+            "title": "Disc Thickness"
+          },
+          "nozzle_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The nozzles to calibrate. Empty: all of them.",
+            "title": "Nozzle Ids"
+          }
+        },
+        "title": "NozzleOffsetsRequest",
         "type": "object"
       },
       "NozzleRequest": {
@@ -11490,6 +11540,83 @@
           }
         ],
         "summary": "Move",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/nozzle-offsets": {
+      "post": {
+        "description": "Measure each nozzle's offset from the top camera with a small disc (punched paper,\nor a small round PCB) on the datum board, the top camera centered over it. Each nozzle\nsniffs for the board's height (steps down with suction on until the vacuum seals),\nthen picks the disc up, turns it, and sets it down three times; how the disc moves\ngives where the nozzle turns. The result is kept (the calibration checklist) and used\nfrom then on.",
+        "operationId": "calibrate_nozzle_offsets_api_v1_machine_nozzle_offsets_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NozzleOffsetsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Calibrate Nozzle Offsets",
         "tags": [
           "machine"
         ]

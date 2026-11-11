@@ -196,6 +196,9 @@ export function MachineWorkspace() {
             onBottomCamera={() =>
               void track(() => api.POST("/api/v1/machine/bottom-camera", { body: {} }))
             }
+            onNozzleOffsets={() =>
+              void track(() => api.POST("/api/v1/machine/nozzle-offsets", { body: {} }))
+            }
           />
         )}
       </aside>

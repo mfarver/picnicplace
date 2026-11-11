@@ -92,6 +92,15 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       and measures the camera's scale. The nozzle never goes more than 2 mm below the
       profile's focus height. Check the place found is within a millimeter or two of
       the profile's, and the image is not turned more than a degree.
+- [ ] Lay a small paper disc (from a hole punch, or a small round PCB) flat on the datum
+      board, clear of its center dot, center the top camera on it, and click
+      **Calibrate** on line 6 (the nozzle offsets). Each nozzle first sniffs for the
+      board's height on its center dot: with suction on, it steps down until the vacuum
+      seals, never more than 1.5 mm below the profile's height. Then it picks the disc
+      up, turns it, and sets it down three times, and the top camera finds it after
+      each. A nozzle more than a millimeter from the profile's offset is flagged. For a
+      PCB disc, give its thickness (`disc_thickness` in the API); the Studio assumes
+      paper.
 
 The checklist lists every calibration in order: what is done (with its value and when it
 was measured), what is still to do, what is out of date and why (a crash, Z losing

@@ -17,6 +17,9 @@ class PartShape:
     body: tuple[float, float] | None = None
     pads: tuple[tuple[float, float, float, float, float], ...] = ()
     """Pads as (x, y, width, height, rotation) in the footprint's frame."""
+    disc: float | None = None
+    """A round disc of this diameter, such as a punched paper disc for calibrating the
+    nozzle offsets. A disc can be picked up again where it lies."""
 
 
 @dataclass(frozen=True)
@@ -40,6 +43,9 @@ class PlacedPart:
 Source = Callable[[float, float], tuple[PartShape, float, float, float] | None]
 """Take the part under a point, if any: its shape, true center, and angle."""
 
+SIM_DISC_DIAMETER_MM = 6.0
+"""The simulator's calibration disc: a paper punch's, about a quarter inch."""
+
 PLACED_BELOW = -10.0
 """A part dropped with the nozzle lower than this lands on the board; higher, it is lost."""
 
@@ -58,13 +64,22 @@ class SimulatedParts:
 
     def pick(self, nozzle: str, x: float, y: float, nozzle_angle: float) -> bool:
         """The nozzle at (x, y) turned on suction: take the part there, if any."""
-        taken = self.source(x, y)
+        taken = self._take_disc(x, y) or self.source(x, y)
         if taken is None:
             return False
         shape, px, py, part_angle = taken
         dx, dy = _turn(px - x, py - y, -nozzle_angle)
         self.held[nozzle] = HeldPart(shape, dx, dy, part_angle - nozzle_angle)
         return True
+
+    def _take_disc(self, x: float, y: float) -> tuple[PartShape, float, float, float] | None:
+        """A disc lying under the point, taken up."""
+        for i, part in enumerate(self.placed):
+            d = part.shape.disc
+            if d is not None and math.hypot(part.x - x, part.y - y) <= d / 2:
+                del self.placed[i]
+                return part.shape, part.x, part.y, part.angle
+        return None
 
     def drop(self, nozzle: str, x: float, y: float, nozzle_angle: float, height: float) -> None:
         """The nozzle released its part at (x, y) with the nozzle at ``height``."""

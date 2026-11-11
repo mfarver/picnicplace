@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Circle,
+  CircleDot,
   Crosshair,
   Focus,
   Home,
@@ -16,7 +17,13 @@ import type { CalibrationLine, MachineProfile, Operation } from "../api/types";
 import { MachineLocations } from "./MachineLocations";
 import { Panel } from "./Panel";
 
-const VISION_KINDS = new Set(["home", "visual_home", "camera_scale", "bottom_camera"]);
+const VISION_KINDS = new Set([
+  "home",
+  "visual_home",
+  "camera_scale",
+  "bottom_camera",
+  "nozzle_offsets",
+]);
 
 const STATUS: Record<CalibrationLine["status"], { label: string; icon: ReactNode }> = {
   done: { label: "Done", icon: <CheckCircle2 size={14} aria-hidden /> },
@@ -40,6 +47,7 @@ interface Props {
   onVisualHome: () => void;
   onCameraScale: () => void;
   onBottomCamera: () => void;
+  onNozzleOffsets: () => void;
 }
 
 /**
@@ -57,6 +65,7 @@ export function CalibrationPanel({
   onVisualHome,
   onCameraScale,
   onBottomCamera,
+  onNozzleOffsets,
 }: Props) {
   const checklist = useCalibration();
   const latest = Object.values(operations)
@@ -111,6 +120,22 @@ export function CalibrationPanel({
             title="With an empty nozzle tip: find the camera's place, focus, and scale"
           >
             <Focus size={16} aria-hidden />
+            {line.status === "done" ? "Calibrate again" : "Calibrate"}
+          </button>
+        );
+      case "nozzle_offsets":
+        return (
+          <button
+            type="button"
+            className="button"
+            disabled={!canRun}
+            onClick={onNozzleOffsets}
+            title={
+              "With the top camera centered on a paper disc on the datum board: each nozzle " +
+              "sniffs for the board's height, then turns the disc to find where it is"
+            }
+          >
+            <CircleDot size={16} aria-hidden />
             {line.status === "done" ? "Calibrate again" : "Calibrate"}
           </button>
         );

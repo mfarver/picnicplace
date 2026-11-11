@@ -36,6 +36,7 @@ PART_END = (200, 200, 205)
 NOZZLE = (140, 140, 145)
 NOZZLE_BORE = (20, 20, 20)
 HEAD_UNDERSIDE = (25, 25, 28)
+PAPER = (235, 238, 240)
 
 SHIFT = 4
 """Fixed-point bits for subpixel drawing."""
@@ -275,10 +276,10 @@ class TopRenderer:
                 _job_board(canvas, img, board)
         else:
             self._board(canvas, img)
-        for part in state.placed:
+        self._locations(canvas, img)
+        for part in state.placed:  # on top of the datum board, as a calibration disc is
             if canvas.visible(part.x, part.y, 10):
                 _shape(canvas, img, part.x, part.y, part.angle, part.shape)
-        self._locations(canvas, img)
         if state.tapes is None:
             self._feeders(canvas, img)
         else:
@@ -480,6 +481,9 @@ def _part(c: _Canvas, img: Image, x: float, y: float, angle: float, t: TapeScene
 def _shape(c: _Canvas, img: Image, x: float, y: float, angle: float, s: PartShape) -> None:
     """A part seen from above or below: its body, and metal where its pads are. Without
     a footprint, a 0603 chip."""
+    if s.disc is not None:
+        c.circle(img, x, y, s.disc / 2, PAPER)
+        return
     if s.body is None and not s.pads:
         _chip(c, img, x, y, angle)
         return

@@ -9,7 +9,8 @@ Besides motion, it simulates the profile's I/O:
   part when suction is on while it is lowered at least ``PICK_DEPTH``, and drops it when
   suction goes off. With a ``pick_source`` (simulated parts, see ``simparts.py``) a
   nozzle only picks where there is a part; without one it picks anywhere. ``on_drop``
-  reports where a part was let go.
+  reports where a part was let go. A nozzle lowered onto a surface (``surface_at``) with
+  suction on seals, and reads as holding a part, as when sniffing for a height.
 - Photon feeders on the feeder bus (``feeders/sim.py``), if given.
 
 Faults can be injected for tests: ``inject_z_slip`` makes the real Z position differ from
@@ -23,7 +24,7 @@ from collections.abc import Callable, Mapping, Sequence
 from picnicplace.feeders.sim import SimulatedPhotonBus
 from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.errors import MotionInterruptedError
-from picnicplace.machine.profile import MachineProfile, Nozzle, nozzle_height
+from picnicplace.machine.profile import MachineProfile, Nozzle, Point, nozzle_height
 
 TICK_S = 0.05
 """Real-time interval between updates during a move or a vacuum change."""
@@ -51,6 +52,18 @@ VACUUM_TAU_S = 0.15
 """Time constant of the simulated vacuum response."""
 
 
+def sim_profile(
+    profile: MachineProfile, nozzle_errors: Mapping[str, tuple[float, float]]
+) -> MachineProfile:
+    """The machine as it really is in the simulator: the profile, with each nozzle off by
+    its error. A copy, so calibrating the profile's nozzle offsets does not move them."""
+    truth = profile.model_copy(deep=True)
+    for nozzle in truth.nozzles:
+        dx, dy = nozzle_errors.get(nozzle.id, (0.0, 0.0))
+        nozzle.offset = Point(x=nozzle.offset.x + dx, y=nozzle.offset.y + dy)
+    return truth
+
+
 class SimulatorDriver(MotionDriver):
     name = "simulator"
     firmware = "PicnicPlace simulator"
@@ -70,6 +83,8 @@ class SimulatorDriver(MotionDriver):
         self.on_drop: Callable[[str, float, float, float, float], None] | None = None
         """Called with the nozzle ID, its physical X/Y, angle, and height when it lets go
         of a part."""
+        self.surface_at: Callable[[float, float], float | None] | None = None
+        """The height of a surface under a physical X/Y, if any, for a nozzle to seal on."""
         self._home_error = home_error
         self._offset = {"X": 0.0, "Y": 0.0}
         """Physical minus reported position: what homing gets wrong."""
@@ -79,6 +94,7 @@ class SimulatorDriver(MotionDriver):
         self._outputs = {o.id: False for o in profile.outputs}
         self._vacuum = {n.vacuum_input: 0.0 for n in profile.nozzles if n.vacuum_input}
         self._held = {n.id: False for n in profile.nozzles}
+        self._sealed = {n.id: False for n in profile.nozzles}
         self._z_slip: dict[str, float] = {}
         self._inputs_by_id = {i.id: i for i in profile.inputs}
         self._connected = False
@@ -260,6 +276,12 @@ class SimulatorDriver(MotionDriver):
                     self._held[n.id] = True
                 else:
                     self._held[n.id] = self.pick_source(n.id, *self._nozzle_at(n))
+            sealed = False
+            if self._suction(n) and not self._held[n.id] and self.surface_at is not None:
+                x, y, _ = self._nozzle_at(n)
+                surface = self.surface_at(x, y)
+                sealed = surface is not None and self._height(n) <= surface
+            self._sealed[n.id] = sealed
         self._io_wake.set()
 
     def _vacuum_target(self, nozzle: Nozzle) -> float:
@@ -272,7 +294,7 @@ class SimulatorDriver(MotionDriver):
         rest = 0.0 if min(start, end) <= 0 <= max(start, end) else start
         if not self._suction(nozzle):
             return rest
-        if self._held[nozzle.id]:
+        if self._held[nozzle.id] or self._sealed[nozzle.id]:
             return threshold + (end - threshold) * VACUUM_HELD
         return rest + (threshold - rest) * VACUUM_OPEN
 

@@ -12,6 +12,7 @@ the image gives the scale, and which way it moves gives the image's turn.
 import math
 from dataclasses import dataclass
 
+from picnicplace.calibration import nozzle_key
 from picnicplace.machine.errors import VisionError
 from picnicplace.machine.profile import Camera, Nozzle
 from picnicplace.machine.service import MachineService
@@ -214,6 +215,10 @@ def start_bottom_camera_calibration(machine: MachineService, nozzle_id: str | No
                 "rotation": fix.rotation,
                 "width": fix.width,
                 "height": fix.height,
+                # Where the nozzle was taken to be: the place moves with it if its offset
+                # is measured later.
+                nozzle_key(nozzle.id, "x"): nozzle.offset.x,
+                nozzle_key(nozzle.id, "y"): nozzle.offset.y,
             },
         )
         machine.apply_calibration()

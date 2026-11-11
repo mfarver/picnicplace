@@ -41,6 +41,7 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/machine/visual-home` | Center the top camera on the homing fiducial and correct the position |
 | `POST /api/v1/machine/camera-scale` | Measure the top camera's scale, kept and used by vision |
 | `POST /api/v1/machine/bottom-camera` | Calibrate the bottom camera with an empty nozzle tip: its place, focus height, and scale, kept and used |
+| `POST /api/v1/machine/nozzle-offsets` | Calibrate the nozzle offsets with a small disc on the datum board, the top camera centered on it: each nozzle sniffs for the board's height, then turns the disc. Kept and used |
 | `GET /api/v1/calibration` | The calibration checklist: every calibration the machine needs, in order, each done (with its value and when), to do, out of date (and why), or from the profile |
 | `POST /api/v1/machine/estop` | Emergency stop; any client may call it |
 | `POST /api/v1/machine/reset` | Clear a latched emergency stop |

@@ -152,6 +152,7 @@ client. Useful pieces:
 | `api/schema.ts` | **Generated** TypeScript types for the whole API (`make api`); never edit by hand |
 | `api/types.ts` | Short names for the generated types |
 | `tape.ts`, `runSteps.ts` | Pure logic with unit tests: tape geometry, fit check, pin-1 quadrant, and table-cell parsing; a run's step list |
+| `mjpeg.ts` | Reads a camera's MJPEG stream with `fetch`, so leaving a view closes its connection (an `<img>` can hold it open and use up the browser's six connections to the core) |
 | `api/client.ts` | The typed REST client (`api.GET("/api/v1/...")`) |
 | `api/core.ts`, `api/CoreProvider.tsx` | The event socket and the live state it feeds: machine state, operations, presence, the lease |
 | `api/use*.ts` | Hooks that fetch and follow one kind of state, such as `useFeeders` and `useCameras` |

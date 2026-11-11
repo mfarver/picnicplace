@@ -622,16 +622,41 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Job */
+        /**
+         * Get Job
+         * @description A job's working copy, with this machine's setup for it (location, board height).
+         */
         get: operations["get_job_api_v1_jobs__job_id__get"];
         /**
          * Put Job
-         * @description Save a job, creating or replacing it.
+         * @description Save a job's working copy, creating or replacing it. Its location and board height
+         *     are kept as this machine's setup for the job, not in the job.
          */
         put: operations["put_job_api_v1_jobs__job_id__put"];
         post?: never;
         /** Delete Job */
         delete: operations["delete_job_api_v1_jobs__job_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/layout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job Layout
+         * @description Where each placement of what runs for the job (``revision``, else its newest, else
+         *     its working copy) lands on this machine, as set up here.
+         */
+        get: operations["get_job_layout_api_v1_jobs__job_id__layout_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -692,6 +717,32 @@ export interface paths {
          */
         get: operations["download_revision_api_v1_jobs__job_id__revisions__number__file_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Setup
+         * @description Where this machine has the job's panel on the bed, and the board's measured height.
+         *     Kept by the machine, apart from the job and its revisions.
+         */
+        get: operations["get_setup_api_v1_jobs__job_id__setup_get"];
+        /**
+         * Put Setup
+         * @description Set where the job's panel sits on this machine, and the board's height. Works for a
+         *     job loaded from a file too, which has no working copy.
+         */
+        put: operations["put_setup_api_v1_jobs__job_id__setup_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1531,9 +1582,10 @@ export interface paths {
         put?: never;
         /**
          * Plan
-         * @description What a run of a saved job would do, without moving anything: each placement's
-         *     feeder and nozzles, and what stops any of them (no part number, part, height, or
-         *     feeder, or out of reach). A dry run against the loaded feeders.
+         * @description What a run of a job's published revision would do, without moving anything: each
+         *     placement's feeder and nozzles, and what stops any of them (no part number, part,
+         *     height, or feeder, or out of reach). A dry run against the loaded feeders. A job not
+         *     yet published is planned from its working copy, with an issue saying it cannot run.
          */
         post: operations["plan_api_v1_run_plan_post"];
         delete?: never;
@@ -1570,7 +1622,8 @@ export interface paths {
         put?: never;
         /**
          * Start
-         * @description Run a saved job: find the board's fiducials, then pick, align, and place every part.
+         * @description Run a job's published revision (its newest unless one is given), set up as this
+         *     machine keeps it: find the board's fiducials, then pick, align, and place every part.
          */
         post: operations["start_api_v1_run_start_post"];
         delete?: never;
@@ -2565,7 +2618,7 @@ export interface components {
             board: components["schemas"]["Board-Input"];
             /**
              * Board Z
-             * @description Machine Z of the board's top surface, once measured.
+             * @description Machine Z of the board's top surface, once measured: from its setup.
              */
             board_z?: number | null;
             /**
@@ -2574,7 +2627,7 @@ export interface components {
              * @constant
              */
             format: "picnicplace-job";
-            /** @description Where the panel sits on the machine, once set. */
+            /** @description Where the panel sits on this machine, once set: from its setup. */
             location?: components["schemas"]["MachineLocation-Input"] | null;
             /** Name */
             name: string;
@@ -2597,7 +2650,7 @@ export interface components {
             board: components["schemas"]["Board-Output"];
             /**
              * Board Z
-             * @description Machine Z of the board's top surface, once measured.
+             * @description Machine Z of the board's top surface, once measured: from its setup.
              */
             board_z: number | null;
             /**
@@ -2606,7 +2659,7 @@ export interface components {
              * @constant
              */
             format: "picnicplace-job";
-            /** @description Where the panel sits on the machine, once set. */
+            /** @description Where the panel sits on this machine, once set: from its setup. */
             location: components["schemas"]["MachineLocation-Output"] | null;
             /** Name */
             name: string;
@@ -2687,6 +2740,11 @@ export interface components {
             /** Parts */
             parts: components["schemas"]["PartNeed"][];
             /**
+             * Revision
+             * @description The published revision planned, whose copy of the library it uses. Empty for a job not yet published, planned from its working copy (which cannot run).
+             */
+            revision: number | null;
+            /**
              * Runnable
              * @description The run can start, placing what it can and skipping what is blocked.
              */
@@ -2710,6 +2768,34 @@ export interface components {
              * @constant
              */
             version: 2;
+        };
+        /**
+         * JobSetup
+         * @description What one machine keeps about a job: where its panel sits on the bed and the
+         *     board's measured height. Never part of a revision, which any machine can run.
+         */
+        "JobSetup-Input": {
+            /**
+             * Board Z
+             * @description Machine Z of the board's top surface, once measured.
+             */
+            board_z?: number | null;
+            /** @description Where the panel sits on the machine, once set. */
+            location?: components["schemas"]["MachineLocation-Input"] | null;
+        };
+        /**
+         * JobSetup
+         * @description What one machine keeps about a job: where its panel sits on the bed and the
+         *     board's measured height. Never part of a revision, which any machine can run.
+         */
+        "JobSetup-Output": {
+            /**
+             * Board Z
+             * @description Machine Z of the board's top surface, once measured.
+             */
+            board_z: number | null;
+            /** @description Where the panel sits on the machine, once set. */
+            location: components["schemas"]["MachineLocation-Output"] | null;
         };
         /** JobSummary */
         JobSummary: {
@@ -3925,6 +4011,11 @@ export interface components {
         PlanRequest: {
             /** Job Id */
             job_id: string;
+            /**
+             * Revision
+             * @description The published revision to run. Empty: the job's newest.
+             */
+            revision?: number | null;
         };
         /**
          * PocketCheck
@@ -4505,6 +4596,11 @@ export interface components {
              * @default false
              */
             record: boolean;
+            /**
+             * Revision
+             * @description The published revision to run. Empty: the job's newest.
+             */
+            revision?: number | null;
             /**
              * Skip Blocked
              * @description Start even if some placements are blocked, skipping them.
@@ -6223,6 +6319,48 @@ export interface operations {
             };
         };
     };
+    get_job_layout_api_v1_jobs__job_id__layout_get: {
+        parameters: {
+            query?: {
+                revision?: number | null;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobLayout"];
+                };
+            };
+            /** @description No such job or revision. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_revisions_api_v1_jobs__job_id__revisions_get: {
         parameters: {
             query?: never;
@@ -6379,6 +6517,90 @@ export interface operations {
                 };
             };
             /** @description No such job or revision. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_setup_api_v1_jobs__job_id__setup_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobSetup-Output"];
+                };
+            };
+            /** @description No job with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_setup_api_v1_jobs__job_id__setup_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobSetup-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobSetup-Output"];
+                };
+            };
+            /** @description No job with this ID. */
             404: {
                 headers: {
                     [name: string]: unknown;

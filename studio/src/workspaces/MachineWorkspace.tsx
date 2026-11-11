@@ -36,7 +36,7 @@ export function MachineWorkspace() {
   // The job run, if any: shown on the map, and a few of its steps under it, for anyone
   // watching from elsewhere (the operator at the machine uses the Run workspace).
   const [jobRun] = useRun();
-  const jobLayout = useJobLayout(jobRun?.job_id);
+  const jobLayout = useJobLayout(jobRun?.job_id, jobRun?.plan.revision);
   const [lastOpId, setLastOpId] = useState<string | null>(null);
 
   const lastOp = lastOpId ? operations[lastOpId] : undefined;

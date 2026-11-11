@@ -1,5 +1,11 @@
 """Running a job: every part on the board picked, aligned, and placed (milestone M4).
 
+**What runs.** A machine runs a job's published revision (spec §5.4), its newest unless
+another is asked for, set up as this machine keeps it (where the panel sits, the
+board's height), with parts, footprints, and tapes from the revision's own copy of the
+library. A job not yet published can be planned from its working copy and the library,
+but not run.
+
 **Plan.** Each enabled part placement on the side facing up becomes an item, with the
 feeder slot (or strip or tray on the bed) that holds its part and the nozzles that can
 reach both it and the placement. Feeder slots come before strips and trays. An item
@@ -54,6 +60,7 @@ from picnicplace.feeders.service import FeederService, FeedersState, rotate
 from picnicplace.feeders.setup import PickCorrection
 from picnicplace.job.layout import Issue, MachinePlacement, layout
 from picnicplace.job.models import Job
+from picnicplace.job.revision import JobFileError, PartsSource
 from picnicplace.job.store import JobStore
 from picnicplace.library import Library, Part, Tape
 from picnicplace.machine.errors import (
@@ -155,6 +162,13 @@ class BoardCheck(WireModel):
 
 class JobPlan(WireModel):
     job_id: str
+    revision: int | None = Field(
+        default=None,
+        description=(
+            "The published revision planned, whose copy of the library it uses. Empty for "
+            "a job not yet published, planned from its working copy (which cannot run)."
+        ),
+    )
     name: str
     items: list[RunItem]
     parts: list[PartNeed]
@@ -287,7 +301,8 @@ def plan_job(
     job: Job,
     profile: MachineProfile,
     feeders: FeedersState,
-    library: Library | None,
+    library: PartsSource | None,
+    revision: int | None = None,
 ) -> JobPlan:
     result = layout(job, profile)
     issues = [i for i in result.issues if not (i.ref and i.severity == "warning")]
@@ -492,6 +507,7 @@ def plan_job(
             need.problem = item.note
     return JobPlan(
         job_id=job_id,
+        revision=revision,
         name=job.name,
         items=items,
         parts=sorted(needs.values(), key=lambda n: (n.problem is None, n.part_id or "")),
@@ -556,6 +572,8 @@ class JobRunner:
         self._jobs = jobs
         self._run: RunState | None = None
         self._job: Job | None = None
+        self._parts: PartsSource | None = None
+        """The run's parts, footprints, and tapes: its revision's copy of them."""
         self._active = False
         self._step = False
         self._picked: set[str] = set()
@@ -590,18 +608,35 @@ class JobRunner:
             if self._placement.holds(nozzle_id) is None:
                 del run.held[nozzle_id]
 
-    def _get_job(self, job_id: str) -> Job:
+    def _resolve(
+        self, job_id: str, revision: int | None = None
+    ) -> tuple[Job, PartsSource | None, int | None]:
+        """What runs for a job (``JobStore.resolve``), with the revision's copy of the
+        library; a job not yet published comes with the library, to plan and check but
+        not to run."""
         try:
-            job = self._jobs.get(job_id)
-        except ValueError as e:
+            job, published = self._jobs.resolve(job_id, revision)
+        except (LookupError, ValueError, JobFileError) as e:
             raise InvalidTargetError(str(e)) from e
-        if job is None:
-            raise InvalidTargetError(f"no job {job_id!r}")
-        return job
+        if published is None:
+            return job, self._library(), None
+        return job, published.design.library, published.revision.number
 
-    def plan(self, job_id: str) -> JobPlan:
-        job = self._get_job(job_id)
-        return plan_job(job_id, job, self._machine.profile, self._feeders.state(), self._library())
+    def _plan(self, job_id: str, revision: int | None) -> tuple[Job, PartsSource | None, JobPlan]:
+        job, parts, number = self._resolve(job_id, revision)
+        plan = plan_job(job_id, job, self._machine.profile, self._feeders.state(), parts, number)
+        if number is None:
+            plan.issues.insert(
+                0,
+                Issue(
+                    severity="error",
+                    message="the job is not published yet: publish it in Prepare to run it",
+                ),
+            )
+        return job, parts, plan
+
+    def plan(self, job_id: str, revision: int | None = None) -> JobPlan:
+        return self._plan(job_id, revision)[2]
 
     # --- Control -----------------------------------------------------------------------
 
@@ -612,13 +647,13 @@ class JobRunner:
         pick_correction: PickCorrection | None = None,
         record: bool = False,
         step: bool = False,
+        revision: int | None = None,
     ) -> Operation:
         """Start a run. With ``step``, it pauses once the board is found, before the first
         part, and each step then places one batch."""
         if self._active:
             raise MachineBusyError("a job is running: pause or stop it first")
-        job = self._get_job(job_id)
-        plan = plan_job(job_id, job, self._machine.profile, self._feeders.state(), self._library())
+        job, parts, plan = self._plan(job_id, revision)
         stopping = [i for i in plan.issues if i.severity == "error" and i.ref is None]
         if stopping:
             raise RunError(f"the job cannot run: {stopping[0].message}")
@@ -640,6 +675,7 @@ class JobRunner:
         if any(c.looking == "up" for c in self._machine.profile.cameras):
             self._placement.bottom_camera()  # raises if it has no focus height
         self._job = job
+        self._parts = parts
         self._run = RunState(
             job_id=job_id,
             name=job.name,
@@ -653,7 +689,7 @@ class JobRunner:
         self._step = step
         self._picked = set()
         if self._sim_error is not None:
-            self._load_sim_board(job)
+            self._load_sim_board(job, parts)
         recorder = self._machine.recorder
         active = recorder.active
         if self._recording is not None and active is not None and active.id == self._recording:
@@ -666,25 +702,25 @@ class JobRunner:
         recorder.event("run.start", run=self._run)
         return self._start_task()
 
-    def check_board(self, job_id: str) -> Operation:
+    def check_board(self, job_id: str, revision: int | None = None) -> Operation:
         """Find a job's board by its fiducials and show how it sits, placing nothing.
         Works whatever the job's placements are, even with none to place."""
         if self._active:
             raise MachineBusyError("a job is running: pause or stop it first")
         if self._run is not None and self._run.status == "paused":
             raise RunError("a run is paused: resume or stop it before checking a board")
-        job = self._get_job(job_id)
+        job, parts, _ = self._resolve(job_id, revision)
         if job.location is None:
             raise RunError("the job has no location on the machine: place it first")
         if not self._chosen_fiducials(job):
             raise RunError("the job has no fiducials turned on to check")
         if self._sim_error is not None:
-            self._load_sim_board(job)
+            self._load_sim_board(job, parts)
 
         async def work() -> str:
             now = datetime.now(UTC)
             try:
-                fix = await self._locate_board(job)
+                fix = await self._locate_board(job, parts)
             except MachineError as e:
                 self._board_check = BoardCheck(
                     job_id=job_id, checked_at=now, ok=False, message=str(e)
@@ -857,9 +893,7 @@ class JobRunner:
         await self._feeders.scan()
         run.located = []
         self._picked = set()
-        plan = plan_job(
-            run.job_id, job, self._machine.profile, self._feeders.state(), self._library()
-        )
+        plan = plan_job(run.job_id, job, self._machine.profile, self._feeders.state(), self._parts)
         now = {(i.copy_id, i.ref): i for i in plan.items}
         lost: list[str] = []
         for item in run.plan.items:
@@ -895,7 +929,7 @@ class JobRunner:
     async def _find_board(self, run: RunState) -> BoardFix:
         job = self._job
         assert job is not None
-        fix = await self._locate_board(job)
+        fix = await self._locate_board(job, self._parts)
         if fix.residual > FIDUCIAL_RESIDUAL_MM:
             raise RunError(self._misfit(fix.residual))
         run.message = (
@@ -928,14 +962,13 @@ class JobRunner:
             f"{fix.residual:.2f} mm)"
         )
 
-    async def _locate_board(self, job: Job) -> BoardFix:
+    async def _locate_board(self, job: Job, library: PartsSource | None) -> BoardFix:
         """Find the job's chosen fiducials and fit the board to them."""
         assert job.location is not None
         chosen = self._chosen_fiducials(job)
         about = Point(x=job.location.x, y=job.location.y)
         if not chosen:
             return BoardFix(dx=0, dy=0, angle=0, about=about, residual=0, fiducials=[])
-        library = self._library()
         checks: list[FiducialCheck] = []
         for f in chosen:
             d = FIDUCIAL_DIAMETER_MM
@@ -1096,7 +1129,7 @@ class JobRunner:
 
     # --- Simulation --------------------------------------------------------------------
 
-    def _load_sim_board(self, job: Job) -> None:
+    def _load_sim_board(self, job: Job, library: PartsSource | None) -> None:
         """Put the job's board on the simulated bed, a little off from where the job
         says, so fiducial alignment has something to find."""
         assert self._sim_error is not None and job.location is not None
@@ -1105,7 +1138,6 @@ class JobRunner:
         true = BoardFix(dx=dx, dy=dy, angle=angle, about=about, residual=0, fiducials=[])
         self._sim_fix = true
         result = layout(job, self._machine.profile)
-        library = self._library()
 
         def at(x: float, y: float) -> tuple[float, float]:
             p = true.apply(x, y)

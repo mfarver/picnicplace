@@ -54,7 +54,9 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/library/export`, `POST /api/v1/library/import` | The library as one JSON document |
 | `POST /api/v1/library/import/openpnp` | Merge OpenPnP `packages.xml` and `parts.xml` |
 | `POST /api/v1/boards/import/kicad` | Read a KiCad board (and panel, and BOM) into a board, its library entries, and a new job |
-| `GET /api/v1/jobs`; `GET`, `PUT`, `DELETE /api/v1/jobs/{id}` | Saved jobs |
+| `GET /api/v1/jobs`; `GET`, `PUT`, `DELETE /api/v1/jobs/{id}` | Saved jobs (working copies, with this machine's setup for each) |
+| `GET`, `PUT /api/v1/jobs/{id}/setup` | Where this machine has a job's panel on the bed, and the board's height |
+| `GET /api/v1/jobs/{id}/layout` | Where what runs for a job (a revision, else its working copy) lands on this machine |
 | `POST /api/v1/jobs/layout` | Where a job's placements land on the machine, and what stops it |
 | `POST /api/v1/jobs/find-location` | A place on the bed where a job fits |
 | `GET`, `POST /api/v1/jobs/{id}/revisions`; `GET /api/v1/jobs/{id}/revisions/{n}` | A job's published revisions; publish the saved job as the next one |
@@ -78,7 +80,7 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/placement` | What each nozzle holds, how it sits once aligned, and the configured pick correction |
 | `POST /api/v1/placement/pick`, `…/align`, `…/place` | Pick from a feeder slot; find the part on the bottom camera; place it at a location and angle |
 | `POST /api/v1/placement/pick-and-place`, `…/discard`, `…/release` | All three steps at once; drop a held part in the discard bin; a part was taken off its nozzle by hand (suction off, part forgotten) |
-| `POST /api/v1/run/plan` | A dry run of a saved job: each placement's feeder and nozzles, and what blocks any |
+| `POST /api/v1/run/plan` | A dry run of a job's published revision (its newest, or one given): each placement's feeder and nozzles, and what blocks any |
 | `POST /api/v1/run/start`, `…/pause`, `…/step`, `…/resume`, `…/stop`; `GET /api/v1/run` | Run a job (a feeder scan, board fiducials, then batches of pick, align, and place, each feeder's fiducial found on its first pick), optionally starting in step mode; its progress |
 | `POST /api/v1/run/check-board`; `GET /api/v1/run/board-check` | Find a job's board by its fiducials and fit it, placing nothing; the last check |
 | `PUT /api/v1/run/items/{index}` | Skip a placement, or take back a skip |

@@ -46,6 +46,8 @@ export function PrepareWorkspace() {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [job, setJob] = useState<Job | null>(null);
   const [savedAs, setSavedAs] = useState<string | null>(null);
+  // A job loaded from a file has no working copy: only where it sits can be changed.
+  const [fromFile, setFromFile] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [checked, setLayout] = useState<JobLayout | null>(null);
   const [files, setFiles] = useState<Files>({});
@@ -116,11 +118,36 @@ export function PrepareWorkspace() {
   };
 
   const openJob = async (id: string) => {
-    const data = await run(() =>
-      api.GET("/api/v1/jobs/{job_id}", { params: { path: { job_id: id } } }),
-    );
+    const summary = jobs.find((j) => j.id === id);
+    const latest = summary?.revisions.at(-1);
+    const path = { job_id: id };
+    const data =
+      summary && !summary.draft && latest
+        ? await run(async () => {
+            const [published, setup] = await Promise.all([
+              api.GET("/api/v1/jobs/{job_id}/revisions/{number}", {
+                params: { path: { ...path, number: latest.number } },
+              }),
+              api.GET("/api/v1/jobs/{job_id}/setup", { params: { path } }),
+            ]);
+            if (!published.data) return { error: published.error };
+            if (!setup.data) return { error: setup.error };
+            const { name, board, panel, side_up } = published.data.design;
+            const job: Job = {
+              format: "picnicplace-job",
+              version: 1,
+              name,
+              board,
+              panel,
+              side_up,
+              ...setup.data,
+            };
+            return { data: job };
+          })
+        : await run(() => api.GET("/api/v1/jobs/{job_id}", { params: { path } }));
     if (!data) return;
     setJob(data);
+    setFromFile(!summary?.draft);
     setSavedAs(id);
     setDirty(false);
     setWarnings([]);
@@ -136,8 +163,14 @@ export function PrepareWorkspace() {
   const saveJob = async () => {
     if (!job) return;
     const id = savedAs ?? jobId(job.name);
+    const path = { job_id: id };
     const saved = await run(() =>
-      api.PUT("/api/v1/jobs/{job_id}", { params: { path: { job_id: id } }, body: job }),
+      fromFile
+        ? api.PUT("/api/v1/jobs/{job_id}/setup", {
+            params: { path },
+            body: { location: job.location, board_z: job.board_z },
+          })
+        : api.PUT("/api/v1/jobs/{job_id}", { params: { path }, body: job }),
     );
     if (!saved) return;
     setSavedAs(id);
@@ -175,6 +208,7 @@ export function PrepareWorkspace() {
   const close = () => {
     setJob(null);
     setSavedAs(null);
+    setFromFile(false);
     setDirty(false);
     setWarnings([]);
     setReport(null);
@@ -247,15 +281,18 @@ export function PrepareWorkspace() {
                       <button
                         type="button"
                         className="item"
-                        disabled={!j.draft}
-                        title={j.draft ? undefined : "Loaded from a job file: it runs as published"}
+                        title={
+                          j.draft
+                            ? undefined
+                            : "Loaded from a job file: it runs as published; set where it sits"
+                        }
                         onClick={() => void openJob(j.id)}
                       >
                         <span className="item-id">{j.name}</span>
                         <span className="item-detail">
                           {j.copies > 1 ? `${j.copies} boards · ` : ""}
                           {j.side_up} up · {j.draft ? published : `${published}, from a file`}
-                          {j.draft && !j.placed ? " · not placed" : ""}
+                          {j.placed ? "" : " · not placed"}
                         </span>
                       </button>
                       {j.draft && (
@@ -307,6 +344,7 @@ export function PrepareWorkspace() {
                 <input
                   className="input"
                   value={job.name}
+                  disabled={fromFile}
                   onChange={(e) => update({ name: e.target.value })}
                 />
               </Field>
@@ -324,6 +362,7 @@ export function PrepareWorkspace() {
                       key={side}
                       type="button"
                       className={job.side_up === side ? "segment active" : "segment"}
+                      disabled={fromFile}
                       onClick={() => update({ side_up: side })}
                     >
                       {side === "top" ? "Top" : "Bottom"}
@@ -346,6 +385,12 @@ export function PrepareWorkspace() {
                   Close
                 </button>
               </div>
+              {fromFile && (
+                <p className="note text-muted">
+                  Loaded from a job file: it runs as published. Where it sits on this machine
+                  can be set and saved.
+                </p>
+              )}
               {notice && <p className="note text-muted">{notice}</p>}
               {error && <p className="note note-danger">{error}</p>}
             </Panel>
@@ -356,6 +401,7 @@ export function PrepareWorkspace() {
                   jobId={savedAs}
                   revisions={jobs.find((j) => j.id === savedAs)?.revisions ?? []}
                   unsaved={dirty}
+                  publishable={!fromFile}
                   onPublished={() => void reloadJobs()}
                 />
               </Panel>
@@ -365,6 +411,7 @@ export function PrepareWorkspace() {
               <p className="text-muted">
                 Where the {job.panel.copies.length > 1 ? "panel" : "board"}'s front-left corner
                 sits, in machine coordinates, and how far it is turned as you look at the bed.
+                This machine keeps it, apart from the job: it is in no revision.
               </p>
               <div className="field-row">
                 <Field label="X, mm">
@@ -464,6 +511,7 @@ export function PrepareWorkspace() {
                     <input
                       type="checkbox"
                       checked={copy.enabled}
+                      disabled={fromFile}
                       onChange={(e) =>
                         update({
                           panel: {

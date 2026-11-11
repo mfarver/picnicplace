@@ -100,10 +100,10 @@ A request goes **route → service → machine service → driver**:
 | `placement.py` | Pick, align, and place one part; pick correction (top or bottom camera) |
 | `simparts.py` | The simulator's parts: which nozzle holds what, and where placed parts landed |
 | `board/` | Boards and panels, and reading them from KiCad (`kicad.py`, with a small S-expression reader) and KiKit panels |
-| `job/models.py`, `job/store.py` | Jobs (a board or panel on the machine) and their files, with their published revisions |
+| `job/models.py`, `job/store.py` | Jobs (a board or panel on the machine) and their files, with their published revisions and this machine's setup for each |
 | `job/revision.py` | Job revisions: the design and a copy of the library entries it uses, the job file, and its hash |
 | `job/layout.py` | Where a job's placements land on the machine, and what the machine cannot reach |
-| `job/run.py` | Running a job: the planner (also the dry run), board alignment, batches, pause, step, resume, stop, refills |
+| `job/run.py` | Running a job's published revision: the planner (also the dry run), board alignment, batches, pause, step, resume, stop, refills |
 
 ### The data directory
 
@@ -115,6 +115,7 @@ The core keeps the owner's data in one folder (`data.dir` in the config; by defa
 | `library.sqlite3` | The parts library | `library/store.py` |
 | `feeders.json` | The feeder setup | `feeders/setup.py` |
 | `jobs/` | One JSON file per job (its working copy), and a folder per job of its published revisions, each written once | `job/store.py` |
+| `setups/` | One JSON file per job: where this machine has its panel on the bed, and the board's height | `job/store.py` |
 | `captures/` | Frames saved with the Capture panel | `capture.py` |
 | `recordings/` | Flight recordings | `recorder.py` |
 | `bring-up.json` | Progress through the bring-up checklist | `bringup.py` |

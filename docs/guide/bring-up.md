@@ -152,8 +152,11 @@ effect at once. The reset button next to one forgets it.
 
 - [ ] In the Prepare workspace, import the board (and its panel), use **Find a place**,
       fasten the board where the map shows it, and save the job. Its parts may run to
-      the edges of where both nozzles reach; rails without parts may go beyond.
-- [ ] In the Run workspace, choose the job. The checks are a dry run against the loaded
+      the edges of where both nozzles reach; rails without parts may go beyond. Then
+      **Publish** it under **Published revisions**: a run runs the newest published
+      revision, with its own copy of the parts. Where the board sits is kept by the
+      machine, so moving it needs no new revision; changing the job does.
+- [ ] In the Run workspace, choose the job (its newest revision is shown). The checks are a dry run against the loaded
       feeders: each placement's feeder and nozzles, and what blocks any of them (no part
       number, no height, no feeder holding the part, tape too wide for the feeders, or
       out of reach). Fix what you can; tick **Place the rest** to leave out the others.

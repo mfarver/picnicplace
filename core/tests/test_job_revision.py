@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
 from picnicplace.board.kicad import read_kicad_pcb
-from picnicplace.job.models import Job, MachineLocation
+from picnicplace.job.models import Job, JobSetup, MachineLocation
 from picnicplace.job.revision import (
     JobFileError,
     JobRevision,
@@ -189,3 +189,71 @@ def test_revision_endpoints(client: TestClient) -> None:
         r = other.post(load_url, json={"text": old})
         assert r.json()["kind"] == "working-copy" and r.json()["job_id"] == "Old-job"
         assert other.post(load_url, json={"text": old}).status_code == 409
+
+
+def test_the_machine_keeps_where_a_job_sits(tmp_path: Path) -> None:
+    store = JobStore(tmp_path / "jobs", tmp_path / "setups")
+    job, _ = demo()
+    at = MachineLocation(x=10, y=20, rotation=90)
+    store.put("picnic-demo", job.model_copy(update={"location": at, "board_z": -27.0}))
+    # The working copy holds the design only; the setup is the machine's.
+    saved = json.loads((tmp_path / "jobs" / "picnic-demo.json").read_text())
+    assert "location" not in saved and "board_z" not in saved
+    assert store.setup("picnic-demo") == JobSetup(location=at, board_z=-27.0)
+    got = store.get("picnic-demo")
+    assert got is not None and got.location == at and got.board_z == -27.0
+    assert store.list()[0].placed
+
+    # A working copy saved before setups were kept apart still has its place.
+    old = job.model_copy(update={"location": at}).model_dump_json()
+    (tmp_path / "jobs" / "older.json").write_text(old)
+    assert store.setup("older").location == at
+
+    # What runs: the newest revision, set up as the machine keeps it.
+    assert store.resolve("picnic-demo")[1] is None
+    store.add_revision(revision())
+    run, published = store.resolve("picnic-demo")
+    assert published is not None and published.revision.number == 1
+    assert run.location == at and run.board_z == -27.0
+    with pytest.raises(LookupError, match="no revision 2"):
+        store.resolve("picnic-demo", 2)
+    with pytest.raises(LookupError, match="no job"):
+        store.resolve("nothing")
+
+    # The setup outlives the working copy.
+    store.delete("picnic-demo")
+    assert store.resolve("picnic-demo")[0].location == at
+
+
+def test_a_job_from_a_file_is_set_up_and_planned(client: TestClient) -> None:
+    job, library = demo()
+    rev = make_revision("picnic-demo", job, library, number=1, author="Pat", reason="", now=WHEN)
+    assert client.post("/api/v1/jobs/import", json={"text": dump(rev)}).status_code == 200
+    assert client.get("/api/v1/jobs/picnic-demo").status_code == 404  # no working copy
+
+    url = "/api/v1/jobs/picnic-demo/setup"
+    assert client.get(url).json() == {"location": None, "board_z": None}
+    at = client.post("/api/v1/jobs/find-location", json=job.model_dump(mode="json")).json()
+    assert client.put(url, json={"location": at}).status_code == 200
+    assert client.get(url).json()["location"] == at
+    assert client.get("/api/v1/jobs/none/setup").status_code == 404
+    assert client.get("/api/v1/jobs").json()[0]["placed"]
+
+    layout = client.get("/api/v1/jobs/picnic-demo/layout").json()
+    assert layout["placements"] and layout["outline"]
+    assert client.get("/api/v1/jobs/picnic-demo/layout?revision=2").status_code == 404
+
+    # The plan uses the revision's copy of the library, not this machine's (empty) one.
+    plan = client.post("/api/v1/run/plan", json={"job_id": "picnic-demo"}).json()
+    assert plan["revision"] == 1
+    notes = {i["ref"]: i["note"] for i in plan["items"]}
+    assert "not in the parts library" not in (notes.get("U2") or "")
+    assert "not in the parts library" in (notes.get("U1") or "")  # missing from the revision
+
+
+def test_a_job_not_yet_published_is_planned_but_not_run(client: TestClient) -> None:
+    job, _ = demo()
+    assert client.put("/api/v1/jobs/draft", json=job.model_dump(mode="json")).status_code == 200
+    plan = client.post("/api/v1/run/plan", json={"job_id": "draft"}).json()
+    assert plan["revision"] is None and not plan["runnable"]
+    assert plan["issues"][0]["message"].startswith("the job is not published yet")

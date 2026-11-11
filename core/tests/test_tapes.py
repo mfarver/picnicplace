@@ -16,7 +16,7 @@ from picnicplace.library.models import (
     with_pin1,
 )
 from tests.conftest import connect
-from tests.test_run import DATA, set_up
+from tests.test_run import DATA, publish, set_up
 from tests.test_run import lumen as lumen_run  # noqa: F401 (fixture)
 
 R0603 = Footprint(
@@ -161,6 +161,7 @@ def test_a_run_warns_when_the_rotation_in_tape_is_not_known(
         part = library.part("EX-R0603-10K")
         tape = library.tape_of(part)
         library.put_tape(tape.model_copy(update={"rotation": None}))
+        publish(s)
         plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
         warnings = [i["message"] for i in plan["issues"] if i["severity"] == "warning"]
         assert any("rotation in tape is not known for EX-R0603-10K" in w for w in warnings)

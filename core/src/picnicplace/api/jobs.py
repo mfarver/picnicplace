@@ -1,5 +1,5 @@
-"""Job endpoints: saved jobs and their published revisions, and where a job's placements
-land on the machine."""
+"""Job endpoints: saved jobs, their published revisions, this machine's setup for each,
+and where a job's placements land on the machine."""
 
 import json
 from typing import Annotated, Any, Literal
@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, ValidationError
 from picnicplace.api.context import Context, require
 from picnicplace.auth import Permission
 from picnicplace.job.layout import JobLayout, find_location, layout
-from picnicplace.job.models import Job, MachineLocation
+from picnicplace.job.models import Job, JobSetup, MachineLocation
 from picnicplace.job.revision import JobFileError, JobRevision, load, make_revision
 from picnicplace.job.store import (
     JOB_ID,
@@ -36,7 +36,7 @@ REVISION_NOT_FOUND: dict[int | str, dict[str, Any]] = {
 
 
 def get_store(ctx: Context) -> JobStore:
-    return JobStore(ctx.config.data.jobs_dir)
+    return JobStore(ctx.config.data.jobs_dir, ctx.config.data.setups_dir)
 
 
 Store = Annotated[JobStore, Depends(get_store)]
@@ -85,6 +85,7 @@ def job_find_location(ctx: Context, job: Job) -> MachineLocation:
 
 @router.get("/{job_id}", responses=NOT_FOUND)
 def get_job(store: Store, job_id: str) -> Job:
+    """A job's working copy, with this machine's setup for it (location, board height)."""
     job = store.get(_checked(job_id))
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"no job {job_id!r}")
@@ -93,7 +94,8 @@ def get_job(store: Store, job_id: str) -> Job:
 
 @router.put("/{job_id}", dependencies=[CanEdit])
 def put_job(store: Store, job_id: str, job: Job) -> Job:
-    """Save a job, creating or replacing it."""
+    """Save a job's working copy, creating or replacing it. Its location and board height
+    are kept as this machine's setup for the job, not in the job."""
     store.put(_checked(job_id), job)
     return job
 
@@ -107,6 +109,47 @@ def put_job(store: Store, job_id: str, job: Job) -> Job:
 def delete_job(store: Store, job_id: str) -> None:
     if not store.delete(_checked(job_id)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"no job {job_id!r}")
+
+
+# --- This machine's setup ----------------------------------------------------------------
+
+
+def _existing(store: JobStore, job_id: str) -> str:
+    if not store.exists(_checked(job_id)):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"no job {job_id!r}")
+    return job_id
+
+
+@router.get("/{job_id}/setup", responses=NOT_FOUND)
+def get_setup(store: Store, job_id: str) -> JobSetup:
+    """Where this machine has the job's panel on the bed, and the board's measured height.
+    Kept by the machine, apart from the job and its revisions."""
+    return store.setup(_existing(store, job_id))
+
+
+@router.put(
+    "/{job_id}/setup", responses=NOT_FOUND, dependencies=[Depends(require(Permission.MOTION))]
+)
+def put_setup(store: Store, job_id: str, setup: JobSetup) -> JobSetup:
+    """Set where the job's panel sits on this machine, and the board's height. Works for a
+    job loaded from a file too, which has no working copy."""
+    store.put_setup(_existing(store, job_id), setup)
+    return setup
+
+
+@router.get("/{job_id}/layout", responses=REVISION_NOT_FOUND)
+def get_job_layout(
+    ctx: Context, store: Store, job_id: str, revision: int | None = None
+) -> JobLayout:
+    """Where each placement of what runs for the job (``revision``, else its newest, else
+    its working copy) lands on this machine, as set up here."""
+    try:
+        job, _ = store.resolve(_checked(job_id), revision)
+    except LookupError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except JobFileError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return layout(job, ctx.machine.profile)
 
 
 # --- Revisions ----------------------------------------------------------------------------

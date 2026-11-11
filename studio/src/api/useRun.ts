@@ -40,8 +40,15 @@ export function useRun(): UseRun {
   return [run, setRun, refresh];
 }
 
-/** A saved job's outline on the bed (boards, panel, and parts), for the machine map. */
-export function useJobLayout(jobId: string | null | undefined, refreshKey: unknown = 0) {
+/**
+ * What runs for a job (the given published revision, else its newest), as set up on this
+ * machine: its outline on the bed (boards, panel, and parts), for the machine map.
+ */
+export function useJobLayout(
+  jobId: string | null | undefined,
+  revision?: number | null,
+  refreshKey: unknown = 0,
+) {
   const { status } = useCore();
   const [layout, setLayout] = useState<{ jobId: string; layout: JobLayout | null } | null>(
     null,
@@ -49,16 +56,16 @@ export function useJobLayout(jobId: string | null | undefined, refreshKey: unkno
   useEffect(() => {
     if (status !== "open" || !jobId) return;
     let cancelled = false;
-    void api.GET("/api/v1/jobs/{job_id}", { params: { path: { job_id: jobId } } }).then(
-      async ({ data }) => {
-        if (!data || cancelled) return;
-        const result = await api.POST("/api/v1/jobs/layout", { body: data });
-        if (!cancelled) setLayout({ jobId, layout: result.data ?? null });
-      },
-    );
+    void api
+      .GET("/api/v1/jobs/{job_id}/layout", {
+        params: { path: { job_id: jobId }, query: { revision: revision ?? undefined } },
+      })
+      .then(({ data }) => {
+        if (!cancelled) setLayout({ jobId, layout: data ?? null });
+      });
     return () => {
       cancelled = true;
     };
-  }, [status, jobId, refreshKey]);
+  }, [status, jobId, revision, refreshKey]);
   return layout && layout.jobId === jobId ? layout.layout : null;
 }

@@ -122,6 +122,7 @@ export function RunWorkspace() {
       api.POST("/api/v1/run/start", {
         body: {
           job_id: chosen,
+          revision: plan?.revision ?? undefined,
           skip_blocked: skipBlocked,
           pick_correction: correction,
           record,
@@ -132,7 +133,11 @@ export function RunWorkspace() {
     if (op) await refresh();
   };
   const checkBoard = () =>
-    void act(() => api.POST("/api/v1/run/check-board", { body: { job_id: chosen } }));
+    void act(() =>
+      api.POST("/api/v1/run/check-board", {
+        body: { job_id: chosen, revision: plan?.revision ?? undefined },
+      }),
+    );
   const goTo = (x: number, y: number) =>
     void act(() => api.POST("/api/v1/machine/move", { body: { position: { X: x, Y: y } } }));
   const signal = async (path: "/api/v1/run/pause" | "/api/v1/run/stop") => {
@@ -180,16 +185,21 @@ export function RunWorkspace() {
               disabled={running}
               onChange={(e) => setJobId(e.target.value)}
             >
-              {jobs.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.name}
-                  {j.placed ? "" : " (not placed on the bed)"}
-                </option>
-              ))}
+              {jobs.map((j) => {
+                const latest = j.revisions.at(-1);
+                return (
+                  <option key={j.id} value={j.id}>
+                    {j.name}
+                    {latest ? ` · r${latest.number}` : " (not published)"}
+                    {j.placed ? "" : " (not placed on the bed)"}
+                  </option>
+                );
+              })}
             </select>
           )}
           {shownPlan && (
             <p className="note text-muted">
+              {shownPlan.revision ? `Revision ${shownPlan.revision}: ` : ""}
               {todo} placement{todo === 1 ? "" : "s"}
               {blocked ? `, ${blocked} blocked` : ""}
               {counts.skipped ? `, ${counts.skipped} left out` : ""}; {shownPlan.fiducials}{" "}

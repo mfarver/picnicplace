@@ -15,7 +15,7 @@ from picnicplace.api import create_app
 from picnicplace.feeders.setup import FixedFeeder
 from picnicplace.machine.profile import Point
 from tests.conftest import Session, connect, fast_config, put_taped
-from tests.test_run import check_landed, lumen, ok, set_up  # noqa: F401 (fixture)
+from tests.test_run import check_landed, lumen, ok, publish, set_up  # noqa: F401 (fixture)
 
 
 def tray(**update: Any) -> dict[str, Any]:
@@ -96,6 +96,7 @@ def test_a_wide_part_from_a_strip(lumen: TestClient) -> None:  # noqa: F811
         library = lumen.app.state.ctx.library  # type: ignore[attr-defined]
         mcu = library.find_part("EX-MCU-8")
         put_taped(library, mcu, "embossed", 24.0, 12.0, library.tape_of(mcu).rotation)
+        publish(s)
         strip = {
             "label": "24 mm holder",
             "kind": "strip",

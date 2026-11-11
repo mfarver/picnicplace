@@ -37,12 +37,15 @@ export function JobRevisions({
   jobId,
   revisions,
   unsaved,
+  publishable = true,
   onPublished,
 }: {
   jobId: string;
   revisions: RevisionSummary[];
   /** The job has changes not yet saved: a revision is made from the saved job. */
   unsaved: boolean;
+  /** False for a job loaded from a file: there is no working copy to publish. */
+  publishable?: boolean;
   onPublished: () => void;
 }) {
   const { run, pending, error } = useAction();
@@ -92,34 +95,42 @@ export function JobRevisions({
           ))}
         </ul>
       )}
-      <Field label="Your name">
-        <input className="input" value={author} onChange={(e) => setAuthor(e.target.value)} />
-      </Field>
-      <Field label="What changed">
-        <input
-          className="input"
-          value={reason}
-          placeholder={revisions.length ? "Such as: turned U3 to match its tape" : "First run"}
-          onChange={(e) => setReason(e.target.value)}
-        />
-      </Field>
-      <div className="button-row">
-        <button
-          type="button"
-          className="button primary"
-          disabled={pending || unsaved || !author.trim()}
-          onClick={() => void publish()}
-        >
-          <Send size={16} aria-hidden />
-          Publish r{(revisions.at(-1)?.number ?? 0) + 1}
-        </button>
-      </div>
-      {unsaved && <p className="note text-muted">Save the job first: it is published as saved.</p>}
-      {missing.length > 0 && (
-        <p className="note note-warn">
-          Not in the library, so not in the revision: {missing.join(", ")}. Add them to the
-          library and publish again.
-        </p>
+      {publishable && (
+        <>
+          <Field label="Your name">
+            <input className="input" value={author} onChange={(e) => setAuthor(e.target.value)} />
+          </Field>
+          <Field label="What changed">
+            <input
+              className="input"
+              value={reason}
+              placeholder={
+                revisions.length ? "Such as: turned U3 to match its tape" : "First run"
+              }
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </Field>
+          <div className="button-row">
+            <button
+              type="button"
+              className="button primary"
+              disabled={pending || unsaved || !author.trim()}
+              onClick={() => void publish()}
+            >
+              <Send size={16} aria-hidden />
+              Publish r{(revisions.at(-1)?.number ?? 0) + 1}
+            </button>
+          </div>
+          {unsaved && (
+            <p className="note text-muted">Save the job first: it is published as saved.</p>
+          )}
+          {missing.length > 0 && (
+            <p className="note note-warn">
+              Not in the library, so not in the revision: {missing.join(", ")}. Add them to the
+              library and publish again.
+            </p>
+          )}
+        </>
       )}
       {error && <p className="note note-danger">{error}</p>}
     </>

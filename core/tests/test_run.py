@@ -92,7 +92,21 @@ def set_up(client: TestClient, s: Session, calibrate: bool = True) -> None:
     location = client.post("/api/v1/jobs/find-location", json=job)
     assert location.status_code == 200, location.json()
     job["location"] = location.json()
-    assert s.put("/api/v1/jobs/demo", job).status_code == 200
+    save(s, job)
+
+
+def publish(s: Session, job_id: str = "demo") -> int:
+    """Publish a job's working copy as its next revision, with the library as it is now:
+    a run uses the revision's copy of the library."""
+    r = s.post(f"/api/v1/jobs/{job_id}/revisions", {"author": "test"})
+    assert r.status_code == 200, r.json()
+    return r.json()["revision"]["number"]
+
+
+def save(s: Session, job: dict[str, Any], job_id: str = "demo") -> int:
+    """Save a job and publish it, so the next run runs it."""
+    assert s.put(f"/api/v1/jobs/{job_id}", job).status_code == 200
+    return publish(s, job_id)
 
 
 def ok(op: dict[str, Any]) -> dict[str, Any]:
@@ -162,17 +176,28 @@ def test_plan_says_what_it_can_and_cannot_do(lumen: TestClient) -> None:
         tape = library.tape_of(mcu)
         assert mcu is not None and tape is not None
         put_taped(library, mcu, tape.kind, 24.0, tape.pitch, tape.rotation)
+        # The published revision keeps its own copy of the part's tape.
         items = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()["items"]
-        u2 = next(i for i in items if i["ref"] == "U2")
+        assert next(i for i in items if i["ref"] == "U2")["status"] == "pending"
+        assert publish(s) == 2
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        assert plan["revision"] == 2
+        u2 = next(i for i in plan["items"] if i["ref"] == "U2")
         assert u2["status"] == "blocked"
         assert u2["note"] == (
             "EX-MCU-8 comes in 24 mm tape; this machine's feeders take 8 and 12 mm "
             "(hold it in a strip on the bed instead)"
         )
         library.put_part(mcu)
+        put_taped(library, mcu, tape.kind, tape.width, tape.pitch, tape.rotation)
+        # Revision 1 is still there to run, as it was.
+        r1 = s.post("/api/v1/run/plan", {"job_id": "demo", "revision": 1}).json()
+        assert r1["revision"] == 1
+        assert next(i for i in r1["items"] if i["ref"] == "U2")["status"] == "pending"
+        assert s.post("/api/v1/run/plan", {"job_id": "demo", "revision": 9}).status_code == 422
 
         # Blocked placements must be skipped on purpose.
-        r = s.post("/api/v1/run/start", {"job_id": "demo"})
+        r = s.post("/api/v1/run/start", {"job_id": "demo", "revision": 1})
         assert r.status_code == 409 and "1 placement is blocked" in r.json()["detail"]
 
 
@@ -205,7 +230,7 @@ def test_check_the_board_without_placing(lumen: TestClient) -> None:
         for p in job["board"]["placements"]:
             if p["kind"] == "part":
                 p["enabled"] = False
-        assert s.put("/api/v1/jobs/demo", job).status_code == 200
+        save(s, job)
         r = s.post("/api/v1/run/start", {"job_id": "demo"})
         assert r.status_code == 409 and "nothing to place" in r.json()["detail"]
 
@@ -229,11 +254,11 @@ def test_check_needs_fiducials_and_a_location(lumen: TestClient) -> None:
         for p in job["board"]["placements"]:
             if p["kind"] == "fiducial":
                 p["enabled"] = False
-        assert s.put("/api/v1/jobs/demo", job).status_code == 200
+        save(s, job)
         r = s.post("/api/v1/run/check-board", {"job_id": "demo"})
         assert r.status_code == 409 and "no fiducials" in r.json()["detail"]
-        job["location"] = None
-        assert s.put("/api/v1/jobs/demo", job).status_code == 200
+        # Where the board sits is this machine's setup, not part of the job.
+        assert s.put("/api/v1/jobs/demo/setup", {"location": None}).status_code == 200
         r = s.post("/api/v1/run/check-board", {"job_id": "demo"})
         assert r.status_code == 409 and "no location" in r.json()["detail"]
 

@@ -83,6 +83,10 @@ class DataConfig(_Section):
         return self.dir.expanduser() / "jobs"
 
     @property
+    def setups_dir(self) -> Path:
+        return self.dir.expanduser() / "setups"
+
+    @property
     def feeders_path(self) -> Path:
         return self.dir.expanduser() / "feeders.json"
 

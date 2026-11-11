@@ -29,6 +29,10 @@ Control = [Depends(require_control)]
 
 class PlanRequest(WireModel):
     job_id: str
+    revision: int | None = Field(
+        default=None,
+        description="The published revision to run. Empty: the job's newest.",
+    )
 
 
 class StartRequest(PlanRequest):
@@ -72,10 +76,11 @@ async def run_state(runner: Runner) -> RunState | None:
 
 @router.post("/plan", responses=MACHINE_ERRORS)
 async def plan(runner: Runner, body: PlanRequest) -> JobPlan:
-    """What a run of a saved job would do, without moving anything: each placement's
-    feeder and nozzles, and what stops any of them (no part number, part, height, or
-    feeder, or out of reach). A dry run against the loaded feeders."""
-    return runner.plan(body.job_id)
+    """What a run of a job's published revision would do, without moving anything: each
+    placement's feeder and nozzles, and what stops any of them (no part number, part,
+    height, or feeder, or out of reach). A dry run against the loaded feeders. A job not
+    yet published is planned from its working copy, with an issue saying it cannot run."""
+    return runner.plan(body.job_id, body.revision)
 
 
 @router.post(
@@ -85,9 +90,10 @@ async def plan(runner: Runner, body: PlanRequest) -> JobPlan:
     dependencies=Control,
 )
 async def start(runner: Runner, body: StartRequest) -> Operation:
-    """Run a saved job: find the board's fiducials, then pick, align, and place every part."""
+    """Run a job's published revision (its newest unless one is given), set up as this
+    machine keeps it: find the board's fiducials, then pick, align, and place every part."""
     return runner.start(
-        body.job_id, body.skip_blocked, body.pick_correction, body.record, body.step
+        body.job_id, body.skip_blocked, body.pick_correction, body.record, body.step, body.revision
     )
 
 
@@ -101,7 +107,7 @@ async def check_board(runner: Runner, body: PlanRequest) -> Operation:
     """Find a saved job's board by its fiducials and fit it, placing nothing: to check the
     board and the job's location before a run. Works even with no placements turned on.
     The result is kept (``GET /api/v1/run/board-check``)."""
-    return runner.check_board(body.job_id)
+    return runner.check_board(body.job_id, body.revision)
 
 
 @router.get("/board-check")

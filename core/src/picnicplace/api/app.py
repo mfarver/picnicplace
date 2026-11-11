@@ -119,7 +119,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         ctx.placement = PlacementService(
             machine, ctx.feeders, lambda: ctx.library, config.machine.pick_correction
         )
-        jobs = JobStore(config.data.jobs_dir)
+        jobs = JobStore(config.data.jobs_dir, config.data.setups_dir)
         ctx.runner = JobRunner(
             machine,
             ctx.feeders,

@@ -15,16 +15,27 @@ import hashlib
 import json
 import re
 from datetime import UTC, datetime
-from typing import Literal, cast
+from typing import Literal, Protocol, cast
 
 from pydantic import Field, ValidationError
 
 from picnicplace.board.models import Board, BoardModel, Placement, Side
 from picnicplace.board.panel import Panel
-from picnicplace.job.models import Job
+from picnicplace.job.models import Job, JobSetup
 from picnicplace.library import Footprint, Library, Part, Tape
 
 HASH = re.compile(r"^[0-9a-f]{64}$")
+
+
+class PartsSource(Protocol):
+    """Where a run finds its parts, footprints, and tapes: a revision's copy of them, or
+    (for a plan of a job not yet published) the library."""
+
+    def find_part(self, part_id: str) -> Part | None: ...
+
+    def find_footprint(self, footprint_id: str) -> Footprint | None: ...
+
+    def tape_of(self, part: Part | None) -> Tape | None: ...
 
 
 class LibrarySnapshot(BoardModel):
@@ -63,6 +74,11 @@ class JobDesign(BoardModel):
             "revision was made, sorted."
         ),
     )
+
+    def job(self, setup: JobSetup | None = None) -> Job:
+        """The design as a job, set up as one machine keeps it."""
+        job = Job(name=self.name, board=self.board, panel=self.panel, side_up=self.side_up)
+        return job.with_setup(setup) if setup else job
 
 
 class RevisionInfo(BoardModel):

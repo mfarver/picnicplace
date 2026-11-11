@@ -2040,7 +2040,7 @@
                 "type": "null"
               }
             ],
-            "description": "Machine Z of the board's top surface, once measured.",
+            "description": "Machine Z of the board's top surface, once measured: from its setup.",
             "title": "Board Z"
           },
           "format": {
@@ -2058,7 +2058,7 @@
                 "type": "null"
               }
             ],
-            "description": "Where the panel sits on the machine, once set."
+            "description": "Where the panel sits on this machine, once set: from its setup."
           },
           "name": {
             "maxLength": 200,
@@ -2109,7 +2109,7 @@
                 "type": "null"
               }
             ],
-            "description": "Machine Z of the board's top surface, once measured.",
+            "description": "Machine Z of the board's top surface, once measured: from its setup.",
             "title": "Board Z"
           },
           "format": {
@@ -2127,7 +2127,7 @@
                 "type": "null"
               }
             ],
-            "description": "Where the panel sits on the machine, once set."
+            "description": "Where the panel sits on this machine, once set: from its setup."
           },
           "name": {
             "maxLength": 200,
@@ -2298,6 +2298,18 @@
             "title": "Parts",
             "type": "array"
           },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The published revision planned, whose copy of the library it uses. Empty for a job not yet published, planned from its working copy (which cannot run).",
+            "title": "Revision"
+          },
           "runnable": {
             "description": "The run can start, placing what it can and skipping what is blocked.",
             "readOnly": true,
@@ -2307,6 +2319,7 @@
         },
         "required": [
           "job_id",
+          "revision",
           "name",
           "items",
           "parts",
@@ -2352,6 +2365,72 @@
           "design"
         ],
         "title": "JobRevision",
+        "type": "object"
+      },
+      "JobSetup-Input": {
+        "additionalProperties": false,
+        "description": "What one machine keeps about a job: where its panel sits on the bed and the\nboard's measured height. Never part of a revision, which any machine can run.",
+        "properties": {
+          "board_z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Machine Z of the board's top surface, once measured.",
+            "title": "Board Z"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachineLocation-Input"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the panel sits on the machine, once set."
+          }
+        },
+        "title": "JobSetup",
+        "type": "object"
+      },
+      "JobSetup-Output": {
+        "additionalProperties": false,
+        "description": "What one machine keeps about a job: where its panel sits on the bed and the\nboard's measured height. Never part of a revision, which any machine can run.",
+        "properties": {
+          "board_z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Machine Z of the board's top surface, once measured.",
+            "title": "Board Z"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachineLocation-Output"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the panel sits on the machine, once set."
+          }
+        },
+        "required": [
+          "location",
+          "board_z"
+        ],
+        "title": "JobSetup",
         "type": "object"
       },
       "JobSummary": {
@@ -4904,6 +4983,18 @@
           "job_id": {
             "title": "Job Id",
             "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The published revision to run. Empty: the job's newest.",
+            "title": "Revision"
           }
         },
         "required": [
@@ -6188,6 +6279,18 @@
             "description": "Keep a flight recording of the run (the frames vision looked at and what the machine did), if nothing else is being recorded. The config can record every run.",
             "title": "Record",
             "type": "boolean"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The published revision to run. Empty: the job's newest.",
+            "title": "Revision"
           },
           "skip_blocked": {
             "default": false,
@@ -9004,6 +9107,7 @@
         ]
       },
       "get": {
+        "description": "A job's working copy, with this machine's setup for it (location, board height).",
         "operationId": "get_job_api_v1_jobs__job_id__get",
         "parameters": [
           {
@@ -9059,7 +9163,7 @@
         ]
       },
       "put": {
-        "description": "Save a job, creating or replacing it.",
+        "description": "Save a job's working copy, creating or replacing it. Its location and board height\nare kept as this machine's setup for the job, not in the job.",
         "operationId": "put_job_api_v1_jobs__job_id__put",
         "parameters": [
           {
@@ -9110,6 +9214,80 @@
           }
         ],
         "summary": "Put Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}/layout": {
+      "get": {
+        "description": "Where each placement of what runs for the job (``revision``, else its newest, else\nits working copy) lands on this machine, as set up here.",
+        "operationId": "get_job_layout_api_v1_jobs__job_id__layout_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Revision"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobLayout"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such job or revision."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Job Layout",
         "tags": [
           "jobs"
         ]
@@ -9377,6 +9555,130 @@
           }
         ],
         "summary": "Download Revision",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}/setup": {
+      "get": {
+        "description": "Where this machine has the job's panel on the bed, and the board's measured height.\nKept by the machine, apart from the job and its revisions.",
+        "operationId": "get_setup_api_v1_jobs__job_id__setup_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSetup-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No job with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Setup",
+        "tags": [
+          "jobs"
+        ]
+      },
+      "put": {
+        "description": "Set where the job's panel sits on this machine, and the board's height. Works for a\njob loaded from a file too, which has no working copy.",
+        "operationId": "put_setup_api_v1_jobs__job_id__setup_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobSetup-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSetup-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No job with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Setup",
         "tags": [
           "jobs"
         ]
@@ -12377,7 +12679,7 @@
     },
     "/api/v1/run/plan": {
       "post": {
-        "description": "What a run of a saved job would do, without moving anything: each placement's\nfeeder and nozzles, and what stops any of them (no part number, part, height, or\nfeeder, or out of reach). A dry run against the loaded feeders.",
+        "description": "What a run of a job's published revision would do, without moving anything: each\nplacement's feeder and nozzles, and what stops any of them (no part number, part,\nheight, or feeder, or out of reach). A dry run against the loaded feeders. A job not\nyet published is planned from its working copy, with an issue saying it cannot run.",
         "operationId": "plan_api_v1_run_plan_post",
         "requestBody": {
           "content": {
@@ -12500,7 +12802,7 @@
     },
     "/api/v1/run/start": {
       "post": {
-        "description": "Run a saved job: find the board's fiducials, then pick, align, and place every part.",
+        "description": "Run a job's published revision (its newest unless one is given), set up as this\nmachine keeps it: find the board's fiducials, then pick, align, and place every part.",
         "operationId": "start_api_v1_run_start_post",
         "parameters": [
           {

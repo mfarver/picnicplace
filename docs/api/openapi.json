@@ -1759,6 +1759,20 @@
         "title": "IdentifyResult",
         "type": "object"
       },
+      "ImportJobRequest": {
+        "properties": {
+          "text": {
+            "description": "The job file's contents.",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ImportJobRequest",
+        "type": "object"
+      },
       "ImportReport": {
         "properties": {
           "added": {
@@ -1831,6 +1845,49 @@
           "document"
         ],
         "title": "ImportRequest",
+        "type": "object"
+      },
+      "ImportedJob": {
+        "properties": {
+          "already_kept": {
+            "default": false,
+            "description": "This very revision was already here; nothing changed.",
+            "title": "Already Kept",
+            "type": "boolean"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "description": "A revision is kept as published; a job file saved before revisions becomes a working copy, to publish from Prepare.",
+            "enum": [
+              "revision",
+              "working-copy"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The revision's number.",
+            "title": "Number"
+          }
+        },
+        "required": [
+          "job_id",
+          "kind",
+          "number",
+          "already_kept"
+        ],
+        "title": "ImportedJob",
         "type": "object"
       },
       "Input": {
@@ -2110,6 +2167,55 @@
         "title": "Job",
         "type": "object"
       },
+      "JobDesign": {
+        "additionalProperties": false,
+        "description": "What to build: everything in a revision that its hash covers.",
+        "properties": {
+          "board": {
+            "$ref": "#/components/schemas/Board-Output"
+          },
+          "library": {
+            "$ref": "#/components/schemas/LibrarySnapshot",
+            "description": "A copy of every part, footprint, and tape the job uses."
+          },
+          "missing": {
+            "description": "Part and footprint IDs the job uses that the library did not have when the revision was made, sorted.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "panel": {
+            "$ref": "#/components/schemas/Panel-Output"
+          },
+          "side_up": {
+            "description": "The board side facing up on the machine.",
+            "enum": [
+              "top",
+              "bottom"
+            ],
+            "title": "Side Up",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "board",
+          "panel",
+          "side_up",
+          "library",
+          "missing"
+        ],
+        "title": "JobDesign",
+        "type": "object"
+      },
       "JobLayout": {
         "properties": {
           "issues": {
@@ -2212,6 +2318,42 @@
         "title": "JobPlan",
         "type": "object"
       },
+      "JobRevision": {
+        "additionalProperties": false,
+        "properties": {
+          "design": {
+            "$ref": "#/components/schemas/JobDesign"
+          },
+          "format": {
+            "const": "picnicplace-job",
+            "default": "picnicplace-job",
+            "title": "Format",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/RevisionInfo"
+          },
+          "version": {
+            "const": 2,
+            "default": 2,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "job_id",
+          "revision",
+          "design"
+        ],
+        "title": "JobRevision",
+        "type": "object"
+      },
       "JobSummary": {
         "properties": {
           "board": {
@@ -2221,6 +2363,11 @@
           "copies": {
             "title": "Copies",
             "type": "integer"
+          },
+          "draft": {
+            "description": "Whether there is a working copy to edit in Prepare.",
+            "title": "Draft",
+            "type": "boolean"
           },
           "id": {
             "title": "Id",
@@ -2239,6 +2386,14 @@
             "title": "Placed",
             "type": "boolean"
           },
+          "revisions": {
+            "description": "Published revisions, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/RevisionSummary"
+            },
+            "title": "Revisions",
+            "type": "array"
+          },
           "side_up": {
             "title": "Side Up",
             "type": "string"
@@ -2251,7 +2406,9 @@
           "copies",
           "side_up",
           "placed",
-          "modified"
+          "modified",
+          "draft",
+          "revisions"
         ],
         "title": "JobSummary",
         "type": "object"
@@ -2564,6 +2721,40 @@
           "parts"
         ],
         "title": "LibraryDocument",
+        "type": "object"
+      },
+      "LibrarySnapshot": {
+        "additionalProperties": false,
+        "description": "The library entries a revision uses, each sorted by ID.",
+        "properties": {
+          "footprints": {
+            "items": {
+              "$ref": "#/components/schemas/Footprint-Output"
+            },
+            "title": "Footprints",
+            "type": "array"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/Part-Output"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "tapes": {
+            "items": {
+              "$ref": "#/components/schemas/Tape-Output"
+            },
+            "title": "Tapes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "footprints",
+          "parts",
+          "tapes"
+        ],
+        "title": "LibrarySnapshot",
         "type": "object"
       },
       "LocalProfileState": {
@@ -4848,6 +5039,29 @@
         "title": "PresenceState",
         "type": "object"
       },
+      "PublishRequest": {
+        "properties": {
+          "author": {
+            "description": "Who is publishing it.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Author",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "description": "What changed, and why.",
+            "maxLength": 2000,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "author"
+        ],
+        "title": "PublishRequest",
+        "type": "object"
+      },
       "RailCalibration": {
         "additionalProperties": false,
         "description": "Where a feeder rail (a profile's feeder bank) really is. Its slots are moved from\nthe profile's places by turning them by ``angle`` and stretching them by ``scale``\nabout ``about``, then shifting them by ``shift``.",
@@ -5150,6 +5364,84 @@
           }
         },
         "title": "RefillRequest",
+        "type": "object"
+      },
+      "RevisionInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "description": "Who made the revision.",
+            "maxLength": 200,
+            "title": "Author",
+            "type": "string"
+          },
+          "created": {
+            "format": "date-time",
+            "title": "Created",
+            "type": "string"
+          },
+          "hash": {
+            "description": "SHA-256 of the design, hex.",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Hash",
+            "type": "string"
+          },
+          "number": {
+            "description": "1 for a job's first revision, then 2, 3, \u2026",
+            "minimum": 1.0,
+            "title": "Number",
+            "type": "integer"
+          },
+          "reason": {
+            "default": "",
+            "description": "What changed, and why.",
+            "maxLength": 2000,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "hash",
+          "author",
+          "created",
+          "reason"
+        ],
+        "title": "RevisionInfo",
+        "type": "object"
+      },
+      "RevisionSummary": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "created": {
+            "format": "date-time",
+            "title": "Created",
+            "type": "string"
+          },
+          "hash": {
+            "title": "Hash",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "hash",
+          "author",
+          "created",
+          "reason"
+        ],
+        "title": "RevisionSummary",
         "type": "object"
       },
       "RunItem": {
@@ -8548,6 +8840,73 @@
         ]
       }
     },
+    "/api/v1/jobs/import": {
+      "post": {
+        "description": "Load a job file from disk: a published revision, or a job saved before revisions.",
+        "operationId": "import_job_api_v1_jobs_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportJobRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportedJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The file is not a job file."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "It clashes with a job already here."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Import Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
     "/api/v1/jobs/layout": {
       "post": {
         "description": "Where each placement of a job (saved or not) lands on this machine, and anything\nthat stops the machine from doing it: placements out of reach, fiducials the\ncamera cannot see, or the board over a keep-out.",
@@ -8751,6 +9110,273 @@
           }
         ],
         "summary": "Put Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}/revisions": {
+      "get": {
+        "description": "A job's published revisions, oldest first.",
+        "operationId": "list_revisions_api_v1_jobs__job_id__revisions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RevisionSummary"
+                  },
+                  "title": "Response List Revisions Api V1 Jobs  Job Id  Revisions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No job with this ID."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Revisions",
+        "tags": [
+          "jobs"
+        ]
+      },
+      "post": {
+        "description": "Publish the job's working copy as its next revision, with a copy of every part,\nfootprint, and tape it uses from the library. A revision never changes afterward.",
+        "operationId": "publish_revision_api_v1_jobs__job_id__revisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No job with this ID."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Another revision was just published."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Publish Revision",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}/revisions/{number}": {
+      "get": {
+        "operationId": "get_revision_api_v1_jobs__job_id__revisions__number__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "title": "Number",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such job or revision."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Revision",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}/revisions/{number}/file": {
+      "get": {
+        "description": "The revision's job file, exactly as kept, to save or take to another machine.",
+        "operationId": "download_revision_api_v1_jobs__job_id__revisions__number__file_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "title": "Number",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {}
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such job or revision."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Download Revision",
         "tags": [
           "jobs"
         ]

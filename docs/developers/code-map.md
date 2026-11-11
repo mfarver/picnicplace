@@ -90,7 +90,7 @@ A request goes **route → service → machine service → driver**:
 
 | Module | What it does |
 |---|---|
-| `library/` | The parts library (SQLite): footprints, parts, and tape packaging per EIA-481 (`tape.py`); OpenPnP library import (`openpnp.py`) |
+| `library/` | The parts library (SQLite): footprints (with pin 1 marked), tapes that parts link to, and parts (`models.py`, `store.py`, which converts older libraries); EIA-481 tape geometry (`tape.py`); OpenPnP library import (`openpnp.py`) |
 | `feeders/slots.py` | Feeder slots, from the profile's feeder banks |
 | `feeders/photon.py`, `feeders/sim.py` | The Photon feeder protocol (RS-485), and simulated Photon feeders |
 | `feeders/setup.py` | The owner's feeder setup (`feeders.json`): parts in feeders, rail and slot calibrations, strips and trays, what the bottom camera learned |
@@ -138,7 +138,7 @@ client. Useful pieces:
 | API, events, presence, config, I/O | `test_api.py`, `test_events.py`, `test_presence.py`, `test_config.py`, `test_io.py` |
 | Machine profiles, the Marlin driver, the probe | `test_profile.py`, `test_marlin.py`, `test_probe.py` |
 | Cameras and vision | `test_cameras.py`, `test_vision.py` |
-| Library, boards, jobs | `test_library.py`, `test_board.py`, `test_job.py` |
+| Library, boards, jobs | `test_library.py`, `test_tapes.py`, `test_board.py`, `test_job.py` |
 | Feeders, placement, runs | `test_feeders.py`, `test_fixed_feeders.py`, `test_placement.py`, `test_pick_correction.py`, `test_run.py` |
 | Flight recorder | `test_recorder.py` |
 
@@ -151,6 +151,7 @@ client. Useful pieces:
 | `components/` | Panels and controls used by the workspaces; `machine/` holds the machine view (the overhead map and head inset), `job/` and `library/` their own pieces |
 | `api/schema.ts` | **Generated** TypeScript types for the whole API (`make api`); never edit by hand |
 | `api/types.ts` | Short names for the generated types |
+| `tape.ts`, `runSteps.ts` | Pure logic with unit tests: tape geometry, fit check, pin-1 quadrant, and table-cell parsing; a run's step list |
 | `api/client.ts` | The typed REST client (`api.GET("/api/v1/...")`) |
 | `api/core.ts`, `api/CoreProvider.tsx` | The event socket and the live state it feeds: machine state, operations, presence, the lease |
 | `api/use*.ts` | Hooks that fetch and follow one kind of state, such as `useFeeders` and `useCameras` |

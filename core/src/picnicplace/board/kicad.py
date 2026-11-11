@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 
 from picnicplace.board.models import Board, Placement, Side, normalize_angle
 from picnicplace.board.sexpr import Node, parse
-from picnicplace.library.models import Footprint, Pad, Part, Size
+from picnicplace.library.models import Footprint, Pad, Part, Size, with_pin1
 
 PART_FIELDS = ("MP", "MPN", "Manufacturer Part Number", "Manufacturer_Part_Number", "PN")
 """Footprint fields tried, in order, for the part ID."""
@@ -155,7 +155,7 @@ def library_footprint(
         description=descr,
         body=body,
         body_basis="estimated" if body is not None else "unknown",
-        pads=pads,
+        pads=with_pin1(pads),
         source=f"KiCad footprint {fp.values[0]}",
     )
 

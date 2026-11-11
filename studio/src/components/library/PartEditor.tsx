@@ -1,42 +1,50 @@
 import { RotateCcw, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
-import type { Basis, Footprint, Part, Tape } from "../../api/types";
+import type { Footprint, Part, Tape } from "../../api/types";
+import { TAPE_WIDTHS, standardTape } from "../../tape";
 import { Field, NumberInput } from "../Form";
 import { FootprintDrawing } from "./FootprintShape";
 import { TapeDrawing } from "./TapeDrawing";
-
-const BASES: Basis[] = ["datasheet", "standard", "observed", "measured", "estimated", "unknown"];
-const TAPE_WIDTHS = [8, 12, 16, 24, 32, 44, 56];
-const QUADRANTS = ["Q1", "Q2", "Q3", "Q4"] as const;
-const NEW_TAPE: Tape = {
-  kind: "unknown",
-  width: 8,
-  pitch: 4,
-  rotation: 0,
-  pin1_quadrant: null,
-  basis: "unknown",
-  source: "",
-};
+import { BasisSelect, RotationHelp } from "./TapeEditor";
 
 interface Props {
   part: Part;
+  parts: Part[];
   footprints: Footprint[];
+  tapes: Tape[];
   busy: boolean;
   onSave: (part: Part) => void;
   onDelete: () => void;
+  onOpenTape: (id: string) => void;
+  /** Save a tape (made from values here), resolving to it once saved. */
+  onCreateTape: (tape: Tape) => Promise<Tape | undefined>;
 }
 
 /**
  * View and edit one part: its footprint, height, and how it sits in its tape. Give it a
  * key per part, so switching parts starts a fresh draft.
  */
-export function PartEditor({ part, footprints, busy, onSave, onDelete }: Props) {
+export function PartEditor({
+  part,
+  parts,
+  footprints,
+  tapes,
+  busy,
+  onSave,
+  onDelete,
+  onOpenTape,
+  onCreateTape,
+}: Props) {
   const [draft, setDraft] = useState<Part>(part);
   const footprint = footprints.find((f) => f.id === draft.footprint_id);
   const changed = JSON.stringify(draft) !== JSON.stringify(part);
   const set = (update: Partial<Part>) => setDraft((d) => ({ ...d, ...update }));
-  const setTape = (update: Partial<Tape>) =>
-    setDraft((d) => ({ ...d, tape: { ...(d.tape ?? NEW_TAPE), ...update } }));
+  const tape = tapes.find((t) => t.id === draft.tape_id);
+  const others = tape ? parts.filter((p) => p.tape_id === tape.id && p.id !== part.id).length : 0;
+  // Tapes other parts with this footprint come in: the likely ones.
+  const sameShape = tapes.filter((t) =>
+    parts.some((p) => p.tape_id === t.id && p.footprint_id === draft.footprint_id),
+  );
 
   return (
     <div className="editor">
@@ -138,116 +146,55 @@ export function PartEditor({ part, footprints, busy, onSave, onDelete }: Props) 
 
         <section className="editor-section">
           <h3 className="section-title">Tape</h3>
-          {draft.tape ? (
-            <>
-              <div className="field-row">
-                <Field label="Kind">
-                  <select
-                    className="input"
-                    value={draft.tape.kind}
-                    onChange={(e) => setTape({ kind: e.target.value as Tape["kind"] })}
-                  >
-                    <option value="paper">Paper</option>
-                    <option value="embossed">Embossed</option>
-                    <option value="unknown">Unknown</option>
-                  </select>
-                </Field>
-                <Field label="Width, mm">
-                  <select
-                    className="input"
-                    value={draft.tape.width ?? ""}
-                    onChange={(e) =>
-                      setTape({ width: e.target.value ? Number(e.target.value) : null })
-                    }
-                  >
-                    <option value="">Unknown</option>
-                    {TAPE_WIDTHS.map((w) => (
-                      <option key={w} value={w}>
-                        {w}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Pitch, mm">
-                  <NumberInput
-                    value={draft.tape.pitch}
-                    onChange={(pitch) => setTape({ pitch })}
-                    min={0}
-                  />
-                </Field>
-              </div>
-              <Field label="Rotation in tape">
-                <div className="segmented">
-                  {[0, 90, 180, -90].map((angle) => (
-                    <button
-                      key={angle}
-                      type="button"
-                      className={draft.tape?.rotation === angle ? "segment active" : "segment"}
-                      onClick={() => setTape({ rotation: angle })}
-                    >
-                      {angle}°
-                    </button>
+          <Field label="Comes in">
+            <select
+              className="input"
+              value={draft.tape_id ?? ""}
+              onChange={(e) => set({ tape_id: e.target.value || null })}
+            >
+              <option value="">Not known</option>
+              {sameShape.length > 0 && (
+                <optgroup label={`Used with ${draft.footprint_id}`}>
+                  {sameShape.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name || t.id}
+                    </option>
                   ))}
-                  <NumberInput
-                    value={draft.tape.rotation}
-                    onChange={(rotation) => setTape({ rotation: rotation ?? 0 })}
-                  />
-                </div>
-              </Field>
-              <div className="field-row">
-                <Field label="Pin 1 quadrant">
-                  <select
-                    className="input"
-                    value={draft.tape.pin1_quadrant ?? ""}
-                    onChange={(e) =>
-                      setTape({
-                        pin1_quadrant: (e.target.value || null) as Tape["pin1_quadrant"],
-                      })
-                    }
-                  >
-                    <option value="">Not given</option>
-                    {QUADRANTS.map((q) => (
-                      <option key={q} value={q}>
-                        {q}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="From">
-                  <BasisSelect value={draft.tape.basis} onChange={(basis) => setTape({ basis })} />
-                </Field>
-              </div>
-              <Field label="Source">
-                <input
-                  className="input"
-                  value={draft.tape.source}
-                  placeholder="Tape and reel drawing, or what the reel shows"
-                  onChange={(e) => setTape({ source: e.target.value })}
-                />
-              </Field>
+                </optgroup>
+              )}
+              <optgroup label="All tapes">
+                {tapes
+                  .filter((t) => !sameShape.includes(t))
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name || t.id}
+                    </option>
+                  ))}
+              </optgroup>
+            </select>
+          </Field>
+          {tape ? (
+            <>
               <div className="drawing-box">
-                <TapeDrawing tape={draft.tape} footprint={footprint} />
-                <p className="caption">
-                  Looking down on the cover tape, sprocket holes at the top, feeding left to right.
-                  Pin 1 is the highlighted pad
-                  {draft.tape.pin1_quadrant ? "; the dot is the datasheet's quadrant" : ""}.
-                </p>
+                <TapeDrawing tape={tape} footprint={footprint} />
               </div>
-              <button
-                type="button"
-                className="button button-sm"
-                onClick={() => set({ tape: null })}
-              >
-                Remove tape details
-              </button>
+              <p className="text-muted note">
+                {others > 0
+                  ? `${others} other part${others === 1 ? "" : "s"} come in this tape too.`
+                  : "No other part comes in this tape yet."}{" "}
+                <button type="button" className="link-button" onClick={() => onOpenTape(tape.id)}>
+                  Edit the tape
+                </button>
+              </p>
             </>
           ) : (
-            <>
-              <p className="text-muted">No tape details yet.</p>
-              <button type="button" className="button" onClick={() => set({ tape: NEW_TAPE })}>
-                Add tape details
-              </button>
-            </>
+            <NewTape
+              busy={busy}
+              onCreate={async (t) => {
+                const created = await onCreateTape(t);
+                if (created) set({ tape_id: created.id });
+              }}
+            />
           )}
         </section>
       </div>
@@ -255,14 +202,60 @@ export function PartEditor({ part, footprints, busy, onSave, onDelete }: Props) 
   );
 }
 
-function BasisSelect({ value, onChange }: { value: Basis; onChange: (b: Basis) => void }) {
+/** Make a tape from its values (or find the one with the same values) for a part. */
+function NewTape({ busy, onCreate }: { busy: boolean; onCreate: (tape: Tape) => void }) {
+  const [kind, setKind] = useState<Tape["kind"]>("paper");
+  const [width, setWidth] = useState<number | null>(8);
+  const [pitch, setPitch] = useState<number | null>(4);
+  const [rotation, setRotation] = useState<number | null>(0);
   return (
-    <select className="input" value={value} onChange={(e) => onChange(e.target.value as Basis)}>
-      {BASES.map((b) => (
-        <option key={b} value={b}>
-          {b[0]!.toUpperCase() + b.slice(1)}
-        </option>
-      ))}
-    </select>
+    <>
+      <p className="text-muted note">
+        Not in a tape the library knows yet. Make one from its values; a tape with the same
+        values is shared rather than made again.
+      </p>
+      <div className="field-row">
+        <Field label="Kind">
+          <select
+            className="input"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as Tape["kind"])}
+          >
+            <option value="paper">Paper</option>
+            <option value="embossed">Embossed</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </Field>
+        <Field label="Width, mm">
+          <select
+            className="input"
+            value={width ?? ""}
+            onChange={(e) => setWidth(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">Not known</option>
+            {TAPE_WIDTHS.map((w) => (
+              <option key={w} value={w}>
+                {w}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Pitch, mm">
+          <NumberInput value={pitch} onChange={setPitch} min={0} />
+        </Field>
+        <Field label="Rotation, °">
+          <NumberInput value={rotation} onChange={setRotation} />
+        </Field>
+      </div>
+      <RotationHelp />
+      <button
+        type="button"
+        className="button"
+        disabled={busy}
+        onClick={() => onCreate(standardTape(kind, width, pitch, rotation))}
+      >
+        Use this tape
+      </button>
+    </>
   );
 }

@@ -80,6 +80,14 @@ class FeederAssignment(_Model):
         gt=0,
         description="Distance from one part to the next. Empty: the part's tape pitch.",
     )
+    tape_width: float | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "The width of tape this feeder takes, mm (8, 12, ...), if known. A part whose "
+            "tape is another width is flagged: the wrong feeder, or the wrong tape."
+        ),
+    )
     enabled: bool = True
     note: str = ""
 
@@ -173,6 +181,11 @@ class FixedFeeder(_Model):
         ),
     )
     picked: int = Field(default=0, ge=0, description="Parts taken (or tried) so far.")
+    tape_width: float | None = Field(
+        default=None,
+        gt=0,
+        description="Strips: the width of tape the holder takes, mm, if known.",
+    )
     enabled: bool = True
 
     @property

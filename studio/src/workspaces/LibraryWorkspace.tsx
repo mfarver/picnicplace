@@ -3,21 +3,29 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useCore } from "../api/core";
 import { useAction } from "../api/useAction";
-import type { Footprint, ImportReport, LibraryDocument, Part } from "../api/types";
+import type { Footprint, ImportReport, LibraryDocument, Part, Tape } from "../api/types";
 import { FootprintDrawing } from "../components/library/FootprintShape";
 import { ImportReportView } from "../components/library/ImportReportView";
 import { PartEditor } from "../components/library/PartEditor";
+import { TapeEditor, TapeTable } from "../components/library/TapeEditor";
 import { Panel } from "../components/Panel";
 import { Placeholder } from "../components/Placeholder";
 
-type Mode = "parts" | "footprints";
+type Mode = "parts" | "tapes" | "footprints";
 
-/** The parts library: parts, their footprints and tape details, and imports. */
+const MODE_LABEL: Record<Mode, string> = {
+  parts: "Parts",
+  tapes: "Tapes",
+  footprints: "Footprints",
+};
+
+/** The parts library: parts, the tapes they come in, their footprints, and imports. */
 export function LibraryWorkspace() {
   const { status } = useCore();
   const { run, pending, error } = useAction();
   const [parts, setParts] = useState<Part[]>([]);
   const [footprints, setFootprints] = useState<Footprint[]>([]);
+  const [tapes, setTapes] = useState<Tape[]>([]);
   const [mode, setMode] = useState<Mode>("parts");
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -26,12 +34,14 @@ export function LibraryWorkspace() {
   const libraryInput = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
-    const [p, f] = await Promise.all([
+    const [p, f, t] = await Promise.all([
       api.GET("/api/v1/library/parts"),
       api.GET("/api/v1/library/footprints"),
+      api.GET("/api/v1/library/tapes"),
     ]);
     if (p.data) setParts(p.data);
     if (f.data) setFootprints(f.data);
+    if (t.data) setTapes(t.data);
   }, []);
 
   useEffect(() => {
@@ -40,15 +50,20 @@ export function LibraryWorkspace() {
     void Promise.all([
       api.GET("/api/v1/library/parts"),
       api.GET("/api/v1/library/footprints"),
-    ]).then(([p, f]) => {
+      api.GET("/api/v1/library/tapes"),
+    ]).then(([p, f, t]) => {
       if (cancelled) return;
       if (p.data) setParts(p.data);
       if (f.data) setFootprints(f.data);
+      if (t.data) setTapes(t.data);
     });
     return () => {
       cancelled = true;
     };
   }, [status]);
+
+  const counts = { parts: parts.length, tapes: tapes.length, footprints: footprints.length };
+  const used = useCallback((id: string) => parts.filter((p) => p.tape_id === id).length, [parts]);
 
   const items = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -57,18 +72,35 @@ export function LibraryWorkspace() {
         ? parts.map((p) => ({
             id: p.id,
             detail: [p.name, p.footprint_id].filter(Boolean).join(" · "),
-            missing: p.height == null || !p.tape,
+            missing:
+              p.height == null || !tapes.some((t) => t.id === p.tape_id && t.rotation !== null),
           }))
-        : footprints.map((f) => ({ id: f.id, detail: `${f.pads.length} pads`, missing: false }));
+        : mode === "tapes"
+          ? tapes.map((t) => ({
+              id: t.id,
+              detail: `${t.name || t.id} · ${used(t.id)} parts`,
+              missing: t.rotation === null || t.width === null || t.pitch === null,
+            }))
+          : footprints.map((f) => ({
+              id: f.id,
+              detail: `${f.pads.length} pads`,
+              missing: f.pads.length > 0 && !f.pads.some((p) => p.pin1),
+            }));
     return needle
       ? list.filter(
           (i) => i.id.toLowerCase().includes(needle) || i.detail.toLowerCase().includes(needle),
         )
       : list;
-  }, [mode, parts, footprints, filter]);
+  }, [mode, parts, footprints, tapes, filter, used]);
 
   const part = mode === "parts" ? parts.find((p) => p.id === selected) : undefined;
   const footprint = mode === "footprints" ? footprints.find((f) => f.id === selected) : undefined;
+  const tape = mode === "tapes" ? tapes.find((t) => t.id === selected) : undefined;
+  const open = (m: Mode, id: string) => {
+    setMode(m);
+    setFilter("");
+    setSelected(id);
+  };
 
   const importOpenPnp = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -133,6 +165,52 @@ export function LibraryWorkspace() {
     if (saved) setParts((list) => list.map((p) => (p.id === saved.id ? saved : p)));
   };
 
+  const saveTape = async (updated: Tape) => {
+    const saved = await run(() =>
+      api.PUT("/api/v1/library/tapes/{tape_id}", {
+        params: { path: { tape_id: updated.id } },
+        body: updated,
+      }),
+    );
+    if (saved) {
+      setTapes((list) =>
+        list.some((t) => t.id === saved.id)
+          ? list.map((t) => (t.id === saved.id ? saved : t))
+          : [...list, saved].sort((a, b) => a.id.localeCompare(b.id)),
+      );
+    }
+    return saved;
+  };
+
+  /** A tape made from values in the part editor: the library's own if it has that one. */
+  const createTape = async (made: Tape) =>
+    tapes.find((t) => t.id === made.id) ?? (await saveTape(made));
+
+  const deleteTape = async (id: string) => {
+    const result = await api.DELETE("/api/v1/library/tapes/{tape_id}", {
+      params: { path: { tape_id: id } },
+    });
+    if (!result.error) {
+      setTapes((list) => list.filter((t) => t.id !== id));
+      setSelected(null);
+    }
+  };
+
+  /** Mark a pad as pin 1 (or clear it, if it was). Drawing only: vision ignores it. */
+  const togglePin1 = async (f: Footprint, index: number) => {
+    const pads = f.pads.map((pad, i) => ({
+      ...pad,
+      pin1: i === index ? !pad.pin1 : false,
+    }));
+    const saved = await run(() =>
+      api.PUT("/api/v1/library/footprints/{footprint_id}", {
+        params: { path: { footprint_id: f.id } },
+        body: { ...f, pads },
+      }),
+    );
+    if (saved) setFootprints((list) => list.map((x) => (x.id === saved.id ? saved : x)));
+  };
+
   const deletePart = async (id: string) => {
     const result = await api.DELETE("/api/v1/library/parts/{part_id}", {
       params: { path: { part_id: id } },
@@ -148,7 +226,7 @@ export function LibraryWorkspace() {
       <aside className="sidebar">
         <Panel title="Library">
           <div className="segmented segmented-wide">
-            {(["parts", "footprints"] as const).map((m) => (
+            {(["parts", "tapes", "footprints"] as const).map((m) => (
               <button
                 key={m}
                 type="button"
@@ -158,7 +236,7 @@ export function LibraryWorkspace() {
                   setSelected(null);
                 }}
               >
-                {m === "parts" ? `Parts (${parts.length})` : `Footprints (${footprints.length})`}
+                {MODE_LABEL[m]} <span className="segment-count">{counts[m]}</span>
               </button>
             ))}
           </div>
@@ -166,7 +244,11 @@ export function LibraryWorkspace() {
             <Search size={14} aria-hidden />
             <input
               className="input"
-              placeholder={mode === "parts" ? "Part number, value, footprint" : "Footprint"}
+              placeholder={
+                { parts: "Part number, value, footprint", tapes: "Tape", footprints: "Footprint" }[
+                  mode
+                ]
+              }
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             />
@@ -257,11 +339,40 @@ export function LibraryWorkspace() {
           <PartEditor
             key={part.id}
             part={part}
+            parts={parts}
             footprints={footprints}
+            tapes={tapes}
             busy={pending}
             onSave={(p) => void savePart(p)}
             onDelete={() => void deletePart(part.id)}
+            onOpenTape={(id) => open("tapes", id)}
+            onCreateTape={createTape}
           />
+        ) : mode === "tapes" && tapes.length > 0 ? (
+          <div className="tape-pane">
+            <TapeTable
+              tapes={tapes}
+              parts={parts}
+              selected={selected}
+              busy={pending}
+              onSelect={setSelected}
+              onSave={(t) => void saveTape(t)}
+            />
+            {tape ? (
+              <TapeEditor
+                key={`${tape.id}:${JSON.stringify(tape)}`}
+                tape={tape}
+                parts={parts}
+                footprints={footprints}
+                busy={pending}
+                onSave={(t) => void saveTape(t)}
+                onDelete={() => void deleteTape(tape.id)}
+                onOpenPart={(id) => open("parts", id)}
+              />
+            ) : (
+              <p className="text-muted note">Pick a tape to see its parts in it.</p>
+            )}
+          </div>
         ) : footprint ? (
           <div className="editor">
             <header className="editor-header">
@@ -271,9 +382,14 @@ export function LibraryWorkspace() {
               </div>
             </header>
             <div className="drawing-box drawing-large">
-              <FootprintDrawing footprint={footprint} />
+              <FootprintDrawing
+                footprint={footprint}
+                onPad={pending ? undefined : (i) => void togglePin1(footprint, i)}
+              />
               <p className="caption">
-                Seen looking down on the part, at 0°. {footprint.pads.length} pads
+                Click a pad to mark it as pin 1 (red), or click it again to clear it; the mark is
+                only drawn, never used by vision. Seen looking down on the part, at 0°.{" "}
+                {footprint.pads.length} pads
                 {footprint.body
                   ? `; body ${footprint.body.x} × ${footprint.body.y} mm (${footprint.body_basis})`
                   : ""}

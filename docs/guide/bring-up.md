@@ -104,7 +104,9 @@ effect at once. The reset button next to one forgets it.
 
 - [ ] **Scan feeders** in the Feeders workspace. Each feeder found is initialized and
       listed under its slot.
-- [ ] Give each feeder its part, and feed one. Check it moves one part's pitch.
+- [ ] Give each feeder its part, and the width of tape it takes (**Takes tape**), and feed
+      one. Check it moves one part's pitch. A part whose tape is another width is flagged:
+      it is in the wrong feeder, or its tape is wrong in the Parts workspace.
 - [ ] **Calibrate rails** (under **Rails**): with feeders near both ends of each rail (the
       core uses the two farthest apart), it finds their fiducials and moves the rail's
       slots to where the rail really is. If it cannot find one, jog the camera onto that
@@ -127,8 +129,13 @@ effect at once. The reset button next to one forgets it.
 
 ## 6. One part
 
-- [ ] Give a feeder's part a height in the Parts workspace, and put a scrap board on the
-      staging plate.
+- [ ] In the Parts workspace, give a feeder's part a height and its tape (**Comes in**: one
+      the library has, or a new one from its kind, width, pitch, and rotation in tape).
+      The preview shows the part in its pockets as you look down on the tape, holes at the
+      top and feeding left to right: compare it with the reel. Under **Footprints**, click
+      a pad to mark pin 1, and the preview says which quadrant of the pocket it lands in,
+      to check against the datasheet's tape drawing. Put a scrap board on the staging
+      plate.
 - [ ] In the Machine workspace's **Single placement** panel, choose the nozzle and the
       feeder, then **Pick**. It feeds, finds the pocket, picks at the tape's part height,
       lifts, and checks the vacuum says a part is held.

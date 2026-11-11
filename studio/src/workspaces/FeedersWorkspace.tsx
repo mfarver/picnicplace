@@ -16,7 +16,8 @@ import { api } from "../api/client";
 import { useDescription } from "../api/useDescription";
 import { useCameras } from "../api/useCameras";
 import { useMachineControl } from "../api/useMachineControl";
-import type { FeedersState, MachineProfile, Part, RailState, SlotState } from "../api/types";
+import { WidthSelect, WidthWarning } from "../components/TapeWidth";
+import type { FeedersState, MachineProfile, Part, RailState, SlotState, Tape } from "../api/types";
 import { CameraView } from "../components/CameraView";
 import { FixedFeederDetail, type TeachWhich } from "../components/FixedFeederDetail";
 import { FixedFeederPanel } from "../components/FixedFeederPanel";
@@ -37,6 +38,7 @@ export function FeedersWorkspace() {
   const { core, machine, canMove, canActuate, run, track, lastOp } = ctl;
   const [state, setState] = useState<FeedersState | null>(null);
   const [parts, setParts] = useState<Part[]>([]);
+  const [tapes, setTapes] = useState<Tape[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedFixed, setSelectedFixed] = useState<string | null>(null);
   const [onlyFound, setOnlyFound] = useState(true);
@@ -45,13 +47,16 @@ export function FeedersWorkspace() {
   useEffect(() => {
     if (core.status !== "open") return;
     let cancelled = false;
-    void Promise.all([api.GET("/api/v1/feeders"), api.GET("/api/v1/library/parts")]).then(
-      ([feeders, library]) => {
-        if (cancelled) return;
-        if (feeders.data) setState(feeders.data);
-        if (library.data) setParts(library.data);
-      },
-    );
+    void Promise.all([
+      api.GET("/api/v1/feeders"),
+      api.GET("/api/v1/library/parts"),
+      api.GET("/api/v1/library/tapes"),
+    ]).then(([feeders, library, tapeList]) => {
+      if (cancelled) return;
+      if (feeders.data) setState(feeders.data);
+      if (library.data) setParts(library.data);
+      if (tapeList.data) setTapes(tapeList.data);
+    });
     return () => {
       cancelled = true;
     };
@@ -314,6 +319,11 @@ export function FeedersWorkspace() {
                   <span className="item-detail">
                     {s.feeder ? (s.feeder.assignment?.part_id ?? "no part assigned") : "empty"}
                     {s.error && <span className="chip chip-warn">error</span>}
+                    {!s.error && s.warning && (
+                      <span className="chip chip-warn" title={s.warning}>
+                        check
+                      </span>
+                    )}
                   </span>
                 </button>
               </li>
@@ -361,6 +371,7 @@ export function FeedersWorkspace() {
         />
         {fixed && (
           <FixedFeederDetail
+            tapes={tapes}
             key={fixed.id}
             state={fixed}
             parts={parts}
@@ -375,6 +386,7 @@ export function FeedersWorkspace() {
         )}
         {slot && (
           <SlotDetail
+            tapes={tapes}
             key={slot.slot.id}
             slot={slot}
             state={state!}
@@ -443,6 +455,7 @@ interface DetailProps {
   slot: SlotState;
   state: FeedersState;
   parts: Part[];
+  tapes: Tape[];
   description: MachineProfile;
   canMove: boolean;
   canActuate: boolean;
@@ -459,13 +472,15 @@ interface DetailProps {
 }
 
 function SlotDetail(p: DetailProps) {
-  const { slot, state, parts } = p;
+  const { slot, state, parts, tapes } = p;
   const feeder = slot.feeder;
   const [partId, setPartId] = useState(feeder?.assignment?.part_id ?? "");
   const [pitch, setPitch] = useState<number | null>(feeder?.assignment?.part_pitch ?? null);
+  const [width, setWidth] = useState<number | null>(feeder?.assignment?.tape_width ?? null);
   const [saving, setSaving] = useState(false);
   const part = useMemo(() => parts.find((x) => x.id === partId), [parts, partId]);
-  const step = pitch ?? part?.tape?.pitch ?? 4;
+  const tape = tapes.find((t) => t.id === part?.tape_id);
+  const step = pitch ?? tape?.pitch ?? 4;
   const cal = slot.calibration;
   const offset = state.fiducial_offset;
   const rail = state.rails.find((r) => r.bank === slot.slot.bank);
@@ -479,6 +494,7 @@ function SlotDetail(p: DetailProps) {
       body: {
         part_id: partId || null,
         part_pitch: pitch,
+        tape_width: width,
         enabled: feeder.assignment?.enabled ?? true,
         note: feeder.assignment?.note ?? "",
       },
@@ -520,18 +536,23 @@ function SlotDetail(p: DetailProps) {
             <Field label="Part pitch (mm)">
               <NumberInput value={pitch} min={0.1} onChange={setPitch} />
             </Field>
+            <Field label="Takes tape (mm)">
+              <WidthSelect value={width} onChange={setWidth} />
+            </Field>
           </div>
           <datalist id="feeder-parts">
             {parts.map((x) => (
               <option key={x.id} value={x.id} />
             ))}
           </datalist>
+          <TapeInUse part={part} tape={tape} />
+          <WidthWarning where="This feeder" width={width} part={part} tape={tape} />
           <p className="text-muted note">
-            {pitch === null && part?.tape?.pitch
-              ? `Empty pitch: the part's tape pitch, ${part.tape.pitch} mm.`
-              : pitch === null
-                ? "Empty pitch: 4 mm, unless the part's tape says otherwise."
-                : ""}
+            {pitch !== null
+              ? `Feeds ${pitch} mm: this feeder's own setting, over the tape's.`
+              : tape?.pitch
+                ? `Feeds ${tape.pitch} mm: from the tape. Set a pitch here only to override it.`
+                : "Feeds 4 mm: neither this feeder nor the part's tape gives a pitch."}
           </p>
           <div className="button-row">
             <button type="button" className="button" disabled={saving} onClick={() => void save()}>
@@ -652,5 +673,26 @@ function SlotDetail(p: DetailProps) {
         </>
       )}
     </section>
+  );
+}
+
+/** The tape a feeder's part comes in, and the values a pick takes from it. */
+export function TapeInUse({ part, tape }: { part?: Part; tape?: Tape }) {
+  if (!part) return null;
+  if (!tape) {
+    return (
+      <p className="note text-warn">
+        {part.id} has no tape in the library: picks take its rotation in tape as 0°. Give it one
+        in the Parts workspace.
+      </p>
+    );
+  }
+  const rotation = tape.rotation === null ? "not known (taken as 0°)" : `${tape.rotation}°`;
+  return (
+    <p className="text-muted note">
+      Tape (from {part.id}): {tape.name || tape.id}. Rotation in tape {rotation}, width{" "}
+      {tape.width ?? "?"} mm, pitch {tape.pitch ?? "?"} mm. A pick turns the part by the slot's
+      orientation plus the rotation in tape.
+    </p>
   );
 }

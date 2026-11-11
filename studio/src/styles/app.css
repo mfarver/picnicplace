@@ -1259,7 +1259,16 @@ code,
 }
 
 .segmented-wide .segment {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.segment-count {
+  margin-left: 2px;
+  font-size: var(--text-xs);
+  opacity: 0.75;
 }
 
 .segment {
@@ -1456,23 +1465,43 @@ code,
 
 .fp-body {
   fill: none;
-  stroke: var(--text-faint);
-  stroke-dasharray: 0.15 0.1;
-  stroke-width: 0.05;
+  stroke: var(--text-muted);
+  stroke-dasharray: 4 3;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
 }
 
 .fp-pad {
-  fill: #c9a24b;
-  opacity: 0.85;
+  fill: none;
+  stroke: #c9a24b;
+  stroke-width: 1.2px;
+  vector-effect: non-scaling-stroke;
 }
 
 .fp-pad-1 {
-  fill: var(--accent);
+  fill: rgb(229 72 77 / 40%);
+  stroke: #e5484d;
+  stroke-width: 1.5px;
 }
 
-.fp-origin line {
+.fp-plus line {
+  stroke: var(--text);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.fp-danger .fp-pad,
+.fp-danger .fp-body {
   stroke: var(--danger);
-  stroke-width: 0.04;
+}
+
+.fp-clickable .fp-pad {
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.fp-clickable .fp-pad:hover {
+  fill: rgb(201 162 75 / 30%);
 }
 
 .tape-body {
@@ -1493,8 +1522,45 @@ code,
   stroke-width: 0.06;
 }
 
-.tape-quadrant {
-  fill: var(--warn);
+.tape-pin1 {
+  fill: rgb(229 72 77 / 22%);
+}
+
+.tape-room {
+  fill: rgb(0 0 0 / 20%);
+  stroke: var(--text-faint);
+  stroke-dasharray: 3 2;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.tape-dim line {
+  stroke: var(--text-faint);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.tape-dim text,
+.tape-feed text {
+  fill: var(--text-muted);
+  font-size: 1px;
+  dominant-baseline: middle;
+}
+
+.tape-dim text {
+  text-anchor: middle;
+}
+
+.tape-dim path {
+  fill: var(--text-faint);
+}
+
+.tape-dim .tape-ext {
+  stroke-dasharray: 2 2;
+}
+
+.tape-feed text {
+  text-anchor: end;
 }
 
 .tape-feed line {
@@ -2288,4 +2354,91 @@ code,
 
 .machine-location-name {
   font-weight: 600;
+}
+
+/* --- Tapes (Parts workspace) ----------------------------------------------------------- */
+
+.tape-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tape-table-box {
+  max-height: 40vh;
+  overflow: auto;
+}
+
+.tape-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.tape-table th {
+  position: sticky;
+  top: 0;
+  padding: var(--space-1) var(--space-2);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-weight: 500;
+  text-align: left;
+}
+
+.tape-table td {
+  padding: 2px var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.tape-table tr {
+  cursor: pointer;
+}
+
+.tape-table tr.active td {
+  background: var(--accent-soft);
+}
+
+.input-cell {
+  width: 6em;
+  padding: 2px var(--space-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.tape-help {
+  margin: var(--space-2) 0;
+  font-size: var(--text-sm);
+}
+
+.tape-help summary {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tape-help ol {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.4em;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip-list .chip {
+  border: 0;
+  cursor: pointer;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
 }

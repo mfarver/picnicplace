@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from picnicplace.library import Footprint, Library, LibraryDocument, LibraryError, Pad, Part, Tape
-from picnicplace.library.models import Size
+from picnicplace.library import Footprint, Library, LibraryDocument, LibraryError, Pad, Part
+from picnicplace.library.models import Size, standard_tape
 from picnicplace.library.openpnp import OpenPnpFormatError, read_library
 from picnicplace.library.tape import geometry
 
@@ -25,8 +25,9 @@ R10K = Part(
     footprint_id=R0603.id,
     height=0.45,
     height_basis="datasheet",
-    tape=Tape(kind="paper", width=8, pitch=4, rotation=90, basis="standard"),
+    tape_id="8mm-paper-p4-r90",
 )
+PAPER = standard_tape("paper", 8, 4, 90).model_copy(update={"basis": "standard"})
 
 # A made-up library in OpenPnP's format, shaped like a KiCad export.
 PACKAGES_XML = """<?xml version='1.0' encoding='UTF-8'?>
@@ -61,6 +62,7 @@ PARTS_XML = """<?xml version='1.0' encoding='UTF-8'?>
 def library() -> Library:
     lib = Library(None)
     lib.put_footprint(R0603)
+    lib.put_tape(PAPER)
     lib.put_part(R10K)
     return lib
 
@@ -69,14 +71,16 @@ def test_store_round_trip(tmp_path: Path) -> None:
     path = tmp_path / "library.sqlite3"
     lib = Library(path)
     lib.put_footprint(R0603)
+    lib.put_tape(PAPER)
     lib.put_part(R10K)
     lib.close()
     reopened = Library(path)
     assert reopened.footprint(R0603.id) == R0603
     assert reopened.parts() == [R10K]
+    assert reopened.tape_of(R10K) == PAPER
     assert (
         reopened.export().model_dump()
-        == LibraryDocument(footprints=[R0603], parts=[R10K]).model_dump()
+        == LibraryDocument(footprints=[R0603], tapes=[PAPER], parts=[R10K]).model_dump()
     )
 
 
@@ -91,32 +95,32 @@ def test_parts_need_their_footprint(library: Library) -> None:
 
 
 def test_import_merges_without_losing_machine_values(library: Library) -> None:
-    # The machine's copy was tuned: a measured height and an observed tape rotation.
+    # The machine's copy was tuned: a measured height, and its tape's rotation observed.
     library.put_part(
-        R10K.model_copy(
-            update={
-                "height": 0.5,
-                "height_basis": "measured",
-                "tape": R10K.tape.model_copy(update={"rotation": -90}) if R10K.tape else None,
-                "manufacturer": "",
-            }
-        )
+        R10K.model_copy(update={"height": 0.5, "height_basis": "measured", "manufacturer": ""})
     )
+    library.put_tape(PAPER.model_copy(update={"rotation": -90, "basis": "observed"}))
     incoming = R10K.model_copy(update={"manufacturer": "Example Corp"})
     report = library.import_document(
         LibraryDocument(
-            footprints=[R0603], parts=[incoming, Part(id="EX-NEW", footprint_id=R0603.id)]
+            footprints=[R0603],
+            tapes=[PAPER],
+            parts=[incoming, Part(id="EX-NEW", footprint_id=R0603.id)],
         )
     )
     assert report.added == ["part:EX-NEW"]
     assert report.unchanged == 1  # the footprint
     assert [(f.id, f.fields) for f in report.filled] == [("EX-R0603-10K", ["manufacturer"])]
-    conflicts = {c.field: (c.current, c.incoming) for c in report.conflicts}
-    assert conflicts == {"height": (0.5, 0.45), "tape.rotation": (-90.0, 90.0)}
+    conflicts = {(c.kind, c.field): (c.current, c.incoming) for c in report.conflicts}
+    assert conflicts == {
+        ("part", "height"): (0.5, 0.45),
+        ("tape", "rotation"): (-90.0, 90.0),
+        ("tape", "basis"): ("observed", "standard"),
+    }
     kept = library.part(R10K.id)
     # The conflicting height's basis is not taken from the import either.
     assert (kept.height, kept.height_basis, kept.manufacturer) == (0.5, "measured", "Example Corp")
-    assert kept.tape is not None and kept.tape.rotation == -90
+    assert library.tape(PAPER.id).rotation == -90
 
     again = library.import_document(LibraryDocument(parts=[incoming]), overwrite=True)
     assert again.replaced == ["part:EX-R0603-10K"]
@@ -142,15 +146,18 @@ def test_openpnp_files() -> None:
 
     switch, qfn_part, orphan = document.parts
     assert switch.name == "Load switch" and switch.speed == 0.5 and switch.height == 1.45
-    assert switch.tape == Tape(
-        rotation=90, pitch=4, source="OpenPnP parts.xml (tape-orientation build)"
-    )
-    assert qfn_part.name == "" and qfn_part.height is None and qfn_part.tape is None
+    assert switch.tape_id == "namm-unknown-p4-r90"
+    assert document.tapes == [
+        standard_tape("unknown", None, 4, 90).model_copy(
+            update={"source": "OpenPnP parts.xml (tape-orientation build)"}
+        )
+    ]
+    assert qfn_part.name == "" and qfn_part.height is None and qfn_part.tape_id is None
     assert orphan.footprint_id == "Missing"
 
     lib = Library(None)
     report = lib.import_document(document)
-    assert len(report.added) == 5 and report.errors == [
+    assert len(report.added) == 6 and report.errors == [
         "part 'EX-ORPHAN': no footprint 'Missing' in the library"
     ]
 
@@ -179,6 +186,8 @@ def test_endpoints(client: TestClient) -> None:
     assert client.get(f"{base}/parts").json() == []
     footprint = R0603.model_dump(mode="json")
     assert client.put(f"{base}/footprints/{R0603.id}", json=footprint).status_code == 200
+    tape = PAPER.model_dump(mode="json")
+    assert client.put(f"{base}/tapes/{PAPER.id}", json=tape).status_code == 200
 
     # Manufacturer part numbers may contain slashes and commas.
     part = R10K.model_copy(update={"id": "LM317T/NOPB,118"}).model_dump(mode="json")
@@ -202,7 +211,7 @@ def test_endpoints(client: TestClient) -> None:
     assert len(exported["parts"]) == 3
 
     r = client.post(f"{base}/import", json={"document": exported})
-    assert r.json()["unchanged"] == 3 + 4
+    assert r.json()["unchanged"] == 3 + 4 + 2  # parts, footprints, tapes
 
     bad = client.post(f"{base}/import/openpnp", json={"parts_xml": "<nope/>"})
     assert bad.status_code == 400

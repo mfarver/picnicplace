@@ -13,6 +13,8 @@ from starlette.testclient import WebSocketTestSession
 
 from picnicplace.api import create_app
 from picnicplace.config import Config
+from picnicplace.library import Library, Part
+from picnicplace.library.models import TapeKind, standard_tape
 
 TEST_PROFILE = Path(__file__).parent / "profiles" / "test-machine.toml"
 
@@ -108,3 +110,20 @@ def connect(client: TestClient, name: str = "test") -> Iterator[Session]:
     with client.websocket_connect(f"/api/v1/events?name={name}") as ws:
         hello = ws.receive_json()
         yield Session(client, ws, hello["client_id"], hello)
+
+
+def put_taped(
+    library: Library,
+    part: Part,
+    kind: TapeKind,
+    width: float | None,
+    pitch: float | None,
+    rotation: float | None,
+) -> Part:
+    """Put a part in the library on a tape with these values (shared with other parts on
+    the same values)."""
+    tape = standard_tape(kind, width, pitch, rotation)
+    library.put_tape(tape)
+    taped = part.model_copy(update={"tape_id": tape.id})
+    library.put_part(taped)
+    return taped

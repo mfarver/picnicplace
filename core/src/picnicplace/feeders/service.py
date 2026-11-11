@@ -32,7 +32,7 @@ from picnicplace.feeders.setup import (
 )
 from picnicplace.feeders.sim import SimulatedPhotonBus
 from picnicplace.feeders.slots import Slot, machine_slots
-from picnicplace.library import Library, Part
+from picnicplace.library import Library, Part, Tape
 from picnicplace.library.tape import SPROCKET_DIAMETER, geometry
 from picnicplace.machine.errors import (
     FeederEmptyError,
@@ -131,6 +131,8 @@ class SlotState(WireModel):
     feeder: FeederState | None
     error: str | None
     pocket: PocketCheck | None
+    warning: str | None = None
+    """Something to check, such as a part whose tape is not as wide as the feeder's."""
 
 
 class FixedFeederState(WireModel):
@@ -143,6 +145,23 @@ class FixedFeederState(WireModel):
     """The parts' machine angle, if known (a strip needs its part's tape rotation)."""
     pocket: PocketCheck | None
     learned: PickLearning | None
+    warning: str | None = None
+    """Something to check, such as a part whose tape is not as wide as the holder's."""
+
+
+def width_mismatch(
+    where: str, feeder_width: float | None, part: Part | None, tape: Tape | None
+) -> str | None:
+    """A warning when a feeder (or strip holder) takes tape of one width and its part's
+    tape is another: the part was put in the wrong feeder, or given the wrong tape."""
+    if feeder_width is None or part is None or tape is None or tape.width is None:
+        return None
+    if abs(feeder_width - tape.width) < 0.01:
+        return None
+    return (
+        f"{where} takes {feeder_width:g} mm tape, but {part.id} comes in {tape.width:g} mm "
+        "tape: check the part is in the right feeder, and its tape in the Parts workspace"
+    )
 
 
 class RailState(WireModel):
@@ -284,6 +303,7 @@ class FeederService:
                     feeder=feeder,
                     error=self._errors.get(slot.id),
                     pocket=self._pockets.get(slot.id),
+                    warning=self._width_warning(slot.label, feeder.assignment if feeder else None),
                 )
             )
         offset, source = (
@@ -312,7 +332,18 @@ class FeederService:
             angle=self.fixed_angle(f),
             pocket=self._pockets.get(fixed_id),
             learned=self.learned(fixed_id),
+            warning=(
+                width_mismatch(self.fixed_label(fixed_id), f.tape_width, part, self.tape_of(part))
+                if f.kind == "strip" and (part := self.fixed_part(f)) is not None
+                else None
+            ),
         )
+
+    def _width_warning(self, where: str, assignment: FeederAssignment | None) -> str | None:
+        if assignment is None:
+            return None
+        part = self._part(assignment)
+        return width_mismatch(where, assignment.tape_width, part, self.tape_of(part))
 
     def slot(self, slot_id: str) -> Slot:
         slot = self._by_id.get(slot_id)
@@ -376,9 +407,9 @@ class FeederService:
         assignment = self._store.setup.feeders.get(uuid) if uuid else None
         if assignment is not None and assignment.part_pitch:
             return assignment.part_pitch
-        part = self._part(assignment)
-        if part is not None and part.tape is not None and part.tape.pitch:
-            return part.tape.pitch
+        tape = self.tape_of(self._part(assignment))
+        if tape is not None and tape.pitch:
+            return tape.pitch
         return DEFAULT_PITCH
 
     def check_can_feed(self, slot: Slot) -> None:
@@ -955,10 +986,10 @@ class FeederService:
         """The machine angle of the parts' 0 degree direction."""
         if f.kind == "tray":
             return f.part_angle
-        part = self.fixed_part(f)
-        if part is None or part.tape is None:
+        tape = self.tape_of(self.fixed_part(f))
+        if tape is None:
             return None
-        return _strip_direction(f) + part.tape.rotation
+        return _strip_direction(f) + (tape.rotation or 0.0)
 
     def fixed_pick_height(self, f: FixedFeeder, label: str) -> float:
         if f.pick_height is not None:
@@ -996,8 +1027,8 @@ class FeederService:
         task."""
         f = self.fixed(fixed_id)
         _, at = self.next_fixed(fixed_id)
-        part = self.fixed_part(f)
-        width = part.tape.width if part and part.tape and part.tape.width else 8.0
+        tape = self.tape_of(self.fixed_part(f))
+        width = tape.width if tape and tape.width else 8.0
         pitch = math.hypot(f.step.x, f.step.y) or DEFAULT_PITCH
         line = _pocket_line_for(width)
         # Look at the holes: on wide tape they are out of view from the pocket.
@@ -1030,8 +1061,8 @@ class FeederService:
     def _pocket_line(self, slot: Slot) -> tuple[float, float]:
         """The tape's pocket line (F) and pitch for the part in a slot."""
         uuid = self._found.get(slot.id)
-        part = self._part(self._store.setup.feeders.get(uuid) if uuid else None)
-        width = part.tape.width if part is not None and part.tape and part.tape.width else 8.0
+        tape = self.tape_of(self._part(self._store.setup.feeders.get(uuid) if uuid else None))
+        width = tape.width if tape is not None and tape.width else 8.0
         return _pocket_line_for(width), self.feed_distance(slot)
 
     async def locate_pocket(self, slot: Slot) -> PocketCheck:
@@ -1097,6 +1128,11 @@ class FeederService:
         if assignment is None or assignment.part_id is None or library is None:
             return None
         return library.find_part(assignment.part_id)
+
+    def tape_of(self, part: Part | None) -> Tape | None:
+        """The tape a part comes in, from the library."""
+        library = self._library()
+        return library.tape_of(part) if library is not None else None
 
     def _invalidate(self) -> None:
         self._tapes = None
@@ -1182,7 +1218,7 @@ class FeederService:
             footprint = (
                 library.find_footprint(part.footprint_id) if part is not None and library else None
             )
-            tape = part.tape if part is not None else None
+            tape = self.tape_of(part)
             width = tape.width if tape is not None and tape.width else 8.0
             pitch = tape.pitch if tape is not None and tape.pitch else DEFAULT_PITCH
             offset = bank.fiducial_offset or SIM_FIDUCIAL_OFFSET
@@ -1202,7 +1238,7 @@ class FeederService:
                     pocket_line=_pocket_line_for(width),
                     advance=feeder.fed_mm,
                     pick_full=self._sim_full.get(address, True),
-                    part_rotation=tape.rotation if tape is not None else 0.0,
+                    part_rotation=(tape.rotation or 0.0) if tape is not None else 0.0,
                     body=(footprint.body.x, footprint.body.y)
                     if footprint is not None and footprint.body is not None
                     else None,
@@ -1234,11 +1270,12 @@ class FeederService:
         out: list[TapeScene] = []
         for fixed_id, f in self._store.setup.fixed.items():
             part = self.fixed_part(f)
-            if f.kind != "strip" or f.remaining == 0 or part is None or part.tape is None:
+            tape = self.tape_of(part)
+            if f.kind != "strip" or f.remaining == 0 or part is None or tape is None:
                 continue
             footprint = library.find_footprint(part.footprint_id) if library else None
             taken = self._sim_fixed_taken.setdefault(fixed_id, set(range(f.picked)))
-            width = part.tape.width or 8.0
+            width = tape.width or 8.0
             pitch = math.hypot(f.step.x, f.step.y) or DEFAULT_PITCH
             line = _pocket_line_for(width)
             at = f.position(f.picked)
@@ -1251,7 +1288,7 @@ class FeederService:
                     pitch=pitch,
                     pocket_line=line,
                     pick_full=f.picked not in taken,
-                    part_rotation=part.tape.rotation,
+                    part_rotation=tape.rotation or 0.0,
                     body=(footprint.body.x, footprint.body.y)
                     if footprint is not None and footprint.body is not None
                     else None,

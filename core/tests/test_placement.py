@@ -14,9 +14,9 @@ from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
 from picnicplace.feeders.service import FeederService
-from picnicplace.library import Footprint, Pad, Part, Size, Tape
+from picnicplace.library import Footprint, Pad, Part, Size
 from picnicplace.simparts import PlacedPart
-from tests.conftest import Session, connect, fast_config
+from tests.conftest import Session, connect, fast_config, put_taped
 
 
 @pytest.fixture
@@ -55,14 +55,7 @@ def set_up(
             ],
         )
     )
-    library.put_part(
-        Part(
-            id="RC0805-1K",
-            footprint_id="R0805",
-            height=0.5,
-            tape=Tape(kind="paper", width=8, pitch=4, rotation=90),
-        )
-    )
+    put_taped(library, Part(id="RC0805-1K", footprint_id="R0805", height=0.5), "paper", 8, 4, 90)
     s.home()
     ok(s.wait(s.post("/api/v1/feeders/scan")))
     state = s.client.get("/api/v1/feeders").json()

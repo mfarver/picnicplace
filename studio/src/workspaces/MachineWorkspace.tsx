@@ -186,8 +186,10 @@ export function MachineWorkspace() {
           <CalibrationPanel
             description={description}
             operations={operations}
+            canMove={canMove}
             canRun={canMove && !!machine?.homed}
             canSet={status === "open" && !controlledElsewhere && !!machine?.homed}
+            onHome={home}
             onVisualHome={() => void track(() => api.POST("/api/v1/machine/visual-home"))}
             onCameraScale={() => void track(() => api.POST("/api/v1/machine/camera-scale"))}
           />

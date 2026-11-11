@@ -153,14 +153,23 @@ def test_sensed_safe_z(sensed_client: TestClient) -> None:
 def test_lost_z_steps_fault(sensed_client: TestClient) -> None:
     with connect(sensed_client) as s:
         s.home()
+        machine = s.client.app.state.ctx.machine  # type: ignore[attr-defined]
+        machine.calibration.record("top_camera_scale", "measured", {"x": 0.05})
         # Z loses steps: commanded Z still says safe, but the nozzle is really low.
-        s.client.app.state.ctx.machine.driver.inject_z_slip("Z", -5)  # type: ignore[attr-defined]
+        machine.driver.inject_z_slip("Z", -5)
         state = s.state()
         assert state["z_safe"] is False
         op = s.move(X=20)
         assert op["status"] == "failed"
         assert "lost steps" in op["error"]
         assert s.state()["homed"] is False
+        # A crash may have knocked the camera: its scale is out of date.
+        line = next(
+            x
+            for x in s.client.get("/api/v1/calibration").json()["lines"]
+            if x["id"] == "top_camera_scale"
+        )
+        assert line["status"] == "stale" and "Z lost steps" in line["stale"]
         # Homing clears the fault.
         s.home()
         assert s.move(X=20)["status"] == "succeeded"

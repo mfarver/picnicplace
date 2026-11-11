@@ -84,6 +84,7 @@ A request goes **route → service → machine service → driver**:
 | `vision/fiducial.py` | Finds round marks: homing and board fiducials, feeder fiducials, sprocket holes |
 | `vision/part.py` | Finds a part on a nozzle, in a bottom camera frame |
 | `capture.py` | Saves single frames on request, for tuning vision on real images |
+| `calibration.py` | The calibration checklist: what the machine has measured of itself and when, what a crash makes out of date, and what stops a run |
 | `recorder.py` | The flight recorder: every frame vision looked at and everything the machine did, and `replay_vision` to run today's vision on recorded frames |
 
 ### Parts, feeders, boards, and jobs
@@ -119,6 +120,7 @@ The core keeps the owner's data in one folder (`data.dir` in the config; by defa
 | `captures/` | Frames saved with the Capture panel | `capture.py` |
 | `recordings/` | Flight recordings | `recorder.py` |
 | `bring-up.json` | Progress through the bring-up checklist | `bringup.py` |
+| `calibration.json` | What the machine has measured of itself (homing, the homing fiducial, the top camera's scale), when, and what is out of date | `calibration.py` |
 
 ## The tests: `core/tests/`
 

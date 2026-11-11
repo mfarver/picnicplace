@@ -2463,3 +2463,75 @@ code,
   font: inherit;
   text-decoration: underline;
 }
+
+/* --- Calibration checklist ----------------------------------------------------------- */
+
+.calibration-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.calibration-title {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.calibration-number {
+  min-width: 18px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.calibration-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.calibration-chip {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--text-faint);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.calibration-done .calibration-chip {
+  color: var(--ok);
+}
+
+.calibration-needed .calibration-chip {
+  color: var(--danger);
+}
+
+.calibration-stale .calibration-chip {
+  color: var(--warn);
+}
+
+.calibration-not_needed .calibration-name {
+  color: var(--text-muted);
+}
+
+.calibration-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+  padding-left: 26px;
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.calibration-body p {
+  margin: 0;
+}
+
+.text-faint {
+  color: var(--text-faint);
+}

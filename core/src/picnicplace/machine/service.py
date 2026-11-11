@@ -22,6 +22,7 @@ import math
 import time
 from collections.abc import Awaitable, Callable, Mapping
 
+from picnicplace.calibration import CRASH_STALES, CalibrationStore
 from picnicplace.camera.source import Frame
 from picnicplace.camera.synthetic import BoardScene, SceneState, TapeScene
 from picnicplace.events import EventBus
@@ -102,6 +103,8 @@ class MachineService:
         self._speed_scale = speed_scale
         self.recorder = recorder or FlightRecorder(None)
         """Keeps what the machine saw and did, while recording."""
+        self.calibration = CalibrationStore(None)
+        """What the machine has measured of itself, for the calibration checklist."""
         self._profile = profile
         self._axes = {a.name: a for a in profile.axes}
         self._inputs = {i.id: i for i in profile.inputs}
@@ -562,6 +565,10 @@ class MachineService:
         if self._profile.safe_z_input is not None and not self.z_safe:
             if computed:
                 self._homed = False
+                self.calibration.mark_stale(
+                    CRASH_STALES,
+                    f"Z lost steps at {time.strftime('%Y-%m-%d %H:%M')}: a crash may have moved it",
+                )
                 self._publish_state()
                 raise SafeZFaultError(
                     "the safe-Z sensor reads not safe although Z is at a safe height; "
@@ -621,6 +628,10 @@ class MachineService:
                 "after homing, the safe-Z sensor reads not safe; check the sensor and the "
                 "Z mechanism"
             )
+        z = self._driver.position.get("Z", self._profile.home_z)
+        self.calibration.record(
+            "machine_frame", f"Homed, with Z at {z:g} as the profile expects.", {"z": z}
+        )
         message = None
         if self._profile.visual_homing:
             message = await self._visual_home()
@@ -721,10 +732,14 @@ class MachineService:
         await self._run_steps([target], None)
         width = (await self._locate_fiducial(fiducial, camera))[2]
         assumed = camera.field_of_view.x / width
-        return (
+        message = (
             f"{camera.label}: {scales['X']:.5f} mm/pixel in X and {scales['Y']:.5f} in Y "
             f"(the profile's field of view implies {assumed:.5f})."
         )
+        self.calibration.record(
+            "top_camera_scale", message, {"x": scales["X"], "y": scales["Y"], "profile": assumed}
+        )
+        return message
 
     async def _visual_home(self) -> str:
         """Center the top camera on the homing fiducial, then make the coordinates agree
@@ -750,8 +765,15 @@ class MachineService:
         off_x, off_y = target["X"] - here["X"], target["Y"] - here["Y"]
         await self._driver.set_position(target)
         log.info("visual homing: machine was off by X %+.3f mm, Y %+.3f mm", off_x, off_y)
+        off = math.hypot(off_x, off_y)
+        self.calibration.record(
+            "homing_fiducial",
+            f"Found the datum board's dot at ({target['X'] + camera.position.x:g}, "
+            f"{target['Y'] + camera.position.y:g}); homing was {off:.3f} mm off.",
+            {"x": off_x, "y": off_y, "off": off},
+        )
         return (
-            f"Visual homing found the machine {math.hypot(off_x, off_y):.3f} mm off after "
+            f"Visual homing found the machine {off:.3f} mm off after "
             f"homing (X {off_x:+.3f}, Y {off_y:+.3f}) and corrected the coordinates."
         )
 

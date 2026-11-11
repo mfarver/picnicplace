@@ -95,6 +95,10 @@ class DataConfig(_Section):
         return self.dir.expanduser() / "captures"
 
     @property
+    def calibration_path(self) -> Path:
+        return self.dir.expanduser() / "calibration.json"
+
+    @property
     def bringup_path(self) -> Path:
         return self.dir.expanduser() / "bring-up.json"
 

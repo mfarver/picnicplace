@@ -227,6 +227,127 @@ shows Python cannot hold target throughput.
   it counts as presence. Detaching from a job leaves it to pause unless another client is
   connected.
 
+### 5.4 The Creator and the machines
+
+Preparing jobs and running machines are split into two programs, because they are
+different work done by different people, often in different places.
+
+```
+ Engineers' browsers                         Operator at each machine
+        │                                              │
+ ┌──────▼──────────────────────┐          ┌────────────▼─────────────┐
+ │ PicnicPlace Creator (server)│◄─────────┤ picnicd (the core)       │
+ │ accounts, library, house    │ the core │ + the operator app       │
+ │ parts, jobs and revisions,  │ connects │ calibration, learned     │
+ │ problem reports, machines   │ out      │ corrections, job cache,  │
+ └─────────────────────────────┘          │ reports waiting to send  │
+                                          └────────────┬─────────────┘
+                                                       │ USB
+                                                    Machine
+```
+
+- **The Creator** is a website and server for engineers. It holds the parts library
+  (with a library that ships with PicnicPlace, under the site's own, the way built-in
+  profiles sit under local ones), house parts, the KiCad importer, every job and its
+  revisions, and the problem reports operators send. It is the **source of truth** for
+  all of these. Engineers sign in with their own accounts, so every change to a job is
+  recorded with who made it.
+- **The core** keeps only what belongs to its machine: the machine's local profile and
+  calibration, what it has learned (pick corrections, feeder positions), what is loaded
+  on it, a cache of the job revisions it has been given, and the reports and run records
+  it has not yet sent. It serves the **operator app** (§8.2).
+- **Where the Creator runs.** The same Creator server runs:
+  - **on the machine's own computer**, beside the core, for a small site with one
+    machine (the default; the core finds it and pairs with it by itself);
+  - **on a server of its own** (in the building or in the cloud), shared by several
+    engineers and several machines.
+
+  It is built so that it could also be offered as a hosted service, which assumes
+  nothing about being on the same network as the machines. PicnicPlace does not run such
+  a service: whether to is decided later (§13). Many owners will not want their board
+  designs on someone else's server, so self-hosting always remains the main way.
+- **The core connects out to the Creator; the Creator never connects in.** The core pulls
+  the jobs published to it and pushes problem reports, run records, its calibration
+  status, and what is loaded on it. This works through any firewall, and it keeps the
+  safety line simple: **a Creator can never move a machine.** It can only offer jobs;
+  an operator at the machine chooses to run one. Machine control stays on the
+  machine's network, as §6.3 says.
+- **Pairing.** A core is attached to a Creator the way a device is paired: the core
+  shows a short code, an engineer with the right to manage machines enters it in the
+  Creator, and the core is issued its own token, which can be revoked. A Creator on the
+  same computer pairs without asking.
+- **Machines run offline.** A job revision the core has cached runs to the end without
+  the Creator: a revision holds everything needed to run it, nothing during a run waits
+  on the network, and reports and run records wait in a queue until the Creator can be
+  reached. A core never paired with a Creator can still run a job file loaded from disk.
+
+#### Job revisions
+
+- Each time an engineer saves a job, the Creator keeps it as a new **revision** that never
+  changes afterward: a number, a hash of its contents, who made it, when, and a short
+  reason ("Fixed U3's rotation, from report 12"). A revision can be compared with any
+  other in plain terms ("U3: rotation 90° → −90°", "C12 now uses HOUSE-C0603-100N").
+- A revision is **published** to one or more machines when it is ready to run. A machine
+  only runs published revisions, and each run's record names the revision, so it is
+  known which boards were built from which revision.
+- A revision is **self-contained**: the boards and panel, the placements, fiducials, and
+  a copy of every part, footprint, and tape it uses, with their vision settings. It does
+  not depend on the library as it is later, so a job runs next year as it did today.
+  Its file form (§8.2) is how a job moves to a machine with no Creator, and its format
+  is text that compares well in Git, for owners who want to keep jobs there too.
+
+#### Problem reports
+
+An operator does not fix a job at the machine; they say what is wrong, and the engineer
+fixes it.
+
+- **Report a problem** is one button on the current step of a run (and on any step
+  already done). The operator picks a reason (placed turned, wrong part, part missing,
+  will not pick, does not fit the nozzle, something else) and may add a few words.
+- The core adds the rest by itself: the job and revision, the placement, part, feeder,
+  and tape, a frame from each camera, and where the head was. The report is sent to the
+  Creator (or waits in the queue).
+- In the Creator, reports are listed on their job, each pointing at its placement. An
+  engineer fixes the job and publishes a new revision, which closes the reports it
+  answers and says so.
+- An operator who is also trusted to change jobs has an **Open in the Creator** button
+  instead of making do; whether it appears is a permission of their account, not a
+  separate program.
+
+#### House parts and where parts live
+
+- **House parts.** A library part can be marked as a **house part**: one kept in stock
+  and on the machine, to be used in designs wherever it fits (a 100 nF 0603 capacitor, a
+  10 kΩ resistor). When a board is imported, the Creator suggests a house part for any
+  part with the same value and footprint ("C12 is 100 nF 0603: use HOUSE-C0603-100N?").
+  The list of house parts can be exported for designers, so boards use them from the
+  start.
+- **Where a part lives is a property of its reel, not of the part.** A reel is one of:
+  - **fixed in a slot**: it lives in one slot on one machine for every run (house parts,
+    usually);
+  - **on its own feeder**: it stays loaded on one feeder, which is put on the machine
+    when needed and stored otherwise. It is tied to the feeder's ID, so the machine knows
+    where the part is whichever slot the feeder goes in (Photon feeders give their ID
+    on the bus; §7.4);
+  - **loaded for a job**: put on a feeder, strip, or tray for one job and taken off after.
+- **The job only says which parts it needs.** When a run is set up, the machine works out,
+  part by part, what is already there, which stored feeder to fetch, and what must be
+  loaded, and gives the operator a short setup list in an order that changes the least
+  (§8.2). In the Creator, each job shows what it will take to set up on each machine
+  ("14 parts: 10 in fixed slots, 2 on stored feeders, 2 to load"), which is a reason to
+  prefer house parts.
+- What is physically loaded is known by the machine (it scans its feeders), and the core
+  reports it to the Creator. What is meant to be where (a house part's slot, which
+  stored feeder holds which reel) is decided in the Creator.
+
+#### Later: more than one machine on a job
+
+A job's plan names the machine for each placement rather than assuming one machine does
+all of them, so a job can later be split across machines (one places half the parts,
+the next the rest, doubling the feeders a job can use). Splitting raises its own
+questions (which parts first, finding the fiducials again on the second machine, moving
+the panel between them), answered by the Creator's planner when it is built.
+
 ## 6. Network API
 
 ### 6.1 Transport
@@ -633,18 +754,27 @@ Device):
 #### Operating and engineering are separate
 
 Running a machine and preparing a job are different work, often by different people.
-The interface is split along that line:
+The interface is split along that line, into two programs (§5.4):
 
-- **The operations view**, for the operator at the machine, holds the minimum needed to
-  run it: the job controls (load a job, start, pause, step, stop, and the prompts a run
-  raises), the camera views, the machine view, and what is loaded on the machine and how
-  much of it is left. Large, touch-friendly controls; nothing that changes a job's
-  design.
-- **The engineering tools**, a separate page (or site), hold everything for creating a
-  job: importing boards and panels, placements, parts and footprints, fiducials, and
-  vision settings. They produce a single **job file** that holds everything needed to
-  run the job, so what the engineer prepared is exactly what the operator runs, and a
-  job can be moved between machines or kept with the board's design files.
+- **The operator app**, served by the core at the machine, holds the minimum needed to
+  run it: the job controls (choose a published job, or load a job file from disk; start,
+  pause, step, stop, and the prompts a run raises), the setup list, **Report a problem**
+  (§5.4), the camera views, the machine view, what is loaded on the machine and how much
+  of it is left, and the calibration checklist. Large, touch-friendly controls; nothing
+  that changes a job's design.
+- **The Creator**, a website of its own (§5.4), holds everything for creating a job:
+  importing boards and panels, placements, parts, tapes, and footprints, house parts,
+  fiducials, and vision settings, with the problem reports operators send. A job is kept
+  as revisions; a published revision holds everything needed to run the job, so what
+  the engineer prepared is exactly what the operator runs. A revision can also be saved
+  as a **job file**, to move a job to a machine with no Creator or keep it with the
+  board's design files.
+- **The setup list.** Before a run, the operator sees what to do to the machine for this
+  job, worked out from what is loaded (§5.4): parts already in fixed slots need nothing;
+  a stored feeder is named by its ID and part ("fetch feeder …003, 10 kΩ 0603, and put
+  it in any free slot"); a part to load names the part, its tape and width, and where it
+  can go. Each line is checked off as the machine sees it done (a feeder found on the
+  bus, a strip taught), so the list doubles as the check that the machine is ready.
 - **Inventory on the machine.** When the operator loads a reel or a tray, they enter how
   many parts it holds. The core takes one off each time it feeds (or, for a strip or
   tray, each time a part is taken), keeps the count with the feeder (a Photon feeder's
@@ -672,18 +802,25 @@ The interface is split along that line:
   make sense there (Continue, Skip this part, Stop the run), and the camera view or
   machine map shows where to look. The operator should never have to read a log or
   find a status line to learn why the machine stopped.
-- **Calibration is an advanced part of the operations view**, not a separate tool. It
-  is as hands-off as the machine can make it: the machine moves, looks, measures, and
-  checks its own results, and asks with the same kind of dialog only when it needs a
-  person (put the calibration board down, fit a nozzle tip, confirm what the camera
-  shows). Teaching feeders works the same way.
+- **Calibration is a checklist in the operator app.** Every calibration the machine
+  needs (§7.7) is a line, in order, each showing whether it is done, its value and when
+  it was measured, or that it is out of date and why (a crash, a nozzle tip changed, a
+  value far from the last one). Whoever sets the machine up works down the list until
+  every line is done; each line starts its calibration, which is as hands-off as the
+  machine can make it: the machine moves, looks, measures, and checks its own results,
+  and asks with the same kind of dialog only when it needs a person (put the calibration
+  token down, fit a nozzle tip, confirm what the camera shows). Teaching feeders works
+  the same way. Before a run, the checklist is compared with what the job needs: a job
+  that aligns parts on the bottom camera does not start until the bottom camera is
+  calibrated, and the operator is told which line to do. The core reports the
+  checklist's state to the Creator, so engineers can see which machines are ready.
 
-[OPEN] The job file's format (one archive with
-the boards, placements, parts, footprints, and vision settings, or a single TOML or JSON
-document), and whether the engineering tools need a core at all, or can run without a
-machine as a static site.
+The job file is one JSON document, as saved jobs are today, holding a revision: its boards, panel,
+placements, fiducials, and copies of the parts, footprints, and tapes it uses. It is
+written in a fixed order so two revisions compare cleanly.
 
-The workspaces below are today's Studio; they will be regrouped into the two views.
+The workspaces below are today's Studio, which holds both sides for now; they will be
+divided between the operator app and the Creator.
 
 Design principles:
 
@@ -808,7 +945,7 @@ refusing to connect.
 | **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. Started: fiducial finder, visual homing (after `G28`, center the top camera on the homing fiducial and correct X/Y with `G92`), and a camera scale measurement, all tested against the simulator, whose homing has a realistic error for visual homing to find. Discard and park locations set by centering the top camera on them, kept in the machine's local profile (layered over the built-in profile, which can now extend another), along with bring-up findings. |
 | **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. Started: the parts library (footprints, parts with height and its source, tapes after EIA-481 as records parts share, with rotation in tape, pin 1 marked on footprints, a tape preview with a fit check, and a check that a feeder's tape width matches its part's; §7.8), merge-only imports, OpenPnP library import, and a library editor in the Studio. Photon feeders: discovery and initialization, part assignment by feeder ID, feeding, simulated feeders with drawn tape, slot pick locations taught by eye or found from each feeder's fiducial, and pockets found from the tape's sprocket holes; a Feeders workspace and a bring-up checklist in the Studio. Single placement: pick (feed, find the pocket, pick at the tape's part height, check the vacuum), align on the bottom camera (the part's offset and angle on the nozzle), and place at a given location and angle (with a part-off check), one step at a time or all three, in the simulator to within 0.05 mm; camera captures for tuning vision on real images. |
 | **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. Boards must lie inside the profile's placement area (where every nozzle can reach, on the staging plates) and clear of its keep-outs; import warns about any placement a nozzle cannot reach. Started: KiCad board import (footprints with pads, part numbers from the board or the schematic's BOM), panels recovered from a KiKit panel file, jobs placed on the bed with reach, camera, and keep-out checks and a search for a place that fits (parts within every nozzle's reach; empty rails may lie outside it), saved as job files, and a Prepare workspace. Runs: a planner that is also a dry run against the loaded feeders (blocked placements and why, parts only some nozzles reach, tape too wide for the feeders), board alignment from up to three fiducials (a rigid fit), batches with a part on every nozzle that can take one, lowest parts first, retries for empty picks, discard and retry after a failed alignment (with no discard location, the run parks the head and pauses for the operator to take the part off and click Part removed), pause, step, resume, stop, and skip, and a Run workspace filled by the job's steps, checked off and the one under way highlighted (the Machine workspace shows the map with a few of them under it, for remote viewers); in the simulator a whole board lands within 0.06 mm of where the misplaced board wants its parts. Strips and trays held on the bed as feeders, with refills (the run pauses and parks the head). Feeders scanned again at the start of each run, and each feeder's fiducial found on its first pick in the run (kept with the feeder, not the slot). Picks kept centered by the top camera (pockets from sprocket holes), the bottom camera (each feeder learns where its parts really lie from earlier picks), or auto (the bottom camera, with the top camera on first picks and after a bad pick), the owner's choice. A flight recorder for sending real frames and timelines to developers, with vision replay. Run history is to come. |
-| **M5 — 1.0 polish** | Installer/packaging, docs. The operations view and the engineering tools split (§8.2), the single job file, and parts counted on reels as well as strips and trays. Done early: strip and tray feeders (M4), OpenPnP library import (M3). |
+| **M5 — 1.0 polish** | Installer/packaging, docs. The operator app and the Creator (§5.4, §8.2), in this order: the self-contained job revision and its job file, and the API between a core and a Creator (pairing, pulling published jobs, sending reports, run records, calibration status, and what is loaded); the calibration checklist in today's Studio, checked before each run; the Creator as a server of its own with accounts, revisions, the library that ships with PicnicPlace, house parts, and problem reports; the core's side (the job cache, the queue of reports, Report a problem, the setup list), with today's Studio becoming the operator app. Parts counted on reels as well as strips and trays. Done early: strip and tray feeders (M4), OpenPnP library import (M3). |
 
 ## 12. Repository layout
 
@@ -837,6 +974,13 @@ The [code map](developers/code-map.md) describes every module.
 7. Exact LumenPnP v4 firmware version: read it from the machine (`M115`) at M1.
 8. ~~Platforms~~ **Decided:** Linux only for 1.0 (§9).
 9. ~~Part on nozzle at pause~~ **Decided:** hold it (§5.3).
+10. ~~Job creation apart from the machine~~ **Decided:** a Creator server, self-hosted on
+    the machine or a server of its own, with engineers' accounts, is the source of truth
+    for the library and jobs; cores connect out to it and keep calibration and a cache
+    (§5.4).
+11. A hosted Creator run by the PicnicPlace project: designed for, decided later (§5.4).
+12. Splitting one job across machines: the job plan allows it; the planner comes later
+    (§5.4).
 
 ## 14. Licensing (decided)
 

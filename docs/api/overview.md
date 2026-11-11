@@ -57,6 +57,9 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/jobs`; `GET`, `PUT`, `DELETE /api/v1/jobs/{id}` | Saved jobs |
 | `POST /api/v1/jobs/layout` | Where a job's placements land on the machine, and what stops it |
 | `POST /api/v1/jobs/find-location` | A place on the bed where a job fits |
+| `GET`, `POST /api/v1/jobs/{id}/revisions`; `GET /api/v1/jobs/{id}/revisions/{n}` | A job's published revisions; publish the saved job as the next one |
+| `GET /api/v1/jobs/{id}/revisions/{n}/file` | A revision's job file, exactly as kept |
+| `POST /api/v1/jobs/import` | Load a job file from disk: a published revision, or a job saved before revisions |
 | `GET /api/v1/feeders` | Feeder slots, the feeder found in each, and where to pick |
 | `POST /api/v1/feeders/scan` | Find and initialize the feeders on the bus |
 | `POST /api/v1/feeders/slots/{id}/feed`, `…/identify` | Feed a feeder, or flash its light |

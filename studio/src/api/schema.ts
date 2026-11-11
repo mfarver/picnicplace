@@ -573,6 +573,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Job
+         * @description Load a job file from disk: a published revision, or a job saved before revisions.
+         */
+        post: operations["import_job_api_v1_jobs_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/layout": {
         parameters: {
             query?: never;
@@ -612,6 +632,68 @@ export interface paths {
         post?: never;
         /** Delete Job */
         delete: operations["delete_job_api_v1_jobs__job_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Revisions
+         * @description A job's published revisions, oldest first.
+         */
+        get: operations["list_revisions_api_v1_jobs__job_id__revisions_get"];
+        put?: never;
+        /**
+         * Publish Revision
+         * @description Publish the job's working copy as its next revision, with a copy of every part,
+         *     footprint, and tape it uses from the library. A revision never changes afterward.
+         */
+        post: operations["publish_revision_api_v1_jobs__job_id__revisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/revisions/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Revision */
+        get: operations["get_revision_api_v1_jobs__job_id__revisions__number__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/revisions/{number}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Revision
+         * @description The revision's job file, exactly as kept, to save or take to another machine.
+         */
+        get: operations["download_revision_api_v1_jobs__job_id__revisions__number__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2369,6 +2451,14 @@ export interface components {
             /** Answered */
             answered: boolean;
         };
+        /** ImportJobRequest */
+        ImportJobRequest: {
+            /**
+             * Text
+             * @description The job file's contents.
+             */
+            text: string;
+        };
         /** ImportReport */
         ImportReport: {
             /**
@@ -2402,6 +2492,28 @@ export interface components {
              * @default false
              */
             overwrite: boolean;
+        };
+        /** ImportedJob */
+        ImportedJob: {
+            /**
+             * Already Kept
+             * @description This very revision was already here; nothing changed.
+             * @default false
+             */
+            already_kept: boolean;
+            /** Job Id */
+            job_id: string;
+            /**
+             * Kind
+             * @description A revision is kept as published; a job file saved before revisions becomes a working copy, to publish from Prepare.
+             * @enum {string}
+             */
+            kind: "revision" | "working-copy";
+            /**
+             * Number
+             * @description The revision's number.
+             */
+            number: number | null;
         };
         /** Input */
         Input: {
@@ -2512,6 +2624,29 @@ export interface components {
              */
             version: 1;
         };
+        /**
+         * JobDesign
+         * @description What to build: everything in a revision that its hash covers.
+         */
+        JobDesign: {
+            board: components["schemas"]["Board-Output"];
+            /** @description A copy of every part, footprint, and tape the job uses. */
+            library: components["schemas"]["LibrarySnapshot"];
+            /**
+             * Missing
+             * @description Part and footprint IDs the job uses that the library did not have when the revision was made, sorted.
+             */
+            missing: string[];
+            /** Name */
+            name: string;
+            panel: components["schemas"]["Panel-Output"];
+            /**
+             * Side Up
+             * @description The board side facing up on the machine.
+             * @enum {string}
+             */
+            side_up: "top" | "bottom";
+        };
         /** JobLayout */
         JobLayout: {
             /** Issues */
@@ -2557,12 +2692,36 @@ export interface components {
              */
             readonly runnable: boolean;
         };
+        /** JobRevision */
+        JobRevision: {
+            design: components["schemas"]["JobDesign"];
+            /**
+             * Format
+             * @default picnicplace-job
+             * @constant
+             */
+            format: "picnicplace-job";
+            /** Job Id */
+            job_id: string;
+            revision: components["schemas"]["RevisionInfo"];
+            /**
+             * Version
+             * @default 2
+             * @constant
+             */
+            version: 2;
+        };
         /** JobSummary */
         JobSummary: {
             /** Board */
             board: string;
             /** Copies */
             copies: number;
+            /**
+             * Draft
+             * @description Whether there is a working copy to edit in Prepare.
+             */
+            draft: boolean;
             /** Id */
             id: string;
             /**
@@ -2574,6 +2733,11 @@ export interface components {
             name: string;
             /** Placed */
             placed: boolean;
+            /**
+             * Revisions
+             * @description Published revisions, oldest first.
+             */
+            revisions: components["schemas"]["RevisionSummary"][];
             /** Side Up */
             side_up: string;
         };
@@ -2719,6 +2883,18 @@ export interface components {
              * @enum {integer}
              */
             version: 1 | 2;
+        };
+        /**
+         * LibrarySnapshot
+         * @description The library entries a revision uses, each sorted by ID.
+         */
+        LibrarySnapshot: {
+            /** Footprints */
+            footprints: components["schemas"]["Footprint-Output"][];
+            /** Parts */
+            parts: components["schemas"]["Part-Output"][];
+            /** Tapes */
+            tapes: components["schemas"]["Tape-Output"][];
         };
         /** LocalProfileState */
         LocalProfileState: {
@@ -3815,6 +3991,20 @@ export interface components {
             /** Present */
             present: boolean;
         };
+        /** PublishRequest */
+        PublishRequest: {
+            /**
+             * Author
+             * @description Who is publishing it.
+             */
+            author: string;
+            /**
+             * Reason
+             * @description What changed, and why.
+             * @default
+             */
+            reason: string;
+        };
         /**
          * RailCalibration
          * @description Where a feeder rail (a profile's feeder bank) really is. Its slots are moved from
@@ -3976,6 +4166,51 @@ export interface components {
              * @default 0
              */
             picked: number;
+        };
+        /** RevisionInfo */
+        RevisionInfo: {
+            /**
+             * Author
+             * @description Who made the revision.
+             */
+            author: string;
+            /**
+             * Created
+             * Format: date-time
+             */
+            created: string;
+            /**
+             * Hash
+             * @description SHA-256 of the design, hex.
+             */
+            hash: string;
+            /**
+             * Number
+             * @description 1 for a job's first revision, then 2, 3, …
+             */
+            number: number;
+            /**
+             * Reason
+             * @description What changed, and why.
+             * @default
+             */
+            reason: string;
+        };
+        /** RevisionSummary */
+        RevisionSummary: {
+            /** Author */
+            author: string;
+            /**
+             * Created
+             * Format: date-time
+             */
+            created: string;
+            /** Hash */
+            hash: string;
+            /** Number */
+            number: number;
+            /** Reason */
+            reason: string;
         };
         /** RunItem */
         RunItem: {
@@ -5791,6 +6026,57 @@ export interface operations {
             };
         };
     };
+    import_job_api_v1_jobs_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportedJob"];
+                };
+            };
+            /** @description The file is not a job file. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description It clashes with a job already here. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     job_layout_api_v1_jobs_layout_post: {
         parameters: {
             query?: never;
@@ -5918,6 +6204,181 @@ export interface operations {
                 content?: never;
             };
             /** @description No job with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_revisions_api_v1_jobs__job_id__revisions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionSummary"][];
+                };
+            };
+            /** @description No job with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_revision_api_v1_jobs__job_id__revisions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRevision"];
+                };
+            };
+            /** @description No job with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Another revision was just published. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_revision_api_v1_jobs__job_id__revisions__number__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRevision"];
+                };
+            };
+            /** @description No such job or revision. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_revision_api_v1_jobs__job_id__revisions__number__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description No such job or revision. */
             404: {
                 headers: {
                     [name: string]: unknown;

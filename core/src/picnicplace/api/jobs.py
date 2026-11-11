@@ -1,15 +1,26 @@
-"""Job endpoints: saved jobs, and where a job's placements land on the machine."""
+"""Job endpoints: saved jobs and their published revisions, and where a job's placements
+land on the machine."""
 
-from typing import Annotated, Any
+import json
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field, ValidationError
 
 from picnicplace.api.context import Context, require
 from picnicplace.auth import Permission
 from picnicplace.job.layout import JobLayout, find_location, layout
 from picnicplace.job.models import Job, MachineLocation
-from picnicplace.job.store import JOB_ID, JobStore, JobSummary
-from picnicplace.schemas import ErrorResponse
+from picnicplace.job.revision import JobFileError, JobRevision, load, make_revision
+from picnicplace.job.store import (
+    JOB_ID,
+    JobStore,
+    JobSummary,
+    RevisionConflict,
+    RevisionSummary,
+    job_id_for,
+)
+from picnicplace.schemas import ErrorResponse, WireModel
 
 router = APIRouter(
     prefix="/api/v1/jobs", tags=["jobs"], dependencies=[Depends(require(Permission.VIEW))]
@@ -18,6 +29,9 @@ CanEdit = Depends(require(Permission.JOB))
 
 NOT_FOUND: dict[int | str, dict[str, Any]] = {
     404: {"model": ErrorResponse, "description": "No job with this ID."}
+}
+REVISION_NOT_FOUND: dict[int | str, dict[str, Any]] = {
+    404: {"model": ErrorResponse, "description": "No such job or revision."}
 }
 
 
@@ -93,3 +107,145 @@ def put_job(store: Store, job_id: str, job: Job) -> Job:
 def delete_job(store: Store, job_id: str) -> None:
     if not store.delete(_checked(job_id)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"no job {job_id!r}")
+
+
+# --- Revisions ----------------------------------------------------------------------------
+
+
+@router.get("/{job_id}/revisions", responses=NOT_FOUND)
+def list_revisions(store: Store, job_id: str) -> list[RevisionSummary]:
+    """A job's published revisions, oldest first."""
+    return store.revisions(_checked(job_id))
+
+
+class PublishRequest(BaseModel):
+    author: str = Field(min_length=1, max_length=200, description="Who is publishing it.")
+    reason: str = Field(default="", max_length=2000, description="What changed, and why.")
+
+
+@router.post(
+    "/{job_id}/revisions",
+    responses={
+        **NOT_FOUND,
+        409: {"model": ErrorResponse, "description": "Another revision was just published."},
+    },
+    dependencies=[CanEdit],
+)
+def publish_revision(ctx: Context, store: Store, job_id: str, body: PublishRequest) -> JobRevision:
+    """Publish the job's working copy as its next revision, with a copy of every part,
+    footprint, and tape it uses from the library. A revision never changes afterward."""
+    job = store.get(_checked(job_id))
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"no job {job_id!r}")
+    revision = make_revision(
+        job_id,
+        job,
+        ctx.library,
+        number=store.next_number(job_id),
+        author=body.author,
+        reason=body.reason,
+    )
+    try:
+        store.add_revision(revision)
+    except RevisionConflict as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"{e}: try again") from e
+    return revision
+
+
+def _revision_or_404(store: JobStore, job_id: str, number: int) -> JobRevision:
+    try:
+        revision = store.revision(_checked(job_id), number)
+    except JobFileError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(e)) from e
+    if revision is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail=f"job {job_id!r} has no revision {number}"
+        )
+    return revision
+
+
+@router.get("/{job_id}/revisions/{number}", responses=REVISION_NOT_FOUND)
+def get_revision(store: Store, job_id: str, number: int) -> JobRevision:
+    return _revision_or_404(store, job_id, number)
+
+
+@router.get(
+    "/{job_id}/revisions/{number}/file",
+    response_class=Response,
+    responses={**REVISION_NOT_FOUND, 200: {"content": {"application/json": {}}}},
+)
+def download_revision(store: Store, job_id: str, number: int) -> Response:
+    """The revision's job file, exactly as kept, to save or take to another machine."""
+    _revision_or_404(store, job_id, number)
+    text = store.revision_text(job_id, number) or ""
+    name = f"{job_id}-r{number:04d}.json"
+    return Response(
+        content=text,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+class ImportJobRequest(BaseModel):
+    text: str = Field(description="The job file's contents.")
+
+
+class ImportedJob(WireModel):
+    job_id: str
+    kind: Literal["revision", "working-copy"] = Field(
+        description=(
+            "A revision is kept as published; a job file saved before revisions becomes "
+            "a working copy, to publish from Prepare."
+        )
+    )
+    number: int | None = Field(default=None, description="The revision's number.")
+    already_kept: bool = Field(
+        default=False, description="This very revision was already here; nothing changed."
+    )
+
+
+@router.post(
+    "/import",
+    responses={
+        400: {"model": ErrorResponse, "description": "The file is not a job file."},
+        409: {"model": ErrorResponse, "description": "It clashes with a job already here."},
+    },
+    dependencies=[CanEdit],
+)
+def import_job(store: Store, body: ImportJobRequest) -> ImportedJob:
+    """Load a job file from disk: a published revision, or a job saved before revisions."""
+    try:
+        version: object = json.loads(body.text).get("version")
+    except (json.JSONDecodeError, AttributeError):
+        version = None
+    if version == 1:
+        try:
+            job = Job.model_validate_json(body.text)
+        except ValidationError as e:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=f"the job file is not valid: {e.errors()[0]['msg']}",
+            ) from e
+        job_id = job_id_for(job.name)
+        if store.get(job_id) is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=f"there is already a job {job_id!r}: rename or delete it first",
+            )
+        store.put(job_id, job)
+        return ImportedJob(job_id=job_id, kind="working-copy")
+    try:
+        revision = load(body.text)
+    except JobFileError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    _checked(revision.job_id)
+    try:
+        added = store.add_revision(revision)
+    except RevisionConflict as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return ImportedJob(
+        job_id=revision.job_id,
+        kind="revision",
+        number=revision.revision.number,
+        already_kept=not added,
+    )

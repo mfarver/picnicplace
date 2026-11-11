@@ -1,4 +1,13 @@
-import { CircuitBoard, FileUp, FolderOpen, LocateFixed, Save, Trash2, X } from "lucide-react";
+import {
+  CircuitBoard,
+  FileInput,
+  FileUp,
+  FolderOpen,
+  LocateFixed,
+  Save,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useCore } from "../api/core";
@@ -7,6 +16,7 @@ import { useDescription } from "../api/useDescription";
 import type { ImportReport, Job, JobLayout, JobSummary } from "../api/types";
 import { Field, NumberInput } from "../components/Form";
 import { JobOverlay } from "../components/job/JobOverlay";
+import { JobRevisions } from "../components/job/JobRevisions";
 import { ImportReportView } from "../components/library/ImportReportView";
 import { MachineView } from "../components/machine/MachineView";
 import { Panel } from "../components/Panel";
@@ -43,6 +53,8 @@ export function PrepareWorkspace() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [report, setReport] = useState<ImportReport | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [jobFile, setJobFile] = useState<File>();
+  const [loaded, setLoaded] = useState<string | null>(null);
 
   const reloadJobs = useCallback(async () => {
     const { data } = await api.GET("/api/v1/jobs");
@@ -134,6 +146,23 @@ export function PrepareWorkspace() {
     await reloadJobs();
   };
 
+  const loadJobFile = async () => {
+    if (!jobFile) return;
+    const result = await run(async () =>
+      api.POST("/api/v1/jobs/import", { body: { text: await jobFile.text() } }),
+    );
+    if (!result) return;
+    setJobFile(undefined);
+    setLoaded(
+      result.kind === "working-copy"
+        ? `Loaded ${result.job_id}, saved before revisions: open it and publish it.`
+        : result.already_kept
+          ? `Revision ${result.number} of ${result.job_id} was already here.`
+          : `Loaded revision ${result.number} of ${result.job_id}.`,
+    );
+    await reloadJobs();
+  };
+
   const findPlace = async () => {
     if (!job) return;
     const location = await run(() => api.POST("/api/v1/jobs/find-location", { body: job }));
@@ -210,26 +239,65 @@ export function PrepareWorkspace() {
             <Panel title="Saved jobs">
               {jobs.length === 0 && <p className="text-muted">No saved jobs yet.</p>}
               <ul className="item-list">
-                {jobs.map((j) => (
-                  <li key={j.id} className="item-with-action">
-                    <button type="button" className="item" onClick={() => void openJob(j.id)}>
-                      <span className="item-id">{j.name}</span>
-                      <span className="item-detail">
-                        {j.copies > 1 ? `${j.copies} boards · ` : ""}
-                        {j.side_up} up{j.placed ? "" : " · not placed"}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button"
-                      title={`Delete ${j.name}`}
-                      onClick={() => void deleteJob(j.id)}
-                    >
-                      <Trash2 size={14} aria-label={`Delete ${j.name}`} />
-                    </button>
-                  </li>
-                ))}
+                {jobs.map((j) => {
+                  const latest = j.revisions.at(-1);
+                  const published = latest ? `r${latest.number}` : "not published";
+                  return (
+                    <li key={j.id} className="item-with-action">
+                      <button
+                        type="button"
+                        className="item"
+                        disabled={!j.draft}
+                        title={j.draft ? undefined : "Loaded from a job file: it runs as published"}
+                        onClick={() => void openJob(j.id)}
+                      >
+                        <span className="item-id">{j.name}</span>
+                        <span className="item-detail">
+                          {j.copies > 1 ? `${j.copies} boards · ` : ""}
+                          {j.side_up} up · {j.draft ? published : `${published}, from a file`}
+                          {j.draft && !j.placed ? " · not placed" : ""}
+                        </span>
+                      </button>
+                      {j.draft && (
+                        <button
+                          type="button"
+                          className="icon-button"
+                          title={`Delete ${j.name} (its published revisions are kept)`}
+                          onClick={() => void deleteJob(j.id)}
+                        >
+                          <Trash2 size={14} aria-label={`Delete ${j.name}`} />
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
+            </Panel>
+            <Panel title="Load a job file">
+              <p className="text-muted">
+                A published revision saved from another PicnicPlace, to run here as it is.
+              </p>
+              <FilePick
+                label="Job file (.json)"
+                accept=".json,application/json"
+                file={jobFile}
+                onPick={(file) => {
+                  setJobFile(file);
+                  setLoaded(null);
+                }}
+              />
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="button"
+                  disabled={!jobFile || pending}
+                  onClick={() => void loadJobFile()}
+                >
+                  <FileInput size={16} aria-hidden />
+                  Load
+                </button>
+              </div>
+              {loaded && <p className="note text-muted">{loaded}</p>}
             </Panel>
           </>
         ) : (
@@ -281,6 +349,17 @@ export function PrepareWorkspace() {
               {notice && <p className="note text-muted">{notice}</p>}
               {error && <p className="note note-danger">{error}</p>}
             </Panel>
+
+            {savedAs && (
+              <Panel title="Published revisions">
+                <JobRevisions
+                  jobId={savedAs}
+                  revisions={jobs.find((j) => j.id === savedAs)?.revisions ?? []}
+                  unsaved={dirty}
+                  onPublished={() => void reloadJobs()}
+                />
+              </Panel>
+            )}
 
             <Panel title="On the machine">
               <p className="text-muted">

@@ -14,6 +14,7 @@ from starlette.types import Scope
 
 from picnicplace import __version__
 from picnicplace.api import boards as board_routes
+from picnicplace.api import calibration as calibration_routes
 from picnicplace.api import cameras as camera_routes
 from picnicplace.api import feeders as feeder_routes
 from picnicplace.api import jobs as job_routes
@@ -26,6 +27,7 @@ from picnicplace.api.context import AppContext
 from picnicplace.api.fingerprint import openapi_text
 from picnicplace.auth import Authenticator
 from picnicplace.bringup import BringUpStore
+from picnicplace.calibration import CalibrationStore
 from picnicplace.camera.manager import CameraManager
 from picnicplace.camera.source import Frame
 from picnicplace.capture import CaptureStore
@@ -89,6 +91,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         async with hub.viewer() as source:
             return await source.fresh_frame(after, wait_s)
 
+    machine.calibration = CalibrationStore(config.data.calibration_path)
     machine.attach_cameras(grab)
     lease.on_holder_left.append(machine.stop_manual_motion)
     ctx = AppContext(
@@ -157,6 +160,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(feeder_routes.router)
     app.include_router(placement_routes.router)
     app.include_router(run_routes.router)
+    app.include_router(calibration_routes.router)
     app.include_router(recording_routes.router)
     app.include_router(websocket.router)
 

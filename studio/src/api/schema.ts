@@ -45,6 +45,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/calibration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Checklist
+         * @description Every calibration this machine needs, in order: whether each is done, its value
+         *     and when it was measured, or that it is out of date and why, and what starts it.
+         */
+        get: operations["checklist_api_v1_calibration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cameras": {
         parameters: {
             query?: never;
@@ -1899,6 +1920,53 @@ export interface components {
              * @description Slots to calibrate. Empty: every slot with a feeder found.
              */
             slot_ids?: string[];
+        };
+        /** CalibrationChecklist */
+        CalibrationChecklist: {
+            /** Lines */
+            lines: components["schemas"]["CalibrationLine"][];
+        };
+        /** CalibrationLine */
+        CalibrationLine: {
+            /**
+             * Action
+             * @description What starts it, if the core can.
+             */
+            action: ("home" | "visual_home" | "camera_scale" | "calibrate_feeders") | null;
+            /**
+             * Detail
+             * @description Its value, or what to do, in words.
+             */
+            detail: string;
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "machine_frame" | "top_camera_orientation" | "homing_fiducial" | "top_camera_scale" | "bottom_camera" | "nozzle_offsets" | "nozzle_runout" | "heights" | "vacuum" | "feeder_rails" | "strips_and_trays" | "boards";
+            /** Measured At */
+            measured_at: string | null;
+            /**
+             * Number
+             * @description Its place in the order (spec §7.7): each needs the ones before.
+             */
+            number: number;
+            /**
+             * Stale
+             * @description Why it is out of date, if it is.
+             */
+            stale: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "done" | "needed" | "stale" | "assumed" | "every_run" | "not_needed";
+            /** Title */
+            title: string;
+            /**
+             * Warning
+             * @description Something about the value worth checking.
+             */
+            warning: string | null;
         };
         /** Camera */
         Camera: {
@@ -4925,6 +4993,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    checklist_api_v1_calibration_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationChecklist"];
                 };
             };
         };

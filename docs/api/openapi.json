@@ -419,6 +419,137 @@
         "title": "CalibrateRequest",
         "type": "object"
       },
+      "CalibrationChecklist": {
+        "properties": {
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/CalibrationLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lines"
+        ],
+        "title": "CalibrationChecklist",
+        "type": "object"
+      },
+      "CalibrationLine": {
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "enum": [
+                  "home",
+                  "visual_home",
+                  "camera_scale",
+                  "calibrate_feeders"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What starts it, if the core can.",
+            "title": "Action"
+          },
+          "detail": {
+            "description": "Its value, or what to do, in words.",
+            "title": "Detail",
+            "type": "string"
+          },
+          "id": {
+            "enum": [
+              "machine_frame",
+              "top_camera_orientation",
+              "homing_fiducial",
+              "top_camera_scale",
+              "bottom_camera",
+              "nozzle_offsets",
+              "nozzle_runout",
+              "heights",
+              "vacuum",
+              "feeder_rails",
+              "strips_and_trays",
+              "boards"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "measured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measured At"
+          },
+          "number": {
+            "description": "Its place in the order (spec \u00a77.7): each needs the ones before.",
+            "title": "Number",
+            "type": "integer"
+          },
+          "stale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it is out of date, if it is.",
+            "title": "Stale"
+          },
+          "status": {
+            "enum": [
+              "done",
+              "needed",
+              "stale",
+              "assumed",
+              "every_run",
+              "not_needed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Something about the value worth checking.",
+            "title": "Warning"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "title",
+          "status",
+          "detail",
+          "measured_at",
+          "stale",
+          "warning",
+          "action"
+        ],
+        "title": "CalibrationLine",
+        "type": "object"
+      },
       "Camera": {
         "additionalProperties": false,
         "properties": {
@@ -6913,6 +7044,33 @@
         "summary": "Put Bring Up",
         "tags": [
           "bring-up"
+        ]
+      }
+    },
+    "/api/v1/calibration": {
+      "get": {
+        "description": "Every calibration this machine needs, in order: whether each is done, its value\nand when it was measured, or that it is out of date and why, and what starts it.",
+        "operationId": "checklist_api_v1_calibration_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalibrationChecklist"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Checklist",
+        "tags": [
+          "calibration"
         ]
       }
     },

@@ -55,6 +55,7 @@ from typing import Literal
 
 from pydantic import Field, computed_field
 
+from picnicplace.calibration import current, run_issues
 from picnicplace.camera.synthetic import BoardScene
 from picnicplace.feeders.service import FeederService, FeedersState, rotate
 from picnicplace.feeders.setup import PickCorrection
@@ -625,6 +626,9 @@ class JobRunner:
     def _plan(self, job_id: str, revision: int | None) -> tuple[Job, PartsSource | None, JobPlan]:
         job, parts, number = self._resolve(job_id, revision)
         plan = plan_job(job_id, job, self._machine.profile, self._feeders.state(), parts, number)
+        aligns = any(i.status == "pending" for i in plan.items)
+        for severity, message in run_issues(current(self._machine, self._feeders), aligns):
+            plan.issues.append(Issue(severity=severity, message=message))
         if number is None:
             plan.issues.insert(
                 0,

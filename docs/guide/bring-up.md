@@ -82,9 +82,15 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
 
 - [ ] Jog right: the top camera's picture slides left. Jog back: it slides down. If not,
       adjust `flip_x`, `flip_y`, or `rotation`.
-- [ ] **Visual home** in the Calibration panel finds the datum fiducial and reports a
-      correction of well under a millimeter.
-- [ ] **Camera scale** reports a size close to the profile's field of view.
+- [ ] **Visual home** on line 3 of the Calibration panel's checklist finds the datum
+      fiducial and reports a correction of well under a millimeter.
+- [ ] **Measure** on line 4 (the top camera's scale) reports a size close to the
+      profile's field of view; the line warns if it is more than 3% off.
+
+The checklist lists every calibration in order: what is done (with its value and when it
+was measured), what is still to do, what is out of date and why (a crash, Z losing
+steps), and what comes from the profile because the machine cannot measure it yet. What
+the machine measures is kept in `calibration.json` in the data directory.
 
 ### Discard and park
 

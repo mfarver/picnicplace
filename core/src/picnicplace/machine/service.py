@@ -22,7 +22,7 @@ import math
 import time
 from collections.abc import Awaitable, Callable, Mapping
 
-from picnicplace.calibration import CRASH_STALES, CalibrationStore
+from picnicplace.calibration import CRASH_STALES, CalibrationStore, apply_measurements
 from picnicplace.camera.source import Frame
 from picnicplace.camera.synthetic import BoardScene, SceneState, TapeScene
 from picnicplace.events import EventBus
@@ -105,6 +105,8 @@ class MachineService:
         """Keeps what the machine saw and did, while recording."""
         self.calibration = CalibrationStore(None)
         """What the machine has measured of itself, for the calibration checklist."""
+        self._design = profile.model_copy(deep=True)
+        """The profile as loaded, before measurements took the place of its values."""
         self._profile = profile
         self._axes = {a.name: a for a in profile.axes}
         self._inputs = {i.id: i for i in profile.inputs}
@@ -654,6 +656,19 @@ class MachineService:
             "commands, or fix the profile's home_z."
         )
 
+    def use_calibration(self, store: CalibrationStore) -> None:
+        """Keep measurements in this store, and use the ones it has."""
+        self.calibration = store
+        self.apply_calibration()
+
+    def apply_calibration(self) -> None:
+        """Use what has been measured in place of the profile's values."""
+        apply_measurements(self._profile, self.calibration.get())
+
+    def design_camera(self, camera_id: str) -> Camera | None:
+        """A camera as the profile gives it, before measurements took its place."""
+        return next((c for c in self._design.cameras if c.id == camera_id), None)
+
     def start_measure_camera_scale(self) -> Operation:
         """Measure the top camera's millimeters per pixel using the homing fiducial."""
         self._check_can_move()
@@ -730,15 +745,25 @@ class MachineService:
                 raise VisionError(f"the fiducial did not move in the image when moving {axis}")
             scales[axis] = 2 * step / pixels
         await self._run_steps([target], None)
-        width = (await self._locate_fiducial(fiducial, camera))[2]
-        assumed = camera.field_of_view.x / width
+        _, _, width, height = await self._locate_fiducial(fiducial, camera)
+        design = next(c for c in self._design.cameras if c.id == camera.id)
+        assumed = design.field_of_view.x / width
         message = (
             f"{camera.label}: {scales['X']:.5f} mm/pixel in X and {scales['Y']:.5f} in Y "
             f"(the profile's field of view implies {assumed:.5f})."
         )
         self.calibration.record(
-            "top_camera_scale", message, {"x": scales["X"], "y": scales["Y"], "profile": assumed}
+            "top_camera_scale",
+            message,
+            {
+                "x": scales["X"],
+                "y": scales["Y"],
+                "profile": assumed,
+                "width": width,
+                "height": height,
+            },
         )
+        self.apply_calibration()
         return message
 
     async def _visual_home(self) -> str:

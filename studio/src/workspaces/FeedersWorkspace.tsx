@@ -220,6 +220,7 @@ export function FeedersWorkspace() {
             id={camera.id}
             title={camera.label}
             info={cameras?.find((c) => c.id === camera.id)}
+            fieldOfView={camera.field_of_view.x}
           />
         )}
 

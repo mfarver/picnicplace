@@ -3,6 +3,7 @@ out of date, and what it stops in a run."""
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
@@ -93,11 +94,11 @@ def test_a_crash_makes_measurements_out_of_date(tmp_path: Path) -> None:
 def test_values_worth_a_look_are_flagged(tmp_path: Path) -> None:
     store = CalibrationStore(None)
     store.record("homing_fiducial", "found it", {"off": 1.6})
-    store.record("top_camera_scale", "measured", {"x": 0.055, "y": 0.055, "profile": 0.05})
+    store.record("top_camera_scale", "measured", {"x": 0.06, "y": 0.06, "profile": 0.05})
     profile = fast_config(machine={"profile": "lumenpnp-v4.1"}).machine.machine_profile
     checklist = build_checklist(profile, True, store.get(), None)
     assert "1.60 mm off" in (checklist.line("homing_fiducial").warning or "")
-    assert "10% from" in (checklist.line("top_camera_scale").warning or "")
+    assert "20% from" in (checklist.line("top_camera_scale").warning or "")
 
 
 def test_a_run_needs_the_bottom_camera_focused() -> None:
@@ -111,3 +112,76 @@ def test_a_run_needs_the_bottom_camera_focused() -> None:
     [(severity, message)] = run_issues(checklist, aligns=True)
     assert severity == "error" and message.startswith("calibration line 5, bottom camera")
     assert run_issues(checklist, aligns=False) == []  # nothing to align: no matter
+
+
+def test_the_measured_top_camera_scale_is_used(tmp_path: Path) -> None:
+    """The simulated top camera really sees 5% more than the profile says. Measuring its
+    scale finds that, and vision uses the measured scale from then on."""
+    config = visual_config(tmp_path, sim_home_error=(0.3, -0.2), sim_top_camera_scale=1.05)
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        design = client.get("/api/v1/machine/description").json()["cameras"][0]
+        op = s.wait(s.post("/api/v1/machine/camera-scale"))
+        assert op["status"] == "succeeded", op
+        top = client.get("/api/v1/machine/description").json()["cameras"][0]
+        assert top["field_of_view"]["x"] == pytest.approx(
+            design["field_of_view"]["x"] * 1.05, rel=0.01
+        )
+        assert top["field_of_view"]["y"] == pytest.approx(
+            design["field_of_view"]["y"] * 1.05, rel=0.01
+        )
+        line = lines(client)["top_camera_scale"]
+        assert line["status"] == "done" and line["warning"] is None  # 5% is not alarming
+
+        # Visual homing now measures the homing error with the true scale.
+        op = s.wait(s.post("/api/v1/machine/visual-home"))
+        assert op["status"] == "succeeded", op
+
+    # Used again after a restart.
+    with TestClient(create_app(config)) as client:
+        top = client.get("/api/v1/machine/description").json()["cameras"][0]
+        assert top["field_of_view"]["x"] == pytest.approx(
+            design["field_of_view"]["x"] * 1.05, rel=0.01
+        )
+
+
+def test_calibrate_the_bottom_camera() -> None:
+    """The simulated bottom camera is 0.8 mm left of and 0.5 mm behind the profile's
+    place, and in focus 0.4 mm lower: calibrating finds all three."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_bottom_camera_error": (-0.8, 0.5, -0.4)},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert lines(client)["bottom_camera"]["action"] == "bottom_camera"
+        design = next(
+            c
+            for c in client.get("/api/v1/machine/description").json()["cameras"]
+            if c["looking"] == "up"
+        )
+        assert home(s)["status"] == "succeeded"
+        op = s.wait(s.post("/api/v1/machine/bottom-camera", {}))
+        assert op["status"] == "succeeded", op
+        bottom = next(
+            c
+            for c in client.get("/api/v1/machine/description").json()["cameras"]
+            if c["looking"] == "up"
+        )
+        assert bottom["position"]["x"] == pytest.approx(design["position"]["x"] - 0.8, abs=0.03)
+        assert bottom["position"]["y"] == pytest.approx(design["position"]["y"] + 0.5, abs=0.03)
+        assert bottom["focus_height"] == pytest.approx(design["focus_height"] - 0.4, abs=0.06)
+        assert bottom["field_of_view"]["x"] == pytest.approx(design["field_of_view"]["x"], rel=0.01)
+        line = lines(client)["bottom_camera"]
+        assert line["status"] == "done" and line["warning"] is None
+        assert "mm from the profile's place" in str(line["detail"])
+        # The nozzles are back up, and nothing is held.
+        assert s.state()["z_safe"]
+
+
+def test_the_bottom_camera_search_needs_a_focus_height(tmp_path: Path) -> None:
+    """Without a focus height to start from, the search could drive the nozzle into the
+    camera: it refuses, saying what to set."""
+    with TestClient(create_app(fast_config())) as client, connect(client) as s:
+        s.home()
+        op = s.wait(s.post("/api/v1/machine/bottom-camera", {}))
+        assert op["status"] == "failed" and "focus_height" in op["error"]

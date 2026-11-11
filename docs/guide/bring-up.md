@@ -85,7 +85,13 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
 - [ ] **Visual home** on line 3 of the Calibration panel's checklist finds the datum
       fiducial and reports a correction of well under a millimeter.
 - [ ] **Measure** on line 4 (the top camera's scale) reports a size close to the
-      profile's field of view; the line warns if it is more than 3% off.
+      profile's field of view; the line warns if it is more than 10% off. The measured
+      scale is used from then on, and the camera views' scale bars follow it.
+- [ ] With an empty nozzle tip fitted, **Calibrate** on line 5 (the bottom camera)
+      centers the tip over the camera, steps it up and down for the sharpest picture,
+      and measures the camera's scale. The nozzle never goes more than 2 mm below the
+      profile's focus height. Check the place found is within a millimeter or two of
+      the profile's, and the image is not turned more than a degree.
 
 The checklist lists every calibration in order: what is done (with its value and when it
 was measured), what is still to do, what is out of date and why (a crash, Z losing

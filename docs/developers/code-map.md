@@ -70,8 +70,9 @@ A request goes **route → service → machine service → driver**:
 | `machine/profile.py` | Machine profiles: axes, nozzles, cameras, feeder banks, locations, keep-outs. Built-in profiles hold a model's **design facts only**, and can `extends` another. |
 | `machine/local.py` | The local profile: what is true of one machine (discard and park locations, measured keep-outs), laid over the built-in profile. Written by the Studio. |
 | `machine/service.py` | The machine service: the one owner of the machine, and where the safety rules live. Also camera frames and vision calls for tasks. |
+| `machine/bottom_camera.py` | Calibrating the bottom camera with a nozzle tip: its place, focus height, scale, and turn |
 | `machine/driver.py` | The interface every motion driver implements |
-| `machine/simulator.py` | The simulated machine. Its errors are realistic (homing error, feeder steps, slot and board offsets), so calibration and vision have something to find. |
+| `machine/simulator.py` | The simulated machine. Its errors are realistic (homing error, feeder steps, slot and board offsets, cameras off the profile), so calibration and vision have something to find. |
 | `machine/factory.py` | Picks the driver the config asks for (simulator, Marlin, or Marlin against a fake firmware) |
 | `machine/errors.py` | Machine errors; their messages are written to be shown to users |
 | `probe.py` | `picnicplace-probe`: records what a new machine is, without moving it |
@@ -83,8 +84,9 @@ A request goes **route → service → machine service → driver**:
 | `camera/` | Camera sources (`device.py` for real cameras, `synthetic.py` for the simulator's rendered views), and a hub per camera that shares frames among viewers |
 | `vision/fiducial.py` | Finds round marks: homing and board fiducials, feeder fiducials, sprocket holes |
 | `vision/part.py` | Finds a part on a nozzle, in a bottom camera frame |
+| `vision/focus.py` | How sharp part of a frame is, for finding a camera's focus |
 | `capture.py` | Saves single frames on request, for tuning vision on real images |
-| `calibration.py` | The calibration checklist: what the machine has measured of itself and when, what a crash makes out of date, and what stops a run |
+| `calibration.py` | The calibration checklist: what the machine has measured of itself and when, using it in place of the profile's values, what a crash makes out of date, and what stops a run |
 | `recorder.py` | The flight recorder: every frame vision looked at and everything the machine did, and `replay_vision` to run today's vision on recorded frames |
 
 ### Parts, feeders, boards, and jobs
@@ -120,7 +122,7 @@ The core keeps the owner's data in one folder (`data.dir` in the config; by defa
 | `captures/` | Frames saved with the Capture panel | `capture.py` |
 | `recordings/` | Flight recordings | `recorder.py` |
 | `bring-up.json` | Progress through the bring-up checklist | `bringup.py` |
-| `calibration.json` | What the machine has measured of itself (homing, the homing fiducial, the top camera's scale), when, and what is out of date | `calibration.py` |
+| `calibration.json` | What the machine has measured of itself (homing, the homing fiducial, the top camera's scale, the bottom camera), when, and what is out of date | `calibration.py` |
 
 ## The tests: `core/tests/`
 

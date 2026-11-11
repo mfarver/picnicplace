@@ -31,6 +31,14 @@ export type Quadrant = "Q1" | "Q2" | "Q3" | "Q4";
  * datasheet's pin-1 quadrants. */
 export const QUADRANT_ROTATION: Record<Quadrant, number> = { Q1: 0, Q2: -90, Q3: 90, Q4: 180 };
 
+/** Where each quadrant is in the pocket, in the tape frame (sprocket holes along the top). */
+export const QUADRANT_PLACE: Record<Quadrant, string> = {
+  Q1: "top left",
+  Q2: "top right",
+  Q3: "bottom left",
+  Q4: "bottom right",
+};
+
 /** F for a width, or null for a width EIA-481 does not list. */
 export function pocketLine(width: number | null): number | null {
   if (width === null) return null;

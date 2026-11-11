@@ -1547,6 +1547,28 @@ code,
   fill: rgb(229 72 77 / 22%);
 }
 
+.quadrant-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-1);
+  vertical-align: -2px;
+}
+
+.quadrant-pocket {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1;
+}
+
+.quadrant-icon .quadrant-pocket:last-child {
+  stroke-width: 0.6;
+  stroke-dasharray: 1 1;
+}
+
+.quadrant-pin1 {
+  fill: rgb(229 72 77 / 70%);
+}
+
 .tape-room {
   fill: rgb(0 0 0 / 20%);
   stroke: var(--text-faint);

@@ -73,7 +73,7 @@ A request goes **route → service → machine service → driver**:
 | `machine/bottom_camera.py` | Calibrating the bottom camera with a nozzle tip: its place, focus height, scale, and turn |
 | `machine/nozzle_offsets.py` | Calibrating the nozzle offsets: sniffing for the datum board's height, then turning a disc on it with each nozzle |
 | `machine/driver.py` | The interface every motion driver implements |
-| `machine/simulator.py` | The simulated machine. Its errors are realistic (homing error, feeder steps, slot and board offsets, cameras and nozzles off the profile, the datum board's height), so calibration and vision have something to find. |
+| `machine/simulator.py` | The simulated machine. Its errors are realistic (homing error, feeder steps, slot and board offsets, cameras and nozzles off the profile, tips longer than the profile's, the datum board's height), so calibration and vision have something to find. |
 | `machine/factory.py` | Picks the driver the config asks for (simulator, Marlin, or Marlin against a fake firmware) |
 | `machine/errors.py` | Machine errors; their messages are written to be shown to users |
 | `probe.py` | `picnicplace-probe`: records what a new machine is, without moving it |
@@ -102,7 +102,7 @@ A request goes **route → service → machine service → driver**:
 | `feeders/pocket.py` | Where the pocket is, from the sprocket holes seen |
 | `feeders/rails.py` | Fitting a feeder rail to the feeder fiducials found on it |
 | `placement.py` | Pick, align, and place one part; pick correction (top or bottom camera) |
-| `simparts.py` | The simulator's parts: which nozzle holds what, where placed parts landed, and the calibration disc |
+| `simparts.py` | The simulator's parts: which nozzle holds what, where placed parts landed (and how far they fell), the calibration disc, and crashes: a tip pressed into a part, or a part into the board |
 | `board/` | Boards and panels, and reading them from KiCad (`kicad.py`, with a small S-expression reader) and KiKit panels |
 | `job/models.py`, `job/store.py` | Jobs (a board or panel on the machine) and their files, with their published revisions and this machine's setup for each |
 | `job/revision.py` | Job revisions: the design and a copy of the library entries it uses, the job file, and its hash |

@@ -16,6 +16,7 @@ from picnicplace.calibration import (
 )
 from picnicplace.config import Config
 from tests.conftest import connect, fast_config
+from tests.test_placement import feeders, ok, placed, set_up
 from tests.test_vision import home, visual_config
 
 
@@ -289,3 +290,46 @@ def test_sniffing_stops_short_of_crashing() -> None:
         op = s.wait(s.post("/api/v1/machine/nozzle-offsets", {"nozzle_ids": ["N1"]}))
         assert op["status"] == "failed" and "did not seal" in op["error"]
         assert s.state()["z_safe"]
+
+
+def test_a_longer_tip_is_found_on_the_datum_board() -> None:
+    """N2's tip is 0.8 mm longer than the profile's: sent to the profile's heights, it
+    presses into the part it picks and into the board it places on. Sniffing the datum
+    board while calibrating the nozzle offsets finds the difference, and from then on N2
+    picks at the part's top and sets the part down on the board."""
+    config = offsets_config(sim_nozzle_z_error={"N2": 0.8})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        parts = feeders(client).sim_parts
+        assert parts is not None
+
+        ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "1", "nozzle_id": "N2"})))
+        ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N2"})))
+        target = {"nozzle_id": "N2", "x": 300.0, "y": 250.0, "rotation": 0.0}
+        ok(s.wait(s.post("/api/v1/placement/place", target)))
+        assert len(parts.crashes) == 2, parts.crashes
+        assert "N2 pressed 0.80 mm into a part" in parts.crashes[0]
+
+        disc = config.machine.sim_calibration_disc
+        assert disc is not None
+        cam = client.get("/api/v1/machine/description").json()["cameras"][0]["position"]
+        s.wait(
+            s.post(
+                "/api/v1/machine/move",
+                {"position": {"X": disc[0] - cam["x"], "Y": disc[1] - cam["y"]}},
+            )
+        )
+        ok(s.wait(s.post("/api/v1/machine/nozzle-offsets", {})))
+        nozzles = {n["id"]: n for n in client.get("/api/v1/machine/description").json()["nozzles"]}
+        assert nozzles["N1"]["z_offset"] == pytest.approx(0.0, abs=0.1)
+        assert nozzles["N2"]["z_offset"] == pytest.approx(0.8, abs=0.1)
+
+        parts.crashes.clear()
+        ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "2", "nozzle_id": "N2"})))
+        ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N2"})))
+        target = {"nozzle_id": "N2", "x": 260.0, "y": 230.0, "rotation": 0.0}
+        ok(s.wait(s.post("/api/v1/placement/place", target)))
+        assert parts.crashes == []
+        landed = placed(client)[-1]
+        assert landed.fell < 0.1
+        assert (landed.x, landed.y) == pytest.approx((260.0, 230.0), abs=0.05)

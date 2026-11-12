@@ -3578,6 +3578,12 @@ export interface components {
             /** Z Axis */
             z_axis: string;
             /**
+             * Z Offset
+             * @description Measured, not set by hand: how much higher this nozzle's tip touches the datum board than the profile's height for it. Every height the nozzle is sent to is shifted by this, so heights mean the same for every nozzle and tip.
+             * @default 0
+             */
+            z_offset: number;
+            /**
              * Z Sign
              * @description Direction of this nozzle on its Z axis. Two nozzles sharing one Z motor move in opposite directions: one has 1, the other -1.
              * @default 1

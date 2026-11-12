@@ -78,6 +78,7 @@ def build_driver(config: MachineConfig) -> DriverBundle:
             config.sim_time_scale,
             config.sim_home_error,
             photon=photon,
+            tip_errors=config.sim_nozzle_z_error,
         )
         driver.surface_at = sim_datum_surface(config)
         return DriverBundle(driver, photon_sim=photon)

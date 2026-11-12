@@ -24,7 +24,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from picnicplace.calibration import nozzle_key
+from picnicplace.calibration import datum_key, nozzle_key
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
 from picnicplace.machine.profile import Location, Nozzle, Point
 from picnicplace.machine.service import MachineService
@@ -83,7 +83,8 @@ def _datum(machine: MachineService) -> Location:
 
 async def sniff_datum(machine: MachineService, nozzle: Nozzle) -> float:
     """Step the nozzle down onto the datum board's center fiducial, with suction on, until
-    the vacuum seals: the board's top, as this nozzle reaches it."""
+    the vacuum seals: the board's top, as this nozzle reaches it, in heights shifted by its
+    Z offset as it stands (add the offset for the raw height)."""
     fiducial = _datum(machine)
     assert fiducial.z is not None
     if nozzle.vacuum_input is None:
@@ -92,7 +93,9 @@ async def sniff_datum(machine: MachineService, nozzle: Nozzle) -> float:
         )
     expected = fiducial.z
     axis = machine.profile.axis(nozzle.z_axis)
-    lowest = axis.min if nozzle.z_sign == 1 else -axis.max
+    # Heights here, as everywhere, are shifted by the nozzle's Z offset; the bottom of
+    # its travel is not.
+    lowest = (axis.min if nozzle.z_sign == 1 else -axis.max) - nozzle.z_offset
     floor = max(expected - SNIFF_BELOW_MM, lowest)
     await machine.move_nozzle_over(nozzle, fiducial.position.x, fiducial.position.y, 0.0)
     start = expected + SNIFF_ABOVE_MM
@@ -245,10 +248,12 @@ def start_nozzle_offset_calibration(
             values[nozzle_key(n.id, "y")] = fix.y
             values[f"off.{n.id}"] = off
             values[f"spread.{n.id}"] = fix.spread
-            values[f"datum.{n.id}"] = heights[n.id]
+            # Kept raw, so a new Z offset follows from it whatever the old one was.
+            raw = heights[n.id] + n.z_offset
+            values[datum_key(n.id)] = raw
             parts.append(
                 f"{n.label}: ({fix.x:.3f}, {fix.y:.3f}), {off:.2f} mm from the profile's, "
-                f"touching the datum board at Z {heights[n.id]:.2f}"
+                f"touching the datum board at Z {raw:.2f}"
             )
         spread = max(f.spread for f in fixes)
         message = f"{'; '.join(parts)}. The disc's turns agreed within {spread:.3f} mm."

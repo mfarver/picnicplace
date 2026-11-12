@@ -176,6 +176,17 @@ class CalibrationChecklist(WireModel):
         return next(line for line in self.lines if line.id == line_id)
 
 
+Z_OFFSET_LIMIT_MM = 2.0
+"""A nozzle touching the datum board farther than this from the profile's height for it
+is not trusted: its Z offset is left as it was."""
+
+
+def datum_key(nozzle_id: str) -> str:
+    """The key of where a nozzle touched the datum board (its raw height) in the nozzle
+    offsets' values."""
+    return f"datum.{nozzle_id}"
+
+
 def nozzle_key(nozzle_id: str, axis: Literal["x", "y"]) -> str:
     """The key of a nozzle's offset in a measurement's values."""
     return f"nozzle.{nozzle_id}.{axis}"
@@ -186,11 +197,20 @@ def apply_measurements(profile: MachineProfile, record: CalibrationRecord) -> No
     scale, the nozzle offsets, and the bottom camera's place, focus height, and scale.
     Out-of-date values are still the best known, and are used until measured again."""
     offsets = record.lines.get("nozzle_offsets")
+    datum = next(
+        (loc.z for loc in profile.locations if loc.kind == "homing_fiducial" and loc.z is not None),
+        None,
+    )
     for nozzle in profile.nozzles:
         v = offsets.values if offsets else {}
         kx, ky = nozzle_key(nozzle.id, "x"), nozzle_key(nozzle.id, "y")
         if kx in v and ky in v:
             nozzle.offset = Point(x=v[kx], y=v[ky])
+        # Where the nozzle touched the datum board, against where the profile says the
+        # board is: its tip's length, and the frame's height, in one.
+        touched = v.get(datum_key(nozzle.id))
+        if touched is not None and datum is not None and abs(touched - datum) <= Z_OFFSET_LIMIT_MM:
+            nozzle.z_offset = touched - datum
     for camera in profile.cameras:
         if camera.looking == "down" and camera.mount == "head":
             m = record.lines.get("top_camera_scale")
@@ -399,11 +419,22 @@ def build_checklist(
             "height: jog the nozzle down to a part and set it (Feeders workspace).",
         )
     else:
+        touched = "nozzle_offsets" in record.lines and any(
+            datum_key(n.id) in record.lines["nozzle_offsets"].values for n in profile.nozzles
+        )
+        nozzles = (
+            "Each nozzle's heights are shifted by where it touched the datum board (line 6): "
+            + ", ".join(f"{n.label} {n.z_offset:+.2f} mm" for n in profile.nozzles)
+            + ". "
+            if touched
+            else "Every nozzle is taken as reaching the profile's heights (line 6 measures "
+            "each one on the datum board). "
+        )
         add(
             "heights",
             "assumed",
-            "Feeder heights from the profile, and strips' and trays' as set by hand; parts' "
-            "heights from the library.",
+            nozzles + "Board and feeder heights from the profile, and strips' and trays' as set "
+            "by hand; parts' heights from the library.",
         )
     add("vacuum", "assumed", "One threshold, from the profile.")
 

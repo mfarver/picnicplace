@@ -4030,6 +4030,12 @@
             "title": "Z Axis",
             "type": "string"
           },
+          "z_offset": {
+            "default": 0.0,
+            "description": "Measured, not set by hand: how much higher this nozzle's tip touches the datum board than the profile's height for it. Every height the nozzle is sent to is shifted by this, so heights mean the same for every nozzle and tip.",
+            "title": "Z Offset",
+            "type": "number"
+          },
           "z_sign": {
             "default": 1,
             "description": "Direction of this nozzle on its Z axis. Two nozzles sharing one Z motor move in opposite directions: one has 1, the other -1.",
@@ -4050,7 +4056,8 @@
           "rotation_axis",
           "vacuum_input",
           "pump_output",
-          "valve_output"
+          "valve_output",
+          "z_offset"
         ],
         "title": "Nozzle",
         "type": "object"

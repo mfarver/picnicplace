@@ -48,7 +48,12 @@ from picnicplace.placement import PlacementService
 from picnicplace.presence import PresenceTracker
 from picnicplace.recorder import FlightRecorder
 from picnicplace.schemas import ClientMessage, ErrorResponse, ServerEvent
-from picnicplace.simparts import SIM_DISC_DIAMETER_MM, PartShape, PlacedPart
+from picnicplace.simparts import (
+    SIM_DISC_DIAMETER_MM,
+    SIM_DISC_THICKNESS_MM,
+    PartShape,
+    PlacedPart,
+)
 
 TITLE = "PicnicPlace Core API"
 
@@ -123,7 +128,12 @@ def create_app(config: Config | None = None) -> FastAPI:
         disc = config.machine.sim_calibration_disc
         if disc is not None and ctx.feeders.sim_parts is not None:
             ctx.feeders.sim_parts.placed.append(
-                PlacedPart(PartShape(disc=SIM_DISC_DIAMETER_MM), disc[0], disc[1], 0.0)
+                PlacedPart(
+                    PartShape(disc=SIM_DISC_DIAMETER_MM, height=SIM_DISC_THICKNESS_MM),
+                    disc[0],
+                    disc[1],
+                    0.0,
+                )
             )
         ctx.placement = PlacementService(
             machine, ctx.feeders, lambda: ctx.library, config.machine.pick_correction

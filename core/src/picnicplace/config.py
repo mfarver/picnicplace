@@ -210,6 +210,14 @@ class MachineConfig(_Section):
             "nozzle ID, as X and Y in mm. Calibrating the nozzle offsets finds and corrects it."
         ),
     )
+    sim_nozzle_z_error: dict[str, float] = Field(
+        default_factory=dict[str, float],
+        description=(
+            "Simulator only: how much longer (mm) each nozzle's tip really is than the "
+            "profile's, by nozzle ID: it reaches that much lower. Sniffing the datum board "
+            "while calibrating the nozzle offsets finds and corrects it."
+        ),
+    )
     sim_datum_height_error: float = Field(
         default=0.0,
         description=(

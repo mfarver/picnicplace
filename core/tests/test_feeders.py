@@ -343,11 +343,16 @@ def test_a_simulated_pick_takes_the_part_from_its_pocket(lumen: TestClient) -> N
     tapes = feeders._scene_tapes()  # pyright: ignore[reportPrivateUsage]
     assert len(tapes) == 6
     first = tapes[0]
-    assert first.pick_full
+    assert first.pick_full and first.top is not None
+    top = first.top
     # Nowhere near a pocket: nothing to pick.
-    assert not parts.pick("N1", first.pick[0] + 5, first.pick[1] + 5, 0.0)
+    assert not parts.pick("N1", first.pick[0] + 5, first.pick[1] + 5, 0.0, top)
+    # A millimeter above the part: the tip does not reach it.
+    assert not parts.pick("N1", first.pick[0], first.pick[1], 0.0, top + 1.0)
+    assert feeders._scene_tapes()[0].pick_full  # pyright: ignore[reportPrivateUsage]
     # 0.3 mm off the pocket: the part is held 0.3 mm off the nozzle, at its tape angle.
-    assert parts.pick("N1", first.pick[0] + 0.3, first.pick[1], 0.0)
+    assert parts.pick("N1", first.pick[0] + 0.3, first.pick[1], 0.0, top)
+    assert parts.crashes == []
     held = parts.held["N1"]
     assert (held.dx, held.dy) == pytest.approx((-0.3, 0.0))
     assert held.angle == pytest.approx(first.rotation + first.part_rotation)
@@ -355,7 +360,7 @@ def test_a_simulated_pick_takes_the_part_from_its_pocket(lumen: TestClient) -> N
     assert not after[0].pick_full
     assert after[1].pick_full
     # The pocket is empty now: a second pick there gets nothing.
-    assert not parts.pick("N2", first.pick[0], first.pick[1], 0.0)
+    assert not parts.pick("N2", first.pick[0], first.pick[1], 0.0, top)
 
 
 def test_bring_up_record_round_trips(lumen: TestClient) -> None:

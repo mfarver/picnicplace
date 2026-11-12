@@ -104,6 +104,14 @@ class Nozzle(ProfileModel):
     vacuum_input: str | None = None
     pump_output: str | None = None
     valve_output: str | None = None
+    z_offset: float = Field(
+        default=0.0,
+        description=(
+            "Measured, not set by hand: how much higher this nozzle's tip touches the datum "
+            "board than the profile's height for it. Every height the nozzle is sent to is "
+            "shifted by this, so heights mean the same for every nozzle and tip."
+        ),
+    )
 
 
 class Camera(ProfileModel):

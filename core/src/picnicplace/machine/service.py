@@ -389,8 +389,11 @@ class MachineService:
         await self.move_axes(target)
 
     async def lower_nozzle(self, nozzle: Nozzle, height: float) -> None:
-        """Move a nozzle down (or up) to a height: 0 at the top, negative down."""
-        await self.move_axes({nozzle.z_axis: nozzle.z_sign * min(0.0, height)})
+        """Move a nozzle down (or up) to a height: 0 at the top, negative down. The
+        nozzle's measured Z offset is added, so a height means the same for every nozzle
+        and tip."""
+        raw = height + nozzle.z_offset
+        await self.move_axes({nozzle.z_axis: nozzle.z_sign * min(0.0, raw)})
 
     async def raise_nozzles(self) -> None:
         await self.move_axes({axis: TRAVEL_HEIGHT for axis in sorted(self._z_axes)})

@@ -100,7 +100,9 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       up, turns it, and sets it down three times, and the top camera finds it after
       each. A nozzle more than a millimeter from the profile's offset is flagged. For a
       PCB disc, give its thickness (`disc_thickness` in the API); the Studio assumes
-      paper.
+      paper. Where each nozzle touched the board also corrects its heights from then
+      on, so a longer or shorter tip picks at the part's top and places on the board:
+      calibrate again after changing a tip.
 
 The checklist lists every calibration in order: what is done (with its value and when it
 was measured), what is still to do, what is out of date and why (a crash, Z losing

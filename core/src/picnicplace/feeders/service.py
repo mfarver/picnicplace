@@ -246,9 +246,11 @@ class FeederService:
             machine.scene_tapes = self._scene_tapes
             driver = machine.driver
             if isinstance(driver, SimulatorDriver):
-                parts = SimulatedParts(self._take_from_tape)
+                parts = SimulatedParts(
+                    self._take_from_tape, top_at=self._sim_top_at, board_at=driver.board_at
+                )
                 self.sim_parts = parts
-                driver.pick_source = lambda nozzle, x, y, angle: parts.pick(nozzle, x, y, angle)
+                driver.pick_source = parts.pick
                 driver.on_drop = parts.drop
                 machine.scene_parts = parts.scene
 
@@ -1149,9 +1151,9 @@ class FeederService:
         nominal = self._nominal[slot.number - 1]
         return nominal.rotation + self.sim_rail_errors.get(nominal.bank, (0.0, 0.0, 0.0))[2]
 
-    def _take_from_tape(self, x: float, y: float) -> tuple[PartShape, float, float, float] | None:
-        """The part in the pocket under (x, y), taken out of its tape: its shape, true
-        center, and angle. None if no full pocket is there."""
+    def _tape_under(self, x: float, y: float) -> tuple[int, TapeScene, float, float] | None:
+        """The feeder whose pocket is under (x, y): its address, tape, and the pocket's
+        true center."""
         self._scene_tapes()
         for address, tape in self._tape_at.items():
             a = math.radians(tape.rotation)
@@ -1159,15 +1161,28 @@ class FeederService:
             along = phase if phase <= tape.pitch / 2 else phase - tape.pitch
             px = tape.pick[0] + math.cos(a) * along
             py = tape.pick[1] + math.sin(a) * along
-            if math.hypot(px - x, py - y) > SIM_PICK_RADIUS:
-                continue
-            if not tape.pick_full:
-                return None
-            self._sim_full[address] = False
-            self._invalidate()
-            shape = PartShape(body=tape.body, pads=tape.pads)
-            return shape, px, py, tape.rotation + tape.part_rotation
-        return self._take_from_fixed(x, y)
+            if math.hypot(px - x, py - y) <= SIM_PICK_RADIUS:
+                return address, tape, px, py
+        return None
+
+    def _sim_top_at(self, x: float, y: float) -> float | None:
+        """The top of the part in the feeder pocket under (x, y), if one is there."""
+        under = self._tape_under(x, y)
+        return under[1].top if under is not None else None
+
+    def _take_from_tape(self, x: float, y: float) -> tuple[PartShape, float, float, float] | None:
+        """The part in the pocket under (x, y), taken out of its tape: its shape, true
+        center, and angle. None if no full pocket is there."""
+        under = self._tape_under(x, y)
+        if under is None:
+            return self._take_from_fixed(x, y)
+        address, tape, px, py = under
+        if not tape.pick_full:
+            return None
+        self._sim_full[address] = False
+        self._invalidate()
+        shape = PartShape(body=tape.body, pads=tape.pads, height=tape.part_height)
+        return shape, px, py, tape.rotation + tape.part_rotation
 
     def _take_from_fixed(self, x: float, y: float) -> tuple[PartShape, float, float, float] | None:
         library = self._library()
@@ -1191,6 +1206,7 @@ class FeederService:
                     pads=tuple((q.x, q.y, q.width, q.height, q.rotation) for q in footprint.pads)
                     if footprint is not None
                     else (),
+                    height=part.height if part is not None else None,
                 )
                 return shape, px, py, self.fixed_angle(f) or 0.0
         return None
@@ -1245,6 +1261,8 @@ class FeederService:
                     pads=tuple((p.x, p.y, p.width, p.height, p.rotation) for p in footprint.pads)
                     if footprint is not None
                     else (),
+                    part_height=part.height if part is not None else None,
+                    top=bank.pick_height,
                     fiducial=(pick.x + fid.x, pick.y + fid.y),
                     fiducial_diameter=bank.fiducial_diameter or 1.0,
                     fiducial_marks=marks,

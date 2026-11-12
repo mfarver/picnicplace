@@ -11,6 +11,9 @@ Besides motion, it simulates the profile's I/O:
   nozzle only picks where there is a part; without one it picks anywhere. ``on_drop``
   reports where a part was let go. A nozzle lowered onto a surface (``surface_at``) with
   suction on seals, and reads as holding a part, as when sniffing for a height.
+- Each nozzle's tip may be longer than the profile's (``tip_errors``): it reaches that
+  much lower than its axis says, for touching parts and surfaces. The safe-Z sensor
+  reads the axis, not the tip.
 - Photon feeders on the feeder bus (``feeders/sim.py``), if given.
 
 Faults can be injected for tests: ``inject_z_slip`` makes the real Z position differ from
@@ -74,15 +77,19 @@ class SimulatorDriver(MotionDriver):
         time_scale: float = 1.0,
         home_error: tuple[float, float] = (0.0, 0.0),
         photon: SimulatedPhotonBus | None = None,
+        tip_errors: Mapping[str, float] | None = None,
     ) -> None:
         super().__init__()
         self.photon = photon
-        self.pick_source: Callable[[str, float, float, float], bool] | None = None
-        """Asked, with the nozzle ID, its physical X/Y, and its angle, whether a part is
-        there to pick (and to take it). None: there always is."""
+        self.pick_source: Callable[[str, float, float, float, float], bool] | None = None
+        """Asked, with the nozzle ID, its physical X/Y, its angle, and its tip's height,
+        whether a part is there to pick (and to take it). None: there always is."""
         self.on_drop: Callable[[str, float, float, float, float], None] | None = None
-        """Called with the nozzle ID, its physical X/Y, angle, and height when it lets go
-        of a part."""
+        """Called with the nozzle ID, its physical X/Y, angle, and tip's height when it
+        lets go of a part."""
+        self._tip_errors = dict(tip_errors or {})
+        """How much longer each nozzle's tip really is than the profile's, by ID: it
+        reaches this much lower."""
         self.surface_at: Callable[[float, float], float | None] | None = None
         """The height of a surface under a physical X/Y, if any, for a nozzle to seal on."""
         self._home_error = home_error
@@ -250,6 +257,19 @@ class SimulatorDriver(MotionDriver):
         real_z = self._position[nozzle.z_axis] + self._z_slip.get(nozzle.z_axis, 0.0)
         return nozzle_height(nozzle, real_z)
 
+    def _tip(self, nozzle: Nozzle) -> float:
+        """Where the nozzle's tip really is: its height, less how much longer it is."""
+        return self._height(nozzle) - self._tip_errors.get(nozzle.id, 0.0)
+
+    def board_at(self, x: float, y: float) -> float | None:
+        """The height of what lies under a physical X/Y: the datum board where it is, else
+        a board on the staging plates, at the profile's height (the truth here)."""
+        if self.surface_at is not None:
+            surface = self.surface_at(x, y)
+            if surface is not None:
+                return surface
+        return self._profile.board_height
+
     def _nozzle_at(self, nozzle: Nozzle) -> tuple[float, float, float]:
         """Where a nozzle physically is, and its angle."""
         at = self.scene_position
@@ -270,17 +290,17 @@ class SimulatorDriver(MotionDriver):
                     self._held[n.id] = False
                     if self.on_drop is not None:
                         x, y, angle = self._nozzle_at(n)
-                        self.on_drop(n.id, x, y, angle, self._height(n))
+                        self.on_drop(n.id, x, y, angle, self._tip(n))
             elif self._height(n) <= -PICK_DEPTH and not self._held[n.id]:
                 if self.pick_source is None:
                     self._held[n.id] = True
                 else:
-                    self._held[n.id] = self.pick_source(n.id, *self._nozzle_at(n))
+                    self._held[n.id] = self.pick_source(n.id, *self._nozzle_at(n), self._tip(n))
             sealed = False
             if self._suction(n) and not self._held[n.id] and self.surface_at is not None:
                 x, y, _ = self._nozzle_at(n)
                 surface = self.surface_at(x, y)
-                sealed = surface is not None and self._height(n) <= surface
+                sealed = surface is not None and self._tip(n) <= surface
             self._sealed[n.id] = sealed
         self._io_wake.set()
 

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from picnicplace.machine.profile import MachineProfile
+from picnicplace.machine.profile import MachineProfile, Point
 from picnicplace.schemas import WireModel
 from picnicplace.storage import write_atomic
 
@@ -49,15 +49,18 @@ measured, but out of date (the reason says why). ``assumed``: the value comes fr
 profile or the config, and the machine cannot measure it yet. ``every_run``: done at
 the start of each run. ``not_needed``: this machine or setup has nothing to calibrate."""
 
-Action = Literal["home", "visual_home", "camera_scale", "calibrate_feeders"]
+Action = Literal["home", "visual_home", "camera_scale", "bottom_camera", "calibrate_feeders"]
 """What starts a line's calibration, for the Studio's button."""
 
 CRASH_STALES: tuple[LineId, ...] = ("homing_fiducial", "top_camera_scale")
 """What a crash may knock out of true: the datum board and the camera on the head."""
 HOMING_OFF_WARN_MM = 1.0
 """Visual homing finding the machine farther off than this is worth a look."""
-SCALE_WARN = 0.03
-"""A measured camera scale this far (as a fraction) from the profile's is worth a look."""
+SCALE_WARN = 0.1
+"""A measured camera scale this far (as a fraction) from the profile's is worth a look:
+the measured one is used, but so far off suggests the wrong lens or camera height."""
+ROTATION_WARN_DEG = 1.0
+"""A bottom camera image turned more than this is worth straightening."""
 
 TITLES: dict[LineId, str] = {
     "machine_frame": "Machine frame",
@@ -167,6 +170,28 @@ class CalibrationChecklist(WireModel):
         return next(line for line in self.lines if line.id == line_id)
 
 
+def apply_measurements(profile: MachineProfile, record: CalibrationRecord) -> None:
+    """Use what the machine measured in place of the profile's values: the top camera's
+    scale, and the bottom camera's place, focus height, and scale. Out-of-date values
+    are still the best known, and are used until measured again."""
+    for camera in profile.cameras:
+        if camera.looking == "down" and camera.mount == "head":
+            m = record.lines.get("top_camera_scale")
+        elif camera.looking == "up":
+            m = record.lines.get("bottom_camera")
+        else:
+            continue
+        if m is None:
+            continue
+        v = m.values
+        if {"x", "y", "width", "height"} <= v.keys() and camera.looking == "down":
+            camera.field_of_view = Point(x=v["x"] * v["width"], y=v["y"] * v["height"])
+        if {"x", "y", "focus", "scale_x", "scale_y", "width", "height"} <= v.keys():
+            camera.position = Point(x=v["x"], y=v["y"])
+            camera.focus_height = v["focus"]
+            camera.field_of_view = Point(x=v["scale_x"] * v["width"], y=v["scale_y"] * v["height"])
+
+
 def _measured(
     line_id: LineId, number: int, record: CalibrationRecord, action: Action | None
 ) -> CalibrationLine | None:
@@ -274,8 +299,8 @@ def build_checklist(
         if assumed and abs(measured - assumed) / assumed > SCALE_WARN:
             warning = (
                 f"{abs(measured - assumed) / assumed:.0%} from what the profile's field of "
-                "view implies, which is what vision uses: set the camera's field of view "
-                "in the config"
+                "view implies (the measured scale is used): check the lens and the "
+                "camera's height"
             )
         add_measured(line, warning)
     else:
@@ -290,6 +315,15 @@ def build_checklist(
     up = [c for c in profile.cameras if c.looking == "up"]
     if not up:
         add("bottom_camera", "not_needed", "This machine has no bottom camera.")
+    elif (line := _measured("bottom_camera", 0, record, "bottom_camera")) is not None:
+        turned = record.lines["bottom_camera"].values.get("rotation", 0.0)
+        warning = (
+            f"Its image is turned {turned:+.1f}°: turn the camera, or set its rotation in "
+            "the config"
+            if abs(turned) > ROTATION_WARN_DEG
+            else None
+        )
+        add_measured(line, warning)
     elif any(c.focus_height is None for c in up):
         add(
             "bottom_camera",
@@ -303,7 +337,9 @@ def build_checklist(
             "bottom_camera",
             "assumed",
             f"At ({camera.position.x:g}, {camera.position.y:g}), in focus with the nozzle at "
-            f"Z {camera.focus_height:g}: from the profile.",
+            f"Z {camera.focus_height:g}: from the profile. Calibrate it with an empty nozzle "
+            "tip fitted.",
+            "bottom_camera",
         )
 
     # 6-9. Not measured yet.

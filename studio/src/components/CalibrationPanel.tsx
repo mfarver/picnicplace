@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Circle,
   Crosshair,
+  Focus,
   Home,
   Minus,
   RefreshCw,
@@ -15,7 +16,7 @@ import type { CalibrationLine, MachineProfile, Operation } from "../api/types";
 import { MachineLocations } from "./MachineLocations";
 import { Panel } from "./Panel";
 
-const VISION_KINDS = new Set(["home", "visual_home", "camera_scale"]);
+const VISION_KINDS = new Set(["home", "visual_home", "camera_scale", "bottom_camera"]);
 
 const STATUS: Record<CalibrationLine["status"], { label: string; icon: ReactNode }> = {
   done: { label: "Done", icon: <CheckCircle2 size={14} aria-hidden /> },
@@ -38,6 +39,7 @@ interface Props {
   onHome: () => void;
   onVisualHome: () => void;
   onCameraScale: () => void;
+  onBottomCamera: () => void;
 }
 
 /**
@@ -54,6 +56,7 @@ export function CalibrationPanel({
   onHome,
   onVisualHome,
   onCameraScale,
+  onBottomCamera,
 }: Props) {
   const checklist = useCalibration();
   const latest = Object.values(operations)
@@ -96,6 +99,19 @@ export function CalibrationPanel({
           >
             <Ruler size={16} aria-hidden />
             {line.status === "done" ? "Measure again" : "Measure"}
+          </button>
+        );
+      case "bottom_camera":
+        return (
+          <button
+            type="button"
+            className="button"
+            disabled={!canRun}
+            onClick={onBottomCamera}
+            title="With an empty nozzle tip: find the camera's place, focus, and scale"
+          >
+            <Focus size={16} aria-hidden />
+            {line.status === "done" ? "Calibrate again" : "Calibrate"}
           </button>
         );
       case "calibrate_feeders":

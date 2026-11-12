@@ -1,8 +1,9 @@
 import { Camera, CameraOff } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { mediaUrl } from "../api/client";
 import { useCore } from "../api/core";
 import { readMjpeg } from "../mjpeg";
+import { scaleLength } from "../scaleBar";
 import type { CameraInfo } from "../api/types";
 import { Panel } from "./Panel";
 
@@ -10,29 +11,59 @@ import { Panel } from "./Panel";
 const STREAM_WIDTH = 640;
 const STREAM_FPS = 15;
 const RETRY_MS = 2000;
+const ZOOM_STEP = 1.25;
+const MAX_ZOOM = 8;
 
 interface Props {
   id: string;
   title: string;
   info?: CameraInfo;
+  /** Width of the view in mm (the profile's, or as measured), for the scale bar. */
+  fieldOfView?: number;
 }
 
 /**
  * A live camera feed (MJPEG) with a crosshair overlay. The overlay is drawn here, not in
  * the video, so it stays sharp at any stream quality (spec section 6.5).
  */
-export function CameraView({ id, title, info }: Props) {
+export function CameraView({ id, title, info, fieldOfView }: Props) {
   return (
     <Panel title={title} collapseId={`camera-${id}`}>
-      <CameraFeed id={id} info={info} />
+      <CameraFeed id={id} info={info} fieldOfView={fieldOfView} />
     </Panel>
   );
 }
 
-function CameraFeed({ id, info }: { id: string; info?: CameraInfo }) {
+function CameraFeed({
+  id,
+  info,
+  fieldOfView,
+}: {
+  id: string;
+  info?: CameraInfo;
+  fieldOfView?: number;
+}) {
   const { status, clientId } = useCore();
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [zoom, setZoom] = useState(1);
+
+  // The mouse wheel zooms the picture about its center (where the crosshair is). The
+  // listener is not passive, so the wheel zooms instead of scrolling the sidebar; it is
+  // attached whenever the live view appears.
+  const view = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      setZoom((z) => {
+        const next = e.deltaY < 0 ? z * ZOOM_STEP : z / ZOOM_STEP;
+        return Math.min(MAX_ZOOM, Math.max(1, Math.abs(next - 1) < 0.01 ? 1 : next));
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   // After a failure, try again shortly with a fresh URL.
   useEffect(() => {
@@ -74,9 +105,16 @@ function CameraFeed({ id, info }: { id: string; info?: CameraInfo }) {
   });
 
   return (
-    <div className="camera-view camera-live" style={{ aspectRatio: aspect }}>
+    <div
+      ref={view}
+      className="camera-view camera-live"
+      style={{ aspectRatio: aspect }}
+      title="Scroll to zoom"
+    >
       {!failed && (
-        <StreamImage src={src} alt={`${id} camera`} onError={() => setFailed(true)} />
+        <div className="camera-zoom" style={{ transform: `scale(${zoom})` }}>
+          <StreamImage src={src} alt={`${id} camera`} onError={() => setFailed(true)} />
+        </div>
       )}
       {failed && (
         <span className="camera-message">
@@ -89,6 +127,28 @@ function CameraFeed({ id, info }: { id: string; info?: CameraInfo }) {
         <line x1="0" y1="50" x2="100" y2="50" />
       </svg>
       {info?.source === "synthetic" && <span className="camera-badge">simulated</span>}
+      {zoom > 1 && (
+        <button
+          type="button"
+          className="camera-zoom-reset"
+          title="Back to the whole view"
+          onClick={() => setZoom(1)}
+        >
+          {zoom.toFixed(1)}×
+        </button>
+      )}
+      {fieldOfView ? <ScaleBar fieldOfView={fieldOfView / zoom} /> : null}
+    </div>
+  );
+}
+
+/** A bar of a round length in the lower right, drawn to the camera's scale. */
+function ScaleBar({ fieldOfView }: { fieldOfView: number }) {
+  const mm = scaleLength(fieldOfView);
+  return (
+    <div className="camera-scale" style={{ width: `${(mm / fieldOfView) * 100}%` }}>
+      <span>{mm} mm</span>
+      <div className="camera-scale-bar" />
     </div>
   );
 }

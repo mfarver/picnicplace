@@ -187,6 +187,22 @@ class MachineConfig(_Section):
             "alignment finds and corrects it."
         ),
     )
+    sim_top_camera_scale: float = Field(
+        default=1.0,
+        gt=0,
+        description=(
+            "Simulator only: the top camera's true field of view, as a multiple of the "
+            "profile's. Measuring the camera's scale finds and corrects it."
+        ),
+    )
+    sim_bottom_camera_error: tuple[float, float, float] = Field(
+        default=(0.0, 0.0, 0.0),
+        description=(
+            "Simulator only: how far the bottom camera really is from the profile's place "
+            "and focus, as X and Y in mm and its focus height in mm. Calibrating the "
+            "bottom camera finds and corrects it."
+        ),
+    )
     sim_rail_error: dict[str, tuple[float, float, float]] = Field(
         default_factory=dict[str, tuple[float, float, float]],
         description=(

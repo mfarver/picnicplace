@@ -331,6 +331,24 @@
         "title": "BoardFix",
         "type": "object"
       },
+      "BottomCameraRequest": {
+        "properties": {
+          "nozzle_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The nozzle to calibrate with. Empty: the first.",
+            "title": "Nozzle Id"
+          }
+        },
+        "title": "BottomCameraRequest",
+        "type": "object"
+      },
       "BringUpRecord-Input": {
         "additionalProperties": false,
         "properties": {
@@ -444,6 +462,7 @@
                   "home",
                   "visual_home",
                   "camera_scale",
+                  "bottom_camera",
                   "calibrate_feeders"
                 ],
                 "type": "string"
@@ -10770,9 +10789,86 @@
         ]
       }
     },
+    "/api/v1/machine/bottom-camera": {
+      "post": {
+        "description": "Calibrate the bottom camera with an empty nozzle tip: center the tip in its image\n(its place), step the nozzle within 2 mm of the profile's focus height for the\nsharpest picture (its focus), and step the head to measure its scale and turn. The\nresult is kept (the calibration checklist) and used from then on.",
+        "operationId": "calibrate_bottom_camera_api_v1_machine_bottom_camera_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BottomCameraRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Calibrate Bottom Camera",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
     "/api/v1/machine/camera-scale": {
       "post": {
-        "description": "Measure the top camera's millimeters per pixel by moving over the homing fiducial.\nThe result is reported in the operation's message; it is not saved yet.",
+        "description": "Measure the top camera's millimeters per pixel by moving over the homing fiducial.\nThe result is kept (the calibration checklist) and used by vision from then on.",
         "operationId": "measure_camera_scale_api_v1_machine_camera_scale_post",
         "parameters": [
           {

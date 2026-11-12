@@ -6,6 +6,7 @@ So these tests check where the part landed, not what the core believes.
 """
 
 import math
+import re
 from collections.abc import Iterator
 from typing import Any
 
@@ -122,6 +123,48 @@ def test_alignment_corrects_an_off_center_pick(lumen: TestClient) -> None:
         part = placed(lumen)[-1]
         assert (part.x, part.y) == pytest.approx((150.0, 280.0), abs=0.05)
         assert angle_error(part.angle, 180.0) < 0.5
+
+
+def test_a_part_whose_leads_are_off_its_center_lands_on_them(lumen: TestClient) -> None:
+    """Three leads 0.8 mm to one side of the body's center, as on a connector, in a tape
+    on a rail turned 2 degrees: bottom vision fits the footprint's pads, finds the turn,
+    and the part's origin, not its leads' middle, goes where it is sent."""
+    feeders(lumen).sim_rail_errors = {"front": (0.0, 0.0, 2.0), "back": (0.0, 0.0, 2.0)}
+    with connect(lumen) as s:
+        library = lumen.app.state.ctx.library  # type: ignore[attr-defined]
+        library.put_footprint(
+            Footprint(
+                id="LEADS3",
+                body=Size(x=3.0, y=1.4),
+                pads=[
+                    Pad(name=str(i + 1), x=x, y=0.8, width=0.5, height=1.0)
+                    for i, x in enumerate((-1.0, 0.0, 1.0))
+                ],
+            )
+        )
+        part = Part(id="LEADS3-PART", footprint_id="LEADS3", height=1.0)
+        put_taped(library, part, "paper", 8, 4, 90)
+        set_up(lumen, s, slots=("3",))
+        uuid = next(
+            slot["feeder"]["uuid"]
+            for slot in s.client.get("/api/v1/feeders").json()["slots"]
+            if slot["slot"]["id"] == "3"
+        )
+        r = s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": "LEADS3-PART"})
+        assert r.status_code == 200, r.json()
+        pick = {"slot_id": "3", "nozzle_id": "N1", "pick_correction": "off"}
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        op = ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"})))
+        assert "pads" not in op["message"], op["message"]
+        turned = re.search(r"turned ([-+]\d+\.\d) degrees", op["message"])
+        assert turned is not None, op["message"]
+        assert float(turned[1]) == pytest.approx(2.0, abs=0.3)
+        target = {"nozzle_id": "N1", "x": 200.0, "y": 260.0, "rotation": 30.0}
+        ok(s.wait(s.post("/api/v1/placement/place", target)))
+        landed = placed(lumen)[-1]
+        assert (landed.x, landed.y) == pytest.approx((200.0, 260.0), abs=0.05)
+        # Three leads in a row look alike turned 180 degrees; the body does not.
+        assert angle_error(landed.angle, 30.0, 360.0) < 0.5
 
 
 def test_picking_from_an_empty_pocket_fails(lumen: TestClient) -> None:

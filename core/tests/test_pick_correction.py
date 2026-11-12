@@ -7,6 +7,7 @@ their setup says, so there is something to learn.
 """
 
 import math
+import re
 from typing import Any
 
 import pytest
@@ -62,7 +63,9 @@ def test_the_bottom_camera_learns_where_a_slots_parts_are(lumen: TestClient) -> 
         assert (learned["offset"]["x"], learned["offset"]["y"]) == pytest.approx(
             (error.x, error.y), abs=0.05
         )
-        assert "Slot 3's parts lie -0.4" in message
+        said = re.search(r"Slot 3's parts lie ([-+]\d+\.\d+), ([-+]\d+\.\d+) mm", message)
+        assert said is not None
+        assert (float(said[1]), float(said[2])) == pytest.approx((error.x, error.y), abs=0.05)
 
         # The next pick goes where the parts really are.
         pick_and_align(s, "3", "N2", "bottom")

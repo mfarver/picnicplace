@@ -30,15 +30,17 @@ import asyncio
 import logging
 import math
 from collections.abc import Callable
+from typing import Any
 
 from picnicplace.feeders.service import FeederService, rotate
 from picnicplace.feeders.setup import PickCorrection, PickMethod
-from picnicplace.library import Library, Part
+from picnicplace.library import Footprint, Library, Part
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
 from picnicplace.machine.profile import Camera, Location, Nozzle, Point
 from picnicplace.machine.service import MachineService
 from picnicplace.schemas import Operation, WireModel
-from picnicplace.vision.part import nearest_angle, wrap
+from picnicplace.vision.pads import PadFit, PadRect
+from picnicplace.vision.part import BRIGHT, PartBox, nearest_angle, wrap
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +57,11 @@ than this off the nozzle's center sends the next picks from its feeder to the to
 AUTO_LOOKS = 3
 """How many picks then look with the top camera first, before trying the bottom camera's
 correction again (the top camera's picks keep teaching it meanwhile)."""
+SPECK_FRACTION = 0.25
+"""Bottom vision leaves out bright specks smaller than this fraction of the part's
+smallest pad, such as a wound inductor's wire ends."""
+FIT_RESIDUAL_MM = 0.15
+"""Pads fitted with more than this left over (root mean square) are reported."""
 SIZE_TOLERANCE = 0.35
 """A part seen more than this fraction larger or smaller than its pads is reported."""
 
@@ -97,6 +104,45 @@ class PlacementState(WireModel):
     """What each nozzle holds, as far as PicnicPlace knows."""
     pick_correction: PickCorrection
     """How picks are corrected unless a pick or run says otherwise, from the config."""
+
+
+def _smallest_pad(part: Part | None, library: Library | None) -> float | None:
+    """The area of a part's smallest pad, in square millimeters."""
+    if part is None or library is None:
+        return None
+    footprint = library.find_footprint(part.footprint_id)
+    if footprint is None or not footprint.pads:
+        return None
+    return min(p.width * p.height for p in footprint.pads)
+
+
+def _footprint(part: Part | None, library: Library | None) -> Footprint | None:
+    if part is None or library is None:
+        return None
+    return library.find_footprint(part.footprint_id)
+
+
+def _image_pads(
+    footprint: Footprint, to_image: Callable[[float, float], tuple[float, float]], px: float
+) -> list[PadRect]:
+    """A footprint's pads as the bottom camera sees them with the part at 0 degrees: in
+    image pixels about the footprint's origin. ``to_image`` takes a machine X/Y
+    displacement to image right/down; the camera may mirror it, but does not turn it."""
+    pads: list[PadRect] = []
+    for p in footprint.pads:
+        u, v = to_image(p.x, p.y)
+        width, height = p.width, p.height
+        quarter = round(p.rotation / 90)
+        if abs(p.rotation - quarter * 90) < 1e-6:
+            if quarter % 2:
+                width, height = height, width
+        else:
+            # Neither along nor across: the box around it.
+            a = math.radians(p.rotation)
+            c, s = abs(math.cos(a)), abs(math.sin(a))
+            width, height = width * c + height * s, width * s + height * c
+        pads.append(PadRect(u / px, v / px, width / px, height / px))
+    return pads
 
 
 def _footprint_center(part: Part | None, library: Library | None) -> tuple[Point, Point] | None:
@@ -422,58 +468,105 @@ class PlacementService:
         mm_per_px = camera.field_of_view.x / w
         size = pads[1] if pads else Point(x=1.6, y=0.8)
         search = (math.hypot(size.x, size.y) / 2 + SEARCH_MARGIN_MM) / mm_per_px
-        box = await self._machine.recorder.vision(
-            "find_part",
-            frame.image,
-            search,
-            camera=camera.id,
-            position=dict(self._machine.driver.position),
-            mm_per_px=mm_per_px,
-            nozzle=nozzle.id,
-            part=load.part_id,
-            source=load.slot_id,
-        )
+        nozzle_at = self._machine.nozzle_position(nozzle)
+        nozzle_angle = self._machine.nozzle_angle(nozzle)
+        expected = nozzle_angle + load.angle
+        context: dict[str, Any] = {
+            "camera": camera.id,
+            "position": dict(self._machine.driver.position),
+            "mm_per_px": mm_per_px,
+            "nozzle": nozzle.id,
+            "part": load.part_id,
+            "source": load.slot_id,
+        }
+        # Machine X/Y to image right/down: the inverse of image_to_machine, which flips
+        # and mirrors but does not turn.
+        ux, uy = self._machine.image_to_machine(camera, 1.0, 0.0)
+        vx, vy = self._machine.image_to_machine(camera, 0.0, 1.0)
+        det = ux * vy - uy * vx
+
+        def to_image(x: float, y: float) -> tuple[float, float]:
+            return (vy * x - vx * y) / det, (-uy * x + ux * y) / det
+
+        # A mirror turns the other way: a part turned by a in the machine is turned by
+        # -a in a mirrored image.
+        mirror = -1.0 if det < 0 else 1.0
+        footprint = _footprint(part, library)
+        fitted: PadFit | None = None
+        box: PartBox | None = None
+        if footprint is not None and len(footprint.pads) >= 2:
+            fitted = await self._machine.recorder.vision(
+                "fit_pads",
+                frame.image,
+                _image_pads(footprint, to_image, mm_per_px),
+                mirror * expected,
+                search,
+                **context,
+            )
+        else:
+            pad_area = _smallest_pad(part, library)
+            speck = SPECK_FRACTION * pad_area / mm_per_px**2 if pad_area else 0.0
+            box = await self._machine.recorder.vision(
+                "find_part", frame.image, search, BRIGHT, speck, **context
+            )
         await self._machine.raise_nozzles()
-        if box is None:
+        if fitted is None and box is None:
             # Likely a bad pick (nothing there, or a part on its side), even when the
             # vacuum could not tell: auto correction looks first next time.
             self._look[load.slot_id] = (1, "after the bottom camera saw no part")
             raise VisionError(f"the {camera.label.lower()} saw no part on {nozzle.id}")
 
-        nozzle_at = self._machine.nozzle_position(nozzle)
-        nozzle_angle = self._machine.nozzle_angle(nozzle)
-        dx, dy = self._machine.image_to_machine(
-            camera, (box.u - w / 2) * mm_per_px, (box.v - h / 2) * mm_per_px
-        )
-        # The box's first side, from image directions to machine ones.
-        a = math.radians(box.angle)
-        sx, sy = self._machine.image_to_machine(camera, math.cos(a), math.sin(a))
-        side = math.degrees(math.atan2(sy, sx))
-        expected = nozzle_angle + load.angle
-        angle = nearest_angle(side, expected)
-        # The box is around the pads; the part's origin may not be their center.
-        center = Point(x=nozzle_at.x + dx, y=nozzle_at.y + dy)
-        if pads is not None:
-            shift = rotate(pads[0], angle)
-            center = Point(x=center.x - shift.x, y=center.y - shift.y)
+        note = ""
+        if fitted is not None:
+            assert footprint is not None
+            # The fit finds the footprint's origin itself, and its turn.
+            dx, dy = self._machine.image_to_machine(
+                camera, (fitted.u - w / 2) * mm_per_px, (fitted.v - h / 2) * mm_per_px
+            )
+            angle = mirror * fitted.angle
+            center = Point(x=nozzle_at.x + dx, y=nozzle_at.y + dy)
+            # What the feeder learns from is where the pads' middle was seen.
+            middle = rotate(pads[0], angle) if pads else Point(x=0, y=0)
+            seen = Point(x=dx + middle.x, y=dy + middle.y)
+            missing = len(footprint.pads) - fitted.found
+            if missing:
+                note = f" The camera saw {fitted.found} of its {len(footprint.pads)} pads."
+            elif fitted.residual * mm_per_px > FIT_RESIDUAL_MM:
+                note = (
+                    f" Its metal lies up to {fitted.residual * mm_per_px:.2f} mm from its "
+                    "pads: check the part and its footprint."
+                )
+        else:
+            assert box is not None
+            dx, dy = self._machine.image_to_machine(
+                camera, (box.u - w / 2) * mm_per_px, (box.v - h / 2) * mm_per_px
+            )
+            seen = Point(x=dx, y=dy)
+            # The box's first side, from image directions to machine ones.
+            a = math.radians(box.angle)
+            sx, sy = self._machine.image_to_machine(camera, math.cos(a), math.sin(a))
+            angle = nearest_angle(math.degrees(math.atan2(sy, sx)), expected)
+            # The box is around the pads; the part's origin may not be their center.
+            center = Point(x=nozzle_at.x + dx, y=nozzle_at.y + dy)
+            if pads is not None:
+                shift = rotate(pads[0], angle)
+                center = Point(x=center.x - shift.x, y=center.y - shift.y)
+            measured = sorted((box.width * mm_per_px, box.height * mm_per_px))
+            want = sorted((size.x, size.y))
+            if pads is not None and any(
+                abs(m - e) > SIZE_TOLERANCE * e for m, e in zip(measured, want, strict=True)
+            ):
+                note = (
+                    f" Its metal measures {measured[0]:.2f} x {measured[1]:.2f} mm; its pads "
+                    f"are {want[0]:.2f} x {want[1]:.2f}: check the part."
+                )
         offset = rotate(Point(x=center.x - nozzle_at.x, y=center.y - nozzle_at.y), -nozzle_angle)
         alignment = Alignment(
             dx=round(offset.x, 4), dy=round(offset.y, 4), angle=wrap(angle - nozzle_angle)
         )
         self._loads[nozzle.id] = load.model_copy(update={"alignment": alignment})
         self._machine.recorder.event("align", nozzle=nozzle.id, alignment=alignment)
-        learned = self._learn(load, Point(x=dx, y=dy), nozzle_angle)
-
-        seen = sorted((box.width * mm_per_px, box.height * mm_per_px))
-        want = sorted((size.x, size.y))
-        note = ""
-        if pads is not None and any(
-            abs(s - e) > SIZE_TOLERANCE * e for s, e in zip(seen, want, strict=True)
-        ):
-            note = (
-                f" Its metal measures {seen[0]:.2f} x {seen[1]:.2f} mm; its pads are "
-                f"{want[0]:.2f} x {want[1]:.2f}: check the part."
-            )
+        learned = self._learn(load, seen, nozzle_angle)
         return (
             f"{nozzle.id} holds its part {math.hypot(offset.x, offset.y):.2f} mm off center "
             f"and turned {wrap(angle - expected):+.1f} degrees from the tape's angle.{note}"

@@ -88,6 +88,22 @@ class Axis(ProfileModel):
         return self
 
 
+class VacuumLevels(ProfileModel):
+    """What a nozzle's vacuum sensor reads, in the sensor's units, measured while
+    calibrating the nozzle offsets (spec §7.7, line 9)."""
+
+    open: float = Field(description="Suction on, nothing on the tip.")
+    sealed: float = Field(description="Suction on, the tip pressed on a flat surface.")
+    held: float = Field(description="Suction on, holding a part (the calibration disc).")
+    threshold: float = Field(
+        description=(
+            "Readings at or past this, going from open toward sealed, mean the tip is "
+            "sealed or holding a part: halfway from open to whichever of sealed and held "
+            "is nearer. Used in place of the sensor's threshold."
+        )
+    )
+
+
 class Nozzle(ProfileModel):
     id: str
     label: str
@@ -110,6 +126,13 @@ class Nozzle(ProfileModel):
             "Measured, not set by hand: how much higher this nozzle's tip touches the datum "
             "board than the profile's height for it. Every height the nozzle is sent to is "
             "shifted by this, so heights mean the same for every nozzle and tip."
+        ),
+    )
+    vacuum: VacuumLevels | None = Field(
+        default=None,
+        description=(
+            "Measured, not set by hand: what this nozzle's vacuum sensor reads with its tip "
+            "open, sealed, and holding a part. None: its sensor's threshold is used."
         ),
     )
 

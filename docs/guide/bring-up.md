@@ -102,7 +102,10 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       PCB disc, give its thickness (`disc_thickness` in the API); the Studio assumes
       paper. Where each nozzle touched the board also corrects its heights from then
       on, so a longer or shorter tip picks at the part's top and places on the board:
-      calibrate again after changing a tip.
+      calibrate again after changing a tip. The same steps read each nozzle's vacuum
+      open, sealed on the board, and holding the disc (line 9), and set the nozzle's own
+      pick threshold between them: a weak pump or a tip that leaks a little still tells
+      a part held from none. Line 9 shows the readings.
 
 The checklist lists every calibration in order: what is done (with its value and when it
 was measured), what is still to do, what is out of date and why (a crash, Z losing

@@ -3571,6 +3571,8 @@ export interface components {
             pump_output: string | null;
             /** Rotation Axis */
             rotation_axis: string;
+            /** @description Measured, not set by hand: what this nozzle's vacuum sensor reads with its tip open, sealed, and holding a part. None: its sensor's threshold is used. */
+            vacuum: components["schemas"]["VacuumLevels"] | null;
             /** Vacuum Input */
             vacuum_input: string | null;
             /** Valve Output */
@@ -4927,6 +4929,33 @@ export interface components {
              * @enum {string}
              */
             which: "first" | "row_end" | "last";
+        };
+        /**
+         * VacuumLevels
+         * @description What a nozzle's vacuum sensor reads, in the sensor's units, measured while
+         *     calibrating the nozzle offsets (spec §7.7, line 9).
+         */
+        VacuumLevels: {
+            /**
+             * Held
+             * @description Suction on, holding a part (the calibration disc).
+             */
+            held: number;
+            /**
+             * Open
+             * @description Suction on, nothing on the tip.
+             */
+            open: number;
+            /**
+             * Sealed
+             * @description Suction on, the tip pressed on a flat surface.
+             */
+            sealed: number;
+            /**
+             * Threshold
+             * @description Readings at or past this, going from open toward sealed, mean the tip is sealed or holding a part: halfway from open to whichever of sealed and held is nearer. Used in place of the sensor's threshold.
+             */
+            threshold: number;
         };
         /** ValidationError */
         ValidationError: {

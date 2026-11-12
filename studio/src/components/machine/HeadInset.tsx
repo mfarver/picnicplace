@@ -35,7 +35,9 @@ function partHeld(nozzle: Nozzle, d: MachineProfile, machine?: MachineState): bo
   if (!nozzle.vacuum_input) return false;
   const input = d.inputs.find((i) => i.id === nozzle.vacuum_input);
   const value = machine?.inputs[nozzle.vacuum_input];
-  return typeof value === "number" && !!input && pastThreshold(input, value);
+  return (
+    typeof value === "number" && !!input && pastThreshold(input, value, threshold(input, d))
+  );
 }
 
 /** Where a value falls from range.min (0) to range.max (1). The range may run backward. */
@@ -44,10 +46,16 @@ function rangeFraction(input: MachineInput, value: number): number {
   return (value - min) / (max - min);
 }
 
+/** A vacuum sensor's pick threshold: its nozzle's measured one, else the sensor's. */
+function threshold(input: MachineInput, d: MachineProfile): number | null {
+  const nozzle = d.nozzles.find((n) => n.vacuum_input === input.id);
+  return nozzle?.vacuum?.threshold ?? input.threshold ?? null;
+}
+
 /** A vacuum reading at or past the pick threshold, going toward range.max (matches the core). */
-function pastThreshold(input: MachineInput, value: number): boolean {
-  if (input.threshold == null || !input.range) return false;
-  return rangeFraction(input, value) >= rangeFraction(input, input.threshold);
+function pastThreshold(input: MachineInput, value: number, at: number | null): boolean {
+  if (at == null || !input.range) return false;
+  return rangeFraction(input, value) >= rangeFraction(input, at);
 }
 
 /** Large raw readings (sensor counts) read better as -1.50M than -1500000.0. */
@@ -96,7 +104,15 @@ export function HeadInset({
           {vacuumInputs.length > 0 && (
             <div className="hi-group">
               {vacuumInputs.map((input) => (
-                <VacuumBar key={input.id} input={input} value={machine?.inputs[input.id]} />
+                <VacuumBar
+                  key={input.id}
+                  input={input}
+                  value={machine?.inputs[input.id]}
+                  threshold={threshold(input, description)}
+                  measured={description.nozzles.some(
+                    (n) => n.vacuum_input === input.id && n.vacuum != null,
+                  )}
+                />
               ))}
             </div>
           )}
@@ -239,11 +255,21 @@ function Dial({ cx, cy, angle, label }: { cx: number; cy: number; angle: number;
 
 // --- Vacuum, lights, outputs -------------------------------------------------------------
 
-function VacuumBar({ input, value }: { input: MachineInput; value: number | boolean | undefined }) {
+function VacuumBar({
+  input,
+  value,
+  threshold,
+  measured,
+}: {
+  input: MachineInput;
+  value: number | boolean | undefined;
+  threshold: number | null;
+  measured: boolean;
+}) {
   const { min, max } = input.range ?? { min: 0, max: 100 };
   const reading = typeof value === "number" ? value : 0;
   const frac = (v: number) => Math.min(1, Math.max(0, rangeFraction(input, v)));
-  const held = pastThreshold(input, reading);
+  const held = pastThreshold(input, reading, threshold);
   return (
     <div className={`hi-vacuum${held ? " hi-lit" : ""}`}>
       <span className="hi-vacuum-label">{input.label}</span>
@@ -256,11 +282,14 @@ function VacuumBar({ input, value }: { input: MachineInput; value: number | bool
         aria-label={input.label}
       >
         <span className="hi-bar-fill" style={{ width: `${frac(reading) * 100}%` }} />
-        {input.threshold != null && (
+        {threshold != null && (
           <span
             className="hi-bar-threshold"
-            style={{ left: `${frac(input.threshold) * 100}%` }}
-            title={`Pick threshold ${formatReading(input.threshold, input)} ${input.unit ?? ""}`}
+            style={{ left: `${frac(threshold) * 100}%` }}
+            title={
+              `Pick threshold ${formatReading(threshold, input)} ${input.unit ?? ""}`.trimEnd() +
+              (measured ? ", measured for this nozzle" : ", from the profile")
+            }
           />
         )}
       </span>

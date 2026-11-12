@@ -10,7 +10,9 @@ Besides motion, it simulates the profile's I/O:
   suction goes off. With a ``pick_source`` (simulated parts, see ``simparts.py``) a
   nozzle only picks where there is a part; without one it picks anywhere. ``on_drop``
   reports where a part was let go. A nozzle lowered onto a surface (``surface_at``) with
-  suction on seals, and reads as holding a part, as when sniffing for a height.
+  suction on seals, and reads as holding a part, as when sniffing for a height. Each
+  nozzle's readings open and holding a part may be set (``vacuum_levels``), as for a tip
+  that leaks or a weak pump.
 - Each nozzle's tip may be longer than the profile's (``tip_errors``): it reaches that
   much lower than its axis says, for touching parts and surfaces. The safe-Z sensor
   reads the axis, not the tip.
@@ -78,6 +80,7 @@ class SimulatorDriver(MotionDriver):
         home_error: tuple[float, float] = (0.0, 0.0),
         photon: SimulatedPhotonBus | None = None,
         tip_errors: Mapping[str, float] | None = None,
+        vacuum_levels: Mapping[str, tuple[float, float]] | None = None,
     ) -> None:
         super().__init__()
         self.photon = photon
@@ -90,6 +93,9 @@ class SimulatorDriver(MotionDriver):
         self._tip_errors = dict(tip_errors or {})
         """How much longer each nozzle's tip really is than the profile's, by ID: it
         reaches this much lower."""
+        self._vacuum_levels = dict(vacuum_levels or {})
+        """Each nozzle's readings open and holding a part (or sealed), by ID, as fractions
+        of its sensor's range; the rest read as ``VACUUM_OPEN`` and ``VACUUM_HELD`` say."""
         self.surface_at: Callable[[float, float], float | None] | None = None
         """The height of a surface under a physical X/Y, if any, for a nozzle to seal on."""
         self._home_error = home_error
@@ -318,7 +324,11 @@ class SimulatorDriver(MotionDriver):
         rest = 0.0 if min(start, end) <= 0 <= max(start, end) else start
         if not self._suction(nozzle):
             return rest
-        if self._held[nozzle.id] or self._sealed[nozzle.id]:
+        held = self._held[nozzle.id] or self._sealed[nozzle.id]
+        if nozzle.id in self._vacuum_levels:
+            fraction = self._vacuum_levels[nozzle.id][1 if held else 0]
+            return start + (end - start) * fraction
+        if held:
             return threshold + (end - threshold) * VACUUM_HELD
         return rest + (threshold - rest) * VACUUM_OPEN
 

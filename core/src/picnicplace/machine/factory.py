@@ -88,6 +88,7 @@ def build_driver(config: MachineConfig) -> DriverBundle:
             config.sim_home_error,
             photon=photon,
             tip_errors=config.sim_nozzle_z_error,
+            vacuum_levels=config.sim_vacuum_levels,
         )
         driver.surface_at = sim_surface(config)
         return DriverBundle(driver, photon_sim=photon)

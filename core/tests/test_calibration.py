@@ -15,7 +15,7 @@ from picnicplace.calibration import (
     run_issues,
 )
 from picnicplace.config import Config
-from tests.conftest import connect, fast_config
+from tests.conftest import Session, connect, fast_config
 from tests.test_placement import feeders, ok, placed, set_up
 from tests.test_vision import home, visual_config
 
@@ -336,3 +336,59 @@ def test_a_longer_tip_is_found_on_the_datum_board() -> None:
         landed = placed(client)[-1]
         assert landed.fell < 0.1
         assert (landed.x, landed.y) == pytest.approx((260.0, 230.0), abs=0.05)
+
+
+def move_camera_over_disc(client: TestClient, s: Session, config: Config) -> None:
+    disc = config.machine.sim_calibration_disc
+    assert disc is not None
+    cam = client.get("/api/v1/machine/description").json()["cameras"][0]["position"]
+    s.wait(
+        s.post(
+            "/api/v1/machine/move", {"position": {"X": disc[0] - cam["x"], "Y": disc[1] - cam["y"]}}
+        )
+    )
+
+
+def test_each_nozzles_vacuum_levels_are_measured() -> None:
+    """N1's pump is weak: holding a part, its vacuum never reaches the profile's
+    threshold. N2's tip leaks: open, it already reads past it. Neither can pick until
+    calibrating the nozzle offsets measures each one's levels; then both pick and place."""
+    # Fractions of the sensor's range, open and holding a part; the threshold is at 0.64.
+    config = offsets_config(sim_vacuum_levels={"N1": (0.3, 0.5), "N2": (0.7, 0.95)})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        assert lines(client)["vacuum"]["status"] == "assumed"
+        op = s.wait(s.post("/api/v1/placement/pick", {"slot_id": "1", "nozzle_id": "N1"}))
+        assert op["status"] == "failed" and "did not seal" in op["error"], op
+        op = s.wait(s.post("/api/v1/placement/pick", {"slot_id": "2", "nozzle_id": "N2"}))
+        assert op["status"] == "failed", op
+        assert "reads as holding a part before touching" in op["error"]
+        assert "measures this nozzle's own vacuum levels" in op["error"]
+        parts = feeders(client).sim_parts
+        assert parts is not None
+        # N1 took its part without knowing, and pressed it down to where sniffing stops.
+        parts.crashes.clear()
+
+        move_camera_over_disc(client, s, config)
+        ok(s.wait(s.post("/api/v1/machine/nozzle-offsets", {})))
+        line = lines(client)["vacuum"]
+        assert line["status"] == "done", line
+        assert "Left nozzle: open -750,000, holding a part -1,250,000" in str(line["detail"]), line
+        nozzles = {n["id"]: n for n in client.get("/api/v1/machine/description").json()["nozzles"]}
+        # Halfway from open to holding a part, in counts (the range runs 0 to -2,500,000).
+        assert nozzles["N1"]["vacuum"]["threshold"] == pytest.approx(-1_000_000, rel=0.01)
+        assert nozzles["N2"]["vacuum"]["threshold"] == pytest.approx(-2_062_500, rel=0.01)
+
+        for nozzle, slot, x in (("N1", "1", 260.0), ("N2", "2", 300.0)):
+            ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": slot, "nozzle_id": nozzle})))
+            ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": nozzle})))
+            target = {"nozzle_id": nozzle, "x": x, "y": 230.0, "rotation": 0.0}
+            ok(s.wait(s.post("/api/v1/placement/place", target)))
+            landed = placed(client)[-1]
+            assert (landed.x, landed.y) == pytest.approx((x, 230.0), abs=0.05)
+        assert parts.crashes == []
+
+    # Used again after a restart.
+    with TestClient(create_app(config)) as client:
+        nozzles = {n["id"]: n for n in client.get("/api/v1/machine/description").json()["nozzles"]}
+        assert nozzles["N2"]["vacuum"]["threshold"] == pytest.approx(-2_062_500, rel=0.01)

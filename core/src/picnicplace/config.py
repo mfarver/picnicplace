@@ -228,6 +228,16 @@ class MachineConfig(_Section):
             "while calibrating the nozzle offsets finds and corrects it."
         ),
     )
+    sim_vacuum_levels: dict[str, tuple[float, float]] = Field(
+        default_factory=dict[str, tuple[float, float]],
+        description=(
+            "Simulator only: what each nozzle's vacuum sensor reads with its tip open and "
+            "holding a part, by nozzle ID, as fractions (0 to 1) of the sensor's range, as "
+            "for a tip that leaks or a weak pump. Calibrating the nozzle offsets measures "
+            "them. Not given: open reads just short of the sensor's threshold, holding a "
+            "part well past it."
+        ),
+    )
     sim_datum_height_error: float = Field(
         default=0.0,
         description=(

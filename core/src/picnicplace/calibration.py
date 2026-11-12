@@ -2,11 +2,12 @@
 order, each saying whether it is done, its value and when it was measured, or that it
 is out of date and why.
 
-What the machine measures (homing, the homing fiducial, the cameras, the nozzle offsets)
-is kept in ``calibration.json`` in the data directory, with when it was measured. A crash (Z
-losing steps) marks what it may have knocked out of true as out of date, until it is
-measured again. Lines the core cannot measure yet say where their value comes from
-today (the profile, the config, or the bring-up checklist).
+What the machine measures (homing, the homing fiducial, the cameras, the nozzle offsets
+and the nozzles' vacuum levels) is kept in ``calibration.json`` in the data directory,
+with when it was measured. A crash (Z losing steps) marks what it may have knocked out
+of true as out of date, until it is measured again. Lines the core cannot measure yet
+say where their value comes from today (the profile, the config, or the bring-up
+checklist).
 
 Before a run, the lines the job needs are checked (``run_issues``): a job that aligns
 parts on the bottom camera does not start until the bottom camera has a focus height,
@@ -20,7 +21,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from picnicplace.machine.profile import MachineProfile, Point
+from picnicplace.machine.profile import MachineProfile, Point, VacuumLevels
 from picnicplace.schemas import WireModel
 from picnicplace.storage import write_atomic
 
@@ -54,9 +55,14 @@ Action = Literal[
 ]
 """What starts a line's calibration, for the Studio's button."""
 
-CRASH_STALES: tuple[LineId, ...] = ("homing_fiducial", "top_camera_scale", "nozzle_offsets")
+CRASH_STALES: tuple[LineId, ...] = (
+    "homing_fiducial",
+    "top_camera_scale",
+    "nozzle_offsets",
+    "vacuum",
+)
 """What a crash may knock out of true: the datum board, the camera on the head, and the
-nozzles."""
+nozzles and their tips."""
 HOMING_OFF_WARN_MM = 1.0
 """Visual homing finding the machine farther off than this is worth a look."""
 SCALE_WARN = 0.1
@@ -192,9 +198,18 @@ def nozzle_key(nozzle_id: str, axis: Literal["x", "y"]) -> str:
     return f"nozzle.{nozzle_id}.{axis}"
 
 
+VacuumName = Literal["open", "sealed", "held", "threshold"]
+
+
+def vacuum_key(nozzle_id: str, name: VacuumName) -> str:
+    """The key of one of a nozzle's vacuum levels in the vacuum line's values."""
+    return f"{name}.{nozzle_id}"
+
+
 def apply_measurements(profile: MachineProfile, record: CalibrationRecord) -> None:
     """Use what the machine measured in place of the profile's values: the top camera's
-    scale, the nozzle offsets, and the bottom camera's place, focus height, and scale.
+    scale, the nozzle offsets and vacuum levels, and the bottom camera's place, focus
+    height, and scale.
     Out-of-date values are still the best known, and are used until measured again."""
     offsets = record.lines.get("nozzle_offsets")
     datum = next(
@@ -211,6 +226,17 @@ def apply_measurements(profile: MachineProfile, record: CalibrationRecord) -> No
         touched = v.get(datum_key(nozzle.id))
         if touched is not None and datum is not None and abs(touched - datum) <= Z_OFFSET_LIMIT_MM:
             nozzle.z_offset = touched - datum
+        vacuum = record.lines.get("vacuum")
+        levels = (
+            {
+                name: vacuum.values.get(vacuum_key(nozzle.id, name))
+                for name in ("open", "sealed", "held", "threshold")
+            }
+            if vacuum
+            else {}
+        )
+        if levels and all(x is not None for x in levels.values()):
+            nozzle.vacuum = VacuumLevels.model_validate(levels)
     for camera in profile.cameras:
         if camera.looking == "down" and camera.mount == "head":
             m = record.lines.get("top_camera_scale")
@@ -407,7 +433,7 @@ def build_checklist(
             "nozzle_offsets",
         )
 
-    # 7-9. Not measured yet.
+    # 7-8. Not measured yet, or not alone.
     add("nozzle_runout", "assumed", "Not measured: taken as none.")
     fixed = feeders.fixed if feeders else []
     no_height = [f.id for f in fixed if f.feeder.pick_height is None]
@@ -436,7 +462,18 @@ def build_checklist(
             nozzles + "Board and feeder heights from the profile, and strips' and trays' as set "
             "by hand; parts' heights from the library.",
         )
-    add("vacuum", "assumed", "One threshold, from the profile.")
+
+    # 9. Vacuum levels, measured with the nozzle offsets.
+    if (line := _measured("vacuum", 0, record, "nozzle_offsets")) is not None:
+        add_measured(line)
+    else:
+        add(
+            "vacuum",
+            "assumed",
+            "One threshold for every nozzle, from the profile. Calibrating the nozzle offsets "
+            "(line 6) measures each nozzle's own: open, sealed, and holding a part.",
+            "nozzle_offsets",
+        )
 
     # 10. Feeder rails.
     if feeders is None or not feeders.rails:

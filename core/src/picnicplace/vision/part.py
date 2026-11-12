@@ -11,6 +11,10 @@ fleck of solder can shine too, and one outside the pads stretches the rectangle 
 its center. Given the smallest pad's area, the finder leaves out bright specks much
 smaller than any pad.
 
+Nor is every bright thing metal: a white or ivory plastic body can be nearly as bright
+as tin. Plastics like that are yellowish, and tin and solder are neutral or slightly
+blue, so the metal mask can leave out bright pixels warmer than a limit.
+
 The brightness threshold suits the simulator's images. Real parts and lighting will
 need tuning, from captured frames.
 """
@@ -26,6 +30,17 @@ from picnicplace.camera.source import Image
 
 BRIGHT = 170
 """Gray level above which a pixel counts as metal."""
+
+WARM = -2.0
+"""Pixels yellower than this (Lab b* minus a*, averaged over ``CHROMA_BLUR`` pixels) are
+plastic, not metal, when asked. On a LumenPnP's bottom camera tin reads about -6 to -12,
+and ivory nylon -1 to +13."""
+CHROMA_BLUR = 9
+"""Color is averaged over this many pixels before it is judged: cameras and compressed
+frames keep color at a coarser grain than brightness."""
+EDGE_OPEN = 5
+"""Where a plastic body meets the dark background, its averaged color turns neutral in a
+thin line along its outline; an opening this many pixels across takes such lines out."""
 
 MIN_PIXELS = 40
 
@@ -43,13 +58,25 @@ class PartBox:
     """Direction of the box's first side, in image degrees: from +u toward +v."""
 
 
-def metal(image: Image, search_px: float, bright: int = BRIGHT, min_blob_px: float = 0) -> MatLike:
+def metal(
+    image: Image,
+    search_px: float,
+    bright: int = BRIGHT,
+    min_blob_px: float = 0,
+    warm: float | None = None,
+) -> MatLike:
     """The bright metal within ``search_px`` of the center, as a mask (1 for metal),
-    leaving out bright specks smaller than ``min_blob_px`` pixels."""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (3, 3), 0)
+    leaving out bright specks smaller than ``min_blob_px`` pixels and, given ``warm``,
+    bright pixels yellower than it (a white or ivory plastic body)."""
+    smooth = cv2.GaussianBlur(image, (3, 3), 0)
+    gray = cv2.cvtColor(smooth, cv2.COLOR_BGR2GRAY)
     h, w = gray.shape
     mask = (gray >= bright).astype(np.uint8)
+    if warm is not None:
+        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB).astype(np.float32)
+        yellow = cv2.GaussianBlur(lab[:, :, 2] - lab[:, :, 1], (CHROMA_BLUR, CHROMA_BLUR), 0)
+        mask[yellow > warm] = 0
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((EDGE_OPEN, EDGE_OPEN), np.uint8))
     yy, xx = np.ogrid[:h, :w]
     mask[(xx - w / 2) ** 2 + (yy - h / 2) ** 2 > search_px**2] = 0
     if min_blob_px > 0:

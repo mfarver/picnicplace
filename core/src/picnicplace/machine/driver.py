@@ -21,6 +21,12 @@ class MotionDriver(ABC):
     """Firmware name and version, once connected, if the driver knows it."""
 
     @property
+    def time_scale(self) -> float:
+        """How much faster than real time the machine runs: above 1 only in a simulator.
+        Waits for the machine to settle (the vacuum, say) are divided by it."""
+        return 1.0
+
+    @property
     def halted(self) -> bool:
         """The firmware stopped itself (or after an emergency stop) and needs a reset."""
         return False

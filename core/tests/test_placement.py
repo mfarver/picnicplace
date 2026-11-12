@@ -177,10 +177,51 @@ def test_picking_from_an_empty_pocket_fails(lumen: TestClient) -> None:
         op = s.wait(s.post("/api/v1/placement/pick", again))
         assert op["status"] == "failed"
         assert "N2 picked nothing from Slot 1" in op["error"]
+        # The part top found on the first pick is forgotten, to be found again.
+        assert feeders(lumen).part_top("1") is None
         # N1 still holds its part, so it cannot pick another.
         r = s.post("/api/v1/placement/pick", pick)
         assert r.status_code == 409
         assert "already holds a part" in r.json()["detail"]
+
+
+def test_the_first_pick_finds_the_parts_top_by_touch() -> None:
+    """The parts in the feeders sit 0.4 mm lower than the profile's pick height, too low
+    for a pick there to reach them. The first pick from a feeder steps down onto its part
+    until the vacuum seals and keeps that height with the feeder; later picks go straight
+    to it, with either nozzle."""
+    config = fast_config(machine={"profile": "lumenpnp-v4.1", "sim_part_height_error": -0.4})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        f = feeders(client)
+        expected = f.bank(f.slot("1")).pick_height
+        assert expected is not None
+        op = ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "1", "nozzle_id": "N1"})))
+        # The simulated vacuum takes a part from 0.25 mm above it.
+        assert "found the part's top at" in op["message"], op["message"]
+        assert "by touch, -0.20 mm" in op["message"], op["message"]
+        assert f.part_top("1") == pytest.approx(expected - 0.2)
+
+        op = ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "1", "nozzle_id": "N2"})))
+        assert "by touch" not in op["message"]
+        parts = f.sim_parts
+        assert parts is not None and parts.crashes == []
+        assert sorted(parts.held) == ["N1", "N2"]
+
+
+def test_without_sniffing_a_low_part_is_missed() -> None:
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_part_height_error": -0.4,
+            "sniff_heights": False,
+        }
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        op = s.wait(s.post("/api/v1/placement/pick", {"slot_id": "1", "nozzle_id": "N1"}))
+        assert op["status"] == "failed" and "picked nothing" in op["error"]
+        assert feeders(client).part_top("1") is None
 
 
 def test_place_needs_alignment_and_discard_needs_a_bin(lumen: TestClient) -> None:

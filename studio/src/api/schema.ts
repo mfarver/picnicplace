@@ -3571,12 +3571,20 @@ export interface components {
             pump_output: string | null;
             /** Rotation Axis */
             rotation_axis: string;
+            /** @description Measured, not set by hand: what this nozzle's vacuum sensor reads with its tip open, sealed, and holding a part. None: its sensor's threshold is used. */
+            vacuum: components["schemas"]["VacuumLevels"] | null;
             /** Vacuum Input */
             vacuum_input: string | null;
             /** Valve Output */
             valve_output: string | null;
             /** Z Axis */
             z_axis: string;
+            /**
+             * Z Offset
+             * @description Measured, not set by hand: how much higher this nozzle's tip touches the datum board than the profile's height for it. Every height the nozzle is sent to is shifted by this, so heights mean the same for every nozzle and tip.
+             * @default 0
+             */
+            z_offset: number;
             /**
              * Z Sign
              * @description Direction of this nozzle on its Z axis. Two nozzles sharing one Z motor move in opposite directions: one has 1, the other -1.
@@ -4504,6 +4512,11 @@ export interface components {
         };
         /** RunState */
         RunState: {
+            /**
+             * Board Z
+             * @description Nozzle height at the board's top, found by touch on a fiducial at the start of the run. Empty if not measured: the job's or the profile's is used.
+             */
+            board_z: number | null;
             /** @description The step under way. Kept when the run pauses on a problem, to show where it stopped; empty between batches and when the run ends. */
             current: components["schemas"]["RunStep"] | null;
             /**
@@ -4578,7 +4591,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "scanning" | "finding_fiducials" | "finding_feeder" | "picking" | "aligning" | "placing";
+            action: "scanning" | "finding_fiducials" | "measuring_board" | "finding_feeder" | "picking" | "aligning" | "placing";
             /**
              * Index
              * @description The placement, for stage 'item'.
@@ -4916,6 +4929,33 @@ export interface components {
              * @enum {string}
              */
             which: "first" | "row_end" | "last";
+        };
+        /**
+         * VacuumLevels
+         * @description What a nozzle's vacuum sensor reads, in the sensor's units, measured while
+         *     calibrating the nozzle offsets (spec §7.7, line 9).
+         */
+        VacuumLevels: {
+            /**
+             * Held
+             * @description Suction on, holding a part (the calibration disc).
+             */
+            held: number;
+            /**
+             * Open
+             * @description Suction on, nothing on the tip.
+             */
+            open: number;
+            /**
+             * Sealed
+             * @description Suction on, the tip pressed on a flat surface.
+             */
+            sealed: number;
+            /**
+             * Threshold
+             * @description Readings at or past this, going from open toward sealed, mean the tip is sealed or holding a part: halfway from open to whichever of sealed and held is nearer. Used in place of the sensor's threshold.
+             */
+            threshold: number;
         };
         /** ValidationError */
         ValidationError: {

@@ -44,6 +44,7 @@ from picnicplace.machine.errors import (
 )
 from picnicplace.machine.profile import (
     Camera,
+    Input,
     Location,
     MachineProfile,
     Nozzle,
@@ -86,6 +87,11 @@ EPSILON = 1e-6
 
 TRAVEL_HEIGHT = 0.0
 """Z axis position used for travel: every nozzle at the top of its travel."""
+
+VACUUM_POLL_S = 0.05
+VACUUM_STEADY = 0.002
+"""A vacuum reading that changes less than this (as a fraction of its sensor's range)
+from one poll to the next has settled."""
 
 
 class MachineService:
@@ -171,17 +177,7 @@ class MachineService:
         """What the synthetic cameras draw: position, outputs, and which nozzles hold a
         part (vacuum past the pick threshold). Positions are rounded so tiny changes do
         not cause new frames."""
-        inputs = self._driver.inputs
-        held: dict[str, bool] = {}
-        for nozzle in self._profile.nozzles:
-            sensor = self._inputs.get(nozzle.vacuum_input or "")
-            value = inputs.get(sensor.id) if sensor else None
-            held[nozzle.id] = (
-                sensor is not None
-                and isinstance(value, (int, float))
-                and not isinstance(value, bool)
-                and sensor.past_threshold(float(value))
-            )
+        held = {n.id: self.reads_held(n, self.vacuum_reading(n)) for n in self._profile.nozzles}
         held_parts, placed = self.scene_parts() if self.scene_parts is not None else ((), ())
         return SceneState(
             position={a: round(v, 3) for a, v in self._driver.scene_position.items()},
@@ -389,8 +385,11 @@ class MachineService:
         await self.move_axes(target)
 
     async def lower_nozzle(self, nozzle: Nozzle, height: float) -> None:
-        """Move a nozzle down (or up) to a height: 0 at the top, negative down."""
-        await self.move_axes({nozzle.z_axis: nozzle.z_sign * min(0.0, height)})
+        """Move a nozzle down (or up) to a height: 0 at the top, negative down. The
+        nozzle's measured Z offset is added, so a height means the same for every nozzle
+        and tip."""
+        raw = height + nozzle.z_offset
+        await self.move_axes({nozzle.z_axis: nozzle.z_sign * min(0.0, raw)})
 
     async def raise_nozzles(self) -> None:
         await self.move_axes({axis: TRAVEL_HEIGHT for axis in sorted(self._z_axes)})
@@ -401,9 +400,34 @@ class MachineService:
         for output in outputs if on else reversed(outputs):
             await self._driver.set_output(output, on)
 
-    async def holds_part(self, nozzle: Nozzle, expect: bool, timeout_s: float) -> bool | None:
+    def vacuum_sensor(self, nozzle: Nozzle) -> Input | None:
+        """The nozzle's vacuum sensor, if it has one with a range to read it against."""
+        sensor = self._inputs.get(nozzle.vacuum_input or "")
+        return sensor if sensor is not None and sensor.range is not None else None
+
+    def vacuum_threshold(self, nozzle: Nozzle) -> float | None:
+        """The reading at or past which the nozzle holds a part: its measured threshold
+        (calibration line 9), else its sensor's."""
+        if nozzle.vacuum is not None:
+            return nozzle.vacuum.threshold
+        sensor = self._inputs.get(nozzle.vacuum_input or "")
+        return sensor.threshold if sensor is not None else None
+
+    def reads_held(self, nozzle: Nozzle, value: float | None, level: float | None = None) -> bool:
+        """Whether a reading is at or past ``level`` (default: the nozzle's threshold),
+        going toward its sensor's range max: a part held, or the tip sealed."""
+        sensor = self.vacuum_sensor(nozzle)
+        level = self.vacuum_threshold(nozzle) if level is None else level
+        if sensor is None or sensor.range is None or level is None or value is None:
+            return False
+        return sensor.range.fraction(value) >= sensor.range.fraction(level)
+
+    async def holds_part(
+        self, nozzle: Nozzle, expect: bool, timeout_s: float, level: float | None = None
+    ) -> bool | None:
         """Wait up to ``timeout_s`` for the vacuum to say whether a part is held (until
-        it says ``expect``). None if the nozzle has no vacuum sensor."""
+        it says ``expect``). ``level``: the reading that means held, in place of the
+        nozzle's threshold. None if the nozzle has no vacuum sensor."""
         sensor = self._inputs.get(nozzle.vacuum_input or "")
         if sensor is None:
             return None
@@ -411,12 +435,8 @@ class MachineService:
         deadline = loop.time() + timeout_s
         while True:
             await self._driver.refresh_input(sensor.id)
-            value = self._driver.inputs.get(sensor.id)
-            held = (
-                isinstance(value, (int, float))
-                and not isinstance(value, bool)
-                and sensor.past_threshold(float(value))
-            )
+            value = self.vacuum_reading(nozzle)
+            held = self.reads_held(nozzle, value, level)
             if held == expect or loop.time() >= deadline:
                 self.recorder.event(
                     "vacuum", nozzle=nozzle.id, expect=expect, held=held, reading=value
@@ -424,9 +444,33 @@ class MachineService:
                 return held
             await asyncio.sleep(0.03)
 
+    async def settled_vacuum(self, nozzle: Nozzle, least_s: float, most_s: float) -> float | None:
+        """The nozzle's vacuum reading once it has stopped changing: after at least
+        ``least_s`` (for the pump to start), and at most ``most_s``. None if the nozzle
+        has no vacuum sensor."""
+        sensor = self.vacuum_sensor(nozzle)
+        if sensor is None or sensor.range is None:
+            return None
+        span = abs(sensor.range.max - sensor.range.min)
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        await asyncio.sleep(least_s)
+        last: float | None = None
+        while True:
+            await self._driver.refresh_input(sensor.id)
+            value = self.vacuum_reading(nozzle)
+            if value is not None and last is not None and abs(value - last) <= VACUUM_STEADY * span:
+                return value
+            if loop.time() - start >= most_s:
+                return value
+            last = value
+            await asyncio.sleep(VACUUM_POLL_S)
+
     def vacuum_reading(self, nozzle: Nozzle) -> float | None:
         value = self._driver.inputs.get(nozzle.vacuum_input or "")
-        return float(value) if isinstance(value, (int, float)) else None
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return float(value)
 
     async def set_light(self, camera: Camera, on: bool) -> None:
         if camera.light_output is not None:

@@ -124,6 +124,26 @@ def test_a_wide_part_from_a_strip(lumen: TestClient) -> None:  # noqa: F811
         assert (pocket["along"], pocket["across"]) == pytest.approx((0.15, -0.1), abs=0.05)
 
 
+def test_a_tray_higher_than_its_pick_height_is_found_by_touch() -> None:
+    """The tray's parts stand 0.6 mm higher than the pick height it was given: picking
+    there would press into them. The first pick finds their top by touch, and keeps it
+    with the tray until its pick height or where its parts lie is changed."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_part_height_error": 0.6},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        move_to_bed(client, s, "EX-MCU-8", tray())
+        op = ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "T1", "nozzle_id": "N1"})))
+        assert "by touch, +0.80 mm" in op["message"], op["message"]
+        feeders = client.app.state.ctx.feeders  # type: ignore[attr-defined]
+        assert feeders.part_top("T1") == pytest.approx(-26.0 + 0.8)
+        assert feeders.sim_parts.crashes == []
+        assert s.put("/api/v1/feeders/fixed/T1", tray(pick_height=-25.4)).status_code == 200
+        assert feeders.part_top("T1") is None
+
+
 def empty_tray_run(client: TestClient, s: Session) -> dict[str, Any]:
     """Run the demo job with C1's part from a tray that is empty: the run pauses."""
     set_up(client, s)

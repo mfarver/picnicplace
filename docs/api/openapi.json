@@ -4004,6 +4004,17 @@
             "title": "Rotation Axis",
             "type": "string"
           },
+          "vacuum": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VacuumLevels"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Measured, not set by hand: what this nozzle's vacuum sensor reads with its tip open, sealed, and holding a part. None: its sensor's threshold is used."
+          },
           "vacuum_input": {
             "anyOf": [
               {
@@ -4030,6 +4041,12 @@
             "title": "Z Axis",
             "type": "string"
           },
+          "z_offset": {
+            "default": 0.0,
+            "description": "Measured, not set by hand: how much higher this nozzle's tip touches the datum board than the profile's height for it. Every height the nozzle is sent to is shifted by this, so heights mean the same for every nozzle and tip.",
+            "title": "Z Offset",
+            "type": "number"
+          },
           "z_sign": {
             "default": 1,
             "description": "Direction of this nozzle on its Z axis. Two nozzles sharing one Z motor move in opposite directions: one has 1, the other -1.",
@@ -4050,7 +4067,9 @@
           "rotation_axis",
           "vacuum_input",
           "pump_output",
-          "valve_output"
+          "valve_output",
+          "z_offset",
+          "vacuum"
         ],
         "title": "Nozzle",
         "type": "object"
@@ -5862,6 +5881,18 @@
       },
       "RunState": {
         "properties": {
+          "board_z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nozzle height at the board's top, found by touch on a fiducial at the start of the run. Empty if not measured: the job's or the profile's is used.",
+            "title": "Board Z"
+          },
           "current": {
             "anyOf": [
               {
@@ -6010,6 +6041,7 @@
           "status",
           "plan",
           "fix",
+          "board_z",
           "message",
           "error",
           "pause_requested",
@@ -6034,6 +6066,7 @@
             "enum": [
               "scanning",
               "finding_fiducials",
+              "measuring_board",
               "finding_feeder",
               "picking",
               "aligning",
@@ -6851,6 +6884,40 @@
           "which"
         ],
         "title": "TeachPartRequest",
+        "type": "object"
+      },
+      "VacuumLevels": {
+        "additionalProperties": false,
+        "description": "What a nozzle's vacuum sensor reads, in the sensor's units, measured while\ncalibrating the nozzle offsets (spec \u00a77.7, line 9).",
+        "properties": {
+          "held": {
+            "description": "Suction on, holding a part (the calibration disc).",
+            "title": "Held",
+            "type": "number"
+          },
+          "open": {
+            "description": "Suction on, nothing on the tip.",
+            "title": "Open",
+            "type": "number"
+          },
+          "sealed": {
+            "description": "Suction on, the tip pressed on a flat surface.",
+            "title": "Sealed",
+            "type": "number"
+          },
+          "threshold": {
+            "description": "Readings at or past this, going from open toward sealed, mean the tip is sealed or holding a part: halfway from open to whichever of sealed and held is nearer. Used in place of the sensor's threshold.",
+            "title": "Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "open",
+          "sealed",
+          "held",
+          "threshold"
+        ],
+        "title": "VacuumLevels",
         "type": "object"
       },
       "ValidationError": {

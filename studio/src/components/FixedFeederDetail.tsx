@@ -209,8 +209,8 @@ export function FixedFeederDetail(p: Props) {
         {strip
           ? `A strip's parts take their angle from the part's tape${tape ? ` (${tape.rotation ?? "not known, taken as 0"}° in ${tape.width ?? "?"} mm tape)` : ", which the library does not give yet"}. Pick from the end where the cover film is peeled back.`
           : "Part angle: the machine angle of the part's 0° direction, the same for every part."}{" "}
-        Empty pick height: the board height plus the part's height, right only for parts lying
-        on the plates themselves.
+        The pick height is where the first pick starts feeling for the part's top, by touch;
+        empty, the board height plus the part's height.
       </p>
       <div className="button-row">
         <button

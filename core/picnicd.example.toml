@@ -36,8 +36,16 @@ sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times fast
 # board's top off the profile's height (mm, up positive), and a 6 mm paper disc lying at
 # X, Y on the bed, to try calibrating the nozzle offsets.
 # sim_nozzle_offset_error = { N1 = [0.4, -0.25], N2 = [-0.15, 0.3] }
+# sim_nozzle_z_error = { N2 = 0.8 }   # N2's tip 0.8 mm longer than the profile's
+# sim_vacuum_levels = { N1 = [0.3, 0.5] }   # N1's vacuum open and holding a part, as fractions
+#                                          # of its sensor's range: a weak pump
 # sim_datum_height_error = 0.3
 # sim_calibration_disc = [217.0, 94.5]
+# Simulator: a board's top on the staging plates, and the tops of parts in feeders,
+# strips, and trays, off the profile's or the setup's heights (mm, up positive), to try
+# finding heights by touch.
+# sim_board_height_error = 0.6
+# sim_part_height_error = -0.4
 speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 when
                            # bringing up a machine. Homing speed is the firmware's.
 # How picks are kept centered on the parts (a run or a single pick can choose again):
@@ -48,6 +56,12 @@ speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 
 # "auto": "bottom", with the top camera on each feeder's first pick in a run, until it
 #         has learned something, and after an empty pick or a part well off center.
 pick_correction = "top"
+# Find heights by touch: with suction on, a nozzle steps down until the vacuum seals. The
+# board's top on a fiducial at the start of each run, and the top of the parts in each
+# feeder, strip, and tray on the first pick from it (kept with that feeder and part, and
+# found again after an empty pick or a change of nozzle tip). Off: the job's or the
+# profile's board height, and the profile's or the setup's pick heights.
+sniff_heights = true
 
 # Places you choose for this machine: where rejected parts are dropped, and where the
 # head waits. Easier: set them in the Studio (Machine workspace, Calibration panel) by

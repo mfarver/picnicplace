@@ -162,6 +162,16 @@ class MachineConfig(_Section):
             "learned unless this is 'off'."
         ),
     )
+    sniff_heights: bool = Field(
+        default=True,
+        description=(
+            "Find heights by touch during runs and picks: a nozzle, with suction on, steps "
+            "down until the vacuum seals. The board's top on one of its fiducials at the "
+            "start of each run, and the top of the parts in each feeder, strip, and tray on "
+            "the first pick from it (kept with that feeder and part). Off: the job's or the "
+            "profile's board height, and the profile's or the setup's pick heights."
+        ),
+    )
     sim_time_scale: float = Field(
         default=1.0, gt=0, description="Simulator only: values above 1 run faster than real time."
     )
@@ -210,11 +220,45 @@ class MachineConfig(_Section):
             "nozzle ID, as X and Y in mm. Calibrating the nozzle offsets finds and corrects it."
         ),
     )
+    sim_nozzle_z_error: dict[str, float] = Field(
+        default_factory=dict[str, float],
+        description=(
+            "Simulator only: how much longer (mm) each nozzle's tip really is than the "
+            "profile's, by nozzle ID: it reaches that much lower. Sniffing the datum board "
+            "while calibrating the nozzle offsets finds and corrects it."
+        ),
+    )
+    sim_vacuum_levels: dict[str, tuple[float, float]] = Field(
+        default_factory=dict[str, tuple[float, float]],
+        description=(
+            "Simulator only: what each nozzle's vacuum sensor reads with its tip open and "
+            "holding a part, by nozzle ID, as fractions (0 to 1) of the sensor's range, as "
+            "for a tip that leaks or a weak pump. Calibrating the nozzle offsets measures "
+            "them. Not given: open reads just short of the sensor's threshold, holding a "
+            "part well past it."
+        ),
+    )
     sim_datum_height_error: float = Field(
         default=0.0,
         description=(
             "Simulator only: how far (mm, up positive) the datum board's top really is from "
             "the profile's height. Sniffing for it with a nozzle finds it."
+        ),
+    )
+    sim_board_height_error: float = Field(
+        default=0.0,
+        description=(
+            "Simulator only: how far (mm, up positive) the top of a board on the staging "
+            "plates really is from the profile's board height, as for a thicker board. "
+            "Sniffing a fiducial at the start of a run finds it."
+        ),
+    )
+    sim_part_height_error: float = Field(
+        default=0.0,
+        description=(
+            "Simulator only: how far (mm, up positive) the tops of parts in feeders, strips, "
+            "and trays really are from the profile's or the setup's pick height. Sniffing "
+            "on the first pick from each finds it."
         ),
     )
     sim_calibration_disc: tuple[float, float] | None = Field(

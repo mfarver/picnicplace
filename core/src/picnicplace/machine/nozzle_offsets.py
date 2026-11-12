@@ -16,6 +16,10 @@ The height to pick the disc at is found by sniffing: each nozzle, with suction o
 down onto the datum board's center until the vacuum says the tip has sealed on it. The
 disc's top is that plus its thickness. The nozzle never goes more than
 ``SNIFF_BELOW_MM`` below the profile's height for the board.
+
+The same steps measure each nozzle's vacuum levels (line 9): open, before the sniff;
+sealed on the board; and holding the disc. Its threshold, from then on, is halfway from
+open to whichever of the other two is nearer.
 """
 
 import asyncio
@@ -24,10 +28,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from picnicplace.calibration import nozzle_key
+from picnicplace.calibration import datum_key, nozzle_key, vacuum_key
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
-from picnicplace.machine.profile import Location, Nozzle, Point
+from picnicplace.machine.profile import Location, Nozzle, Point, VacuumLevels
 from picnicplace.machine.service import MachineService
+from picnicplace.machine.sniff import SniffError, VacuumMeasure, floor_message, sniff
 from picnicplace.schemas import Operation
 
 TURNS = (90.0, -90.0, 180.0)
@@ -48,11 +53,13 @@ SNIFF_ABOVE_MM = 2.0
 """Sniffing starts this far above the profile's height for the datum board."""
 SNIFF_BELOW_MM = 1.5
 """...and stops, with nothing found, this far below it (or at the bottom of travel)."""
-SNIFF_STEP_MM = 0.1
-SNIFF_WAIT_S = 0.3
-"""How long each step waits for the vacuum to seal."""
 PAPER_MM = 0.1
 """A paper disc's thickness, when the request gives none."""
+HELD_SETTLE_S = 1.0
+"""How long the vacuum is given to settle while holding the disc, for its level."""
+VACUUM_GAP_MIN = 0.05
+"""A nozzle whose reading holding the disc is less than this (as a fraction of its
+sensor's range) from its reading open cannot tell a part held from none."""
 
 
 class NozzleOffsetError(MachineError):
@@ -81,42 +88,35 @@ def _datum(machine: MachineService) -> Location:
     return fiducial
 
 
-async def sniff_datum(machine: MachineService, nozzle: Nozzle) -> float:
+async def sniff_datum(
+    machine: MachineService, nozzle: Nozzle, measure: VacuumMeasure | None = None
+) -> float:
     """Step the nozzle down onto the datum board's center fiducial, with suction on, until
-    the vacuum seals: the board's top, as this nozzle reaches it."""
+    the vacuum seals: the board's top, as this nozzle reaches it, in heights shifted by its
+    Z offset as it stands (add the offset for the raw height). ``measure``: fill in its
+    vacuum levels, open and sealed."""
     fiducial = _datum(machine)
     assert fiducial.z is not None
-    if nozzle.vacuum_input is None:
-        raise NozzleOffsetError(
-            f"{nozzle.label} has no vacuum sensor, so it cannot sniff for the datum board"
-        )
-    expected = fiducial.z
-    axis = machine.profile.axis(nozzle.z_axis)
-    lowest = axis.min if nozzle.z_sign == 1 else -axis.max
-    floor = max(expected - SNIFF_BELOW_MM, lowest)
-    await machine.move_nozzle_over(nozzle, fiducial.position.x, fiducial.position.y, 0.0)
-    start = expected + SNIFF_ABOVE_MM
-    await machine.lower_nozzle(nozzle, start)
-    await machine.suction(nozzle, True)
     try:
-        if await machine.holds_part(nozzle, False, VACUUM_TIMEOUT_S):
-            raise NozzleOffsetError(
-                f"{nozzle.label} reads sealed before touching anything: take off whatever "
-                "is on it, and check its tip is clear"
-            )
-        for step in range(round((start - floor) / SNIFF_STEP_MM) + 1):
-            z = max(floor, round(start - step * SNIFF_STEP_MM, 3))
-            await machine.lower_nozzle(nozzle, z)
-            if await machine.holds_part(nozzle, True, SNIFF_WAIT_S):
-                return z
-    finally:
-        await machine.suction(nozzle, False)
-        await machine.raise_nozzles()
-    raise NozzleOffsetError(
-        f"{nozzle.label} did not seal on the datum board down to Z {floor:g} "
-        f"(the profile's height for it is {expected:g}): check the tip seals (a tip that "
-        "leaks never does), and the board's height in the profile"
-    )
+        z = await sniff(
+            machine,
+            nozzle,
+            fiducial.position,
+            fiducial.z,
+            SNIFF_ABOVE_MM,
+            SNIFF_BELOW_MM,
+            "the datum board",
+            angle=0.0,
+            measure=measure,
+        )
+    except SniffError as e:
+        raise NozzleOffsetError(str(e)) from e
+    if z is None:
+        raise NozzleOffsetError(
+            f"{floor_message(nozzle, 'the datum board', fiducial.z, SNIFF_BELOW_MM)}: check "
+            "the tip seals (a tip that leaks never does), and the board's height in the profile"
+        )
+    return z
 
 
 async def find_disc(machine: MachineService, near: Point, diameter: float | None) -> Point:
@@ -139,15 +139,23 @@ async def find_disc(machine: MachineService, near: Point, diameter: float | None
 
 
 async def turn_disc(
-    machine: MachineService, nozzle: Nozzle, at: Point, turn: float, height: float
-) -> None:
-    """Pick the disc up at a point, turn it, and set it down there again."""
+    machine: MachineService,
+    nozzle: Nozzle,
+    at: Point,
+    turn: float,
+    height: float,
+    level: float | None = None,
+) -> float | None:
+    """Pick the disc up at a point, turn it, and set it down there again. ``level``: the
+    vacuum reading that means it is held, in place of the nozzle's threshold. Returns the
+    reading while it was held."""
     await machine.move_nozzle_over(nozzle, at.x, at.y, 0.0)
     await machine.lower_nozzle(nozzle, height)
     await machine.suction(nozzle, True)
     await asyncio.sleep(PICK_DWELL_S)
     await machine.raise_nozzles()
-    held = await machine.holds_part(nozzle, True, VACUUM_TIMEOUT_S)
+    held = await machine.holds_part(nozzle, True, VACUUM_TIMEOUT_S, level)
+    reading = await machine.settled_vacuum(nozzle, 0.0, HELD_SETTLE_S) if held else None
     if held is False:
         await machine.suction(nozzle, False)
         raise NozzleOffsetError(
@@ -159,6 +167,35 @@ async def turn_disc(
     await machine.suction(nozzle, False)
     await asyncio.sleep(PLACE_DWELL_S)
     await machine.raise_nozzles()
+    return reading
+
+
+def reading(value: float | None) -> str:
+    """A vacuum reading for a message: large raw counts with thousands separators."""
+    if value is None:
+        return "none"
+    return f"{value:,.0f}" if abs(value) >= 10_000 else f"{value:.3g}"
+
+
+def vacuum_levels(
+    machine: MachineService, nozzle: Nozzle, measure: VacuumMeasure, held: float | None
+) -> VacuumLevels | None:
+    """A nozzle's vacuum levels from its readings open, sealed, and holding the disc;
+    None if its sensor gave no readings. Raises if it cannot tell a part held from none."""
+    sensor = machine.vacuum_sensor(nozzle)
+    if sensor is None or sensor.range is None:
+        return None
+    if measure.open is None or measure.sealed is None or held is None:
+        return None
+    o, s, h = measure.open, measure.sealed, held
+    nearer = h if abs(h - o) <= abs(s - o) else s
+    if sensor.range.fraction(nearer) - sensor.range.fraction(o) < VACUUM_GAP_MIN:
+        raise NozzleOffsetError(
+            f"{nozzle.label}'s vacuum barely changes between open ({reading(o)}) and holding "
+            f"the disc ({reading(h)}): it cannot tell a part held from none. Check the tip "
+            "seals, the tubing for leaks, and the pump"
+        )
+    return VacuumLevels(open=o, sealed=s, held=h, threshold=o + (nearer - o) / 2)
 
 
 def solve(moves: list[tuple[float, Point]]) -> tuple[float, float, float]:
@@ -178,13 +215,22 @@ def solve(moves: list[tuple[float, Point]]) -> tuple[float, float, float]:
 
 
 async def calibrate_nozzle(
-    machine: MachineService, nozzle: Nozzle, disc: Point, diameter: float | None, height: float
-) -> tuple[NozzleFix, Point]:
-    """Measure one nozzle's offset with the disc found at ``disc``. Returns where the disc
-    was left, too."""
+    machine: MachineService,
+    nozzle: Nozzle,
+    disc: Point,
+    diameter: float | None,
+    height: float,
+    level: float | None = None,
+) -> tuple[NozzleFix, Point, float | None]:
+    """Measure one nozzle's offset with the disc found at ``disc``, taking the disc as
+    held at vacuum reading ``level`` (default: the nozzle's threshold). Returns where the
+    disc was left, and the vacuum reading holding it, too."""
     moves: list[tuple[float, Point]] = []
+    readings: list[float] = []
     for turn in TURNS:
-        await turn_disc(machine, nozzle, disc, turn, height)
+        reading = await turn_disc(machine, nozzle, disc, turn, height, level)
+        if reading is not None:
+            readings.append(reading)
         after = await find_disc(machine, disc, diameter)
         moves.append((turn, Point(x=after.x - disc.x, y=after.y - disc.y)))
         disc = after
@@ -196,7 +242,7 @@ async def calibrate_nozzle(
             "lighter, flatter disc"
         )
     fix = NozzleFix(nozzle, nozzle.offset.x + ex, nozzle.offset.y + ey, spread)
-    return fix, disc
+    return fix, disc, sum(readings) / len(readings) if readings else None
 
 
 def start_nozzle_offset_calibration(
@@ -227,12 +273,23 @@ def start_nozzle_offset_calibration(
         disc = await find_disc(machine, machine.camera_position(), diameter)
         fixes: list[NozzleFix] = []
         heights: dict[str, float] = {}
+        levels: dict[str, VacuumLevels] = {}
         for nozzle in nozzles:
-            heights[nozzle.id] = await sniff_datum(machine, nozzle)
-            fix, disc = await calibrate_nozzle(
-                machine, nozzle, disc, diameter, heights[nozzle.id] + disc_thickness
+            measure = VacuumMeasure()
+            heights[nozzle.id] = await sniff_datum(machine, nozzle, measure)
+            # Until its levels are known, the disc is held at a reading halfway to sealed.
+            level = (
+                measure.open + (measure.sealed - measure.open) / 2
+                if measure.open is not None and measure.sealed is not None
+                else None
+            )
+            fix, disc, held = await calibrate_nozzle(
+                machine, nozzle, disc, diameter, heights[nozzle.id] + disc_thickness, level
             )
             fixes.append(fix)
+            found = vacuum_levels(machine, nozzle, measure, held)
+            if found is not None:
+                levels[nozzle.id] = found
 
         previous = machine.calibration.get().lines.get("nozzle_offsets")
         values = dict(previous.values) if previous else {}
@@ -245,15 +302,40 @@ def start_nozzle_offset_calibration(
             values[nozzle_key(n.id, "y")] = fix.y
             values[f"off.{n.id}"] = off
             values[f"spread.{n.id}"] = fix.spread
-            values[f"datum.{n.id}"] = heights[n.id]
+            # Kept raw, so a new Z offset follows from it whatever the old one was.
+            raw = heights[n.id] + n.z_offset
+            values[datum_key(n.id)] = raw
             parts.append(
                 f"{n.label}: ({fix.x:.3f}, {fix.y:.3f}), {off:.2f} mm from the profile's, "
-                f"touching the datum board at Z {heights[n.id]:.2f}"
+                f"touching the datum board at Z {raw:.2f}"
             )
         spread = max(f.spread for f in fixes)
         message = f"{'; '.join(parts)}. The disc's turns agreed within {spread:.3f} mm."
         machine.calibration.record("nozzle_offsets", message, values)
+        if levels:
+            record_vacuum(machine, levels)
         machine.apply_calibration()
         return message
 
     return machine.start_task("nozzle_offsets", work)
+
+
+def record_vacuum(machine: MachineService, levels: dict[str, VacuumLevels]) -> None:
+    """Keep the nozzles' measured vacuum levels (line 9), with those of nozzles not
+    measured this time."""
+    previous = machine.calibration.get().lines.get("vacuum")
+    values = dict(previous.values) if previous else {}
+    for nozzle_id, found in levels.items():
+        for name in ("open", "sealed", "held", "threshold"):
+            values[vacuum_key(nozzle_id, name)] = getattr(found, name)
+    parts: list[str] = []
+    for nozzle in machine.profile.nozzles:
+        v = {n: values.get(vacuum_key(nozzle.id, n)) for n in ("open", "held", "threshold")}
+        if all(x is not None for x in v.values()):
+            parts.append(
+                f"{nozzle.label}: open {reading(v['open'])}, holding a part "
+                f"{reading(v['held'])}, threshold {reading(v['threshold'])}"
+            )
+    unit = next((i.unit for i in machine.profile.inputs if i.role == "vacuum" and i.unit), None)
+    message = "; ".join(parts) + (f" ({unit})." if unit else ".")
+    machine.calibration.record("vacuum", message, values)

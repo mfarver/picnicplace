@@ -102,6 +102,10 @@ class TapeScene:
     body: tuple[float, float] | None = None
     pads: tuple[tuple[float, float, float, float, float], ...] = ()
     """Pads as (x, y, width, height, rotation) in the footprint's frame."""
+    part_height: float | None = None
+    """How tall its parts are, from the library."""
+    top: float | None = None
+    """Where the top of the part at the pick location really is, as a nozzle height."""
     fiducial: tuple[float, float] | None = None
     fiducial_diameter: float = 1.0
     fiducial_marks: tuple[tuple[float, float], ...] = ()

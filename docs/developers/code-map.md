@@ -82,7 +82,7 @@ A request goes **route → service → machine service → driver**:
 |---|---|
 | `camera/` | Camera sources (`device.py` for real cameras, `synthetic.py` for the simulator's rendered views), and a hub per camera that shares frames among viewers |
 | `vision/fiducial.py` | Finds round marks: homing and board fiducials, feeder fiducials, sprocket holes |
-| `vision/part.py` | Finds a part on a nozzle, in a bottom camera frame |
+| `vision/part.py` | Finds a part on a nozzle, in a bottom camera frame, leaving out bright specks much smaller than its pads |
 | `capture.py` | Saves single frames on request, for tuning vision on real images |
 | `calibration.py` | The calibration checklist: what the machine has measured of itself and when, what a crash makes out of date, and what stops a run |
 | `recorder.py` | The flight recorder: every frame vision looked at and everything the machine did, and `replay_vision` to run today's vision on recorded frames |
@@ -124,7 +124,7 @@ The core keeps the owner's data in one folder (`data.dir` in the config; by defa
 
 ## The tests: `core/tests/`
 
-Every test runs against the simulator, usually through the real API with FastAPI's test
+Nearly every test runs against the simulator, usually through the real API with FastAPI's test
 client. Useful pieces:
 
 - `conftest.py`: `fast_config()` (a fast simulator and a temporary data directory), and
@@ -134,8 +134,9 @@ client. Useful pieces:
   that put parts in the library and on feeders, and (`test_run.py`) a demo board job.
 - The simulator knows where every part really is, so tests check **where a part
   landed**, not what the core believes (`placed(client)`, `check_landed(...)`).
-- `tests/data/`: sample boards (KiCad, KiKit) and other inputs; `tests/profiles/`: a
-  test machine profile.
+- `tests/data/`: sample boards (KiCad, KiKit) and other inputs; `tests/data/vision/`:
+  real camera frames that `test_bottom_vision_frames.py` runs the vision functions on;
+  `tests/profiles/`: a test machine profile.
 
 | Area | Tests |
 |---|---|

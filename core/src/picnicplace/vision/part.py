@@ -6,6 +6,11 @@ over the camera's center), and fits the smallest rotated rectangle around them: 
 center, and the direction of one of its sides. A rectangle's sides repeat every 90
 degrees, so the caller picks the angle nearest the one it expects.
 
+Not everything bright is a pad: a wound inductor's wire ends, a glint on a nozzle, or a
+fleck of solder can shine too, and one outside the pads stretches the rectangle and moves
+its center. Given the smallest pad's area, the finder leaves out bright specks much
+smaller than any pad.
+
 The brightness threshold suits the simulator's images. Real parts and lighting will
 need tuning, from captured frames.
 """
@@ -15,6 +20,7 @@ from dataclasses import dataclass
 
 import cv2
 import numpy as np
+from cv2.typing import MatLike
 
 from picnicplace.camera.source import Image
 
@@ -37,15 +43,29 @@ class PartBox:
     """Direction of the box's first side, in image degrees: from +u toward +v."""
 
 
-def find_part(image: Image, search_px: float, bright: int = BRIGHT) -> PartBox | None:
-    """The rotated box around the bright metal within ``search_px`` of the center."""
+def metal(image: Image, search_px: float, bright: int = BRIGHT, min_blob_px: float = 0) -> MatLike:
+    """The bright metal within ``search_px`` of the center, as a mask (1 for metal),
+    leaving out bright specks smaller than ``min_blob_px`` pixels."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (3, 3), 0)
     h, w = gray.shape
     mask = (gray >= bright).astype(np.uint8)
     yy, xx = np.ogrid[:h, :w]
     mask[(xx - w / 2) ** 2 + (yy - h / 2) ** 2 > search_px**2] = 0
-    if int(mask.sum()) < MIN_PIXELS:
+    if min_blob_px > 0:
+        _, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        small = np.flatnonzero(stats[:, cv2.CC_STAT_AREA] < min_blob_px)
+        mask[np.isin(labels, small[small > 0])] = 0
+    return mask
+
+
+def find_part(
+    image: Image, search_px: float, bright: int = BRIGHT, min_blob_px: float = 0
+) -> PartBox | None:
+    """The rotated box around the bright metal within ``search_px`` of the center, leaving
+    out bright specks smaller than ``min_blob_px`` pixels."""
+    mask = metal(image, search_px, bright, min_blob_px)
+    if cv2.countNonZero(mask) < MIN_PIXELS:
         return None
     points = cv2.findNonZero(mask)
     (u, v), (bw, bh), angle = cv2.minAreaRect(points)

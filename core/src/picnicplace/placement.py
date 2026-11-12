@@ -38,7 +38,7 @@ from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionE
 from picnicplace.machine.profile import Camera, Location, Nozzle, Point
 from picnicplace.machine.service import MachineService
 from picnicplace.schemas import Operation, WireModel
-from picnicplace.vision.part import nearest_angle, wrap
+from picnicplace.vision.part import BRIGHT, nearest_angle, wrap
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +55,9 @@ than this off the nozzle's center sends the next picks from its feeder to the to
 AUTO_LOOKS = 3
 """How many picks then look with the top camera first, before trying the bottom camera's
 correction again (the top camera's picks keep teaching it meanwhile)."""
+SPECK_FRACTION = 0.25
+"""Bottom vision leaves out bright specks smaller than this fraction of the part's
+smallest pad, such as a wound inductor's wire ends."""
 SIZE_TOLERANCE = 0.35
 """A part seen more than this fraction larger or smaller than its pads is reported."""
 
@@ -97,6 +100,16 @@ class PlacementState(WireModel):
     """What each nozzle holds, as far as PicnicPlace knows."""
     pick_correction: PickCorrection
     """How picks are corrected unless a pick or run says otherwise, from the config."""
+
+
+def _smallest_pad(part: Part | None, library: Library | None) -> float | None:
+    """The area of a part's smallest pad, in square millimeters."""
+    if part is None or library is None:
+        return None
+    footprint = library.find_footprint(part.footprint_id)
+    if footprint is None or not footprint.pads:
+        return None
+    return min(p.width * p.height for p in footprint.pads)
 
 
 def _footprint_center(part: Part | None, library: Library | None) -> tuple[Point, Point] | None:
@@ -422,10 +435,14 @@ class PlacementService:
         mm_per_px = camera.field_of_view.x / w
         size = pads[1] if pads else Point(x=1.6, y=0.8)
         search = (math.hypot(size.x, size.y) / 2 + SEARCH_MARGIN_MM) / mm_per_px
+        pad_area = _smallest_pad(part, library)
+        speck = SPECK_FRACTION * pad_area / mm_per_px**2 if pad_area else 0.0
         box = await self._machine.recorder.vision(
             "find_part",
             frame.image,
             search,
+            BRIGHT,
+            speck,
             camera=camera.id,
             position=dict(self._machine.driver.position),
             mm_per_px=mm_per_px,

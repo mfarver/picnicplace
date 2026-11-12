@@ -91,7 +91,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         async with hub.viewer() as source:
             return await source.fresh_frame(after, wait_s)
 
-    machine.calibration = CalibrationStore(config.data.calibration_path)
+    machine.use_calibration(CalibrationStore(config.data.calibration_path))
     machine.attach_cameras(grab)
     lease.on_holder_left.append(machine.stop_manual_motion)
     ctx = AppContext(

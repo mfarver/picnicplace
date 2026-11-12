@@ -407,6 +407,7 @@ export function RunWorkspace() {
             id={topCamera.id}
             title={topCamera.label}
             info={cameras?.find((c) => c.id === topCamera.id)}
+            fieldOfView={topCamera.field_of_view.x}
           />
         )}
       </aside>

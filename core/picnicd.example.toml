@@ -27,6 +27,11 @@ sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times fast
 # Simulator: feeder rails off the profile's place, to try rail calibration (by feeder bank
 # ID: X and Y in mm, and a turn in degrees about its first slot).
 # sim_rail_error = { front = [4.0, -2.5, 0.4], back = [-3.0, 5.0, -0.3] }
+# Simulator: cameras off the profile, to try camera calibration: the top camera's true
+# field of view as a multiple of the profile's, and the bottom camera's place and focus
+# height (X, Y, and focus, in mm).
+# sim_top_camera_scale = 1.05
+# sim_bottom_camera_error = [-0.8, 0.5, -0.4]
 speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 when
                            # bringing up a machine. Homing speed is the firmware's.
 # How picks are kept centered on the parts (a run or a single pick can choose again):

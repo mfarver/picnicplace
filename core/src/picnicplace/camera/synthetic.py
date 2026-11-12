@@ -607,6 +607,11 @@ class BottomRenderer:
                 continue
             canvas.circle(img, x, y, 2.6, NOZZLE)
             canvas.circle(img, x, y, 0.35, NOZZLE_BORE)
+            empty = not state.held.get(nozzle.id) and nozzle.id not in dict(state.held_parts)
+            if empty and self.camera.focus_height is not None:
+                # An empty tip is sharp only at the camera's focus height.
+                height = state.position.get(nozzle.z_axis, 0.0) * nozzle.z_sign
+                _defocus(canvas, img, x, y, abs(height - self.camera.focus_height))
             angle = state.position.get(nozzle.rotation_axis, 0.0)
             known = dict(state.held_parts).get(nozzle.id)
             if known is not None:
@@ -619,6 +624,24 @@ class BottomRenderer:
                 # Parts never sit exactly centered: a small, fixed pick error.
                 _chip(canvas, img, x + 0.12, y - 0.07, angle + 3.0)
         return _finish(img, self._grain, self.camera, state)
+
+
+DEFOCUS_BLUR = 0.3
+"""Blur (sigma, mm) per mm a nozzle tip is from the bottom camera's focus."""
+
+
+def _defocus(canvas: _Canvas, img: Image, x: float, y: float, off: float) -> None:
+    """Blur the area around a nozzle tip as far out of focus as it is."""
+    sigma = off * DEFOCUS_BLUR * canvas.ppm
+    if sigma < 0.3:
+        return
+    u, v = (c / ONE for c in canvas.px(x, y))
+    r = round(4.5 * canvas.ppm + 3 * sigma)
+    h, w = img.shape[:2]
+    x0, x1 = max(0, round(u) - r), min(w, round(u) + r)
+    y0, y1 = max(0, round(v) - r), min(h, round(v) + r)
+    if x1 > x0 and y1 > y0:
+        img[y0:y1, x0:x1] = cv2.GaussianBlur(img[y0:y1, x0:x1], (0, 0), sigma)
 
 
 def _finish(img: Image, grain: np.ndarray, camera: Camera, state: SceneState) -> Image:

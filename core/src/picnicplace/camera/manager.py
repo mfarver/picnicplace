@@ -6,8 +6,26 @@ from picnicplace.camera.device import DeviceCamera
 from picnicplace.camera.hub import CameraHub
 from picnicplace.camera.synthetic import SceneState, SyntheticCamera
 from picnicplace.config import Config
-from picnicplace.machine.profile import MachineProfile
+from picnicplace.machine.profile import Camera, MachineProfile, Point
 from picnicplace.schemas import CameraInfo
+
+SIM_FOCUS_HEIGHT = -4.0
+"""The simulated bottom camera's focus, for a profile that gives none."""
+
+
+def sim_truth(camera: Camera, config: Config) -> Camera:
+    """The camera as it really is in the simulator: the profile's, off by the config's
+    simulator errors. A copy, so calibrating the profile's camera does not move it."""
+    truth = camera.model_copy(deep=True)
+    machine = config.machine
+    if camera.looking == "down" and camera.mount == "head":
+        k = machine.sim_top_camera_scale
+        truth.field_of_view = Point(x=camera.field_of_view.x * k, y=camera.field_of_view.y * k)
+    elif camera.looking == "up":
+        dx, dy, dz = machine.sim_bottom_camera_error
+        truth.position = Point(x=camera.position.x + dx, y=camera.position.y + dy)
+        truth.focus_height = (camera.focus_height or SIM_FOCUS_HEIGHT) + dz
+    return truth
 
 
 class CameraManager:
@@ -19,9 +37,8 @@ class CameraManager:
             settings = config.camera(camera.id)
             self._sources[camera.id] = settings.source
             if settings.source == "synthetic":
-                self._hubs[camera.id] = CameraHub(
-                    camera.id, SyntheticCamera(profile, camera, scene)
-                )
+                truth = sim_truth(camera, config)
+                self._hubs[camera.id] = CameraHub(camera.id, SyntheticCamera(profile, truth, scene))
             elif settings.source == "device":
                 assert settings.device is not None
                 source = DeviceCamera(

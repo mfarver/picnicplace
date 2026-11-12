@@ -9,6 +9,7 @@ from picnicplace import __version__
 from picnicplace.api.context import Context, get_client_id, require, require_control
 from picnicplace.api.fingerprint import api_fingerprint
 from picnicplace.auth import Permission
+from picnicplace.machine.bottom_camera import start_bottom_camera_calibration
 from picnicplace.machine.errors import NotHomedError
 from picnicplace.machine.local import LocalProfileState, LocationKind
 from picnicplace.machine.profile import KeepOut, MachineProfile, Point
@@ -24,6 +25,7 @@ from picnicplace.schemas import (
     Operation,
     OutputRequest,
     PresenceState,
+    WireModel,
 )
 
 MACHINE_ERRORS: dict[int | str, dict[str, Any]] = {
@@ -211,8 +213,29 @@ async def visual_home(ctx: Context) -> Operation:
 )
 async def measure_camera_scale(ctx: Context) -> Operation:
     """Measure the top camera's millimeters per pixel by moving over the homing fiducial.
-    The result is reported in the operation's message; it is not saved yet."""
+    The result is kept (the calibration checklist) and used by vision from then on."""
     return ctx.machine.start_measure_camera_scale()
+
+
+class BottomCameraRequest(WireModel):
+    nozzle_id: str | None = Field(
+        default=None, description="The nozzle to calibrate with. Empty: the first."
+    )
+
+
+@router.post(
+    "/machine/bottom-camera",
+    tags=["machine"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def calibrate_bottom_camera(ctx: Context, body: BottomCameraRequest) -> Operation:
+    """Calibrate the bottom camera with an empty nozzle tip: center the tip in its image
+    (its place), step the nozzle within 2 mm of the profile's focus height for the
+    sharpest picture (its focus), and step the head to measure its scale and turn. The
+    result is kept (the calibration checklist) and used from then on."""
+    return start_bottom_camera_calibration(ctx.machine, body.nozzle_id)
 
 
 @router.post(

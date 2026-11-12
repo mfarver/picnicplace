@@ -96,6 +96,7 @@ export function MachineWorkspace() {
             id={camera.id}
             title={camera.label}
             info={cameras?.find((c) => c.id === camera.id)}
+            fieldOfView={camera.field_of_view.x}
           />
         ))}
 
@@ -192,6 +193,9 @@ export function MachineWorkspace() {
             onHome={home}
             onVisualHome={() => void track(() => api.POST("/api/v1/machine/visual-home"))}
             onCameraScale={() => void track(() => api.POST("/api/v1/machine/camera-scale"))}
+            onBottomCamera={() =>
+              void track(() => api.POST("/api/v1/machine/bottom-camera", { body: {} }))
+            }
           />
         )}
       </aside>

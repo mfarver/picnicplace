@@ -997,6 +997,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/bottom-camera": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Calibrate Bottom Camera
+         * @description Calibrate the bottom camera with an empty nozzle tip: center the tip in its image
+         *     (its place), step the nozzle within 2 mm of the profile's focus height for the
+         *     sharpest picture (its focus), and step the head to measure its scale and turn. The
+         *     result is kept (the calibration checklist) and used from then on.
+         */
+        post: operations["calibrate_bottom_camera_api_v1_machine_bottom_camera_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/camera-scale": {
         parameters: {
             query?: never;
@@ -1009,7 +1032,7 @@ export interface paths {
         /**
          * Measure Camera Scale
          * @description Measure the top camera's millimeters per pixel by moving over the homing fiducial.
-         *     The result is reported in the operation's message; it is not saved yet.
+         *     The result is kept (the calibration checklist) and used by vision from then on.
          */
         post: operations["measure_camera_scale_api_v1_machine_camera_scale_post"];
         delete?: never;
@@ -1871,6 +1894,14 @@ export interface components {
              */
             residual: number;
         };
+        /** BottomCameraRequest */
+        BottomCameraRequest: {
+            /**
+             * Nozzle Id
+             * @description The nozzle to calibrate with. Empty: the first.
+             */
+            nozzle_id?: string | null;
+        };
         /** BringUpRecord */
         "BringUpRecord-Input": {
             /**
@@ -1932,7 +1963,7 @@ export interface components {
              * Action
              * @description What starts it, if the core can.
              */
-            action: ("home" | "visual_home" | "camera_scale" | "calibrate_feeders") | null;
+            action: ("home" | "visual_home" | "camera_scale" | "bottom_camera" | "calibrate_feeders") | null;
             /**
              * Detail
              * @description Its value, or what to do, in words.
@@ -7351,6 +7382,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MachineState"];
+                };
+            };
+        };
+    };
+    calibrate_bottom_camera_api_v1_machine_bottom_camera_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BottomCameraRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

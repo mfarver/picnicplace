@@ -45,6 +45,7 @@ from picnicplace import __version__
 from picnicplace.events import EventBus, Subscription, SubscriptionOverflowError
 from picnicplace.schemas import WireModel
 from picnicplace.vision.fiducial import find_circle, find_circles
+from picnicplace.vision.pads import fit_pads
 from picnicplace.vision.part import find_part
 
 log = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ VISION_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "find_circle": find_circle,
     "find_circles": find_circles,
     "find_part": find_part,
+    "fit_pads": fit_pads,
 }
 """The vision functions a recording can hold calls of, by name, for replaying them."""
 

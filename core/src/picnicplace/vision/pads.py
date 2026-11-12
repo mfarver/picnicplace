@@ -22,7 +22,9 @@ Plastic as bright as tin (an ivory connector body) is left out by its color; see
 """
 
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import cv2
 import numpy as np
@@ -193,9 +195,19 @@ def _rigid(
     return u, v, angle, residual
 
 
+def _pad(p: PadRect | Mapping[str, Any] | Sequence[float]) -> PadRect:
+    """A pad as given, or as a recording keeps it (a mapping or a list)."""
+    if isinstance(p, PadRect):
+        return p
+    if isinstance(p, Mapping):
+        return PadRect(float(p["x"]), float(p["y"]), float(p["width"]), float(p["height"]))
+    x, y, width, height = (float(v) for v in p)
+    return PadRect(x, y, width, height)
+
+
 def fit_pads(
     image: Image,
-    pads: list[PadRect],
+    pads: Sequence[PadRect | Mapping[str, Any] | Sequence[float]],
     expected_angle: float,
     search_px: float,
     bright: int = BRIGHT,
@@ -204,15 +216,16 @@ def fit_pads(
     """Where the footprint whose pads are ``pads`` lies on the metal within ``search_px``
     of the image center, the part turned about ``expected_angle``; None without at least
     two pads' metal to fit to."""
-    speck = SPECK_SHARE * min(p.width * p.height for p in pads)
+    rects = [_pad(p) for p in pads]
+    speck = SPECK_SHARE * min(p.width * p.height for p in rects)
     mask = metal(image, search_px, bright, speck, warm)
     if cv2.countNonZero(mask) == 0:
         return None
-    u, v, angle = _coarse(mask, pads, expected_angle)
+    u, v, angle = _coarse(mask, rects, expected_angle)
     found: list[tuple[PadRect, float, float, float]] = []
     residual = 0.0
     for _ in range(REFINE_PASSES):
-        found = _centers(mask, pads, u, v, angle)
+        found = _centers(mask, rects, u, v, angle)
         if len(found) < 2:
             return None
         u, v, angle, residual = _rigid(found, u, v, angle)

@@ -60,7 +60,7 @@ def test_a_recorded_run(lumen: TestClient, tmp_path: Path) -> None:  # noqa: F81
         assert kind in kinds, kind
     assert {"move", "vacuum", "core.operation", "core.machine.state", "run.end"} <= kinds
     seen = {e["fn"] for e in events(tmp_path / root) if e["kind"] == "vision"}
-    assert seen == {"find_circle", "find_circles", "find_part"}
+    assert seen == {"find_circle", "find_circles", "fit_pads"}
 
     # Today's vision gives the same answers on the recorded frames.
     checks = replay_vision(saved)

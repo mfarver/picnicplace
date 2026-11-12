@@ -466,7 +466,7 @@ def test_without_a_discard_location_the_operator_takes_the_part_off(lumen: TestC
         blind = {"left": 1}
 
         async def fails_once(name: str, *args: Any, **kwargs: Any) -> Any:
-            if name == "find_part" and blind["left"] > 0:
+            if name in ("find_part", "fit_pads") and blind["left"] > 0:
                 blind["left"] -= 1
                 return None
             return await vision(name, *args, **kwargs)

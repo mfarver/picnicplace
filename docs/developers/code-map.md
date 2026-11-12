@@ -82,8 +82,8 @@ A request goes **route → service → machine service → driver**:
 |---|---|
 | `camera/` | Camera sources (`device.py` for real cameras, `synthetic.py` for the simulator's rendered views), and a hub per camera that shares frames among viewers |
 | `vision/fiducial.py` | Finds round marks: homing and board fiducials, feeder fiducials, sprocket holes |
-| `vision/part.py` | Finds a part on a nozzle, in a bottom camera frame, leaving out bright specks much smaller than its pads |
-| `vision/pads.py` | Fits a footprint's pads to the metal in a bottom camera frame, for parts whose pads are off their body's center or whose body is as bright as their leads (not yet used by placement) |
+| `vision/part.py` | The metal mask (bright, not yellowish plastic, no specks), and one box around a part's metal, for parts without a footprint |
+| `vision/pads.py` | Fits a footprint's pads to the metal in a bottom camera frame, for parts whose pads are off their body's center or whose body is as bright as their leads (bottom vision's finder whenever a footprint has two pads or more) |
 | `capture.py` | Saves single frames on request, for tuning vision on real images |
 | `calibration.py` | The calibration checklist: what the machine has measured of itself and when, what a crash makes out of date, and what stops a run |
 | `recorder.py` | The flight recorder: every frame vision looked at and everything the machine did, and `replay_vision` to run today's vision on recorded frames |

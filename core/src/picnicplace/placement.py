@@ -14,6 +14,10 @@ Each step is an operation, so a first run on a real machine can go one step at a
   find, and for ``AUTO_LOOKS`` picks after a part from it sat more than
   ``AUTO_MISS_MM`` off the nozzle's center (a feeder stepping unevenly, which learning
   cannot follow). Trays have no sprocket holes, so they always use the bottom camera.
+  The first pick from each feeder, strip, or tray takes its part by touch: the nozzle
+  steps down onto it with suction on until the vacuum seals, which marks the part's top.
+  That height is kept with the feeder and part, and later picks go straight to it; an
+  empty pick forgets it, so the next pick finds it again.
 - **Align**: carry the part over the bottom camera with its underside in focus, find it,
   and record where it sits on the nozzle and at what angle. How far it sits off center
   says where the part really lay when it was picked: the feeder learns from that.
@@ -37,6 +41,7 @@ from picnicplace.library import Library, Part
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
 from picnicplace.machine.profile import Camera, Location, Nozzle, Point
 from picnicplace.machine.service import MachineService
+from picnicplace.machine.sniff import SniffError, floor_message, sniff
 from picnicplace.schemas import Operation, WireModel
 from picnicplace.vision.part import nearest_angle, wrap
 
@@ -47,6 +52,10 @@ PICK_DWELL_S = 0.2
 PLACE_DWELL_S = 0.1
 """Wait this long after letting go, before lifting."""
 VACUUM_TIMEOUT_S = 1.0
+PART_SNIFF_ABOVE_MM = 1.5
+"""Sniffing for a part's top starts this far above the setup's height for it..."""
+PART_SNIFF_BELOW_MM = 0.5
+"""...and stops this far below it, gently: further would press into the part."""
 SEARCH_MARGIN_MM = 3.0
 """Bottom vision looks this far around the part's expected size."""
 AUTO_MISS_MM = 0.3
@@ -126,6 +135,8 @@ class PlacementService:
         self._feeders = feeders
         self._library = library
         self.pick_correction: PickCorrection = pick_correction
+        self.sniff_heights = False
+        """Find each feeder's part top by touch on its first pick (from the config)."""
         self._loads: dict[str, NozzleLoad] = {}
         self._look: dict[str, tuple[int, str]] = {}
         """Auto correction: by slot or strip ID, how many more picks to look at with the
@@ -279,10 +290,10 @@ class PlacementService:
             at, found = self._learned(slot.id, base)
         tape = self._feeders.tape_of(part)
         tape_angle = slot.rotation + (tape.rotation or 0.0 if tape else 0.0)
-        await self._take_counted(slot.id, how, nozzle, at, bank.pick_height, slot.label)
+        top = await self._take_counted(slot.id, how, nozzle, at, bank.pick_height, slot.label)
         self._loads[nozzle.id] = self._picked(nozzle, part, slot.id, tape_angle, at, base, how)
         what = part.id if part else "a part"
-        return f"{nozzle.id} picked {what} from {slot.label}{found}{why}."
+        return f"{nozzle.id} picked {what} from {slot.label}{found}{top}{why}."
 
     async def _pick_fixed(
         self, fixed_id: str, nozzle: Nozzle, correction: PickCorrection, first: bool
@@ -314,10 +325,10 @@ class PlacementService:
         elif how == "bottom":
             at, found = self._learned(fixed_id, base)
         feeders.took_fixed(fixed_id)  # tried or taken, that pocket is done with
-        await self._take_counted(fixed_id, how, nozzle, at, height, label)
+        top = await self._take_counted(fixed_id, how, nozzle, at, height, label)
         self._loads[nozzle.id] = self._picked(nozzle, part, fixed_id, angle, at, base, how)
         what = part.id if part else "a part"
-        return f"{nozzle.id} picked {what} number {index + 1} from {label}{found}{why}."
+        return f"{nozzle.id} picked {what} number {index + 1} from {label}{found}{top}{why}."
 
     def _method(
         self, source_id: str, correction: PickCorrection, first: bool
@@ -336,13 +347,27 @@ class PlacementService:
 
     async def _take_counted(
         self, source_id: str, how: PickMethod, nozzle: Nozzle, at: Point, height: float, label: str
-    ) -> None:
+    ) -> str:
         """Take the part, and keep count for auto correction: after an empty pick, look
-        with the top camera next time; a part taken after a look uses one up."""
+        with the top camera next time; a part taken after a look uses one up. ``height``:
+        the setup's or profile's height for the part's top, used until a sniff finds it.
+        Returns a note for the pick's message when it sniffed."""
+        top = self._feeders.part_top(source_id) if self.sniff_heights else None
+        note = ""
         try:
-            await self._take(nozzle, at, height, label)
+            if self.sniff_heights and top is None:
+                found = await self._sniff_take(nozzle, at, height, label)
+                self._feeders.set_part_top(source_id, found, nozzle)
+                note = (
+                    f" (found the part's top at Z {found:.2f} by touch, "
+                    f"{found - height:+.2f} mm from the setup's height)"
+                )
+            else:
+                await self._take(nozzle, at, height if top is None else top, label)
         except MispickError:
             self._look[source_id] = (1, "after an empty pick")
+            # Sniff again next time: the parts may sit higher or lower than thought.
+            self._feeders.forget_part_top(source_id)
             raise
         if how == "top" and source_id in self._look:
             looks, why = self._look[source_id]
@@ -350,6 +375,7 @@ class PlacementService:
                 del self._look[source_id]
             else:
                 self._look[source_id] = (looks - 1, why)
+        return note
 
     def _learned(self, source_id: str, base: Point) -> tuple[Point, str]:
         """Where to pick with the bottom camera's correction, and a note saying so."""
@@ -401,6 +427,37 @@ class PlacementService:
                 if reading is not None
                 else f"{nozzle.id} picked nothing from {label}"
             )
+
+    async def _sniff_take(self, nozzle: Nozzle, at: Point, expected: float, label: str) -> float:
+        """Take the part by touch: step down onto it with suction on until the vacuum
+        seals, lift, and check it came up. Returns the height it sealed at, its top."""
+        try:
+            found = await sniff(
+                self._machine,
+                nozzle,
+                at,
+                expected,
+                PART_SNIFF_ABOVE_MM,
+                PART_SNIFF_BELOW_MM,
+                f"the part at {label}",
+                hold=True,
+                dwell_s=PICK_DWELL_S,
+            )
+        except SniffError as e:
+            raise PlacementError(str(e)) from e
+        if found is None:
+            raise MispickError(
+                f"{floor_message(nozzle, f'a part at {label}', expected, PART_SNIFF_BELOW_MM)}: "
+                "check there is a part in the pocket, and the pick height"
+            )
+        held = await self._machine.holds_part(nozzle, True, VACUUM_TIMEOUT_S)
+        if held is False:
+            await self._machine.suction(nozzle, False)
+            raise MispickError(
+                f"{nozzle.id} sealed at Z {found:.2f} over {label} but lifted nothing: check "
+                "there is a part in the pocket"
+            )
+        return found
 
     async def align(self, nozzle: Nozzle) -> str:
         load = self._load(nozzle)

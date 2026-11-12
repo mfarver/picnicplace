@@ -303,6 +303,28 @@ def test_run_a_job(lumen: TestClient) -> None:
         }
 
 
+def test_the_run_finds_the_boards_top_by_touch() -> None:
+    """The board is 0.6 mm thicker than the profile's board height: placed there, every
+    part would be pressed into it. Before the first part, the run finds the board's top
+    by touch on a fiducial, and sets each part down on the board as it is."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_board_height_error": 0.6},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        run = client.get("/api/v1/run").json()
+        board = load_profile("lumenpnp-v4.1").board_height
+        assert board is not None
+        assert run["board_z"] == pytest.approx(board + 0.6, abs=0.15)
+        parts = client.app.state.ctx.feeders.sim_parts  # type: ignore[attr-defined]
+        assert parts.crashes == []
+        assert all(p.fell < 0.15 for p in parts.placed)
+        assert check_landed(client, run) == 4
+
+
 def test_pause_skip_and_resume(lumen: TestClient) -> None:
     with connect(lumen) as s:
         set_up(lumen, s)

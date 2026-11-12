@@ -17,7 +17,10 @@ feeders.
 **Board.** Before the first part, the top camera finds up to three of the job's
 fiducials (the panel's own if it has two or more, else the boards'). A rigid fit (shift
 and turn) of where they were found to where the job says they are corrects every
-placement. Without fiducials, the job's location is used as it is.
+placement. Without fiducials, the job's location is used as it is. Then a nozzle finds
+the board's top by touch on the first fiducial (flat, bare copper): with suction on, it
+steps down until the vacuum seals. Every part is placed at that height, so a thicker or
+warped board, or one higher on its plate, is placed on as it is.
 
 **Feeders.** On a machine with a feeder bus, the run scans the feeders before it finds
 the board, in case one was moved or swapped since the job was planned; a placement whose
@@ -73,6 +76,7 @@ from picnicplace.machine.errors import (
 )
 from picnicplace.machine.profile import MachineProfile, Point, Rect
 from picnicplace.machine.service import MachineService
+from picnicplace.machine.sniff import floor_message, sniff
 from picnicplace.placement import MispickError, PlacementService
 from picnicplace.schemas import Operation, WireModel
 
@@ -84,6 +88,10 @@ ALIGN_ATTEMPTS = 2
 MAX_FIDUCIALS = 3
 FIDUCIAL_SEARCH_MM = 3.0
 """How far from where the job says a fiducial is, the camera looks for it."""
+BOARD_SNIFF_ABOVE_MM = 1.5
+"""Sniffing for the board's top starts this far above the job's or profile's height..."""
+BOARD_SNIFF_BELOW_MM = 1.0
+"""...and stops this far below it."""
 FIDUCIAL_DIAMETER_MM = 1.0
 """For fiducials whose footprint is not in the library."""
 SIM_DECOY_SIZE = 0.7
@@ -192,7 +200,13 @@ class JobPlan(WireModel):
 RunStatus = Literal["running", "paused", "finished", "stopped"]
 
 StepAction = Literal[
-    "scanning", "finding_fiducials", "finding_feeder", "picking", "aligning", "placing"
+    "scanning",
+    "finding_fiducials",
+    "measuring_board",
+    "finding_feeder",
+    "picking",
+    "aligning",
+    "placing",
 ]
 
 
@@ -213,6 +227,13 @@ class RunState(WireModel):
     status: RunStatus
     plan: JobPlan
     fix: BoardFix | None
+    board_z: float | None = Field(
+        default=None,
+        description=(
+            "Nozzle height at the board's top, found by touch on a fiducial at the start of "
+            "the run. Empty if not measured: the job's or the profile's is used."
+        ),
+    )
     message: str | None = None
     error: str | None = Field(default=None, description="Why the run paused, if it did.")
     pause_requested: bool = False
@@ -585,6 +606,9 @@ class JobRunner:
         """The flight recording this runner started for the run, if any."""
         self.record_runs = False
         """Record every run (from the config)."""
+        self.sniff_board = False
+        """Find the board's top by touch on a fiducial at the start of each run (from the
+        config)."""
         self._sim_error = sim_board_error if feeders.sim_parts is not None else None
         self.sim_decoys = False
         """In the simulator, print a round silkscreen mark smaller than each fiducial
@@ -834,8 +858,12 @@ class JobRunner:
                 run.message = "finding the board's fiducials"
                 run.current = RunStep(stage="board", action="finding_fiducials")
                 run.fix = await self._find_board(run)
-                run.current = None
                 found = run.message
+                run.current = RunStep(stage="board", action="measuring_board")
+                run.board_z = await self._measure_board(run, run.fix)
+                if run.board_z is not None:
+                    found = f"{found}; {run.message}"
+                run.current = None
             while True:
                 if run.stop_requested:
                     self._finish(run, "stopped", f"stopped: {self._summary(run)}")
@@ -943,6 +971,51 @@ class JobRunner:
         )
         log.info("%s", run.message)
         return fix
+
+    async def _measure_board(self, run: RunState, fix: BoardFix) -> float | None:
+        """Sniff the board's top on its first fiducial (flat, bare copper) with a nozzle
+        that reaches it. None if sniffing is off, or there is no fiducial or no height to
+        start from."""
+        job = self._job
+        assert job is not None
+        profile = self._machine.profile
+        expected = job.board_z if job.board_z is not None else profile.board_height
+        if not self.sniff_board or not fix.fiducials or expected is None:
+            return None
+        at = fix.fiducials[0].found
+        reach = profile.nozzle_reach
+        nozzle = next(
+            (
+                n
+                for n in profile.nozzles
+                if n.vacuum_input is not None and n.id in reach and _inside(reach[n.id], at.x, at.y)
+            ),
+            None,
+        )
+        if nozzle is None:
+            return None
+        ref = fix.fiducials[0].ref
+        run.message = f"{nozzle.id} finding the board's top on fiducial {ref} by touch"
+        source = "the job's" if job.board_z is not None else "the profile's"
+        z = await sniff(
+            self._machine,
+            nozzle,
+            at,
+            expected,
+            BOARD_SNIFF_ABOVE_MM,
+            BOARD_SNIFF_BELOW_MM,
+            f"fiducial {ref}",
+        )
+        if z is None:
+            raise RunError(
+                f"{floor_message(nozzle, f'fiducial {ref}', expected, BOARD_SNIFF_BELOW_MM)}: "
+                "check the board is in place and flat, and the nozzle's tip seals. To place "
+                f"at {source} board height instead, turn off sniff_heights in the config"
+            )
+        run.message = f"board's top at Z {z:.2f}, {z - expected:+.2f} mm from {source} height"
+        self._machine.recorder.event("run.board_z", z=z, expected=expected, nozzle=nozzle.id)
+        log.info("%s", run.message)
+        return z
 
     def _chosen_fiducials(self, job: Job) -> list[MachinePlacement]:
         result = layout(job, self._machine.profile)
@@ -1103,7 +1176,8 @@ class JobRunner:
             target = run.fix.apply(item.x, item.y)
             run.message = f"{nozzle_id} placing {item.ref}"
             run.current = RunStep(stage="item", action="placing", index=index, nozzle=nozzle_id)
-            await self._placement.place(nozzle, target, item.rotation + run.fix.angle, job.board_z)
+            board = run.board_z if run.board_z is not None else job.board_z
+            await self._placement.place(nozzle, target, item.rotation + run.fix.angle, board)
             del run.held[nozzle_id]
             item.status, item.note, item.nozzle = "placed", "", nozzle_id
             self._machine.recorder.event("run.placed", ref=item.ref, index=index, at=target)

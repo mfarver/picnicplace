@@ -90,6 +90,24 @@ describe("runSteps", () => {
     expect(focusIndex(rows)).toBe(3);
   });
 
+  it("shows the board's top once it is found by touch", () => {
+    const items = [item(0, "R1", "pending")];
+    const measuring = run(items, {
+      fix,
+      current: { stage: "board", action: "measuring_board", index: null, nozzle: null },
+    });
+    expect(runSteps(items, measuring, 1, false)[0]).toMatchObject({
+      mark: "todo",
+      current: true,
+      detail: "finding the board's top",
+    });
+    const found = run(items, { fix, board_z: -26.9 });
+    expect(runSteps(items, found, 1, false)[0]).toMatchObject({
+      mark: "done",
+      detail: "1.00 mm off, turned +0.50°, top at Z -26.90",
+    });
+  });
+
   it("marks where a problem paused the run", () => {
     const items = [item(0, "R1", "pending")];
     const state = run(items, {

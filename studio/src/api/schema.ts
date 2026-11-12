@@ -4510,6 +4510,11 @@ export interface components {
         };
         /** RunState */
         RunState: {
+            /**
+             * Board Z
+             * @description Nozzle height at the board's top, found by touch on a fiducial at the start of the run. Empty if not measured: the job's or the profile's is used.
+             */
+            board_z: number | null;
             /** @description The step under way. Kept when the run pauses on a problem, to show where it stopped; empty between batches and when the run ends. */
             current: components["schemas"]["RunStep"] | null;
             /**
@@ -4584,7 +4589,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "scanning" | "finding_fiducials" | "finding_feeder" | "picking" | "aligning" | "placing";
+            action: "scanning" | "finding_fiducials" | "measuring_board" | "finding_feeder" | "picking" | "aligning" | "placing";
             /**
              * Index
              * @description The placement, for stage 'item'.

@@ -28,6 +28,7 @@ from picnicplace.calibration import datum_key, nozzle_key
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
 from picnicplace.machine.profile import Location, Nozzle, Point
 from picnicplace.machine.service import MachineService
+from picnicplace.machine.sniff import SniffError, floor_message, sniff
 from picnicplace.schemas import Operation
 
 TURNS = (90.0, -90.0, 180.0)
@@ -48,9 +49,6 @@ SNIFF_ABOVE_MM = 2.0
 """Sniffing starts this far above the profile's height for the datum board."""
 SNIFF_BELOW_MM = 1.5
 """...and stops, with nothing found, this far below it (or at the bottom of travel)."""
-SNIFF_STEP_MM = 0.1
-SNIFF_WAIT_S = 0.3
-"""How long each step waits for the vacuum to seal."""
 PAPER_MM = 0.1
 """A paper disc's thickness, when the request gives none."""
 
@@ -87,39 +85,25 @@ async def sniff_datum(machine: MachineService, nozzle: Nozzle) -> float:
     Z offset as it stands (add the offset for the raw height)."""
     fiducial = _datum(machine)
     assert fiducial.z is not None
-    if nozzle.vacuum_input is None:
-        raise NozzleOffsetError(
-            f"{nozzle.label} has no vacuum sensor, so it cannot sniff for the datum board"
-        )
-    expected = fiducial.z
-    axis = machine.profile.axis(nozzle.z_axis)
-    # Heights here, as everywhere, are shifted by the nozzle's Z offset; the bottom of
-    # its travel is not.
-    lowest = (axis.min if nozzle.z_sign == 1 else -axis.max) - nozzle.z_offset
-    floor = max(expected - SNIFF_BELOW_MM, lowest)
-    await machine.move_nozzle_over(nozzle, fiducial.position.x, fiducial.position.y, 0.0)
-    start = expected + SNIFF_ABOVE_MM
-    await machine.lower_nozzle(nozzle, start)
-    await machine.suction(nozzle, True)
     try:
-        if await machine.holds_part(nozzle, False, VACUUM_TIMEOUT_S):
-            raise NozzleOffsetError(
-                f"{nozzle.label} reads sealed before touching anything: take off whatever "
-                "is on it, and check its tip is clear"
-            )
-        for step in range(round((start - floor) / SNIFF_STEP_MM) + 1):
-            z = max(floor, round(start - step * SNIFF_STEP_MM, 3))
-            await machine.lower_nozzle(nozzle, z)
-            if await machine.holds_part(nozzle, True, SNIFF_WAIT_S):
-                return z
-    finally:
-        await machine.suction(nozzle, False)
-        await machine.raise_nozzles()
-    raise NozzleOffsetError(
-        f"{nozzle.label} did not seal on the datum board down to Z {floor:g} "
-        f"(the profile's height for it is {expected:g}): check the tip seals (a tip that "
-        "leaks never does), and the board's height in the profile"
-    )
+        z = await sniff(
+            machine,
+            nozzle,
+            fiducial.position,
+            fiducial.z,
+            SNIFF_ABOVE_MM,
+            SNIFF_BELOW_MM,
+            "the datum board",
+            angle=0.0,
+        )
+    except SniffError as e:
+        raise NozzleOffsetError(str(e)) from e
+    if z is None:
+        raise NozzleOffsetError(
+            f"{floor_message(nozzle, 'the datum board', fiducial.z, SNIFF_BELOW_MM)}: check "
+            "the tip seals (a tip that leaks never does), and the board's height in the profile"
+        )
+    return z
 
 
 async def find_disc(machine: MachineService, near: Point, diameter: float | None) -> Point:

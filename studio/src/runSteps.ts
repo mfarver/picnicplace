@@ -20,6 +20,7 @@ export interface RunStepRow {
 const ACTION: Record<NonNullable<RunState["current"]>["action"], string> = {
   scanning: "scanning",
   finding_fiducials: "finding fiducials",
+  measuring_board: "finding the board's top",
   finding_feeder: "finding its feeder's fiducial",
   picking: "picking",
   aligning: "aligning",
@@ -70,18 +71,19 @@ export function runSteps(
   let boardDetail = fiducials
     ? `${fiducials} fiducial${fiducials === 1 ? "" : "s"}`
     : "no fiducials: placed where the job says";
-  if (boardCurrent) boardDetail = ACTION.finding_fiducials;
+  if (boardCurrent) boardDetail = ACTION[at.action];
   else if (fix && fix.fiducials.length > 0) {
     const off = Math.hypot(fix.dx, fix.dy).toFixed(2);
     const turn = (fix.angle >= 0 ? "+" : "") + fix.angle.toFixed(2);
     boardDetail = `${off} mm off, turned ${turn}°`;
+    if (run?.board_z != null) boardDetail += `, top at Z ${run.board_z.toFixed(2)}`;
   }
   rows.push(
     row({
       key: "board",
       label: "Find the board",
       detail: boardDetail,
-      mark: fix ? "done" : "todo",
+      mark: fix && !boardCurrent ? "done" : "todo",
       current: boardCurrent,
       held: false,
     }),

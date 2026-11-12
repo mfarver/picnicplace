@@ -125,6 +125,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             bundle.photon_sim,
         )
         ctx.feeders.sim_rail_errors = dict(config.machine.sim_rail_error)
+        ctx.feeders.sim_part_height_error = config.machine.sim_part_height_error
         disc = config.machine.sim_calibration_disc
         if disc is not None and ctx.feeders.sim_parts is not None:
             ctx.feeders.sim_parts.placed.append(
@@ -148,6 +149,8 @@ def create_app(config: Config | None = None) -> FastAPI:
             config.machine.sim_board_error,
         )
         ctx.runner.record_runs = config.recorder.record_runs
+        ctx.placement.sniff_heights = config.machine.sniff_heights
+        ctx.runner.sniff_board = config.machine.sniff_heights
         recorder.snapshot = recording_routes.snapshot_builder(ctx, jobs.get)
         await machine.start()
         try:

@@ -52,19 +52,28 @@ SIM_DATUM_RADIUS_MM = 25.0
 """The simulated datum board's flat top, around its center fiducial."""
 
 
-def sim_datum_surface(config: MachineConfig) -> Callable[[float, float], float | None] | None:
-    """The simulated datum board's top, for a nozzle to seal on: the profile's height of
-    its center fiducial, off by the config's simulator error."""
-    fiducial = next(
-        (loc for loc in config.machine_profile.locations if loc.kind == "homing_fiducial"), None
-    )
-    if fiducial is None or fiducial.z is None:
+def sim_surface(config: MachineConfig) -> Callable[[float, float], float | None] | None:
+    """What a simulated nozzle can seal on: the datum board's top (the profile's height of
+    its center fiducial) near it, and a board's top on the staging plates (the profile's
+    board height), each off by the config's simulator error."""
+    profile = config.machine_profile
+    fiducial = next((loc for loc in profile.locations if loc.kind == "homing_fiducial"), None)
+    datum = fiducial if fiducial is not None and fiducial.z is not None else None
+    board = profile.board_height
+    if datum is None and board is None:
         return None
-    center, top = fiducial.position, fiducial.z + config.sim_datum_height_error
+    plates = profile.staging_plates
 
     def surface(x: float, y: float) -> float | None:
-        near = math.hypot(x - center.x, y - center.y) <= SIM_DATUM_RADIUS_MM
-        return top if near else None
+        if datum is not None and datum.z is not None:
+            center = datum.position
+            if math.hypot(x - center.x, y - center.y) <= SIM_DATUM_RADIUS_MM:
+                return datum.z + config.sim_datum_height_error
+        if board is not None:
+            for p in plates:
+                if abs(x - p.center.x) <= p.size.x / 2 and abs(y - p.center.y) <= p.size.y / 2:
+                    return board + config.sim_board_height_error
+        return None
 
     return surface
 
@@ -80,7 +89,7 @@ def build_driver(config: MachineConfig) -> DriverBundle:
             photon=photon,
             tip_errors=config.sim_nozzle_z_error,
         )
-        driver.surface_at = sim_datum_surface(config)
+        driver.surface_at = sim_surface(config)
         return DriverBundle(driver, photon_sim=photon)
 
     assert profile.marlin is not None  # checked when the config was loaded

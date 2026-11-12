@@ -13,7 +13,9 @@ Kept in the data directory as ``feeders.json``:
 - fixed feeders: strips of tape and trays held on the bed, with how many parts have
   been taken from each;
 - what the bottom camera has learned of each feeder's picks: how far its parts really
-  lie from where the rest of the setup says, and how far off center its picks have been.
+  lie from where the rest of the setup says, and how far off center its picks have been;
+- the top of the parts in each feeder, strip, and tray, found by sniffing on the first
+  pick from it (kept with that feeder and part).
 """
 
 import math
@@ -70,6 +72,23 @@ class PickLearning(_Model):
     misses: dict[PickMethod, PickMisses] = Field(
         default_factory=dict[PickMethod, PickMisses],
         description="How far off center its picks have been, by how they were corrected.",
+    )
+
+
+class PartTop(_Model):
+    """The top of the parts in one feeder, strip, or tray, found by sniffing."""
+
+    z: float = Field(description="Nozzle height at the top of a part, as sniffed.")
+    part_id: str | None = Field(description="The part it was found for.")
+    feeder: str | None = Field(
+        default=None,
+        description="Photon feeders: the ID of the feeder in the slot then. Another feeder "
+        "in the slot, or another part, is sniffed again.",
+    )
+    nozzle: str = Field(description="The nozzle that found it.")
+    z_offset: float = Field(
+        description="That nozzle's Z offset then. Once it changes (calibrated again, or "
+        "another tip fitted), the top is sniffed again."
     )
 
 
@@ -238,6 +257,11 @@ class FeederSetup(_Model):
         default_factory=dict[str, PickLearning],
         description="What the bottom camera has learned of each slot's or strip's or "
         "tray's picks, by slot ID or T ID.",
+    )
+    part_tops: dict[str, PartTop] = Field(
+        default_factory=dict[str, PartTop],
+        description="The top of the parts in each slot or strip or tray, found by sniffing, "
+        "by slot ID or T ID.",
     )
 
 

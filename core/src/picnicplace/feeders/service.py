@@ -23,6 +23,7 @@ from picnicplace.feeders.setup import (
     FeederAssignment,
     FeederSetupStore,
     FixedFeeder,
+    PartTop,
     PickLearning,
     PickMethod,
     PickMisses,
@@ -40,7 +41,7 @@ from picnicplace.machine.errors import (
     InvalidTargetError,
     NotSupportedError,
 )
-from picnicplace.machine.profile import FeederBank, Point
+from picnicplace.machine.profile import FeederBank, Nozzle, Point
 from picnicplace.machine.service import MachineService
 from picnicplace.machine.simulator import SimulatorDriver
 from picnicplace.operations import OperationManager
@@ -70,6 +71,9 @@ RAIL_RESIDUAL_MM = 1.0
 suspect: a fiducial was mistaken, or a rail is bent."""
 """Look for a feeder's fiducial this far from where it should be."""
 
+Z_OFFSET_SAME_MM = 0.005
+"""A nozzle's Z offset closer than this to the one a part top was found with is the
+same: the top still holds."""
 FIDUCIAL_DIAMETERS = (0.5, 2.5)
 """Diameter range searched when the profile does not give the fiducial's size."""
 
@@ -224,6 +228,9 @@ class FeederService:
         self.sim_rail_errors: dict[str, tuple[float, float, float]] = {}
         """Simulated rails: how far each bank really is from the profile, by bank ID: a
         shift (x, y) in mm and a turn in degrees about its first slot."""
+        self.sim_part_height_error = 0.0
+        """Simulated parts: how far (mm, up positive) their tops in feeders, strips, and
+        trays really are from the profile's or the setup's pick height."""
         self._bus = (
             PhotonBus(machine.driver.rs485) if self._profile.feeder_bus == "photon" else None
         )
@@ -888,6 +895,42 @@ class FeederService:
         self._store.setup.learned.pop(source_id, None)
         self._store.save()
 
+    # --- Part tops, found by sniffing -------------------------------------------------
+
+    def _source_part_id(self, source_id: str) -> str | None:
+        if self.is_fixed(source_id):
+            return self.fixed(source_id).part_id
+        part = self.part(self.slot(source_id))
+        return part.id if part is not None else None
+
+    def part_top(self, source_id: str) -> float | None:
+        """The top of the parts in a slot or strip or tray, as sniffed: only for the part
+        it holds now and, for a slot, the feeder in it now."""
+        top = self._store.setup.part_tops.get(source_id)
+        if top is None or top.part_id != self._source_part_id(source_id):
+            return None
+        if not self.is_fixed(source_id) and top.feeder != self._found.get(source_id):
+            return None
+        nozzle = next((n for n in self._machine.profile.nozzles if n.id == top.nozzle), None)
+        if nozzle is None or abs(nozzle.z_offset - top.z_offset) > Z_OFFSET_SAME_MM:
+            return None
+        return top.z
+
+    def set_part_top(self, source_id: str, z: float, nozzle: Nozzle) -> None:
+        feeder = None if self.is_fixed(source_id) else self._found.get(source_id)
+        self._store.setup.part_tops[source_id] = PartTop(
+            z=round(z, 3),
+            part_id=self._source_part_id(source_id),
+            feeder=feeder,
+            nozzle=nozzle.id,
+            z_offset=round(nozzle.z_offset, 4),
+        )
+        self._store.save()
+
+    def forget_part_top(self, source_id: str) -> None:
+        if self._store.setup.part_tops.pop(source_id, None) is not None:
+            self._store.save()
+
     # --- Fixed feeders: strips and trays on the bed -----------------------------------
 
     def is_fixed(self, source_id: str) -> bool:
@@ -918,6 +961,11 @@ class FeederService:
         old = self._store.setup.fixed.get(fixed_id)
         if old is None or _geometry(old) != _geometry(feeder):
             self._store.setup.learned.pop(fixed_id, None)
+        if old is None or (_geometry(old), old.pick_height) != (
+            _geometry(feeder),
+            feeder.pick_height,
+        ):
+            self._store.setup.part_tops.pop(fixed_id, None)
         self._store.setup.fixed[fixed_id] = feeder
         self._store.save()
         self._sim_fixed_taken[fixed_id] = set(range(feeder.picked))
@@ -928,6 +976,7 @@ class FeederService:
         self.fixed(fixed_id)
         del self._store.setup.fixed[fixed_id]
         self._store.setup.learned.pop(fixed_id, None)
+        self._store.setup.part_tops.pop(fixed_id, None)
         self._store.save()
         self._invalidate()
 
@@ -1166,9 +1215,33 @@ class FeederService:
         return None
 
     def _sim_top_at(self, x: float, y: float) -> float | None:
-        """The top of the part in the feeder pocket under (x, y), if one is there."""
+        """The top of the part in the feeder pocket or on the strip or tray under (x, y),
+        if one is there."""
         under = self._tape_under(x, y)
-        return under[1].top if under is not None else None
+        if under is not None:
+            return under[1].top
+        fixed = self._fixed_under(x, y)
+        if fixed is None:
+            return None
+        f = fixed[1]
+        top = f.pick_height
+        if top is None:
+            part, board = self.fixed_part(f), self._profile.board_height
+            if part is None or part.height is None or board is None:
+                return None
+            top = board + part.height
+        return top + self.sim_part_height_error
+
+    def _fixed_under(self, x: float, y: float) -> tuple[str, FixedFeeder, int, float, float] | None:
+        """The strip or tray place under (x, y), if any: its ID, the strip or tray, the
+        place's number, and where its part really lies."""
+        for fixed_id, f in self._store.setup.fixed.items():
+            for n in range(f.capacity):
+                at = f.position(n)
+                px, py = at.x + SIM_FIXED_ERROR.x, at.y + SIM_FIXED_ERROR.y
+                if math.hypot(px - x, py - y) <= SIM_PICK_RADIUS:
+                    return fixed_id, f, n, px, py
+        return None
 
     def _take_from_tape(self, x: float, y: float) -> tuple[PartShape, float, float, float] | None:
         """The part in the pocket under (x, y), taken out of its tape: its shape, true
@@ -1185,31 +1258,28 @@ class FeederService:
         return shape, px, py, tape.rotation + tape.part_rotation
 
     def _take_from_fixed(self, x: float, y: float) -> tuple[PartShape, float, float, float] | None:
+        under = self._fixed_under(x, y)
+        if under is None:
+            return None
+        fixed_id, f, n, px, py = under
+        taken = self._sim_fixed_taken.setdefault(fixed_id, set(range(f.picked)))
+        if n in taken:
+            return None
+        taken.add(n)
+        self._invalidate()
         library = self._library()
-        for fixed_id, f in self._store.setup.fixed.items():
-            taken = self._sim_fixed_taken.setdefault(fixed_id, set(range(f.picked)))
-            for n in range(f.capacity):
-                at = f.position(n)
-                px, py = at.x + SIM_FIXED_ERROR.x, at.y + SIM_FIXED_ERROR.y
-                if math.hypot(px - x, py - y) > SIM_PICK_RADIUS:
-                    continue
-                if n in taken:
-                    return None
-                taken.add(n)
-                self._invalidate()
-                part = self.fixed_part(f)
-                footprint = library.find_footprint(part.footprint_id) if part and library else None
-                shape = PartShape(
-                    body=(footprint.body.x, footprint.body.y)
-                    if footprint is not None and footprint.body is not None
-                    else None,
-                    pads=tuple((q.x, q.y, q.width, q.height, q.rotation) for q in footprint.pads)
-                    if footprint is not None
-                    else (),
-                    height=part.height if part is not None else None,
-                )
-                return shape, px, py, self.fixed_angle(f) or 0.0
-        return None
+        part = self.fixed_part(f)
+        footprint = library.find_footprint(part.footprint_id) if part and library else None
+        shape = PartShape(
+            body=(footprint.body.x, footprint.body.y)
+            if footprint is not None and footprint.body is not None
+            else None,
+            pads=tuple((q.x, q.y, q.width, q.height, q.rotation) for q in footprint.pads)
+            if footprint is not None
+            else (),
+            height=part.height if part is not None else None,
+        )
+        return shape, px, py, self.fixed_angle(f) or 0.0
 
     def _scene_tapes(self) -> tuple[TapeScene, ...]:
         if self._tapes is None:
@@ -1262,7 +1332,9 @@ class FeederService:
                     if footprint is not None
                     else (),
                     part_height=part.height if part is not None else None,
-                    top=bank.pick_height,
+                    top=bank.pick_height + self.sim_part_height_error
+                    if bank.pick_height is not None
+                    else None,
                     fiducial=(pick.x + fid.x, pick.y + fid.y),
                     fiducial_diameter=bank.fiducial_diameter or 1.0,
                     fiducial_marks=marks,

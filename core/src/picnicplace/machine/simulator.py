@@ -112,6 +112,10 @@ class SimulatorDriver(MotionDriver):
     # --- State ---------------------------------------------------------------------------
 
     @property
+    def time_scale(self) -> float:
+        return self._time_scale
+
+    @property
     def axes(self) -> Sequence[str]:
         return [a.name for a in self._profile.axes]
 

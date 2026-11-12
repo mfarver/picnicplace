@@ -5869,6 +5869,18 @@
       },
       "RunState": {
         "properties": {
+          "board_z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nozzle height at the board's top, found by touch on a fiducial at the start of the run. Empty if not measured: the job's or the profile's is used.",
+            "title": "Board Z"
+          },
           "current": {
             "anyOf": [
               {
@@ -6017,6 +6029,7 @@
           "status",
           "plan",
           "fix",
+          "board_z",
           "message",
           "error",
           "pause_requested",
@@ -6041,6 +6054,7 @@
             "enum": [
               "scanning",
               "finding_fiducials",
+              "measuring_board",
               "finding_feeder",
               "picking",
               "aligning",

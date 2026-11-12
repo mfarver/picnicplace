@@ -145,7 +145,9 @@ effect at once. The reset button next to one forgets it.
 - [ ] For parts held on the bed (a cut strip of 24 mm tape in a holder, or a tray), use
       **Add strip or tray** under **Strips and trays**. Give it its part, the number of
       parts (and rows, for a tray), and a pick height: the nozzle height at the top of a
-      part, measured with the nozzle jogged down onto one. Center the camera on the first
+      part, roughly (jog the nozzle down onto one). The first pick finds the part's top by
+      touch, starting 1.5 mm above the pick height and stopping 0.5 mm below it, and
+      keeps what it found. Center the camera on the first
       part and click **First part**, then on the last part and click **Last part** (on a
       tray, also the end of the first row). On a strip, **Find pocket** should land on
       the next part. The map shows how many parts each one has left.
@@ -160,8 +162,11 @@ effect at once. The reset button next to one forgets it.
       to check against the datasheet's tape drawing. Put a scrap board on the staging
       plate.
 - [ ] In the Machine workspace's **Single placement** panel, choose the nozzle and the
-      feeder, then **Pick**. It feeds, finds the pocket, picks at the tape's part height,
-      lifts, and checks the vacuum says a part is held.
+      feeder, then **Pick**. It feeds, finds the pocket, lowers onto the part, lifts, and
+      checks the vacuum says a part is held. The first pick from a feeder steps down
+      0.1 mm at a time with suction on until the vacuum seals on the part: its message
+      says where the part's top was, against the profile's height. Later picks from that
+      feeder go straight there, until one comes up empty or the part is changed.
 - [ ] **Align**: the part is shown to the bottom camera with its underside in focus, and
       the panel reports how far off center and how turned it sits on the nozzle.
 - [ ] Center the top camera on a spot on the board, click the crosshair button to use
@@ -191,8 +196,10 @@ effect at once. The reset button next to one forgets it.
       camera's crosshair.
 - [ ] Tick **Start in step mode** and **Start**: the run scans the feeders (a feeder
       moved since the checks is picked from where it is now), finds the board again,
-      and pauses before the first part. Before the first pick from each feeder, the
-      camera visits that feeder's fiducial.
+      and pauses before the first part. After finding the board, a nozzle sniffs its top on
+      the first fiducial, and every part is set down at that height: the step list shows
+      it next to how the board sits. Before the first pick from each feeder, the camera
+      visits that feeder's fiducial.
 - [ ] As the run goes, the list checks off each step and highlights the one under way
       (finding a feeder's fiducial, picking, aligning, or placing, and on which nozzle).
       A part already picked and waiting on its nozzle has a thin bar beside it. When a

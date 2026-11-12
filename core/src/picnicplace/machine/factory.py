@@ -1,5 +1,6 @@
 """Build the motion driver a config asks for."""
 
+import math
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -10,7 +11,7 @@ from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.marlin.driver import MarlinDriver
 from picnicplace.machine.marlin.fake import FakeMarlinPty, FakeSettings
 from picnicplace.machine.marlin.transport import LineTransport, SerialTransport
-from picnicplace.machine.simulator import SimulatorDriver
+from picnicplace.machine.simulator import SimulatorDriver, sim_profile
 
 
 async def _nothing() -> None:
@@ -47,13 +48,38 @@ def simulated_feeders(config: MachineConfig) -> SimulatedPhotonBus | None:
     )
 
 
+SIM_DATUM_RADIUS_MM = 25.0
+"""The simulated datum board's flat top, around its center fiducial."""
+
+
+def sim_datum_surface(config: MachineConfig) -> Callable[[float, float], float | None] | None:
+    """The simulated datum board's top, for a nozzle to seal on: the profile's height of
+    its center fiducial, off by the config's simulator error."""
+    fiducial = next(
+        (loc for loc in config.machine_profile.locations if loc.kind == "homing_fiducial"), None
+    )
+    if fiducial is None or fiducial.z is None:
+        return None
+    center, top = fiducial.position, fiducial.z + config.sim_datum_height_error
+
+    def surface(x: float, y: float) -> float | None:
+        near = math.hypot(x - center.x, y - center.y) <= SIM_DATUM_RADIUS_MM
+        return top if near else None
+
+    return surface
+
+
 def build_driver(config: MachineConfig) -> DriverBundle:
     profile = config.machine_profile
     if config.driver == "simulator":
         photon = simulated_feeders(config)
         driver = SimulatorDriver(
-            profile, config.sim_time_scale, config.sim_home_error, photon=photon
+            sim_profile(profile, config.sim_nozzle_offset_error),
+            config.sim_time_scale,
+            config.sim_home_error,
+            photon=photon,
         )
+        driver.surface_at = sim_datum_surface(config)
         return DriverBundle(driver, photon_sim=photon)
 
     assert profile.marlin is not None  # checked when the config was loaded

@@ -203,6 +203,27 @@ class MachineConfig(_Section):
             "bottom camera finds and corrects it."
         ),
     )
+    sim_nozzle_offset_error: dict[str, tuple[float, float]] = Field(
+        default_factory=dict[str, tuple[float, float]],
+        description=(
+            "Simulator only: how far each nozzle really is from the profile's offset, by "
+            "nozzle ID, as X and Y in mm. Calibrating the nozzle offsets finds and corrects it."
+        ),
+    )
+    sim_datum_height_error: float = Field(
+        default=0.0,
+        description=(
+            "Simulator only: how far (mm, up positive) the datum board's top really is from "
+            "the profile's height. Sniffing for it with a nozzle finds it."
+        ),
+    )
+    sim_calibration_disc: tuple[float, float] | None = Field(
+        default=None,
+        description=(
+            "Simulator only: where (X, Y in mm) a 6 mm paper disc lies on the bed, for "
+            "calibrating the nozzle offsets. None: there is none."
+        ),
+    )
     sim_rail_error: dict[str, tuple[float, float, float]] = Field(
         default_factory=dict[str, tuple[float, float, float]],
         description=(

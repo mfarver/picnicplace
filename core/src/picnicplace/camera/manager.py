@@ -7,6 +7,7 @@ from picnicplace.camera.hub import CameraHub
 from picnicplace.camera.synthetic import SceneState, SyntheticCamera
 from picnicplace.config import Config
 from picnicplace.machine.profile import Camera, MachineProfile, Point
+from picnicplace.machine.simulator import sim_profile
 from picnicplace.schemas import CameraInfo
 
 SIM_FOCUS_HEIGHT = -4.0
@@ -38,7 +39,13 @@ class CameraManager:
             self._sources[camera.id] = settings.source
             if settings.source == "synthetic":
                 truth = sim_truth(camera, config)
-                self._hubs[camera.id] = CameraHub(camera.id, SyntheticCamera(profile, truth, scene))
+                # The bottom camera sees the nozzles where they really are.
+                seen = (
+                    sim_profile(profile, config.machine.sim_nozzle_offset_error)
+                    if camera.looking == "up"
+                    else profile
+                )
+                self._hubs[camera.id] = CameraHub(camera.id, SyntheticCamera(seen, truth, scene))
             elif settings.source == "device":
                 assert settings.device is not None
                 source = DeviceCamera(

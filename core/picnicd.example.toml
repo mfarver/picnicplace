@@ -32,6 +32,12 @@ sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times fast
 # height (X, Y, and focus, in mm).
 # sim_top_camera_scale = 1.05
 # sim_bottom_camera_error = [-0.8, 0.5, -0.4]
+# Simulator: nozzles off the profile's offsets (by nozzle ID, X and Y in mm), the datum
+# board's top off the profile's height (mm, up positive), and a 6 mm paper disc lying at
+# X, Y on the bed, to try calibrating the nozzle offsets.
+# sim_nozzle_offset_error = { N1 = [0.4, -0.25], N2 = [-0.15, 0.3] }
+# sim_datum_height_error = 0.3
+# sim_calibration_disc = [217.0, 94.5]
 speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 when
                            # bringing up a machine. Homing speed is the firmware's.
 # How picks are kept centered on the parts (a run or a single pick can choose again):

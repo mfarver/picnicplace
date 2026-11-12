@@ -5,7 +5,7 @@ import type { CalibrationChecklist } from "./types";
 import { publishDescription } from "./useDescription";
 
 /** Operations whose results take the place of the profile's values. */
-const MEASURING = new Set(["camera_scale", "bottom_camera"]);
+const MEASURING = new Set(["camera_scale", "bottom_camera", "nozzle_offsets"]);
 
 /**
  * The calibration checklist. Fetched when the event socket connects, when an operation

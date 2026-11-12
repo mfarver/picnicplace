@@ -12,6 +12,7 @@ from picnicplace.auth import Permission
 from picnicplace.machine.bottom_camera import start_bottom_camera_calibration
 from picnicplace.machine.errors import NotHomedError
 from picnicplace.machine.local import LocalProfileState, LocationKind
+from picnicplace.machine.nozzle_offsets import start_nozzle_offset_calibration
 from picnicplace.machine.profile import KeepOut, MachineProfile, Point
 from picnicplace.schemas import (
     PROTOCOL_VERSION,
@@ -236,6 +237,37 @@ async def calibrate_bottom_camera(ctx: Context, body: BottomCameraRequest) -> Op
     sharpest picture (its focus), and step the head to measure its scale and turn. The
     result is kept (the calibration checklist) and used from then on."""
     return start_bottom_camera_calibration(ctx.machine, body.nozzle_id)
+
+
+class NozzleOffsetsRequest(WireModel):
+    nozzle_ids: list[str] | None = Field(
+        default=None, description="The nozzles to calibrate. Empty: all of them."
+    )
+    disc_diameter: float | None = Field(
+        default=None, gt=0, le=20, description="The disc's diameter in mm. Empty: 2 to 12 mm."
+    )
+    disc_thickness: float | None = Field(
+        default=None, ge=0, le=5, description="The disc's thickness in mm. Empty: paper's, 0.1."
+    )
+
+
+@router.post(
+    "/machine/nozzle-offsets",
+    tags=["machine"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def calibrate_nozzle_offsets(ctx: Context, body: NozzleOffsetsRequest) -> Operation:
+    """Measure each nozzle's offset from the top camera with a small disc (punched paper,
+    or a small round PCB) on the datum board, the top camera centered over it. Each nozzle
+    sniffs for the board's height (steps down with suction on until the vacuum seals),
+    then picks the disc up, turns it, and sets it down three times; how the disc moves
+    gives where the nozzle turns. The result is kept (the calibration checklist) and used
+    from then on."""
+    return start_nozzle_offset_calibration(
+        ctx.machine, body.nozzle_ids, body.disc_diameter, body.disc_thickness
+    )
 
 
 @router.post(

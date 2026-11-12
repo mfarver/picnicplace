@@ -2,8 +2,8 @@
 order, each saying whether it is done, its value and when it was measured, or that it
 is out of date and why.
 
-What the machine measures (homing, the homing fiducial, the top camera's scale) is kept
-in ``calibration.json`` in the data directory, with when it was measured. A crash (Z
+What the machine measures (homing, the homing fiducial, the cameras, the nozzle offsets)
+is kept in ``calibration.json`` in the data directory, with when it was measured. A crash (Z
 losing steps) marks what it may have knocked out of true as out of date, until it is
 measured again. Lines the core cannot measure yet say where their value comes from
 today (the profile, the config, or the bring-up checklist).
@@ -49,11 +49,14 @@ measured, but out of date (the reason says why). ``assumed``: the value comes fr
 profile or the config, and the machine cannot measure it yet. ``every_run``: done at
 the start of each run. ``not_needed``: this machine or setup has nothing to calibrate."""
 
-Action = Literal["home", "visual_home", "camera_scale", "bottom_camera", "calibrate_feeders"]
+Action = Literal[
+    "home", "visual_home", "camera_scale", "bottom_camera", "nozzle_offsets", "calibrate_feeders"
+]
 """What starts a line's calibration, for the Studio's button."""
 
-CRASH_STALES: tuple[LineId, ...] = ("homing_fiducial", "top_camera_scale")
-"""What a crash may knock out of true: the datum board and the camera on the head."""
+CRASH_STALES: tuple[LineId, ...] = ("homing_fiducial", "top_camera_scale", "nozzle_offsets")
+"""What a crash may knock out of true: the datum board, the camera on the head, and the
+nozzles."""
 HOMING_OFF_WARN_MM = 1.0
 """Visual homing finding the machine farther off than this is worth a look."""
 SCALE_WARN = 0.1
@@ -61,6 +64,9 @@ SCALE_WARN = 0.1
 the measured one is used, but so far off suggests the wrong lens or camera height."""
 ROTATION_WARN_DEG = 1.0
 """A bottom camera image turned more than this is worth straightening."""
+NOZZLE_OFFSET_WARN_MM = 1.0
+"""A nozzle measured farther than this from the profile's offset is worth a look: the
+measured offset is used, but so far off suggests a bent nozzle or a loose head."""
 
 TITLES: dict[LineId, str] = {
     "machine_frame": "Machine frame",
@@ -170,10 +176,21 @@ class CalibrationChecklist(WireModel):
         return next(line for line in self.lines if line.id == line_id)
 
 
+def nozzle_key(nozzle_id: str, axis: Literal["x", "y"]) -> str:
+    """The key of a nozzle's offset in a measurement's values."""
+    return f"nozzle.{nozzle_id}.{axis}"
+
+
 def apply_measurements(profile: MachineProfile, record: CalibrationRecord) -> None:
     """Use what the machine measured in place of the profile's values: the top camera's
-    scale, and the bottom camera's place, focus height, and scale. Out-of-date values
-    are still the best known, and are used until measured again."""
+    scale, the nozzle offsets, and the bottom camera's place, focus height, and scale.
+    Out-of-date values are still the best known, and are used until measured again."""
+    offsets = record.lines.get("nozzle_offsets")
+    for nozzle in profile.nozzles:
+        v = offsets.values if offsets else {}
+        kx, ky = nozzle_key(nozzle.id, "x"), nozzle_key(nozzle.id, "y")
+        if kx in v and ky in v:
+            nozzle.offset = Point(x=v[kx], y=v[ky])
     for camera in profile.cameras:
         if camera.looking == "down" and camera.mount == "head":
             m = record.lines.get("top_camera_scale")
@@ -187,7 +204,14 @@ def apply_measurements(profile: MachineProfile, record: CalibrationRecord) -> No
         if {"x", "y", "width", "height"} <= v.keys() and camera.looking == "down":
             camera.field_of_view = Point(x=v["x"] * v["width"], y=v["y"] * v["height"])
         if {"x", "y", "focus", "scale_x", "scale_y", "width", "height"} <= v.keys():
-            camera.position = Point(x=v["x"], y=v["y"])
+            # The place was found with a nozzle's tip: where the nozzle is now known to
+            # be, measured since, moves it with the nozzle.
+            dx = dy = 0.0
+            for nozzle in profile.nozzles:
+                kx, ky = nozzle_key(nozzle.id, "x"), nozzle_key(nozzle.id, "y")
+                if kx in v and ky in v:
+                    dx, dy = nozzle.offset.x - v[kx], nozzle.offset.y - v[ky]
+            camera.position = Point(x=v["x"] + dx, y=v["y"] + dy)
             camera.focus_height = v["focus"]
             camera.field_of_view = Point(x=v["scale_x"] * v["width"], y=v["scale_y"] * v["height"])
 
@@ -342,8 +366,28 @@ def build_checklist(
             "bottom_camera",
         )
 
-    # 6-9. Not measured yet.
-    add("nozzle_offsets", "assumed", "From the profile.")
+    # 6. Nozzle offsets from the top camera.
+    if (line := _measured("nozzle_offsets", 0, record, "nozzle_offsets")) is not None:
+        values = record.lines["nozzle_offsets"].values
+        off = max((v for k, v in values.items() if k.startswith("off.")), default=0.0)
+        warning = (
+            f"A nozzle is {off:.2f} mm from the profile's offset (the measured offset is "
+            "used): check it is straight and the head is tight"
+            if off > NOZZLE_OFFSET_WARN_MM
+            else None
+        )
+        add_measured(line, warning)
+    else:
+        add(
+            "nozzle_offsets",
+            "assumed",
+            "From the profile. Lay a small paper disc (from a hole punch) on the datum board, "
+            "center the top camera on it, and calibrate: each nozzle picks it up, turns it, "
+            "and sets it down.",
+            "nozzle_offsets",
+        )
+
+    # 7-9. Not measured yet.
     add("nozzle_runout", "assumed", "Not measured: taken as none.")
     fixed = feeders.fixed if feeders else []
     no_height = [f.id for f in fixed if f.feeder.pick_height is None]

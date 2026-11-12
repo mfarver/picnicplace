@@ -669,6 +669,10 @@ class MachineService:
         """A camera as the profile gives it, before measurements took its place."""
         return next((c for c in self._design.cameras if c.id == camera_id), None)
 
+    def design_nozzle(self, nozzle_id: str) -> Nozzle | None:
+        """A nozzle as the profile gives it, before measurements took its place."""
+        return next((n for n in self._design.nozzles if n.id == nozzle_id), None)
+
     def start_measure_camera_scale(self) -> Operation:
         """Measure the top camera's millimeters per pixel using the homing fiducial."""
         self._check_can_move()

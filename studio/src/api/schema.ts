@@ -1212,6 +1212,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/nozzle-offsets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Calibrate Nozzle Offsets
+         * @description Measure each nozzle's offset from the top camera with a small disc (punched paper,
+         *     or a small round PCB) on the datum board, the top camera centered over it. Each nozzle
+         *     sniffs for the board's height (steps down with suction on until the vacuum seals),
+         *     then picks the disc up, turns it, and sets it down three times; how the disc moves
+         *     gives where the nozzle turns. The result is kept (the calibration checklist) and used
+         *     from then on.
+         */
+        post: operations["calibrate_nozzle_offsets_api_v1_machine_nozzle_offsets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/outputs/{output_id}": {
         parameters: {
             query?: never;
@@ -1963,7 +1988,7 @@ export interface components {
              * Action
              * @description What starts it, if the core can.
              */
-            action: ("home" | "visual_home" | "camera_scale" | "bottom_camera" | "calibrate_feeders") | null;
+            action: ("home" | "visual_home" | "camera_scale" | "bottom_camera" | "nozzle_offsets" | "calibrate_feeders") | null;
             /**
              * Detail
              * @description Its value, or what to do, in words.
@@ -3577,6 +3602,24 @@ export interface components {
             picked_at: components["schemas"]["Point"] | null;
             /** Slot Id */
             slot_id: string;
+        };
+        /** NozzleOffsetsRequest */
+        NozzleOffsetsRequest: {
+            /**
+             * Disc Diameter
+             * @description The disc's diameter in mm. Empty: 2 to 12 mm.
+             */
+            disc_diameter?: number | null;
+            /**
+             * Disc Thickness
+             * @description The disc's thickness in mm. Empty: paper's, 0.1.
+             */
+            disc_thickness?: number | null;
+            /**
+             * Nozzle Ids
+             * @description The nozzles to calibrate. Empty: all of them.
+             */
+            nozzle_ids?: string[] | null;
         };
         /** NozzleRequest */
         NozzleRequest: {
@@ -7805,6 +7848,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    calibrate_nozzle_offsets_api_v1_machine_nozzle_offsets_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NozzleOffsetsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

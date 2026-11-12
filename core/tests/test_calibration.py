@@ -9,9 +9,12 @@ from fastapi.testclient import TestClient
 from picnicplace.api import create_app
 from picnicplace.calibration import (
     CalibrationStore,
+    apply_measurements,
     build_checklist,
+    nozzle_key,
     run_issues,
 )
+from picnicplace.config import Config
 from tests.conftest import connect, fast_config
 from tests.test_vision import home, visual_config
 
@@ -185,3 +188,104 @@ def test_the_bottom_camera_search_needs_a_focus_height(tmp_path: Path) -> None:
         s.home()
         op = s.wait(s.post("/api/v1/machine/bottom-camera", {}))
         assert op["status"] == "failed" and "focus_height" in op["error"]
+
+
+def offsets_config(**machine: object) -> Config:
+    fiducial = (217.0, 106.0)  # the LumenPnP datum board's center
+    return fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_calibration_disc": (fiducial[0], fiducial[1] - 11.5),
+            **machine,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+
+
+def test_calibrate_the_nozzle_offsets() -> None:
+    """The simulated nozzles are off from the profile's offsets, and the datum board is
+    0.3 mm higher than the profile says. Each nozzle sniffs for the board, then turns a
+    paper disc lying on it: that finds both nozzles, and the board's height."""
+    errors = {"N1": (0.4, -0.25), "N2": (-0.15, 0.3)}
+    config = offsets_config(sim_nozzle_offset_error=errors, sim_datum_height_error=0.3)
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert lines(client)["nozzle_offsets"]["action"] == "nozzle_offsets"
+        design = client.get("/api/v1/machine/description").json()["nozzles"]
+        assert home(s)["status"] == "succeeded"
+        disc = config.machine.sim_calibration_disc
+        assert disc is not None
+        cam = client.get("/api/v1/machine/description").json()["cameras"][0]["position"]
+        s.wait(
+            s.post(
+                "/api/v1/machine/move",
+                {"position": {"X": disc[0] - cam["x"], "Y": disc[1] - cam["y"]}},
+            )
+        )
+        op = s.wait(s.post("/api/v1/machine/nozzle-offsets", {}))
+        assert op["status"] == "succeeded", op
+        nozzles = client.get("/api/v1/machine/description").json()["nozzles"]
+        for before, after in zip(design, nozzles, strict=True):
+            dx, dy = errors[after["id"]]
+            assert after["offset"]["x"] == pytest.approx(before["offset"]["x"] + dx, abs=0.03)
+            assert after["offset"]["y"] == pytest.approx(before["offset"]["y"] + dy, abs=0.03)
+        line = lines(client)["nozzle_offsets"]
+        assert line["status"] == "done" and line["warning"] is None
+        assert "touching the datum board at Z -27.2" in str(line["detail"])
+        assert s.state()["z_safe"]
+
+    # Used again after a restart.
+    with TestClient(create_app(config)) as client:
+        nozzles = client.get("/api/v1/machine/description").json()["nozzles"]
+        assert nozzles[0]["offset"]["x"] == pytest.approx(design[0]["offset"]["x"] + 0.4, abs=0.03)
+
+
+def test_the_bottom_camera_moves_with_its_nozzle(tmp_path: Path) -> None:
+    """The bottom camera's place was found with N1's tip: when N1's offset is measured
+    later, the camera's place moves with it."""
+    store = CalibrationStore(None)
+    profile = fast_config(machine={"profile": "lumenpnp-v4.1"}).machine.machine_profile
+    n1 = profile.nozzles[0]
+    store.record(
+        "bottom_camera",
+        "found",
+        {
+            "x": 200.0,
+            "y": 150.0,
+            "focus": -3.5,
+            "scale_x": 0.03,
+            "scale_y": 0.03,
+            "width": 1280,
+            "height": 720,
+            nozzle_key("N1", "x"): n1.offset.x,
+            nozzle_key("N1", "y"): n1.offset.y,
+        },
+    )
+    store.record(
+        "nozzle_offsets",
+        "measured",
+        {nozzle_key("N1", "x"): n1.offset.x + 0.5, nozzle_key("N1", "y"): n1.offset.y - 0.2},
+    )
+    apply_measurements(profile, store.get())
+    bottom = next(c for c in profile.cameras if c.looking == "up")
+    assert bottom.position.x == pytest.approx(200.5)
+    assert bottom.position.y == pytest.approx(149.8)
+
+
+def test_sniffing_stops_short_of_crashing() -> None:
+    """With no board where the profile says (here, 3 mm lower than its height), the
+    nozzle stops 1.5 mm below that height (or at the bottom of its travel) and says so."""
+    config = offsets_config(sim_datum_height_error=-3.0)
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        disc = config.machine.sim_calibration_disc
+        assert disc is not None
+        cam = client.get("/api/v1/machine/description").json()["cameras"][0]["position"]
+        s.wait(
+            s.post(
+                "/api/v1/machine/move",
+                {"position": {"X": disc[0] - cam["x"], "Y": disc[1] - cam["y"]}},
+            )
+        )
+        op = s.wait(s.post("/api/v1/machine/nozzle-offsets", {"nozzle_ids": ["N1"]}))
+        assert op["status"] == "failed" and "did not seal" in op["error"]
+        assert s.state()["z_safe"]

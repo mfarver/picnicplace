@@ -26,6 +26,11 @@ class MotionDriver(ABC):
         Waits for the machine to settle (the vacuum, say) are divided by it."""
         return 1.0
 
+    def tip_fitted(self, nozzle_id: str, tip_id: str | None) -> None:
+        """The operator fitted a tip on a nozzle. Only a simulator, which has no hands to
+        change it, takes note."""
+        return None
+
     @property
     def halted(self) -> bool:
         """The firmware stopped itself (or after an emergency stop) and needs a reset."""

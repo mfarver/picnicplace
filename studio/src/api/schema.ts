@@ -1237,6 +1237,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/nozzles/{nozzle_id}/tip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Nozzle Tip
+         * @description Say which tip is now fitted on a nozzle, after changing it by hand. It is kept, and
+         *     the nozzle's Z offset and vacuum levels become those measured with that tip; a tip
+         *     not measured yet marks the nozzle offsets out of date until they are calibrated.
+         */
+        put: operations["set_nozzle_tip_api_v1_machine_nozzles__nozzle_id__tip_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/outputs/{output_id}": {
         parameters: {
             query?: never;
@@ -3309,6 +3331,11 @@ export interface components {
             readonly nozzle_reach: {
                 [key: string]: components["schemas"]["Rect"];
             };
+            /**
+             * Nozzle Tips
+             * @description The kinds of nozzle tip this machine can be fitted with.
+             */
+            nozzle_tips: components["schemas"]["NozzleTip"][];
             /** Nozzles */
             nozzles: components["schemas"]["Nozzle"][];
             /** Outputs */
@@ -3571,6 +3598,11 @@ export interface components {
             pump_output: string | null;
             /** Rotation Axis */
             rotation_axis: string;
+            /**
+             * Tip
+             * @description Which of the profile's nozzle tips is fitted, by ID: set by the operator when they change it, and kept in the data directory. None: not said. The Z offset and vacuum levels are those measured with this tip.
+             */
+            tip: string | null;
             /** @description Measured, not set by hand: what this nozzle's vacuum sensor reads with its tip open, sealed, and holding a part. None: its sensor's threshold is used. */
             vacuum: components["schemas"]["VacuumLevels"] | null;
             /** Vacuum Input */
@@ -3633,6 +3665,35 @@ export interface components {
         NozzleRequest: {
             /** Nozzle Id */
             nozzle_id: string;
+        };
+        /**
+         * NozzleTip
+         * @description A kind of nozzle tip: the part of a nozzle that touches the part, changed by hand
+         *     or by a tip changer to suit the parts being placed.
+         */
+        NozzleTip: {
+            /** Id */
+            id: string;
+            /**
+             * Inner Diameter
+             * @description Across the hole in its end, in mm, if known: how hard it can pull.
+             */
+            inner_diameter: number | null;
+            /** Label */
+            label: string;
+            /**
+             * Outer Diameter
+             * @description Across the tip's end, in mm: it must fit on the part's top.
+             */
+            outer_diameter: number;
+        };
+        /** NozzleTipRequest */
+        NozzleTipRequest: {
+            /**
+             * Tip Id
+             * @description The tip now fitted, from the profile's nozzle_tips. None: not said.
+             */
+            tip_id: string | null;
         };
         /** OpenPnpImportRequest */
         OpenPnpImportRequest: {
@@ -7915,6 +7976,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_nozzle_tip_api_v1_machine_nozzles__nozzle_id__tip_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                nozzle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NozzleTipRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineProfile"];
                 };
             };
             /** @description The machine cannot do this right now, or this client does not hold the control lease. */

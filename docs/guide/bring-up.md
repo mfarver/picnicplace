@@ -101,8 +101,10 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       each. A nozzle more than a millimeter from the profile's offset is flagged. For a
       PCB disc, give its thickness (`disc_thickness` in the API); the Studio assumes
       paper. Where each nozzle touched the board also corrects its heights from then
-      on, so a longer or shorter tip picks at the part's top and places on the board:
-      calibrate again after changing a tip. The same steps read each nozzle's vacuum
+      on, so a longer or shorter tip picks at the part's top and places on the board.
+      First say which tip is on each nozzle (under the checklist), and calibrate once with
+      each tip you use: after a change, say which tip is now on, and its heights and
+      vacuum levels come back. A tip not calibrated yet marks line 6 out of date. The same steps read each nozzle's vacuum
       open, sealed on the board, and holding the disc (line 9), and set the nozzle's own
       pick threshold between them: a weak pump or a tip that leaks a little still tells
       a part held from none. Line 9 shows the readings.

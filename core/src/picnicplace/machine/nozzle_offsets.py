@@ -170,6 +170,11 @@ async def turn_disc(
     return reading
 
 
+def with_tip(nozzle: Nozzle) -> str:
+    """A nozzle's name, with its tip if one is said, for a message."""
+    return nozzle.label + (f" with the {nozzle.tip} tip" if nozzle.tip else "")
+
+
 def reading(value: float | None) -> str:
     """A vacuum reading for a message: large raw counts with thousands separators."""
     if value is None:
@@ -304,9 +309,9 @@ def start_nozzle_offset_calibration(
             values[f"spread.{n.id}"] = fix.spread
             # Kept raw, so a new Z offset follows from it whatever the old one was.
             raw = heights[n.id] + n.z_offset
-            values[datum_key(n.id)] = raw
+            values[datum_key(n.id, n.tip)] = raw
             parts.append(
-                f"{n.label}: ({fix.x:.3f}, {fix.y:.3f}), {off:.2f} mm from the profile's, "
+                f"{with_tip(n)}: ({fix.x:.3f}, {fix.y:.3f}), {off:.2f} mm from the profile's, "
                 f"touching the datum board at Z {raw:.2f}"
             )
         spread = max(f.spread for f in fixes)
@@ -321,19 +326,23 @@ def start_nozzle_offset_calibration(
 
 
 def record_vacuum(machine: MachineService, levels: dict[str, VacuumLevels]) -> None:
-    """Keep the nozzles' measured vacuum levels (line 9), with those of nozzles not
-    measured this time."""
+    """Keep the nozzles' measured vacuum levels (line 9) with the tips they have fitted,
+    with those of other nozzles and tips measured before."""
     previous = machine.calibration.get().lines.get("vacuum")
     values = dict(previous.values) if previous else {}
     for nozzle_id, found in levels.items():
+        tip = machine.nozzle(nozzle_id).tip
         for name in ("open", "sealed", "held", "threshold"):
-            values[vacuum_key(nozzle_id, name)] = getattr(found, name)
+            values[vacuum_key(nozzle_id, name, tip)] = getattr(found, name)
     parts: list[str] = []
     for nozzle in machine.profile.nozzles:
-        v = {n: values.get(vacuum_key(nozzle.id, n)) for n in ("open", "held", "threshold")}
+        v = {
+            n: values.get(vacuum_key(nozzle.id, n, nozzle.tip))
+            for n in ("open", "held", "threshold")
+        }
         if all(x is not None for x in v.values()):
             parts.append(
-                f"{nozzle.label}: open {reading(v['open'])}, holding a part "
+                f"{with_tip(nozzle)}: open {reading(v['open'])}, holding a part "
                 f"{reading(v['held'])}, threshold {reading(v['threshold'])}"
             )
     unit = next((i.unit for i in machine.profile.inputs if i.role == "vacuum" and i.unit), None)

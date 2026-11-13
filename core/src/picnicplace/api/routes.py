@@ -138,6 +138,28 @@ async def reset_location(ctx: Context, kind: LocationKind) -> MachineProfile:
     return ctx.machine.profile
 
 
+class NozzleTipRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tip_id: str | None = Field(
+        description="The tip now fitted, from the profile's nozzle_tips. None: not said."
+    )
+
+
+@router.put(
+    "/machine/nozzles/{nozzle_id}/tip",
+    tags=["machine"],
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def set_nozzle_tip(ctx: Context, nozzle_id: str, body: NozzleTipRequest) -> MachineProfile:
+    """Say which tip is now fitted on a nozzle, after changing it by hand. It is kept, and
+    the nozzle's Z offset and vacuum levels become those measured with that tip; a tip
+    not measured yet marks the nozzle offsets out of date until they are calibrated."""
+    ctx.machine.set_tip(nozzle_id, body.tip_id)
+    return ctx.machine.profile
+
+
 @router.put(
     "/machine/outputs/{output_id}",
     tags=["machine"],

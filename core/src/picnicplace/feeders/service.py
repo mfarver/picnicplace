@@ -912,7 +912,9 @@ class FeederService:
         if not self.is_fixed(source_id) and top.feeder != self._found.get(source_id):
             return None
         nozzle = next((n for n in self._machine.profile.nozzles if n.id == top.nozzle), None)
-        if nozzle is None or abs(nozzle.z_offset - top.z_offset) > Z_OFFSET_SAME_MM:
+        if nozzle is None or nozzle.tip != top.tip:
+            return None
+        if abs(nozzle.z_offset - top.z_offset) > Z_OFFSET_SAME_MM:
             return None
         return top.z
 
@@ -923,6 +925,7 @@ class FeederService:
             part_id=self._source_part_id(source_id),
             feeder=feeder,
             nozzle=nozzle.id,
+            tip=nozzle.tip,
             z_offset=round(nozzle.z_offset, 4),
         )
         self._store.save()

@@ -514,8 +514,9 @@ item by their `id`, anything else replaced):
    tray.
 2. **`[[machine.locations]]` in the config**, for owners who keep places there.
 3. **Local profile** (`local-profile.json` in the core's data directory): what is true of
-   this one machine. The Studio writes it. The discard and park locations are set in
-   the Calibration panel by centering the top camera on them, and take effect at once.
+   this one machine. The Studio writes it. The discard and park locations are set on
+   the setup wizard's discard and park page by centering the top camera on them, and
+   take effect at once.
    Bring-up findings (axis directions, measured keep-outs) are saved there with **Save
    to this machine** and take effect when the core restarts. A local value can be reset
    to fall back to the layers under it.
@@ -837,14 +838,28 @@ The interface is split along that line, into two programs (§5.4):
   that aligns parts on the bottom camera does not start until the bottom camera is
   calibrated, and the operator is told which line to do. The core reports the
   checklist's state to the Creator, so engineers can see which machines are ready.
-  **Today** the checklist is the Machine workspace's Calibration panel: each line of
-  §7.7 with its state, a button for what the machine can already do (home, visual
-  homing, the top camera's scale, the bottom camera, the nozzle offsets with each
-  nozzle's vacuum levels), and what the machine measured and when, kept in the data
-  directory. Measured camera values, nozzle offsets, and vacuum thresholds take the place
-  of the profile's from then on, and after a restart. Z losing steps marks the homing
-  fiducial, the camera's scale, the nozzle offsets, and the vacuum levels out of date. A run's plan stops on a bottom camera with no
-  focus height, and warns of anything out of date.
+  **Today** the checklist is the Machine workspace's setup wizard: one page per step of
+  §7.7, each saying what it learns, what to do before it (Start stays off until each item
+  is ticked), and what will happen, then what it found. Measuring pages start what the
+  machine can already do (visual homing, the top camera's scale, the bottom camera, the
+  nozzle offsets with each nozzle's vacuum levels); the tips fitted and the discard and
+  park locations are confirmed by hand, and strips and trays may be skipped. What the
+  machine measured and when is kept in `calibration.json`, and the pages confirmed in
+  `wizard.json`, so the wizard can be left and taken up again from any Studio. Measured
+  camera values, nozzle offsets, and vacuum thresholds take the place of the profile's
+  from then on, and after a restart. Z losing steps marks the homing fiducial, the
+  camera's scale, the nozzle offsets, and the vacuum levels out of date. Until every
+  page is done, the machine service limits the machine: homing, jogging and the wizard's
+  steps at a quarter of full speed at most; picks, placements and runs refused; teaching
+  feeders once homing and the top camera are done. Calibrated, a page going out of date
+  pauses runs until it is redone, while a single pick or placement goes ahead with a
+  warning. The machine's travel limits are a separate check, always enforced. A banner
+  across the top of every workspace says the machine is limited, names the next page,
+  and has Continue calibration. The simulator is held to the limits only when its config
+  asks (`sim_calibration_limits`). Choosing the machine, its serial port and cameras in
+  the wizard, the interview for an unlisted machine, and stopping a step without an
+  emergency stop are planned; until then pages 2 to 6 follow the bring-up checklist. A
+  run's plan also stops on a bottom camera with no focus height.
 
 The job file is one JSON document, as saved jobs are today, holding a revision: its boards, panel,
 placements, fiducials, and copies of the parts, footprints, and tapes it uses. It is
@@ -976,7 +991,7 @@ refusing to connect.
 | **M2 — Calibration** | Camera scale and lens calibration, camera-to-nozzle offsets, nozzle runout, bottom camera position. Guided wizards. WebRTC video. Started: fiducial finder, visual homing (after `G28`, center the top camera on the homing fiducial and correct X/Y with `G92`), and a camera scale measurement, all tested against the simulator, whose homing has a realistic error for visual homing to find. Discard and park locations set by centering the top camera on them, kept in the machine's local profile (layered over the built-in profile, which can now extend another), along with bring-up findings. |
 | **M3 — Single placement** | Parts/packages library, Photon feeder support, pick, bottom vision alignment, place at a manually entered location. Started: the parts library (footprints, parts with height and its source, tapes after EIA-481 as records parts share, with rotation in tape, pin 1 marked on footprints, a tape preview with a fit check, and a check that a feeder's tape width matches its part's; §7.8), merge-only imports, OpenPnP library import, and a library editor in the Studio. Photon feeders: discovery and initialization, part assignment by feeder ID, feeding, simulated feeders with drawn tape, slot pick locations taught by eye or found from each feeder's fiducial, and pockets found from the tape's sprocket holes; a Feeders workspace and a bring-up checklist in the Studio. Single placement: pick (feed, find the pocket, pick at the tape's part height, check the vacuum), align on the bottom camera (the part's offset and angle on the nozzle), and place at a given location and angle (with a part-off check), one step at a time or all three, in the simulator to within 0.05 mm; camera captures for tuning vision on real images. |
 | **M4 — Jobs** | Import KiCad/CSV placements, fiducial board alignment, planner, executor with pause/step/stop, run history. Boards must lie inside the profile's placement area (where every nozzle can reach, on the staging plates) and clear of its keep-outs; import warns about any placement a nozzle cannot reach. Started: KiCad board import (footprints with pads, part numbers from the board or the schematic's BOM), panels recovered from a KiKit panel file, jobs placed on the bed with reach, camera, and keep-out checks and a search for a place that fits (parts within every nozzle's reach; empty rails may lie outside it), saved as job files, and a Prepare workspace. Runs: a planner that is also a dry run against the loaded feeders (blocked placements and why, parts only some nozzles reach, tape too wide for the feeders), board alignment from up to three fiducials (a rigid fit), batches with a part on every nozzle that can take one, lowest parts first, retries for empty picks, discard and retry after a failed alignment (with no discard location, the run parks the head and pauses for the operator to take the part off and click Part removed), pause, step, resume, stop, and skip, and a Run workspace filled by the job's steps, checked off and the one under way highlighted (the Machine workspace shows the map with a few of them under it, for remote viewers); in the simulator a whole board lands within 0.06 mm of where the misplaced board wants its parts. Strips and trays held on the bed as feeders, with refills (the run pauses and parks the head). Feeders scanned again at the start of each run, and each feeder's fiducial found on its first pick in the run (kept with the feeder, not the slot). Picks kept centered by the top camera (pockets from sprocket holes), the bottom camera (each feeder learns where its parts really lie from earlier picks), or auto (the bottom camera, with the top camera on first picks and after a bad pick), the owner's choice. A flight recorder for sending real frames and timelines to developers, with vision replay. Run history is to come. |
-| **M5 — 1.0 polish** | Installer/packaging, docs. The operator app and the Creator (§5.4, §8.2), in this order: the self-contained job revision and its job file, and the API between a core and a Creator (pairing, pulling published jobs, sending reports, run records, calibration status, and what is loaded); the calibration checklist in today's Studio, checked before each run; the Creator as a server of its own with accounts, revisions, the library that ships with PicnicPlace, house parts, and problem reports; the core's side (the job cache, the queue of reports, Report a problem, the setup list), with today's Studio becoming the operator app. Parts counted on reels as well as strips and trays. Started: job revisions (a design with a copy of the library entries it uses, a hash, kept once and never changed), published from Prepare, downloaded as job files, and loaded from disk; runs run published revisions, with where the panel sits kept by the machine; the calibration checklist in the Machine workspace, with measurements kept and dated, made out of date by a crash, and checked by each run's plan; the top camera's scale, the bottom camera (place, focus, scale), and the nozzle offsets (with a paper disc on the datum board, its height sniffed) calibrated and used; each nozzle's heights corrected from where it touched the datum board, and the board's top and each feeder's part tops found by touch; each nozzle's vacuum levels measured, and its own threshold used; which tip is fitted on each nozzle, with heights and vacuum levels kept for each tip, and the fitted tip's size seen by the bottom camera. Done early: strip and tray feeders (M4), OpenPnP library import (M3). |
+| **M5 — 1.0 polish** | Installer/packaging, docs. The operator app and the Creator (§5.4, §8.2), in this order: the self-contained job revision and its job file, and the API between a core and a Creator (pairing, pulling published jobs, sending reports, run records, calibration status, and what is loaded); the calibration checklist in today's Studio, checked before each run; the Creator as a server of its own with accounts, revisions, the library that ships with PicnicPlace, house parts, and problem reports; the core's side (the job cache, the queue of reports, Report a problem, the setup list), with today's Studio becoming the operator app. Parts counted on reels as well as strips and trays. Started: job revisions (a design with a copy of the library entries it uses, a hash, kept once and never changed), published from Prepare, downloaded as job files, and loaded from disk; runs run published revisions, with where the panel sits kept by the machine; the calibration checklist in the Machine workspace, with measurements kept and dated, made out of date by a crash, and checked by each run's plan; the top camera's scale, the bottom camera (place, focus, scale), and the nozzle offsets (with a paper disc on the datum board, its height sniffed) calibrated and used; each nozzle's heights corrected from where it touched the datum board, and the board's top and each feeder's part tops found by touch; each nozzle's vacuum levels measured, and its own threshold used; which tip is fitted on each nozzle, with heights and vacuum levels kept for each tip, and the fitted tip's size seen by the bottom camera; the setup wizard's calibration pages, with the machine limited until they are done and a banner saying so. Done early: strip and tray feeders (M4), OpenPnP library import (M3). |
 
 ## 12. Repository layout
 

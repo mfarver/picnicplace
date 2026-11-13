@@ -107,6 +107,10 @@ class DataConfig(_Section):
         return self.dir.expanduser() / "recordings"
 
     @property
+    def wizard_path(self) -> Path:
+        return self.dir.expanduser() / "wizard.json"
+
+    @property
     def tips_path(self) -> Path:
         return self.dir.expanduser() / "nozzle-tips.json"
 
@@ -238,6 +242,14 @@ class MachineConfig(_Section):
             "Simulator only: how much longer (mm) each kind of nozzle tip really is, by tip "
             "ID, on whichever nozzle it is said to be fitted: it reaches that much lower. "
             "Calibrating the nozzle offsets with the tip fitted finds it."
+        ),
+    )
+    sim_calibration_limits: bool = Field(
+        default=False,
+        description=(
+            "Simulator only: hold the simulated machine to the setup wizard's limits, as a "
+            "real machine always is (no picks, placements or runs until it is calibrated, "
+            "and moves at a quarter of full speed). Off, the simulator can try anything."
         ),
     )
     sim_vacuum_levels: dict[str, tuple[float, float]] = Field(

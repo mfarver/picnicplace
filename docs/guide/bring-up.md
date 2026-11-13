@@ -82,22 +82,23 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
 
 - [ ] Jog right: the top camera's picture slides left. Jog back: it slides down. If not,
       adjust `flip_x`, `flip_y`, or `rotation`.
-- [ ] **Visual home** on line 3 of the Calibration panel's checklist finds the datum
+- [ ] In the Machine workspace's **Setup wizard**, **Start** on the visual homing page
+      (page 7) finds the datum
       fiducial and reports a correction of well under a millimeter.
-- [ ] **Measure** on line 4 (the top camera's scale) reports a size close to the
+- [ ] **Start** on page 8 (the top camera's scale) reports a size close to the
       profile's field of view; the line warns if it is more than 10% off. The measured
       scale is used from then on, and the camera views' scale bars follow it.
-- [ ] With an empty nozzle tip fitted, **Calibrate** on line 5 (the bottom camera)
+- [ ] With an empty nozzle tip fitted, **Start** on page 10 (the bottom camera)
       centers the tip over the camera, steps it up and down for the sharpest picture,
       and measures the camera's scale. The nozzle never goes more than 2 mm below the
       profile's focus height. Check the place found is within a millimeter or two of
       the profile's, and the image is not turned more than a degree. If you said which
-      tip is fitted (under the checklist), it looks for a circle that tip's size and
+      tip is fitted (page 9, nozzle tips), it looks for a circle that tip's size and
       says how big the tip's end looked; a note that it looks unlike the tip means the
       wrong tip is fitted, or it is dirty.
 - [ ] Lay a small paper disc (from a hole punch, or a small round PCB) flat on the datum
       board, clear of its center dot, center the top camera on it, and click
-      **Calibrate** on line 6 (the nozzle offsets). Each nozzle first sniffs for the
+      **Start** on page 11 (nozzle offsets, heights and vacuum). Each nozzle first sniffs for the
       board's height on its center dot: with suction on, it steps down until the vacuum
       seals, never more than 1.5 mm below the profile's height. Then it picks the disc
       up, turns it, and sets it down three times, and the top camera finds it after
@@ -105,21 +106,31 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       PCB disc, give its thickness (`disc_thickness` in the API); the Studio assumes
       paper. Where each nozzle touched the board also corrects its heights from then
       on, so a longer or shorter tip picks at the part's top and places on the board.
-      First say which tip is on each nozzle (under the checklist), and calibrate once with
+      First say which tip is on each nozzle (page 9), and calibrate once with
       each tip you use: after a change, say which tip is now on, and its heights and
-      vacuum levels come back. A tip not calibrated yet marks line 6 out of date. The same steps read each nozzle's vacuum
-      open, sealed on the board, and holding the disc (line 9), and set the nozzle's own
-      pick threshold between them: a weak pump or a tip that leaks a little still tells
-      a part held from none. Line 9 shows the readings.
+      vacuum levels come back. A tip not calibrated yet marks page 11 out of date. The
+      same steps read each nozzle's vacuum open, sealed on the board, and holding the
+      disc, and set the nozzle's own pick threshold between them: a weak pump or a tip
+      that leaks a little still tells a part held from none. Page 11 shows the readings.
 
-The checklist lists every calibration in order: what is done (with its value and when it
-was measured), what is still to do, what is out of date and why (a crash, Z losing
-steps), and what comes from the profile because the machine cannot measure it yet. What
-the machine measures is kept in `calibration.json` in the data directory.
+The wizard's overview lists every page in order: what is done (with what it found and
+when), what is still to do, and what is out of date and why (a crash, Z losing steps).
+**Continue** opens the next page; **Exit, and finish later** leaves it, and any Studio
+finds it where it was. What the machine measures is kept in `calibration.json` in the
+data directory, and the pages you confirm or skip in `wizard.json`.
+
+Until every page is done, the machine is limited, and a banner across the top of every
+workspace says so, with **Continue calibration**. Homing, jogging and the wizard's steps
+work, at a quarter of full speed at most. Picks, placements and runs are refused, and
+teaching feeders waits until homing and the top camera are done. Once calibrated, a page
+going out of date (after a crash) pauses runs until it is redone; a single pick or
+placement still works, with a warning naming what is out of date. Pages 2 to 6 (setting
+the machine up) take their state from the bring-up checklist until they are built into
+the wizard.
 
 ### Discard and park
 
-In the Machine workspace's **Calibration** panel:
+On the setup wizard's **Discard and park** page (page 13):
 
 - [ ] Jog the top camera over the middle of the discard tray (or wherever rejected parts
       should go) and click **Set discard here**. A run drops a part the bottom camera

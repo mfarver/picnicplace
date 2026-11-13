@@ -23,6 +23,7 @@ from picnicplace.operations import OperationManager
 from picnicplace.placement import PlacementService
 from picnicplace.presence import PresenceTracker
 from picnicplace.schemas import ClientInfo
+from picnicplace.wizard import Wizard
 
 
 @dataclass
@@ -38,6 +39,7 @@ class AppContext:
     bring_up: BringUpStore
     captures: CaptureStore
     local_profile: LocalProfile
+    wizard: Wizard
     library: Library | None = None
     """Opened when the app starts, so building the app (as for the OpenAPI document)
     touches no files."""

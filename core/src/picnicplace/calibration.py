@@ -554,7 +554,7 @@ def current(machine: "MachineService", feeders: "FeederService | None") -> Calib
     """The checklist as the machine stands now."""
     return build_checklist(
         machine.profile,
-        machine.state.homed,
+        machine.homed,
         machine.calibration.get(),
         feeders.state() if feeders else None,
     )

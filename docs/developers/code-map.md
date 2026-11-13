@@ -90,6 +90,7 @@ A request goes **route → service → machine service → driver**:
 | `vision/focus.py` | How sharp part of a frame is, for finding a camera's focus |
 | `capture.py` | Saves single frames on request, for tuning vision on real images |
 | `calibration.py` | The calibration checklist: what the machine has measured of itself and when, using it in place of the profile's values, what a crash makes out of date, and what stops a run |
+| `wizard.py` | The setup wizard: each page's state (from the checklist, the bring-up checklist, and the pages the owner confirms), the machine's stage, and the limits `MachineService.start_task` holds it to until calibrated |
 | `recorder.py` | The flight recorder: every frame vision looked at and everything the machine did, and `replay_vision` to run today's vision on recorded frames |
 
 ### Parts, feeders, boards, and jobs
@@ -125,6 +126,7 @@ The core keeps the owner's data in one folder (`data.dir` in the config; by defa
 | `captures/` | Frames saved with the Capture panel | `capture.py` |
 | `recordings/` | Flight recordings | `recorder.py` |
 | `bring-up.json` | Progress through the bring-up checklist | `bringup.py` |
+| `wizard.json` | The setup wizard's pages the owner confirmed or skipped | `wizard.py` |
 | `calibration.json` | What the machine has measured of itself (homing, the homing fiducial, the top camera's scale, the bottom camera, the nozzle offsets, each nozzle's Z offset and vacuum levels for each tip), when, and what is out of date | `calibration.py` |
 | `nozzle-tips.json` | Which tip is fitted on each nozzle | `machine/tips.py` |
 
@@ -158,7 +160,7 @@ client. Useful pieces:
 |---|---|
 | `App.tsx` | The shell: the top bar's workspaces, the status bar, E-stop |
 | `workspaces/` | One screen per tab: `PrepareWorkspace` (boards and jobs), `LibraryWorkspace` (Parts), `FeedersWorkspace`, `RunWorkspace`, `MachineWorkspace` |
-| `components/` | Panels and controls used by the workspaces; `machine/` holds the machine view (the overhead map and head inset), `job/` and `library/` their own pieces |
+| `components/` | Panels and controls used by the workspaces; `machine/` holds the machine view (the overhead map and head inset), `wizard/` the setup wizard and the calibration banner, `job/` and `library/` their own pieces |
 | `api/schema.ts` | **Generated** TypeScript types for the whole API (`make api`); never edit by hand |
 | `api/types.ts` | Short names for the generated types |
 | `tape.ts`, `runSteps.ts` | Pure logic with unit tests: tape geometry, fit check, pin-1 quadrant, and table-cell parsing; a run's step list |

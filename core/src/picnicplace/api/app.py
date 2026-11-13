@@ -23,6 +23,7 @@ from picnicplace.api import placement as placement_routes
 from picnicplace.api import recordings as recording_routes
 from picnicplace.api import routes, websocket
 from picnicplace.api import run as run_routes
+from picnicplace.api import wizard as wizard_routes
 from picnicplace.api.context import AppContext
 from picnicplace.api.fingerprint import openapi_text
 from picnicplace.auth import Authenticator
@@ -55,6 +56,7 @@ from picnicplace.simparts import (
     PartShape,
     PlacedPart,
 )
+from picnicplace.wizard import Wizard, WizardStore
 
 TITLE = "PicnicPlace Core API"
 
@@ -102,6 +104,16 @@ def create_app(config: Config | None = None) -> FastAPI:
     machine.use_tips(TipStore(config.data.tips_path))
     machine.attach_cameras(grab)
     lease.on_holder_left.append(machine.stop_manual_motion)
+    bring_up = BringUpStore(config.data.bringup_path)
+    wizard = Wizard(
+        machine,
+        WizardStore(config.data.wizard_path),
+        bring_up,
+        enforced=config.machine.driver != "simulator" or config.machine.sim_calibration_limits,
+    )
+    if wizard.enforced:
+        machine.limits = wizard.limit
+        machine.limited = wizard.limited
     ctx = AppContext(
         config=config,
         auth=Authenticator(config.server.token),
@@ -111,9 +123,10 @@ def create_app(config: Config | None = None) -> FastAPI:
         machine=machine,
         lease=lease,
         cameras=cameras,
-        bring_up=BringUpStore(config.data.bringup_path),
+        bring_up=bring_up,
         captures=CaptureStore(config.data.captures_dir),
         local_profile=LocalProfile(local_store, config.machine.with_local, profile, applied),
+        wizard=wizard,
     )
 
     @asynccontextmanager
@@ -126,6 +139,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             lambda: ctx.library,
             bundle.photon_sim,
         )
+        wizard.feeders = ctx.feeders
         ctx.feeders.sim_rail_errors = dict(config.machine.sim_rail_error)
         ctx.feeders.sim_part_height_error = config.machine.sim_part_height_error
         disc = config.machine.sim_calibration_disc
@@ -162,6 +176,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             ctx.library.close()
             ctx.library = None
             ctx.feeders = None
+            wizard.feeders = None
             ctx.placement = None
             ctx.runner = None
             await cameras.shutdown()
@@ -182,6 +197,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(placement_routes.router)
     app.include_router(run_routes.router)
     app.include_router(calibration_routes.router)
+    app.include_router(wizard_routes.router)
     app.include_router(recording_routes.router)
     app.include_router(websocket.router)
 

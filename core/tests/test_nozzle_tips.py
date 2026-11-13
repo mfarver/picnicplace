@@ -27,10 +27,11 @@ def test_fitting_a_tip_is_kept() -> None:
             "N24",
             "N40",
             "N75",
+            "N110",
         ]
         n08 = description["nozzle_tips"][1]
         assert (n08["inner_diameter"], n08["outer_diameter"]) == (0.8, 1.5)
-        assert description["nozzle_tips"][5]["outer_diameter"] is None
+        assert description["nozzle_tips"][5]["outer_diameter"] == 9.0
         assert all(n["tip"] is None for n in description["nozzles"])
         assert fit(s, "N1", "N08")["N1"]["tip"] == "N08"
         r = s.put("/api/v1/machine/nozzles/N1/tip", {"tip_id": "N99"})

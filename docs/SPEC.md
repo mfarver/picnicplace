@@ -491,7 +491,8 @@ A declarative, data-driven model, loaded from config:
 - **Fixed cameras** (bottom/"up-looking").
 - **Nozzle tips** with sizes, vacuum thresholds, and tool-changer positions. Today the
   profile lists the kinds of tip (an ID, a label, and the diameters of its hole and its
-  end, where known; the LumenPnP's are CP40-style, named for the hole), and the operator says which is fitted on each nozzle; that is kept in the data
+  end, where known; the LumenPnP's are Samsung CP40-style, named for the hole, with sizes from
+  Samsung's table), and the operator says which is fitted on each nozzle; that is kept in the data
   directory, not the profile. Each nozzle's Z offset and vacuum levels are measured and
   kept for each tip it is calibrated with, and come back when that tip is fitted again.
   Which tips suit which parts, tip changes in a run, and tool changers are planned.

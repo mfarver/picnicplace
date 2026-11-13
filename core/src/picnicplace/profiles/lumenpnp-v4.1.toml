@@ -110,12 +110,14 @@ vacuum_input = "vac_n2"
 pump_output = "pump_n2"
 valve_output = "valve_n2"
 
-# The LumenPnP's CP40-style nozzle tips (Samsung CP40LV series). The number in a name is
-# the hole's diameter with the decimal point after its first digit (N08: 0.8 mm, N045:
-# 0.45 mm, N75: 7.5 mm). Outer diameters are from parts sellers' listings, not Samsung's
-# or Opulo's documents, and worth checking with calipers; sellers differ a little (N045
-# hole 0.5, N08 outside 1.4, N40 outside 6.0). The N75's outside is not known. A machine
-# with other tips adds them in its local profile.
+# The LumenPnP's CP40-style nozzle tips (Samsung CP40LV series), with sizes from Samsung's
+# CP40 nozzle table. The number in a name is the hole's diameter with the decimal point
+# after its first digit (N08: 0.8 mm, N045: 0.45 mm). Samsung recommends them for these
+# parts (metric chip codes: 1005 is 0402, 1608 0603, 2012 0805, 3216 1206):
+#   N045: 1005, 1608, 2012, transistors     N08: 1608, 2012, 3216, transistors
+#   N14: 2012, 3216, tantalum capacitors    N24 to N110: SOP, PLCC, QFP, BGA
+# Opulo's set has the first six; N110 is a CP40 tip sold separately. A machine with
+# other tips adds them in its local profile.
 [[nozzle_tips]]
 id = "N045"
 label = "N045 (0.45 mm hole)"
@@ -150,6 +152,13 @@ outer_diameter = 6.2
 id = "N75"
 label = "N75 (7.5 mm hole)"
 inner_diameter = 7.5
+outer_diameter = 9
+
+[[nozzle_tips]]
+id = "N110"
+label = "N110 (11 mm hole)"
+inner_diameter = 11
+outer_diameter = 12.7
 
 # 1920 x 1080 at 0.01075 mm/pixel at board height.
 [[cameras]]

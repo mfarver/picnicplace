@@ -177,9 +177,9 @@ class MachineService:
         return self.z_safe_computed
 
     def scene(self) -> SceneState:
-        """What the synthetic cameras draw: position, outputs, and which nozzles hold a
-        part (vacuum past the pick threshold). Positions are rounded so tiny changes do
-        not cause new frames."""
+        """What the synthetic cameras draw: position, outputs, which nozzles hold a part
+        (vacuum past the pick threshold), and the tips fitted. Positions are rounded so tiny
+        changes do not cause new frames."""
         held = {n.id: self.reads_held(n, self.vacuum_reading(n)) for n in self._profile.nozzles}
         held_parts, placed = self.scene_parts() if self.scene_parts is not None else ((), ())
         return SceneState(
@@ -190,6 +190,7 @@ class MachineService:
             held_parts=held_parts,
             placed=placed,
             boards=self.scene_boards() if self.scene_boards is not None else (),
+            tips=tuple((n.id, n.tip) for n in self._profile.nozzles if n.tip is not None),
         )
 
     @property

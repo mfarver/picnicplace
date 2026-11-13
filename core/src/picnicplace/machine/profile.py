@@ -118,7 +118,18 @@ class NozzleTip(ProfileModel):
     outer_diameter: float | None = Field(
         default=None,
         gt=0,
-        description="Across the tip's end, in mm, if known: it must fit on the part's top.",
+        description=(
+            "Across the tip's end, in mm, if known: it must fit on the part's top, and it "
+            "is the circle the bottom camera looks for."
+        ),
+    )
+    length: float | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "From the tip's end to its top, in mm, if known. Two tips' lengths differ by "
+            "about as much as a nozzle's Z offset does with each."
+        ),
     )
 
 

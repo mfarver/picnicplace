@@ -91,7 +91,10 @@ stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
       centers the tip over the camera, steps it up and down for the sharpest picture,
       and measures the camera's scale. The nozzle never goes more than 2 mm below the
       profile's focus height. Check the place found is within a millimeter or two of
-      the profile's, and the image is not turned more than a degree.
+      the profile's, and the image is not turned more than a degree. If you said which
+      tip is fitted (under the checklist), it looks for a circle that tip's size and
+      says how big the tip's end looked; a note that it looks unlike the tip means the
+      wrong tip is fitted, or it is dirty.
 - [ ] Lay a small paper disc (from a hole punch, or a small round PCB) flat on the datum
       board, clear of its center dot, center the top camera on it, and click
       **Calibrate** on line 6 (the nozzle offsets). Each nozzle first sniffs for the

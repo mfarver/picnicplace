@@ -5,9 +5,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
-from tests.conftest import Session, connect
+from picnicplace.machine.bottom_camera import tip_size_note
+from picnicplace.machine.profile import NozzleTip
+from tests.conftest import Session, connect, fast_config
 from tests.test_calibration import lines, move_camera_over_disc, offsets_config
 from tests.test_placement import feeders, ok, placed, set_up
+from tests.test_vision import home
 
 
 def fit(s: Session, nozzle_id: str, tip_id: str | None) -> dict[str, dict[str, object]]:
@@ -32,6 +35,7 @@ def test_fitting_a_tip_is_kept() -> None:
         n08 = description["nozzle_tips"][1]
         assert (n08["inner_diameter"], n08["outer_diameter"]) == (0.8, 1.5)
         assert description["nozzle_tips"][5]["outer_diameter"] == 9.0
+        assert {t["length"] for t in description["nozzle_tips"][:6]} == {14.5}
         assert all(n["tip"] is None for n in description["nozzles"])
         assert fit(s, "N1", "N08")["N1"]["tip"] == "N08"
         r = s.put("/api/v1/machine/nozzles/N1/tip", {"tip_id": "N99"})
@@ -103,3 +107,40 @@ def test_each_tip_keeps_its_own_heights() -> None:
     with TestClient(create_app(config)) as client:
         n1 = client.get("/api/v1/machine/description").json()["nozzles"][0]
         assert n1["tip"] == "N14" and n1["z_offset"] == pytest.approx(0.6, abs=0.1)
+
+
+@pytest.mark.parametrize(("tip", "diameter"), [("N045", 1.0), ("N08", 1.5), ("N75", 9.0)])
+def test_the_bottom_camera_sees_the_fitted_tip(tip: str, diameter: float) -> None:
+    """The simulated bottom camera draws the end of the tip fitted, in front of its body.
+    Calibrating looks for a circle that tip's size, even one larger than a tip of unknown
+    size may be (the N75), and says how big its end looked."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_bottom_camera_error": (-0.8, 0.5, -0.4)},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+
+    def bottom() -> dict[str, dict[str, float]]:
+        cameras = client.get("/api/v1/machine/description").json()["cameras"]
+        return next(c for c in cameras if c["looking"] == "up")
+
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        design = bottom()
+        fit(s, "N1", tip)
+        assert home(s)["status"] == "succeeded"
+        op = s.wait(s.post("/api/v1/machine/bottom-camera", {}))
+        assert op["status"] == "succeeded", op
+        detail = str(lines(client)["bottom_camera"]["detail"])
+        assert f"as the {tip} tip should" in detail, detail
+        seen = float(detail.split("looked ")[1].split(" mm")[0])
+        assert seen == pytest.approx(diameter, rel=0.1)
+        found = bottom()["position"]
+        assert found["x"] == pytest.approx(design["position"]["x"] - 0.8, abs=0.03)
+        assert found["y"] == pytest.approx(design["position"]["y"] + 0.5, abs=0.03)
+
+
+def test_a_tip_unlike_the_fitted_one_is_noted() -> None:
+    n08 = NozzleTip(id="N08", label="N08", inner_diameter=0.8, outer_diameter=1.5)
+    assert tip_size_note(n08, 1.6).endswith("as the N08 tip should.")
+    note = tip_size_note(n08, 2.7)
+    assert "but the N08 tip is 1.5 mm: check which tip is fitted" in note
+    assert tip_size_note(None, 5.2) == "The tip's end looked 5.20 mm across."

@@ -3682,8 +3682,13 @@ export interface components {
             /** Label */
             label: string;
             /**
+             * Length
+             * @description From the tip's end to its top, in mm, if known. Two tips' lengths differ by about as much as a nozzle's Z offset does with each.
+             */
+            length: number | null;
+            /**
              * Outer Diameter
-             * @description Across the tip's end, in mm, if known: it must fit on the part's top.
+             * @description Across the tip's end, in mm, if known: it must fit on the part's top, and it is the circle the bottom camera looks for.
              */
             outer_diameter: number | null;
         };

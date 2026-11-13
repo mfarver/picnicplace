@@ -4281,17 +4281,24 @@
             "type": "string"
           },
           "outer_diameter": {
-            "description": "Across the tip's end, in mm: it must fit on the part's top.",
-            "exclusiveMinimum": 0.0,
-            "title": "Outer Diameter",
-            "type": "number"
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Across the tip's end, in mm, if known: it must fit on the part's top.",
+            "title": "Outer Diameter"
           }
         },
         "required": [
           "id",
           "label",
-          "outer_diameter",
-          "inner_diameter"
+          "inner_diameter",
+          "outer_diameter"
         ],
         "title": "NozzleTip",
         "type": "object"

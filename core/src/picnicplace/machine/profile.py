@@ -110,13 +110,15 @@ class NozzleTip(ProfileModel):
 
     id: str
     label: str
-    outer_diameter: float = Field(
-        gt=0, description="Across the tip's end, in mm: it must fit on the part's top."
-    )
     inner_diameter: float | None = Field(
         default=None,
         gt=0,
         description="Across the hole in its end, in mm, if known: how hard it can pull.",
+    )
+    outer_diameter: float | None = Field(
+        default=None,
+        gt=0,
+        description="Across the tip's end, in mm, if known: it must fit on the part's top.",
     )
 
 

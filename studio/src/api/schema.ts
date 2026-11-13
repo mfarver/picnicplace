@@ -3683,9 +3683,9 @@ export interface components {
             label: string;
             /**
              * Outer Diameter
-             * @description Across the tip's end, in mm: it must fit on the part's top.
+             * @description Across the tip's end, in mm, if known: it must fit on the part's top.
              */
-            outer_diameter: number;
+            outer_diameter: number | null;
         };
         /** NozzleTipRequest */
         NozzleTipRequest: {

@@ -1763,6 +1763,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/wizard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Wizard
+         * @description Every page of the setup wizard, in order, with where each stands; the machine's
+         *     stage (limited, out of date, or calibrated), and the page Continue opens.
+         */
+        get: operations["wizard_api_v1_wizard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wizard/pages/{page_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Page
+         * @description Finish a page the owner confirms (the tips fitted, the discard and park locations),
+         *     skip an optional one (strips and trays), or open one again. Pages the machine
+         *     measures are finished by measuring them.
+         */
+        put: operations["set_page_api_v1_wizard_pages__page_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3863,6 +3906,15 @@ export interface components {
             /** Y */
             y: number;
         };
+        /** PageRequest */
+        PageRequest: {
+            /**
+             * Status
+             * @description 'done': the owner confirms it. 'skipped': an optional page, skipped. 'todo': open it again.
+             * @enum {string}
+             */
+            status: "done" | "skipped" | "todo";
+        };
         /** Panel */
         "Panel-Input": {
             /** Copies */
@@ -5046,6 +5098,81 @@ export interface components {
             max: number;
             /** Min */
             min: number;
+        };
+        /** WizardPage */
+        WizardPage: {
+            /**
+             * Action
+             * @description What starts its measurement, if anything does.
+             */
+            action: ("home" | "visual_home" | "camera_scale" | "bottom_camera" | "nozzle_offsets" | "calibrate_feeders") | null;
+            /**
+             * Confirm
+             * @description The owner finishes it by confirming it (or skipping).
+             */
+            confirm: boolean;
+            /**
+             * Detail
+             * @description Where it stands, in words: what was found, or what to do.
+             */
+            detail: string;
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "welcome" | "machine" | "connect" | "cameras" | "first_motion" | "bed" | "visual_homing" | "top_camera_scale" | "nozzle_tips" | "bottom_camera" | "nozzle_offsets" | "nozzle_runout" | "discard_park" | "feeders" | "strips_trays" | "done";
+            /** Measured At */
+            measured_at: string | null;
+            /** Number */
+            number: number;
+            /**
+             * Optional
+             * @description The owner may skip it.
+             */
+            optional: boolean;
+            /**
+             * Part
+             * @description 1: setting the machine up. 2: calibrating it.
+             * @enum {integer}
+             */
+            part: 1 | 2;
+            /**
+             * Stale
+             * @description Why it is out of date, if it is.
+             */
+            stale: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "done" | "todo" | "stale" | "skipped" | "not_needed" | "not_built";
+            /** Title */
+            title: string;
+            /**
+             * Warning
+             * @description Something in its result worth a look.
+             */
+            warning: string | null;
+        };
+        /** WizardState */
+        WizardState: {
+            /**
+             * Enforced
+             * @description The machine is held to the stage's limits. The simulator is not, unless its config asks to be (sim_calibration_limits).
+             */
+            enforced: boolean;
+            /**
+             * Next Page
+             * @description The first page still to do (or out of date), where Continue opens.
+             */
+            next_page: ("welcome" | "machine" | "connect" | "cameras" | "first_motion" | "bed" | "visual_homing" | "top_camera_scale" | "nozzle_tips" | "bottom_camera" | "nozzle_offsets" | "nozzle_runout" | "discard_park" | "feeders" | "strips_trays" | "done") | null;
+            /** Pages */
+            pages: components["schemas"]["WizardPage"][];
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "limited" | "out_of_date" | "calibrated";
         };
         /** PickRequest */
         picnicplace__api__feeders__PickRequest: {
@@ -9132,6 +9259,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    wizard_api_v1_wizard_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WizardState"];
+                };
+            };
+        };
+    };
+    set_page_api_v1_wizard_pages__page_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                page_id: "nozzle_tips" | "discard_park" | "strips_trays";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WizardState"];
                 };
             };
             /** @description Validation Error */

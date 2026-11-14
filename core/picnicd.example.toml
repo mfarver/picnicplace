@@ -38,6 +38,7 @@ sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times fast
 # sim_nozzle_offset_error = { N1 = [0.4, -0.25], N2 = [-0.15, 0.3] }
 # sim_nozzle_z_error = { N2 = 0.8 }   # N2's tip 0.8 mm longer than the profile's
 # sim_tip_z_error = { N14 = 0.6 }     # the N14 tip 0.6 mm longer, on whichever nozzle
+# sim_calibration_limits = true     # hold the simulator to the setup wizard's limits
 # sim_vacuum_levels = { N1 = [0.3, 0.5] }   # N1's vacuum open and holding a part, as fractions
 #                                          # of its sensor's range: a weak pump
 # sim_datum_height_error = 0.3
@@ -65,7 +66,7 @@ pick_correction = "top"
 sniff_heights = true
 
 # Places you choose for this machine: where rejected parts are dropped, and where the
-# head waits. Easier: set them in the Studio (Machine workspace, Calibration panel) by
+# head waits. Easier: set them in the Studio (the setup wizard's discard and park page) by
 # centering the top camera on them; the core keeps those in local-profile.json in its
 # data directory, and they win over these. These values are from one LumenPnP.
 # [[machine.locations]]

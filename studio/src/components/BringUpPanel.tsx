@@ -11,6 +11,7 @@ import {
 import { type ReactNode, useEffect, useState } from "react";
 import { api, errorMessage } from "../api/client";
 import { useCore } from "../api/core";
+import { wizardChanged } from "../api/useWizard";
 import type {
   BringUpRecord,
   LocalProfileUpdate,
@@ -437,6 +438,7 @@ export function BringUpPanel({
     setRecord(next);
     void api.PUT("/api/v1/bring-up", { body: next }).then(({ error }) => {
       setSaveError(error ? "Could not save the checklist." : null);
+      if (!error) wizardChanged();
     });
   };
 

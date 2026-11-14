@@ -8,6 +8,7 @@ import { Splash } from "./components/Splash";
 import { StatusBar } from "./components/StatusBar";
 import { TokenPrompt } from "./components/TokenPrompt";
 import { TopBar, type WorkspaceTab } from "./components/TopBar";
+import { CalibrationBanner } from "./components/wizard/CalibrationBanner";
 import { useTheme } from "./theme";
 import { FeedersWorkspace } from "./workspaces/FeedersWorkspace";
 import { LibraryWorkspace } from "./workspaces/LibraryWorkspace";
@@ -68,7 +69,7 @@ export function App() {
   const workspace = WORKSPACES.find((w) => w.id === active) ?? WORKSPACES[0]!;
 
   return (
-    <div className={compatibility === "different" ? "app app-with-banner" : "app"}>
+    <div className="app app-with-banner">
       <TopBar
         tabs={WORKSPACES}
         active={workspace.id}
@@ -76,7 +77,10 @@ export function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
       />
-      {compatibility === "different" && <VersionBanner />}
+      <div className="banners">
+        {compatibility === "different" && <VersionBanner />}
+        {status === "open" && <CalibrationBanner onOpen={() => setActive("machine")} />}
+      </div>
       <main className="main">{workspace.render()}</main>
       <StatusBar />
       {status === "unauthorized" && <TokenPrompt />}

@@ -4635,6 +4635,26 @@
         "title": "Pad",
         "type": "object"
       },
+      "PageRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "description": "'done': the owner confirms it. 'skipped': an optional page, skipped. 'todo': open it again.",
+            "enum": [
+              "done",
+              "skipped",
+              "todo"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PageRequest",
+        "type": "object"
+      },
       "Panel-Input": {
         "additionalProperties": false,
         "properties": {
@@ -7084,6 +7104,211 @@
           "max"
         ],
         "title": "ValueRange",
+        "type": "object"
+      },
+      "WizardPage": {
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "enum": [
+                  "home",
+                  "visual_home",
+                  "camera_scale",
+                  "bottom_camera",
+                  "nozzle_offsets",
+                  "calibrate_feeders"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What starts its measurement, if anything does.",
+            "title": "Action"
+          },
+          "confirm": {
+            "description": "The owner finishes it by confirming it (or skipping).",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "detail": {
+            "description": "Where it stands, in words: what was found, or what to do.",
+            "title": "Detail",
+            "type": "string"
+          },
+          "id": {
+            "enum": [
+              "welcome",
+              "machine",
+              "connect",
+              "cameras",
+              "first_motion",
+              "bed",
+              "visual_homing",
+              "top_camera_scale",
+              "nozzle_tips",
+              "bottom_camera",
+              "nozzle_offsets",
+              "nozzle_runout",
+              "discard_park",
+              "feeders",
+              "strips_trays",
+              "done"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "measured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measured At"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "optional": {
+            "description": "The owner may skip it.",
+            "title": "Optional",
+            "type": "boolean"
+          },
+          "part": {
+            "description": "1: setting the machine up. 2: calibrating it.",
+            "enum": [
+              1,
+              2
+            ],
+            "title": "Part",
+            "type": "integer"
+          },
+          "stale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it is out of date, if it is.",
+            "title": "Stale"
+          },
+          "status": {
+            "enum": [
+              "done",
+              "todo",
+              "stale",
+              "skipped",
+              "not_needed",
+              "not_built"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Something in its result worth a look.",
+            "title": "Warning"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "part",
+          "title",
+          "status",
+          "detail",
+          "stale",
+          "warning",
+          "measured_at",
+          "optional",
+          "action",
+          "confirm"
+        ],
+        "title": "WizardPage",
+        "type": "object"
+      },
+      "WizardState": {
+        "properties": {
+          "enforced": {
+            "description": "The machine is held to the stage's limits. The simulator is not, unless its config asks to be (sim_calibration_limits).",
+            "title": "Enforced",
+            "type": "boolean"
+          },
+          "next_page": {
+            "anyOf": [
+              {
+                "enum": [
+                  "welcome",
+                  "machine",
+                  "connect",
+                  "cameras",
+                  "first_motion",
+                  "bed",
+                  "visual_homing",
+                  "top_camera_scale",
+                  "nozzle_tips",
+                  "bottom_camera",
+                  "nozzle_offsets",
+                  "nozzle_runout",
+                  "discard_park",
+                  "feeders",
+                  "strips_trays",
+                  "done"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first page still to do (or out of date), where Continue opens.",
+            "title": "Next Page"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/WizardPage"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "stage": {
+            "enum": [
+              "limited",
+              "out_of_date",
+              "calibrated"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "next_page",
+          "enforced",
+          "pages"
+        ],
+        "title": "WizardState",
         "type": "object"
       },
       "picnicplace__api__feeders__PickRequest": {
@@ -13648,6 +13873,114 @@
         "summary": "Stop",
         "tags": [
           "run"
+        ]
+      }
+    },
+    "/api/v1/wizard": {
+      "get": {
+        "description": "Every page of the setup wizard, in order, with where each stands; the machine's\nstage (limited, out of date, or calibrated), and the page Continue opens.",
+        "operationId": "wizard_api_v1_wizard_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WizardState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Wizard",
+        "tags": [
+          "wizard"
+        ]
+      }
+    },
+    "/api/v1/wizard/pages/{page_id}": {
+      "put": {
+        "description": "Finish a page the owner confirms (the tips fitted, the discard and park locations),\nskip an optional one (strips and trays), or open one again. Pages the machine\nmeasures are finished by measuring them.",
+        "operationId": "set_page_api_v1_wizard_pages__page_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page_id",
+            "required": true,
+            "schema": {
+              "enum": [
+                "nozzle_tips",
+                "discard_park",
+                "strips_trays"
+              ],
+              "title": "Page Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WizardState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Page",
+        "tags": [
+          "wizard"
         ]
       }
     }

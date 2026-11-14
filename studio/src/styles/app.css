@@ -1912,6 +1912,90 @@ code,
   flex: 1;
 }
 
+.banners {
+  min-width: 0;
+}
+
+/* --- Setup wizard --------------------------------------------------------------------- */
+
+.wizard-part {
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.wizard-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wizard-row:hover .calibration-name {
+  text-decoration: underline;
+}
+
+.wizard-done .calibration-chip,
+.calibration-chip.wizard-done {
+  color: var(--ok);
+}
+
+.wizard-todo .calibration-chip,
+.calibration-chip.wizard-todo {
+  color: var(--danger);
+}
+
+.wizard-stale .calibration-chip,
+.calibration-chip.wizard-stale {
+  color: var(--warn);
+}
+
+.wizard-not_needed .calibration-name,
+.wizard-not_built .calibration-name,
+.wizard-skipped .calibration-name {
+  color: var(--text-muted);
+}
+
+.wizard-page section p {
+  margin: 0 0 var(--space-2);
+}
+
+.wizard-count {
+  color: var(--text-faint);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.wizard-title {
+  font-weight: 600;
+}
+
+.wizard-before {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.wizard-before label {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.wizard-nav {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
 .crash {
   display: grid;
   place-items: center;

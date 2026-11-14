@@ -26,6 +26,12 @@ class NotHomedError(MachineError):
     code = "not_homed"
 
 
+class CalibrationRequiredError(MachineError):
+    """The setup wizard's stage does not allow this yet."""
+
+    code = "calibration_required"
+
+
 class InvalidTargetError(MachineError):
     code = "invalid_target"
     http_status = 422

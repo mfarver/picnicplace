@@ -28,6 +28,7 @@ from picnicplace.camera.synthetic import BoardScene, SceneState, TapeScene
 from picnicplace.events import EventBus
 from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.errors import (
+    CalibrationRequiredError,
     ConnectFailedError,
     EmergencyStopActiveError,
     HomingError,
@@ -57,6 +58,7 @@ from picnicplace.presence import PresenceTracker
 from picnicplace.recorder import FlightRecorder
 from picnicplace.schemas import MachineState, MachineStateEvent, Operation
 from picnicplace.simparts import HeldPart, PlacedPart
+from picnicplace.wizard import LIMITED_SPEED, Limit
 
 log = logging.getLogger(__name__)
 
@@ -93,6 +95,9 @@ VACUUM_POLL_S = 0.05
 VACUUM_STEADY = 0.002
 """A vacuum reading that changes less than this (as a fraction of its sensor's range)
 from one poll to the next has settled."""
+LIMITED_CACHE_S = 1.0
+"""How long whether the machine is limited (to a quarter of full speed) is taken as
+known, so every move does not work it out again."""
 
 
 class MachineService:
@@ -108,6 +113,12 @@ class MachineService:
         recorder: FlightRecorder | None = None,
     ) -> None:
         self._speed_scale = speed_scale
+        self.limits: Callable[[str], Limit] | None = None
+        """Set by the setup wizard: whether a task of a kind may start now, and what to
+        warn of if it may."""
+        self.limited: Callable[[], bool] | None = None
+        """Set by the setup wizard: moves are capped at a quarter of full speed."""
+        self._limited_cache = (-math.inf, False)
         self.recorder = recorder or FlightRecorder(None)
         """Keeps what the machine saw and did, while recording."""
         self.calibration = CalibrationStore(None)
@@ -209,7 +220,7 @@ class MachineService:
             inputs=dict(self._driver.inputs),
             outputs=dict(self._driver.outputs),
             z_safe=self.z_safe,
-            speed_scale=self._speed_scale,
+            speed_scale=self.speed_scale,
             warnings=list(self._driver.warnings),
         )
 
@@ -339,10 +350,40 @@ class MachineService:
         """Raise unless outputs and feeders may be used now."""
         self._check_can_actuate()
 
+    @property
+    def homed(self) -> bool:
+        return self._homed
+
+    @property
+    def speed_scale(self) -> float:
+        """The fraction of full speed moves are capped at: the config's, and no more than
+        a quarter until the setup wizard is finished."""
+        if self.limited is None:
+            return self._speed_scale
+        now = time.monotonic()
+        at, limited = self._limited_cache
+        if now - at > LIMITED_CACHE_S:
+            limited = self.limited()
+            self._limited_cache = (now, limited)
+        return min(self._speed_scale, LIMITED_SPEED) if limited else self._speed_scale
+
     def start_task(self, kind: str, work: _Work) -> Operation:
-        """Run work that moves the machine as an operation, with the machine busy."""
+        """Run work that moves the machine as an operation, with the machine busy. The
+        setup wizard's stage may refuse it (a pick before the machine is calibrated), or
+        let it go ahead with a warning put before its message."""
         self._check_can_move()
         self._check_homed()
+        allowed = self.limits(kind) if self.limits is not None else Limit()
+        if allowed.refused:
+            raise CalibrationRequiredError(allowed.refused)
+        if allowed.warning:
+            warning, inner = allowed.warning, work
+
+            async def warned() -> str | None:
+                message = await inner()
+                return f"Warning: {warning}. " + (message or "")
+
+            work = warned
         return self._start_operation(kind, work)
 
     async def frame(self, camera_id: str, settle: bool = True) -> Frame:
@@ -665,9 +706,10 @@ class MachineService:
 
     def _limit_speed(self, step: Mapping[str, float], speed: float | None) -> float | None:
         """Apply the speed scale: no faster than that fraction of the slowest moving axis."""
-        if self._speed_scale >= 1:
+        scale = self.speed_scale
+        if scale >= 1:
             return speed
-        cap = min(self._axes[a].max_speed for a in step) * self._speed_scale
+        cap = min(self._axes[a].max_speed for a in step) * scale
         return cap if speed is None else min(speed, cap)
 
     async def _home(self) -> str | None:

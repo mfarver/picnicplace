@@ -7,6 +7,10 @@ the nozzle steps up and down, never more than ``FOCUS_RANGE_MM`` from the profil
 focus height (so it cannot reach the camera), for the sharpest picture of the tip.
 Last, the head steps by a known distance each way in X and Y: how far the tip moves in
 the image gives the scale, and which way it moves gives the image's turn.
+
+With a tip fitted whose size the profile gives, vision looks for a circle that size, and
+the message says how big the tip's end looked, noting a tip that looks unlike the one the
+operator said is fitted (the start of checking the fitted tip by camera).
 """
 
 import math
@@ -14,7 +18,7 @@ from dataclasses import dataclass
 
 from picnicplace.calibration import nozzle_key
 from picnicplace.machine.errors import VisionError
-from picnicplace.machine.profile import Camera, Nozzle
+from picnicplace.machine.profile import Camera, Nozzle, NozzleTip
 from picnicplace.machine.service import MachineService
 from picnicplace.schemas import Operation
 
@@ -26,7 +30,12 @@ CENTER_PASSES = 5
 CENTER_TOLERANCE_MM = 0.02
 SCALE_STEP_MM = 1.0
 TIP_DIAMETER_MM = (0.5, 8.0)
-"""Nozzle tips seen from below, smallest to largest."""
+"""Nozzle tips seen from below, smallest to largest, when the fitted tip's size is not
+known."""
+TIP_SIZE_SLACK = 1.5
+"""A fitted tip of known size is looked for from this much smaller to this much larger."""
+TIP_SIZE_MISMATCH = 1.25
+"""A tip's end looking this much smaller or larger than the fitted tip's is noted."""
 SHARPNESS_RADIUS_MM = 4.0
 
 
@@ -41,6 +50,8 @@ class BottomCameraFix:
     """Degrees the image is turned from what the profile's axes say."""
     width: int
     height: int
+    tip_diameter: float
+    """How big the tip's end looked, in mm, at the measured scale."""
 
 
 def bottom_camera(machine: MachineService) -> Camera:
@@ -50,30 +61,62 @@ def bottom_camera(machine: MachineService) -> Camera:
     return camera
 
 
+def fitted_tip(machine: MachineService, nozzle: Nozzle) -> NozzleTip | None:
+    """The tip the operator said is fitted on a nozzle, if any."""
+    return machine.profile.nozzle_tip(nozzle.tip)
+
+
+def tip_size_note(tip: NozzleTip | None, seen: float) -> str:
+    """What the bottom camera saw of a nozzle's tip, and whether it looks like the tip the
+    operator said is fitted."""
+    note = f"The tip's end looked {seen:.2f} mm across"
+    if tip is None or tip.outer_diameter is None:
+        return note + "."
+    ratio = seen / tip.outer_diameter
+    if 1 / TIP_SIZE_MISMATCH <= ratio <= TIP_SIZE_MISMATCH:
+        return note + f", as the {tip.id} tip should."
+    return (
+        note + f", but the {tip.id} tip is {tip.outer_diameter:g} mm: check which tip is "
+        "fitted, and that it is clean."
+    )
+
+
 async def _find_tip(
-    machine: MachineService, camera: Camera, search_mm: float
-) -> tuple[float, float, int, int]:
+    machine: MachineService, camera: Camera, nozzle: Nozzle, search_mm: float
+) -> tuple[float, float, int, int, float]:
+    """Where the nozzle's tip is in the bottom camera's image, the image's size, and the
+    tip's diameter, in pixels."""
     frame = await machine.frame(camera.id)
     h, w = frame.image.shape[:2]
     mm = camera.field_of_view.x / w
-    low, high = TIP_DIAMETER_MM
+    tip = fitted_tip(machine, nozzle)
+    expected = tip.outer_diameter if tip is not None else None
+    if expected is not None:
+        low, high = expected / TIP_SIZE_SLACK, expected * TIP_SIZE_SLACK
+        if tip is not None and tip.inner_diameter is not None:
+            # A wide hole is a dark circle nearly the end's size: look past it.
+            low = max(low, (tip.inner_diameter + expected) / 2)
+    else:
+        low, high = TIP_DIAMETER_MM
     circle = await machine.recorder.vision(
         "find_circle",
         frame.image,
         low / mm,
         high / mm,
         search_mm / mm,
+        expected / mm if expected is not None else None,
         camera=camera.id,
         mm_per_px=mm,
         purpose="nozzle tip",
     )
     if circle is None:
+        fitted = f"the {tip.id} tip" if expected is not None and tip is not None else "the tip"
         raise VisionError(
             f"the {camera.label.lower()} cannot see the nozzle tip within {search_mm:g} mm "
-            "of its center: check the tip is fitted and empty, the camera's light, and the "
-            "camera's position in the profile"
+            f"of its center: check {fitted} is fitted and empty, the camera's light, and "
+            "the camera's position in the profile"
         )
-    return circle.x, circle.y, w, h
+    return circle.x, circle.y, w, h, circle.diameter
 
 
 async def calibrate_bottom_camera(machine: MachineService, nozzle: Nozzle) -> BottomCameraFix:
@@ -102,7 +145,7 @@ async def _calibrate(
     for _ in range(CENTER_PASSES):
         await machine.move_nozzle_over(nozzle, x, y)
         await machine.lower_nozzle(nozzle, guess)
-        u, v, w, h = await _find_tip(machine, camera, search)
+        u, v, w, h, _ = await _find_tip(machine, camera, nozzle, search)
         mm = camera.field_of_view.x / w
         dx, dy = machine.image_to_machine(camera, (u - w / 2) * mm, (v - h / 2) * mm)
         if math.hypot(dx, dy) <= CENTER_TOLERANCE_MM:
@@ -151,6 +194,7 @@ async def _calibrate(
     # Scale and turn: step the head each way and watch the tip move in the image.
     seen: dict[str, tuple[float, float]] = {}
     w = h = 0
+    seen_px: list[float] = []
     for axis in ("X", "Y"):
         points: list[tuple[float, float]] = []
         for sign in (-1, 1):
@@ -158,8 +202,9 @@ async def _calibrate(
             sx, sy = (x + step, y) if axis == "X" else (x, y + step)
             await machine.move_nozzle_over(nozzle, sx, sy)
             await machine.lower_nozzle(nozzle, focus)
-            u, v, w, h = await _find_tip(machine, camera, SHARPNESS_RADIUS_MM)
+            u, v, w, h, d = await _find_tip(machine, camera, nozzle, SHARPNESS_RADIUS_MM)
             points.append((u, v))
+            seen_px.append(d)
         seen[axis] = (points[1][0] - points[0][0], points[1][1] - points[0][1])
     scale_x = 2 * SCALE_STEP_MM / math.hypot(*seen["X"])
     scale_y = 2 * SCALE_STEP_MM / math.hypot(*seen["Y"])
@@ -172,7 +217,8 @@ async def _calibrate(
         actual = math.atan2(dv, du)
         turns.append(math.degrees(math.remainder(actual - expected, math.tau)))
     rotation = sum(turns) / len(turns)
-    return BottomCameraFix(x, y, focus, scale_x, scale_y, rotation, w, h)
+    tip_diameter = sum(seen_px) / len(seen_px) * (scale_x + scale_y) / 2
+    return BottomCameraFix(x, y, focus, scale_x, scale_y, rotation, w, h, tip_diameter)
 
 
 def _image_direction(machine: MachineService, camera: Camera, axis: str) -> tuple[float, float]:
@@ -201,7 +247,8 @@ def start_bottom_camera_calibration(machine: MachineService, nozzle_id: str | No
             f"{camera.label}: at ({fix.x:.3f}, {fix.y:.3f}), {moved:.2f} mm from the "
             f"profile's place; in focus with the nozzle at Z {fix.focus:.2f}; "
             f"{(fix.scale_x + fix.scale_y) / 2:.5f} mm/pixel; image turned "
-            f"{fix.rotation:+.2f}°. Measured with {nozzle.label}."
+            f"{fix.rotation:+.2f}°. Measured with {nozzle.label}. "
+            + tip_size_note(fitted_tip(machine, nozzle), fix.tip_diameter)
         )
         machine.calibration.record(
             "bottom_camera",

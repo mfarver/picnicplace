@@ -190,6 +190,7 @@ export function MachineWorkspace() {
             canMove={canMove}
             canRun={canMove && !!machine?.homed}
             canSet={status === "open" && !controlledElsewhere && !!machine?.homed}
+            canFit={status === "open" && !controlledElsewhere && !pending}
             onHome={home}
             onVisualHome={() => void track(() => api.POST("/api/v1/machine/visual-home"))}
             onCameraScale={() => void track(() => api.POST("/api/v1/machine/camera-scale"))}

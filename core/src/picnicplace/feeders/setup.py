@@ -86,6 +86,9 @@ class PartTop(_Model):
         "in the slot, or another part, is sniffed again.",
     )
     nozzle: str = Field(description="The nozzle that found it.")
+    tip: str | None = Field(
+        default=None, description="The tip on that nozzle then. Another tip sniffs again."
+    )
     z_offset: float = Field(
         description="That nozzle's Z offset then. Once it changes (calibrated again, or "
         "another tip fitted), the top is sniffed again."

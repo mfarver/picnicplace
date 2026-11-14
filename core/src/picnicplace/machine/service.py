@@ -51,6 +51,7 @@ from picnicplace.machine.profile import (
     Point,
     nozzle_height,
 )
+from picnicplace.machine.tips import TipStore
 from picnicplace.operations import OperationManager
 from picnicplace.presence import PresenceTracker
 from picnicplace.recorder import FlightRecorder
@@ -111,6 +112,8 @@ class MachineService:
         """Keeps what the machine saw and did, while recording."""
         self.calibration = CalibrationStore(None)
         """What the machine has measured of itself, for the calibration checklist."""
+        self.tips = TipStore(None)
+        """Which tip is fitted on each nozzle."""
         self._design = profile.model_copy(deep=True)
         """The profile as loaded, before measurements took the place of its values."""
         self._profile = profile
@@ -174,9 +177,9 @@ class MachineService:
         return self.z_safe_computed
 
     def scene(self) -> SceneState:
-        """What the synthetic cameras draw: position, outputs, and which nozzles hold a
-        part (vacuum past the pick threshold). Positions are rounded so tiny changes do
-        not cause new frames."""
+        """What the synthetic cameras draw: position, outputs, which nozzles hold a part
+        (vacuum past the pick threshold), and the tips fitted. Positions are rounded so tiny
+        changes do not cause new frames."""
         held = {n.id: self.reads_held(n, self.vacuum_reading(n)) for n in self._profile.nozzles}
         held_parts, placed = self.scene_parts() if self.scene_parts is not None else ((), ())
         return SceneState(
@@ -187,6 +190,7 @@ class MachineService:
             held_parts=held_parts,
             placed=placed,
             boards=self.scene_boards() if self.scene_boards is not None else (),
+            tips=tuple((n.id, n.tip) for n in self._profile.nozzles if n.tip is not None),
         )
 
     @property
@@ -704,6 +708,41 @@ class MachineService:
         """Keep measurements in this store, and use the ones it has."""
         self.calibration = store
         self.apply_calibration()
+
+    def use_tips(self, store: TipStore) -> None:
+        """Keep which tip is on each nozzle in this store, and fit the ones it says (a
+        tip the profile no longer has is taken as none said)."""
+        self.tips = store
+        fitted = store.get()
+        for nozzle in self._profile.nozzles:
+            tip = fitted.get(nozzle.id)
+            nozzle.tip = tip if self._profile.nozzle_tip(tip) is not None else None
+            self._driver.tip_fitted(nozzle.id, nozzle.tip)
+        self.apply_calibration()
+
+    def set_tip(self, nozzle_id: str, tip_id: str | None) -> Nozzle:
+        """Say which tip is now fitted on a nozzle (None: not said). Its Z offset and
+        vacuum levels become those measured with that tip, if it has been."""
+        nozzle = self.nozzle(nozzle_id)
+        if tip_id is not None and self._profile.nozzle_tip(tip_id) is None:
+            raise InvalidTargetError(
+                f"this machine's profile has no nozzle tip {tip_id!r}: add it to the local "
+                "profile's nozzle_tips first"
+            )
+        if self._busy:
+            raise MachineBusyError("the machine is busy: change tips once it has stopped")
+        outputs = [o for o in (nozzle.pump_output, nozzle.valve_output) if o is not None]
+        if any(self._driver.outputs.get(o) for o in outputs):
+            raise InvalidTargetError(
+                f"{nozzle.label} has suction on, so it may be holding a part: put the part "
+                "down or discard it, and turn suction off, before changing its tip"
+            )
+        self.tips.put(nozzle.id, tip_id)
+        self._driver.tip_fitted(nozzle.id, tip_id)
+        nozzle.tip = tip_id
+        self.apply_calibration()
+        self.recorder.event("nozzle_tip", nozzle=nozzle.id, tip=tip_id)
+        return nozzle
 
     def apply_calibration(self) -> None:
         """Use what has been measured in place of the profile's values."""

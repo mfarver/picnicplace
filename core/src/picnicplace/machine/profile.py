@@ -104,6 +104,35 @@ class VacuumLevels(ProfileModel):
     )
 
 
+class NozzleTip(ProfileModel):
+    """A kind of nozzle tip: the part of a nozzle that touches the part, changed by hand
+    or by a tip changer to suit the parts being placed."""
+
+    id: str
+    label: str
+    inner_diameter: float | None = Field(
+        default=None,
+        gt=0,
+        description="Across the hole in its end, in mm, if known: how hard it can pull.",
+    )
+    outer_diameter: float | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Across the tip's end, in mm, if known: it must fit on the part's top, and it "
+            "is the circle the bottom camera looks for."
+        ),
+    )
+    length: float | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "From the tip's end to its top, in mm, if known. Two tips' lengths differ by "
+            "about as much as a nozzle's Z offset does with each."
+        ),
+    )
+
+
 class Nozzle(ProfileModel):
     id: str
     label: str
@@ -133,6 +162,14 @@ class Nozzle(ProfileModel):
         description=(
             "Measured, not set by hand: what this nozzle's vacuum sensor reads with its tip "
             "open, sealed, and holding a part. None: its sensor's threshold is used."
+        ),
+    )
+    tip: str | None = Field(
+        default=None,
+        description=(
+            "Which of the profile's nozzle tips is fitted, by ID: set by the operator when "
+            "they change it, and kept in the data directory. None: not said. The Z offset "
+            "and vacuum levels are those measured with this tip."
         ),
     )
 
@@ -419,6 +456,10 @@ class MachineProfile(ProfileModel):
         description="The feeders' bus: 'photon' for Opulo's Photon feeders over RS-485.",
     )
     nozzles: list[Nozzle] = Field(default_factory=list[Nozzle])
+    nozzle_tips: list[NozzleTip] = Field(
+        default_factory=list[NozzleTip],
+        description="The kinds of nozzle tip this machine can be fitted with.",
+    )
     cameras: list[Camera] = Field(default_factory=list[Camera])
     locations: list[Location] = Field(default_factory=list[Location])
     feeder_banks: list[FeederBank] = Field(default_factory=list[FeederBank])
@@ -442,6 +483,8 @@ class MachineProfile(ProfileModel):
         outputs = {o.id for o in self.outputs}
         _unique("axis", [a.name for a in self.axes])
         _unique("nozzle", [n.id for n in self.nozzles])
+        _unique("nozzle tip", [t.id for t in self.nozzle_tips])
+        tips = {t.id for t in self.nozzle_tips}
         _unique("camera", [c.id for c in self.cameras])
         _unique("location", [loc.id for loc in self.locations])
         _unique("feeder bank", [b.id for b in self.feeder_banks])
@@ -451,6 +494,8 @@ class MachineProfile(ProfileModel):
             for axis in (n.z_axis, n.rotation_axis):
                 if axis not in axes:
                     raise ValueError(f"nozzle {n.id}: unknown axis {axis!r}")
+            if n.tip is not None and n.tip not in tips:
+                raise ValueError(f"nozzle {n.id}: unknown nozzle tip {n.tip!r}")
             if n.vacuum_input is not None and n.vacuum_input not in inputs:
                 raise ValueError(f"nozzle {n.id}: unknown input {n.vacuum_input!r}")
             for out in (n.pump_output, n.valve_output):
@@ -568,6 +613,10 @@ class MachineProfile(ProfileModel):
                 for b in self.feeder_banks
             ),
         ]
+
+    def nozzle_tip(self, tip_id: str | None) -> NozzleTip | None:
+        """A nozzle tip by ID, if the profile has it."""
+        return next((t for t in self.nozzle_tips if t.id == tip_id), None)
 
     def axis(self, name: str) -> Axis:
         return next(a for a in self.axes if a.name == name)

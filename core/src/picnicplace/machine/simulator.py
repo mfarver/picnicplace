@@ -13,8 +13,9 @@ Besides motion, it simulates the profile's I/O:
   suction on seals, and reads as holding a part, as when sniffing for a height. Each
   nozzle's readings open and holding a part may be set (``vacuum_levels``), as for a tip
   that leaks or a weak pump.
-- Each nozzle's tip may be longer than the profile's (``tip_errors``): it reaches that
-  much lower than its axis says, for touching parts and surfaces. The safe-Z sensor
+- Each nozzle's tip may be longer than the profile's (``tip_errors``), and each kind of
+  tip too (``tip_kind_errors``, by tip ID, for the tip the operator says they fitted): it
+  reaches that much lower than its axis says, for touching parts and surfaces. The safe-Z sensor
   reads the axis, not the tip.
 - Photon feeders on the feeder bus (``feeders/sim.py``), if given.
 
@@ -81,6 +82,7 @@ class SimulatorDriver(MotionDriver):
         photon: SimulatedPhotonBus | None = None,
         tip_errors: Mapping[str, float] | None = None,
         vacuum_levels: Mapping[str, tuple[float, float]] | None = None,
+        tip_kind_errors: Mapping[str, float] | None = None,
     ) -> None:
         super().__init__()
         self.photon = photon
@@ -93,6 +95,10 @@ class SimulatorDriver(MotionDriver):
         self._tip_errors = dict(tip_errors or {})
         """How much longer each nozzle's tip really is than the profile's, by ID: it
         reaches this much lower."""
+        self._tip_kind_errors = dict(tip_kind_errors or {})
+        """How much longer each kind of tip really is, by tip ID."""
+        self._fitted: dict[str, str | None] = {}
+        """The kind of tip on each nozzle, as the operator said when they fitted it."""
         self._vacuum_levels = dict(vacuum_levels or {})
         """Each nozzle's readings open and holding a part (or sealed), by ID, as fractions
         of its sensor's range; the rest read as ``VACUUM_OPEN`` and ``VACUUM_HELD`` say."""
@@ -269,7 +275,13 @@ class SimulatorDriver(MotionDriver):
 
     def _tip(self, nozzle: Nozzle) -> float:
         """Where the nozzle's tip really is: its height, less how much longer it is."""
-        return self._height(nozzle) - self._tip_errors.get(nozzle.id, 0.0)
+        kind = self._fitted.get(nozzle.id)
+        longer = self._tip_errors.get(nozzle.id, 0.0)
+        longer += self._tip_kind_errors.get(kind, 0.0) if kind is not None else 0.0
+        return self._height(nozzle) - longer
+
+    def tip_fitted(self, nozzle_id: str, tip_id: str | None) -> None:
+        self._fitted[nozzle_id] = tip_id
 
     def board_at(self, x: float, y: float) -> float | None:
         """The height of what lies under a physical X/Y: the datum board where it is, else

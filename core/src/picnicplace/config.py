@@ -107,6 +107,10 @@ class DataConfig(_Section):
         return self.dir.expanduser() / "recordings"
 
     @property
+    def tips_path(self) -> Path:
+        return self.dir.expanduser() / "nozzle-tips.json"
+
+    @property
     def local_profile_path(self) -> Path:
         return self.dir.expanduser() / "local-profile.json"
 
@@ -226,6 +230,14 @@ class MachineConfig(_Section):
             "Simulator only: how much longer (mm) each nozzle's tip really is than the "
             "profile's, by nozzle ID: it reaches that much lower. Sniffing the datum board "
             "while calibrating the nozzle offsets finds and corrects it."
+        ),
+    )
+    sim_tip_z_error: dict[str, float] = Field(
+        default_factory=dict[str, float],
+        description=(
+            "Simulator only: how much longer (mm) each kind of nozzle tip really is, by tip "
+            "ID, on whichever nozzle it is said to be fitted: it reaches that much lower. "
+            "Calibrating the nozzle offsets with the tip fitted finds it."
         ),
     )
     sim_vacuum_levels: dict[str, tuple[float, float]] = Field(

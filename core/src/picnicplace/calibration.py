@@ -15,6 +15,7 @@ and the plan says which line to do.
 """
 
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -187,10 +188,14 @@ Z_OFFSET_LIMIT_MM = 2.0
 is not trusted: its Z offset is left as it was."""
 
 
-def datum_key(nozzle_id: str) -> str:
-    """The key of where a nozzle touched the datum board (its raw height) in the nozzle
-    offsets' values."""
-    return f"datum.{nozzle_id}"
+def tip_suffix(tip_id: str | None) -> str:
+    return "" if tip_id is None else f".{tip_id}"
+
+
+def datum_key(nozzle_id: str, tip_id: str | None = None) -> str:
+    """The key of where a nozzle, with a tip fitted (or none said), touched the datum
+    board (its raw height) in the nozzle offsets' values."""
+    return f"datum.{nozzle_id}{tip_suffix(tip_id)}"
 
 
 def nozzle_key(nozzle_id: str, axis: Literal["x", "y"]) -> str:
@@ -201,14 +206,16 @@ def nozzle_key(nozzle_id: str, axis: Literal["x", "y"]) -> str:
 VacuumName = Literal["open", "sealed", "held", "threshold"]
 
 
-def vacuum_key(nozzle_id: str, name: VacuumName) -> str:
-    """The key of one of a nozzle's vacuum levels in the vacuum line's values."""
-    return f"{name}.{nozzle_id}"
+def vacuum_key(nozzle_id: str, name: VacuumName, tip_id: str | None = None) -> str:
+    """The key of one of a nozzle's vacuum levels, with a tip fitted (or none said), in
+    the vacuum line's values."""
+    return f"{name}.{nozzle_id}{tip_suffix(tip_id)}"
 
 
 def apply_measurements(profile: MachineProfile, record: CalibrationRecord) -> None:
     """Use what the machine measured in place of the profile's values: the top camera's
-    scale, the nozzle offsets and vacuum levels, and the bottom camera's place, focus
+    scale, the nozzle offsets, each nozzle's Z offset and vacuum levels with the tip it
+    has fitted (none, if not measured with it), and the bottom camera's place, focus
     height, and scale.
     Out-of-date values are still the best known, and are used until measured again."""
     offsets = record.lines.get("nozzle_offsets")
@@ -223,18 +230,20 @@ def apply_measurements(profile: MachineProfile, record: CalibrationRecord) -> No
             nozzle.offset = Point(x=v[kx], y=v[ky])
         # Where the nozzle touched the datum board, against where the profile says the
         # board is: its tip's length, and the frame's height, in one.
-        touched = v.get(datum_key(nozzle.id))
+        touched = v.get(datum_key(nozzle.id, nozzle.tip))
+        nozzle.z_offset = 0.0
         if touched is not None and datum is not None and abs(touched - datum) <= Z_OFFSET_LIMIT_MM:
             nozzle.z_offset = touched - datum
         vacuum = record.lines.get("vacuum")
         levels = (
             {
-                name: vacuum.values.get(vacuum_key(nozzle.id, name))
+                name: vacuum.values.get(vacuum_key(nozzle.id, name, nozzle.tip))
                 for name in ("open", "sealed", "held", "threshold")
             }
             if vacuum
             else {}
         )
+        nozzle.vacuum = None
         if levels and all(x is not None for x in levels.values()):
             nozzle.vacuum = VacuumLevels.model_validate(levels)
     for camera in profile.cameras:
@@ -412,6 +421,26 @@ def build_checklist(
             "bottom_camera",
         )
 
+    def untried(line_id: LineId, key: Callable[[str, str | None], str]) -> None:
+        """Mark a measured line out of date for nozzles measured with some tip, but not
+        the one fitted now."""
+        m = record.lines.get(line_id)
+        if m is None:
+            return
+
+        def measured(nozzle_id: str) -> bool:
+            bare = key(nozzle_id, None)
+            return any(k == bare or k.startswith(bare + ".") for k in m.values)
+
+        missing = [
+            n for n in profile.nozzles if measured(n.id) and key(n.id, n.tip) not in m.values
+        ]
+        if missing:
+            lines[-1].status = "stale"
+            lines[-1].stale = "not measured with the tip fitted on " + ", ".join(
+                f"{n.label} ({n.tip or 'none said'})" for n in missing
+            )
+
     # 6. Nozzle offsets from the top camera.
     if (line := _measured("nozzle_offsets", 0, record, "nozzle_offsets")) is not None:
         values = record.lines["nozzle_offsets"].values
@@ -423,6 +452,7 @@ def build_checklist(
             else None
         )
         add_measured(line, warning)
+        untried("nozzle_offsets", datum_key)
     else:
         add(
             "nozzle_offsets",
@@ -446,7 +476,7 @@ def build_checklist(
         )
     else:
         touched = "nozzle_offsets" in record.lines and any(
-            datum_key(n.id) in record.lines["nozzle_offsets"].values for n in profile.nozzles
+            datum_key(n.id, n.tip) in record.lines["nozzle_offsets"].values for n in profile.nozzles
         )
         nozzles = (
             "Each nozzle's heights are shifted by where it touched the datum board (line 6): "
@@ -466,6 +496,7 @@ def build_checklist(
     # 9. Vacuum levels, measured with the nozzle offsets.
     if (line := _measured("vacuum", 0, record, "nozzle_offsets")) is not None:
         add_measured(line)
+        untried("vacuum", lambda n, t: vacuum_key(n, "threshold", t))
     else:
         add(
             "vacuum",

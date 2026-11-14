@@ -42,6 +42,7 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/machine/camera-scale` | Measure the top camera's scale, kept and used by vision |
 | `POST /api/v1/machine/bottom-camera` | Calibrate the bottom camera with an empty nozzle tip: its place, focus height, and scale, kept and used |
 | `POST /api/v1/machine/nozzle-offsets` | Calibrate the nozzle offsets with a small disc on the datum board, the top camera centered on it: each nozzle sniffs for the board's height, then turns the disc. Its vacuum levels (open, sealed, holding the disc) are measured on the way, setting its own pick threshold. Kept and used |
+| `PUT /api/v1/machine/nozzles/{nozzle_id}/tip` | Say which of the profile's nozzle tips is now fitted on a nozzle (`tip_id`, or null), after changing it by hand. Kept; the nozzle's Z offset and vacuum levels become those measured with that tip. Refused while the nozzle has suction on. Returns the machine profile |
 | `GET /api/v1/calibration` | The calibration checklist: every calibration the machine needs, in order, each done (with its value and when), to do, out of date (and why), or from the profile |
 | `POST /api/v1/machine/estop` | Emergency stop; any client may call it |
 | `POST /api/v1/machine/reset` | Clear a latched emergency stop |

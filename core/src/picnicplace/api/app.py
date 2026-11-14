@@ -43,6 +43,7 @@ from picnicplace.machine.errors import MachineError
 from picnicplace.machine.factory import build_driver
 from picnicplace.machine.local import LocalProfile, LocalProfileStore
 from picnicplace.machine.service import MachineService
+from picnicplace.machine.tips import TipStore
 from picnicplace.operations import OperationManager
 from picnicplace.placement import PlacementService
 from picnicplace.presence import PresenceTracker
@@ -98,6 +99,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             return await source.fresh_frame(after, wait_s)
 
     machine.use_calibration(CalibrationStore(config.data.calibration_path))
+    machine.use_tips(TipStore(config.data.tips_path))
     machine.attach_cameras(grab)
     lease.on_holder_left.append(machine.stop_manual_motion)
     ctx = AppContext(

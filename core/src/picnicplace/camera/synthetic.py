@@ -3,7 +3,7 @@
 The top camera looks down at whatever is under the head: the bed, a demo board with
 fiducials and pads in the work area, the homing fiducial, the discard bin, and part tape
 in every feeder slot. The bottom camera looks up and sees a nozzle when one is over it,
-with the part it holds. Lights dim the view when off.
+with the part it holds, and the end of the tip fitted on it. Lights dim the view when off.
 
 The scene is deterministic, so a vision test can know the true position of every feature.
 Frames are only rendered when what the camera would see changes.
@@ -19,7 +19,7 @@ import cv2
 import numpy as np
 
 from picnicplace.camera.source import CameraSource, Frame, Image
-from picnicplace.machine.profile import Camera, MachineProfile, Point
+from picnicplace.machine.profile import Camera, MachineProfile, NozzleTip, Point
 from picnicplace.simparts import HeldPart, PartShape, PlacedPart
 
 # Colors, BGR.
@@ -34,6 +34,8 @@ POCKET = (95, 120, 135)
 PART_BODY = (35, 35, 38)
 PART_END = (214, 205, 203)  # tin: neutral to slightly blue, as real tin reads (BGR)
 NOZZLE = (140, 140, 145)
+NOZZLE_BODY = (62, 62, 66)
+"""A fitted tip's body, behind its end and out of the light."""
 NOZZLE_BORE = (20, 20, 20)
 HEAD_UNDERSIDE = (25, 25, 28)
 PAPER = (235, 238, 240)
@@ -65,6 +67,8 @@ class SceneState:
     """Parts put down on the bed."""
     boards: tuple["BoardScene", ...] = ()
     """Boards loaded for a job. Without any, the demo board is drawn."""
+    tips: tuple[tuple[str, str], ...] = ()
+    """Nozzle ID and the tip fitted on it, where the operator has said."""
 
 
 @dataclass(frozen=True)
@@ -609,17 +613,17 @@ class BottomRenderer:
         # The head's underside, if it is over the camera.
         if canvas.visible(head_x, head_y, 60):
             canvas.rect(img, head_x, head_y - 40, 90, 70, 0, HEAD_UNDERSIDE)
+        tips = dict(state.tips)
         for nozzle in self.profile.nozzles:
             x, y = head_x + nozzle.offset.x, head_y + nozzle.offset.y
             if not canvas.visible(x, y, 5):
                 continue
-            canvas.circle(img, x, y, 2.6, NOZZLE)
-            canvas.circle(img, x, y, 0.35, NOZZLE_BORE)
+            end = _tip_end(canvas, img, x, y, self.profile.nozzle_tip(tips.get(nozzle.id)))
             empty = not state.held.get(nozzle.id) and nozzle.id not in dict(state.held_parts)
             if empty and self.camera.focus_height is not None:
                 # An empty tip is sharp only at the camera's focus height.
                 height = state.position.get(nozzle.z_axis, 0.0) * nozzle.z_sign
-                _defocus(canvas, img, x, y, abs(height - self.camera.focus_height))
+                _defocus(canvas, img, x, y, abs(height - self.camera.focus_height), end)
             angle = state.position.get(nozzle.rotation_axis, 0.0)
             known = dict(state.held_parts).get(nozzle.id)
             if known is not None:
@@ -634,17 +638,40 @@ class BottomRenderer:
         return _finish(img, self._grain, self.camera, state)
 
 
+TIP_BODY_RADIUS = 2.6
+"""A nozzle seen from below without a known tip, and a fitted tip's body behind its end."""
+
+
+def _tip_end(canvas: _Canvas, img: Image, x: float, y: float, tip: NozzleTip | None) -> float:
+    """Draw a nozzle's tip seen from below, and return its radius, in mm. A fitted tip of
+    known size shows its end, lit, with its hole, in front of its darker body; without
+    one, a generic tip."""
+    if tip is None or tip.outer_diameter is None:
+        canvas.circle(img, x, y, TIP_BODY_RADIUS, NOZZLE)
+        canvas.circle(img, x, y, 0.35, NOZZLE_BORE)
+        return TIP_BODY_RADIUS
+    end = tip.outer_diameter / 2
+    canvas.circle(img, x, y, TIP_BODY_RADIUS, NOZZLE_BODY)
+    canvas.circle(img, x, y, end, NOZZLE)
+    if tip.inner_diameter is not None and tip.inner_diameter < tip.outer_diameter:
+        canvas.circle(img, x, y, tip.inner_diameter / 2, NOZZLE_BORE)
+    return max(end, TIP_BODY_RADIUS)
+
+
 DEFOCUS_BLUR = 0.3
 """Blur (sigma, mm) per mm a nozzle tip is from the bottom camera's focus."""
 
 
-def _defocus(canvas: _Canvas, img: Image, x: float, y: float, off: float) -> None:
-    """Blur the area around a nozzle tip as far out of focus as it is."""
+def _defocus(
+    canvas: _Canvas, img: Image, x: float, y: float, off: float, radius: float = 2.6
+) -> None:
+    """Blur the area around a nozzle tip, ``radius`` mm across, as far out of focus as it
+    is."""
     sigma = off * DEFOCUS_BLUR * canvas.ppm
     if sigma < 0.3:
         return
     u, v = (c / ONE for c in canvas.px(x, y))
-    r = round(4.5 * canvas.ppm + 3 * sigma)
+    r = round((radius + 1.9) * canvas.ppm + 3 * sigma)
     h, w = img.shape[:2]
     x0, x1 = max(0, round(u) - r), min(w, round(u) + r)
     y0, y1 = max(0, round(v) - r), min(h, round(v) + r)

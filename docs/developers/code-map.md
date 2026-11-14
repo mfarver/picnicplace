@@ -70,8 +70,9 @@ A request goes **route → service → machine service → driver**:
 | `machine/profile.py` | Machine profiles: axes, nozzles, cameras, feeder banks, locations, keep-outs. Built-in profiles hold a model's **design facts only**, and can `extends` another. |
 | `machine/local.py` | The local profile: what is true of one machine (discard and park locations, measured keep-outs), laid over the built-in profile. Written by the Studio. |
 | `machine/service.py` | The machine service: the one owner of the machine, and where the safety rules live. Also camera frames and vision calls for tasks. |
-| `machine/bottom_camera.py` | Calibrating the bottom camera with a nozzle tip: its place, focus height, scale, and turn |
+| `machine/bottom_camera.py` | Calibrating the bottom camera with a nozzle tip: its place, focus height, scale, and turn, and how big the fitted tip looked |
 | `machine/sniff.py` | Finding a height by touch: a nozzle steps down with suction on until the vacuum jumps from its open reading (the datum board, a board's fiducial, a part in its pocket) |
+| `machine/tips.py` | Which nozzle tip is fitted on each nozzle, kept in the data directory |
 | `machine/nozzle_offsets.py` | Calibrating the nozzle offsets: sniffing for the datum board's height, then turning a disc on it with each nozzle; each nozzle's vacuum levels measured on the way |
 | `machine/driver.py` | The interface every motion driver implements |
 | `machine/simulator.py` | The simulated machine. Its errors are realistic (homing error, feeder steps, slot and board offsets, cameras and nozzles off the profile, tips longer than the profile's, the datum board's height), so calibration and vision have something to find. |
@@ -125,7 +126,8 @@ The core keeps the owner's data in one folder (`data.dir` in the config; by defa
 | `captures/` | Frames saved with the Capture panel | `capture.py` |
 | `recordings/` | Flight recordings | `recorder.py` |
 | `bring-up.json` | Progress through the bring-up checklist | `bringup.py` |
-| `calibration.json` | What the machine has measured of itself (homing, the homing fiducial, the top camera's scale, the bottom camera, the nozzle offsets, each nozzle's vacuum levels), when, and what is out of date | `calibration.py` |
+| `calibration.json` | What the machine has measured of itself (homing, the homing fiducial, the top camera's scale, the bottom camera, the nozzle offsets, each nozzle's Z offset and vacuum levels for each tip), when, and what is out of date | `calibration.py` |
+| `nozzle-tips.json` | Which tip is fitted on each nozzle | `machine/tips.py` |
 
 ## The tests: `core/tests/`
 

@@ -3425,6 +3425,14 @@
             "title": "Nozzle Reach",
             "type": "object"
           },
+          "nozzle_tips": {
+            "description": "The kinds of nozzle tip this machine can be fitted with.",
+            "items": {
+              "$ref": "#/components/schemas/NozzleTip"
+            },
+            "title": "Nozzle Tips",
+            "type": "array"
+          },
           "nozzles": {
             "items": {
               "$ref": "#/components/schemas/Nozzle"
@@ -3536,6 +3544,7 @@
           "board_height",
           "feeder_bus",
           "nozzles",
+          "nozzle_tips",
           "cameras",
           "locations",
           "feeder_banks",
@@ -4004,6 +4013,18 @@
             "title": "Rotation Axis",
             "type": "string"
           },
+          "tip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which of the profile's nozzle tips is fitted, by ID: set by the operator when they change it, and kept in the data directory. None: not said. The Z offset and vacuum levels are those measured with this tip.",
+            "title": "Tip"
+          },
           "vacuum": {
             "anyOf": [
               {
@@ -4069,7 +4090,8 @@
           "pump_output",
           "valve_output",
           "z_offset",
-          "vacuum"
+          "vacuum",
+          "tip"
         ],
         "title": "Nozzle",
         "type": "object"
@@ -4231,6 +4253,90 @@
           "nozzle_id"
         ],
         "title": "NozzleRequest",
+        "type": "object"
+      },
+      "NozzleTip": {
+        "additionalProperties": false,
+        "description": "A kind of nozzle tip: the part of a nozzle that touches the part, changed by hand\nor by a tip changer to suit the parts being placed.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inner_diameter": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Across the hole in its end, in mm, if known: how hard it can pull.",
+            "title": "Inner Diameter"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "From the tip's end to its top, in mm, if known. Two tips' lengths differ by about as much as a nozzle's Z offset does with each.",
+            "title": "Length"
+          },
+          "outer_diameter": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Across the tip's end, in mm, if known: it must fit on the part's top, and it is the circle the bottom camera looks for.",
+            "title": "Outer Diameter"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "inner_diameter",
+          "outer_diameter",
+          "length"
+        ],
+        "title": "NozzleTip",
+        "type": "object"
+      },
+      "NozzleTipRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "tip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The tip now fitted, from the profile's nozzle_tips. None: not said.",
+            "title": "Tip Id"
+          }
+        },
+        "required": [
+          "tip_id"
+        ],
+        "title": "NozzleTipRequest",
         "type": "object"
       },
       "OpenPnpImportRequest": {
@@ -11684,6 +11790,92 @@
           }
         ],
         "summary": "Calibrate Nozzle Offsets",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/nozzles/{nozzle_id}/tip": {
+      "put": {
+        "description": "Say which tip is now fitted on a nozzle, after changing it by hand. It is kept, and\nthe nozzle's Z offset and vacuum levels become those measured with that tip; a tip\nnot measured yet marks the nozzle offsets out of date until they are calibrated.",
+        "operationId": "set_nozzle_tip_api_v1_machine_nozzles__nozzle_id__tip_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nozzle_id",
+            "required": true,
+            "schema": {
+              "title": "Nozzle Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NozzleTipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Nozzle Tip",
         "tags": [
           "machine"
         ]

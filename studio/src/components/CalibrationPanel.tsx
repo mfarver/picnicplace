@@ -15,6 +15,7 @@ import type { ReactNode } from "react";
 import { useCalibration } from "../api/useCalibration";
 import type { CalibrationLine, MachineProfile, Operation } from "../api/types";
 import { MachineLocations } from "./MachineLocations";
+import { NozzleTips } from "./NozzleTips";
 import { Panel } from "./Panel";
 
 const VISION_KINDS = new Set([
@@ -43,6 +44,8 @@ interface Props {
   canRun: boolean;
   /** Homed, and this client may change the machine's locations. */
   canSet: boolean;
+  /** This client may say which tips are fitted. */
+  canFit: boolean;
   onHome: () => void;
   onVisualHome: () => void;
   onCameraScale: () => void;
@@ -53,7 +56,7 @@ interface Props {
 /**
  * The calibration checklist (spec §7.7): every calibration the machine needs, in order,
  * whether each is done, its value and when, or why it is out of date, with a button for
- * those the machine can do. Then the machine's own locations.
+ * those the machine can do. Then the tip on each nozzle, and the machine's own locations.
  */
 export function CalibrationPanel({
   description,
@@ -61,13 +64,15 @@ export function CalibrationPanel({
   canMove,
   canRun,
   canSet,
+  canFit,
   onHome,
   onVisualHome,
   onCameraScale,
   onBottomCamera,
   onNozzleOffsets,
 }: Props) {
-  const checklist = useCalibration();
+  // A tip fitted changes which measurements apply: fetch the checklist again.
+  const checklist = useCalibration(description.nozzles.map((n) => n.tip ?? "").join(","));
   const latest = Object.values(operations)
     .filter((op) => VISION_KINDS.has(op.kind) && op.status === "failed")
     .at(-1);
@@ -186,6 +191,7 @@ export function CalibrationPanel({
         ))}
       </ol>
       {latest && <p className="note note-danger">{latest.error}</p>}
+      <NozzleTips description={description} canSet={canFit} />
       <MachineLocations description={description} canSet={canSet} />
     </Panel>
   );

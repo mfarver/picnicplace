@@ -10,9 +10,9 @@ const MEASURING = new Set(["camera_scale", "bottom_camera", "nozzle_offsets"]);
 /**
  * The calibration checklist. Fetched when the event socket connects, when an operation
  * ends (a homing or a measurement may have changed it), and when the machine is homed or
- * loses its homing.
+ * loses its homing, or when `refresh` changes (such as the tips fitted).
  */
-export function useCalibration(): CalibrationChecklist | null {
+export function useCalibration(refresh = ""): CalibrationChecklist | null {
   const { status, clientId, operations, machine } = useCore();
   const [state, setState] = useState<CalibrationChecklist | null>(null);
   const ops = Object.values(operations);
@@ -29,7 +29,7 @@ export function useCalibration(): CalibrationChecklist | null {
     return () => {
       cancelled = true;
     };
-  }, [status, clientId, ended, homed]);
+  }, [status, clientId, ended, homed, refresh]);
 
   // A measurement changes the machine description (a camera's scale or place): show it.
   useEffect(() => {

@@ -163,6 +163,15 @@ export function HeadInset({
 const COLUMN = 64;
 const TOP = 30;
 const DEPTH_PX = 70;
+/** Side view pixels per mm across a tip: its body (about 6 mm) is drawn 8 px wide. */
+const TIP_PX_PER_MM = 1.3;
+
+/** Half the drawn width of a nozzle's end: its fitted tip's, if known, else a generic one. */
+function tipHalfWidth(nozzle: Nozzle, d: MachineProfile): number {
+  const tip = d.nozzle_tips.find((t) => t.id === nozzle.tip);
+  if (!tip?.outer_diameter) return 1.5;
+  return Math.min(7, Math.max(0.75, (tip.outer_diameter / 2) * TIP_PX_PER_MM));
+}
 
 function SideView({
   description,
@@ -201,10 +210,12 @@ function SideView({
         const held = partHeld(n, description, machine);
         const rotation = machine?.position[n.rotation_axis] ?? 0;
         const low = h < description.safe_z;
+        const end = tipHalfWidth(n, description);
         return (
           <g key={n.id}>
             <title>
-              {`${n.label}: ${h.toFixed(2)} mm, ${rotation.toFixed(1)}°${held ? ", part held" : ""}`}
+              {`${n.label}${n.tip ? ` (${n.tip} tip)` : ""}: ${h.toFixed(2)} mm, ` +
+                `${rotation.toFixed(1)}°${held ? ", part held" : ""}`}
             </title>
             <Dial cx={cx} cy={TOP / 2 - 1} angle={rotation} label={n.id} />
             <rect
@@ -216,7 +227,10 @@ function SideView({
             />
             <path
               className={`hi-tip${low ? " hi-low" : ""}`}
-              d={`M${cx - 4} ${tipY - 6} L${cx + 4} ${tipY - 6} L${cx + 1.5} ${tipY} L${cx - 1.5} ${tipY} Z`}
+              d={
+                `M${cx - 4} ${tipY - 6} L${cx + 4} ${tipY - 6} ` +
+                `L${cx + end} ${tipY} L${cx - end} ${tipY} Z`
+              }
             />
             {held && (
               <rect className="hi-part" x={cx - 6} y={tipY + 1} width={12} height={4} rx={1} />

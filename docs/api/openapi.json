@@ -593,6 +593,12 @@
             "title": "Id",
             "type": "string"
           },
+          "image_rotation": {
+            "default": 0.0,
+            "description": "Up-looking cameras: degrees the picture is turned from what the machine's axes say (clockwise as shown), measured by calibrating the camera. What the camera sees is turned back by this much.",
+            "title": "Image Rotation",
+            "type": "number"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -645,9 +651,115 @@
           "field_of_view",
           "light_output",
           "settle_s",
-          "focus_height"
+          "focus_height",
+          "image_rotation"
         ],
         "title": "Camera",
+        "type": "object"
+      },
+      "CameraChoice-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "device": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A path or an index; None: the camera is off.",
+            "title": "Device"
+          },
+          "flip_x": {
+            "default": false,
+            "description": "Mirror the picture left to right.",
+            "title": "Flip X",
+            "type": "boolean"
+          },
+          "flip_y": {
+            "default": false,
+            "description": "Mirror the picture top to bottom.",
+            "title": "Flip Y",
+            "type": "boolean"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise, after the flips.",
+            "maximum": 45.0,
+            "minimum": -45.0,
+            "title": "Rotation",
+            "type": "number"
+          }
+        },
+        "title": "CameraChoice",
+        "type": "object"
+      },
+      "CameraChoice-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "device": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A path or an index; None: the camera is off.",
+            "title": "Device"
+          },
+          "flip_x": {
+            "default": false,
+            "description": "Mirror the picture left to right.",
+            "title": "Flip X",
+            "type": "boolean"
+          },
+          "flip_y": {
+            "default": false,
+            "description": "Mirror the picture top to bottom.",
+            "title": "Flip Y",
+            "type": "boolean"
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees counterclockwise, after the flips.",
+            "maximum": 45.0,
+            "minimum": -45.0,
+            "title": "Rotation",
+            "type": "number"
+          }
+        },
+        "required": [
+          "device",
+          "flip_x",
+          "flip_y",
+          "rotation"
+        ],
+        "title": "CameraChoice",
+        "type": "object"
+      },
+      "CameraDevice": {
+        "properties": {
+          "device": {
+            "description": "What to put in the camera's config: a path or an index.",
+            "title": "Device",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device",
+          "label"
+        ],
+        "title": "CameraDevice",
         "type": "object"
       },
       "CameraInfo": {
@@ -3178,6 +3290,24 @@
         "title": "LocationRequest",
         "type": "object"
       },
+      "MachineChoice": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "MachineChoice",
+        "type": "object"
+      },
       "MachineLocation-Input": {
         "additionalProperties": false,
         "properties": {
@@ -3558,6 +3688,93 @@
         "title": "MachineProfile",
         "type": "object"
       },
+      "MachineSetup": {
+        "additionalProperties": false,
+        "properties": {
+          "cameras": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CameraChoice-Output"
+            },
+            "description": "Camera ID from the profile to its device and how its picture is turned.",
+            "title": "Cameras",
+            "type": "object"
+          },
+          "driver": {
+            "anyOf": [
+              {
+                "enum": [
+                  "simulator",
+                  "marlin"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "'marlin': the real machine on serial_port. 'simulator': try it with none.",
+            "title": "Driver"
+          },
+          "format": {
+            "const": "picnicplace-machine-setup",
+            "default": "picnicplace-machine-setup",
+            "title": "Format",
+            "type": "string"
+          },
+          "probe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProbeResult"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last probe of serial_port."
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A built-in machine profile's ID, such as 'lumenpnp-v4.1'.",
+            "title": "Profile"
+          },
+          "serial_port": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial Port"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "profile",
+          "driver",
+          "serial_port",
+          "cameras",
+          "probe"
+        ],
+        "title": "MachineSetup",
+        "type": "object"
+      },
       "MachineState": {
         "properties": {
           "axes": {
@@ -3641,6 +3858,11 @@
             "title": "Outputs",
             "type": "object"
           },
+          "paused": {
+            "description": "Paused: the running operation waits before its next move, and nothing new starts, until resume (or stop).",
+            "title": "Paused",
+            "type": "boolean"
+          },
           "position": {
             "additionalProperties": {
               "type": "number"
@@ -3675,6 +3897,7 @@
           "connection_error",
           "homed",
           "estop",
+          "paused",
           "busy",
           "motion_enabled",
           "axes",
@@ -5475,6 +5698,112 @@
         "title": "PresenceState",
         "type": "object"
       },
+      "ProbeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "serial_port": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Serial Port",
+            "type": "string"
+          }
+        },
+        "required": [
+          "serial_port"
+        ],
+        "title": "ProbeRequest",
+        "type": "object"
+      },
+      "ProbeResult": {
+        "description": "What a serial port's firmware said, asked without moving anything.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "emergency_parser": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "STOP acts mid-move (the firmware's emergency parser), if it says.",
+            "title": "Emergency Parser"
+          },
+          "expected_machine_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the chosen machine's profile expects, if it says.",
+            "title": "Expected Machine Type"
+          },
+          "firmware": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its name and version, from M115.",
+            "title": "Firmware"
+          },
+          "machine_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Machine Type"
+          },
+          "serial_port": {
+            "title": "Serial Port",
+            "type": "string"
+          },
+          "vacuum": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "description": "The vacuum sensors read in each firmware variant the profile knows: the one that gives numbers is the one this firmware speaks.",
+            "title": "Vacuum",
+            "type": "object"
+          }
+        },
+        "required": [
+          "serial_port",
+          "firmware",
+          "machine_type",
+          "expected_machine_type",
+          "emergency_parser",
+          "vacuum",
+          "at"
+        ],
+        "title": "ProbeResult",
+        "type": "object"
+      },
       "PublishRequest": {
         "properties": {
           "author": {
@@ -6005,6 +6334,31 @@
         "title": "RunItem",
         "type": "object"
       },
+      "RunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "redo": {
+            "default": false,
+            "description": "Redo every step (Run again), not only those still to do or out of date.",
+            "title": "Redo",
+            "type": "boolean"
+          },
+          "stop": {
+            "description": "1: everything the machine can do with a hand on the power switch (homing, visual homing, the cameras, naming the tips, the feeders). 2: with a paper disc on the datum board, each nozzle's offset, height and vacuum levels.",
+            "enum": [
+              1,
+              2
+            ],
+            "title": "Stop",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stop"
+        ],
+        "title": "RunRequest",
+        "type": "object"
+      },
       "RunState": {
         "properties": {
           "board_z": {
@@ -6022,7 +6376,7 @@
           "current": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/RunStep"
+                "$ref": "#/components/schemas/picnicplace__job__run__RunStep"
               },
               {
                 "type": "null"
@@ -6185,63 +6539,23 @@
         "title": "RunState",
         "type": "object"
       },
-      "RunStep": {
-        "description": "What the run is doing now, or was doing when it paused on a problem.",
+      "SerialPort": {
         "properties": {
-          "action": {
-            "enum": [
-              "scanning",
-              "finding_fiducials",
-              "measuring_board",
-              "finding_feeder",
-              "picking",
-              "aligning",
-              "placing"
-            ],
-            "title": "Action",
+          "device": {
+            "title": "Device",
             "type": "string"
           },
-          "index": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The placement, for stage 'item'.",
-            "title": "Index"
-          },
-          "nozzle": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nozzle"
-          },
-          "stage": {
-            "description": "Scanning the feeders, finding the board, or working on a placement.",
-            "enum": [
-              "scan",
-              "board",
-              "item"
-            ],
-            "title": "Stage",
+          "label": {
+            "description": "What the device's name says, for people.",
+            "title": "Label",
             "type": "string"
           }
         },
         "required": [
-          "stage",
-          "action",
-          "index",
-          "nozzle"
+          "device",
+          "label"
         ],
-        "title": "RunStep",
+        "title": "SerialPort",
         "type": "object"
       },
       "ServerEvent": {
@@ -6284,6 +6598,117 @@
             "$ref": "#/components/schemas/ErrorEvent"
           }
         ]
+      },
+      "SetupChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "cameras": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CameraChoice-Input"
+            },
+            "title": "Cameras",
+            "type": "object"
+          },
+          "driver": {
+            "anyOf": [
+              {
+                "enum": [
+                  "simulator",
+                  "marlin"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Driver"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "serial_port": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial Port"
+          }
+        },
+        "title": "SetupChoice",
+        "type": "object"
+      },
+      "SetupState": {
+        "properties": {
+          "can_restart": {
+            "description": "The core can restart itself; otherwise the owner restarts it.",
+            "title": "Can Restart",
+            "type": "boolean"
+          },
+          "machines": {
+            "description": "The built-in machine profiles.",
+            "items": {
+              "$ref": "#/components/schemas/MachineChoice"
+            },
+            "title": "Machines",
+            "type": "array"
+          },
+          "pinned": {
+            "description": "Choices the config file sets itself, which win over the wizard's: machine.profile, machine.driver, machine.marlin.port, cameras.<id>.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Pinned",
+            "type": "array"
+          },
+          "restart_needed": {
+            "description": "The wizard's choices differ from what the core runs: restart it.",
+            "title": "Restart Needed",
+            "type": "boolean"
+          },
+          "running": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": "What the core is running now: profile, driver, serial_port, and each camera's device (None: off or simulated).",
+            "title": "Running",
+            "type": "object"
+          },
+          "saved": {
+            "$ref": "#/components/schemas/MachineSetup",
+            "description": "The wizard's choices, as kept."
+          }
+        },
+        "required": [
+          "saved",
+          "running",
+          "pinned",
+          "machines",
+          "restart_needed",
+          "can_restart"
+        ],
+        "title": "SetupState",
+        "type": "object"
       },
       "Size": {
         "additionalProperties": false,
@@ -7214,6 +7639,17 @@
             "title": "Status",
             "type": "string"
           },
+          "stop": {
+            "description": "Which of the wizard's stops does it: 0 choosing the machine; 1 with a hand on the power switch; 2 with a paper disc on the datum board; 3 checking the discard and park spots.",
+            "enum": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "title": "Stop",
+            "type": "integer"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -7243,9 +7679,41 @@
           "measured_at",
           "optional",
           "action",
-          "confirm"
+          "confirm",
+          "stop"
         ],
         "title": "WizardPage",
+        "type": "object"
+      },
+      "WizardRun": {
+        "description": "A stop being run (or the last one run): its steps, one after another.",
+        "properties": {
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/picnicplace__wizard__RunStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "stop": {
+            "enum": [
+              1,
+              2
+            ],
+            "title": "Stop",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stop",
+          "steps",
+          "running"
+        ],
+        "title": "WizardRun",
         "type": "object"
       },
       "WizardState": {
@@ -7285,12 +7753,41 @@
             "description": "The first page still to do (or out of date), where Continue opens.",
             "title": "Next Page"
           },
+          "next_stop": {
+            "anyOf": [
+              {
+                "enum": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first stop with a page still to do (or out of date).",
+            "title": "Next Stop"
+          },
           "pages": {
             "items": {
               "$ref": "#/components/schemas/WizardPage"
             },
             "title": "Pages",
             "type": "array"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WizardRun"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The stop being run, or the last one run."
           },
           "stage": {
             "enum": [
@@ -7306,7 +7803,9 @@
           "stage",
           "next_page",
           "enforced",
-          "pages"
+          "pages",
+          "next_stop",
+          "run"
         ],
         "title": "WizardState",
         "type": "object"
@@ -7369,6 +7868,109 @@
           "nozzle_id"
         ],
         "title": "PickRequest",
+        "type": "object"
+      },
+      "picnicplace__job__run__RunStep": {
+        "description": "What the run is doing now, or was doing when it paused on a problem.",
+        "properties": {
+          "action": {
+            "enum": [
+              "scanning",
+              "finding_fiducials",
+              "measuring_board",
+              "finding_feeder",
+              "picking",
+              "aligning",
+              "placing"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The placement, for stage 'item'.",
+            "title": "Index"
+          },
+          "nozzle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nozzle"
+          },
+          "stage": {
+            "description": "Scanning the feeders, finding the board, or working on a placement.",
+            "enum": [
+              "scan",
+              "board",
+              "item"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "action",
+          "index",
+          "nozzle"
+        ],
+        "title": "RunStep",
+        "type": "object"
+      },
+      "picnicplace__wizard__RunStep": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What it found or did, or why it failed.",
+            "title": "Message"
+          },
+          "status": {
+            "enum": [
+              "waiting",
+              "running",
+              "done",
+              "failed",
+              "skipped",
+              "stopped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "status",
+          "message"
+        ],
+        "title": "RunStep",
         "type": "object"
       }
     },
@@ -11447,7 +12049,7 @@
     },
     "/api/v1/machine/estop": {
       "post": {
-        "description": "Emergency stop. Allowed for any authenticated client, in any state.",
+        "description": "Emergency stop: the firmware's halt (``M112`` on Marlin), sent at once. Marlin acts\non it at once only when built with its emergency parser, and then stays halted until\nthe controller is power-cycled; the Studio pauses instead. Allowed for any\nauthenticated client, in any state.",
         "operationId": "estop_api_v1_machine_estop_post",
         "responses": {
           "200": {
@@ -12202,6 +12804,33 @@
         ]
       }
     },
+    "/api/v1/machine/pause": {
+      "post": {
+        "description": "Pause: the move under way finishes, then the running operation waits before its\nnext move, and nothing new starts, until resume or stop. Allowed for any\nauthenticated client, in any state.",
+        "operationId": "pause_api_v1_machine_pause_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pause",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
     "/api/v1/machine/reset": {
       "post": {
         "description": "Clear a latched emergency stop. The machine must be homed again afterward.",
@@ -12254,6 +12883,90 @@
           }
         ],
         "summary": "Reset",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/resume": {
+      "post": {
+        "description": "Carry on from where pause held the machine.",
+        "operationId": "resume_api_v1_machine_resume_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resume",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/stop": {
+      "post": {
+        "description": "End the running operation before its next move (it may still raise the nozzles),\nresuming the machine if it is paused. The machine stays homed. Allowed for any\nauthenticated client, in any state; does nothing if nothing runs.",
+        "operationId": "stop_api_v1_machine_stop_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stop",
         "tags": [
           "machine"
         ]
@@ -13876,6 +14589,284 @@
         ]
       }
     },
+    "/api/v1/setup": {
+      "get": {
+        "description": "The wizard's choices, what the core is running, and what the config file pins.",
+        "operationId": "get_setup_api_v1_setup_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Setup",
+        "tags": [
+          "setup"
+        ]
+      },
+      "put": {
+        "description": "Keep the wizard's choices. They are used when the core next starts; the last\nprobe is kept while the serial port stays the same.",
+        "operationId": "put_setup_api_v1_setup_put",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupChoice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Setup",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/api/v1/setup/cameras": {
+      "get": {
+        "description": "The cameras the wizard offers: stable paths on Linux, the first indexes elsewhere.",
+        "operationId": "list_cameras_api_v1_setup_cameras_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CameraDevice"
+                  },
+                  "title": "Response List Cameras Api V1 Setup Cameras Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Cameras",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/api/v1/setup/probe": {
+      "post": {
+        "description": "Ask the firmware on a serial port what it is, and read its vacuum sensors. Nothing\nmoves or switches on. The result is kept with the wizard's choices.",
+        "operationId": "probe_api_v1_setup_probe_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProbeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Probe",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/api/v1/setup/restart": {
+      "post": {
+        "description": "Restart the core, to use the wizard's choices. Studios reconnect when it is back.",
+        "operationId": "restart_api_v1_setup_restart_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Restart",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/api/v1/setup/serial-ports": {
+      "get": {
+        "description": "The serial devices a machine might be on, found by name: none is opened.",
+        "operationId": "list_serial_ports_api_v1_setup_serial_ports_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SerialPort"
+                  },
+                  "title": "Response List Serial Ports Api V1 Setup Serial Ports Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Serial Ports",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
     "/api/v1/wizard": {
       "get": {
         "description": "Every page of the setup wizard, in order, with where each stands; the machine's\nstage (limited, out of date, or calibrated), and the page Continue opens.",
@@ -13905,7 +14896,7 @@
     },
     "/api/v1/wizard/pages/{page_id}": {
       "put": {
-        "description": "Finish a page the owner confirms (the tips fitted, the discard and park locations),\nskip an optional one (strips and trays), or open one again. Pages the machine\nmeasures are finished by measuring them.",
+        "description": "Finish a page the owner confirms (the discard and park locations),\nskip an optional one (strips and trays), or open one again. Pages the machine\nmeasures are finished by measuring them.",
         "operationId": "set_page_api_v1_wizard_pages__page_id__put",
         "parameters": [
           {
@@ -13914,7 +14905,6 @@
             "required": true,
             "schema": {
               "enum": [
-                "nozzle_tips",
                 "discard_park",
                 "strips_trays"
               ],
@@ -13979,6 +14969,73 @@
           }
         ],
         "summary": "Set Page",
+        "tags": [
+          "wizard"
+        ]
+      }
+    },
+    "/api/v1/wizard/run": {
+      "post": {
+        "description": "Run a stop of the wizard: its steps one after another, as one operation, stopping\nat the first that fails. Progress is in the wizard's ``run``.",
+        "operationId": "run_stop_api_v1_wizard_run_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Run Stop",
         "tags": [
           "wizard"
         ]

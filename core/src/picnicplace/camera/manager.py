@@ -25,6 +25,9 @@ def sim_truth(camera: Camera, config: Config) -> Camera:
     elif camera.looking == "up":
         dx, dy, dz = machine.sim_bottom_camera_error
         truth.position = Point(x=camera.position.x + dx, y=camera.position.y + dy)
+        truth.image_rotation = machine.sim_bottom_camera_turn
+        k = machine.sim_bottom_camera_scale
+        truth.field_of_view = Point(x=camera.field_of_view.x * k, y=camera.field_of_view.y * k)
         truth.focus_height = (camera.focus_height or SIM_FOCUS_HEIGHT) + dz
     return truth
 

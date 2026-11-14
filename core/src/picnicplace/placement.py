@@ -470,11 +470,7 @@ class PlacementService:
 
         await self._machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y)
         await self._machine.lower_nozzle(nozzle, camera.focus_height + height)
-        await self._machine.set_light(camera, True)
-        try:
-            frame = await self._machine.frame(camera.id)
-        finally:
-            await self._machine.set_light(camera, False)
+        frame = await self._machine.frame(camera.id)
         h, w = frame.image.shape[:2]
         mm_per_px = camera.field_of_view.x / w
         size = pads[1] if pads else Point(x=1.6, y=0.8)

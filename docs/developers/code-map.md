@@ -29,7 +29,7 @@ A request goes **route → service → machine service → driver**:
    as an operation started through `MachineService.start_task`.
 3. `machine/service.py` (the **machine service**) is the one owner of the machine. Every
    move, output, camera frame, and vision call goes through it, and so does every safety
-   rule (safe Z, homing, travel limits, E-stop).
+   rule (safe Z, homing, travel limits, E-stop, pause, resume and stop).
 4. A **driver** (`machine/simulator.py`, or the Marlin driver) talks to the hardware.
 
 ## Repository layout
@@ -70,7 +70,7 @@ A request goes **route → service → machine service → driver**:
 | `machine/profile.py` | Machine profiles: axes, nozzles, cameras, feeder banks, locations, keep-outs. Built-in profiles hold a model's **design facts only**, and can `extends` another. |
 | `machine/local.py` | The local profile: what is true of one machine (discard and park locations, measured keep-outs), laid over the built-in profile. Written by the Studio. |
 | `machine/service.py` | The machine service: the one owner of the machine, and where the safety rules live. Also camera frames and vision calls for tasks. |
-| `machine/bottom_camera.py` | Calibrating the bottom camera with a nozzle tip: its place, focus height, scale, and turn, and how big the fitted tip looked |
+| `machine/bottom_camera.py` | Calibrating the bottom camera with a nozzle tip: its place, focus height, scale, and turn, and how big the fitted tip looked; naming the tip on each nozzle by the size of its end |
 | `machine/sniff.py` | Finding a height by touch: a nozzle steps down with suction on until the vacuum jumps from its open reading (the datum board, a board's fiducial, a part in its pocket) |
 | `machine/tips.py` | Which nozzle tip is fitted on each nozzle, kept in the data directory |
 | `machine/nozzle_offsets.py` | Calibrating the nozzle offsets: sniffing for the datum board's height, then turning a disc on it with each nozzle; each nozzle's vacuum levels measured on the way |
@@ -90,7 +90,9 @@ A request goes **route → service → machine service → driver**:
 | `vision/focus.py` | How sharp part of a frame is, for finding a camera's focus |
 | `capture.py` | Saves single frames on request, for tuning vision on real images |
 | `calibration.py` | The calibration checklist: what the machine has measured of itself and when, using it in place of the profile's values, what a crash makes out of date, and what stops a run |
-| `wizard.py` | The setup wizard: each page's state (from the checklist, the bring-up checklist, and the pages the owner confirms), the machine's stage, and the limits `MachineService.start_task` holds it to until calibrated |
+| `machine_setup.py` | The setup wizard's choices (machine, serial port, cameras), laid under the config when `picnicd` starts; listing serial ports and cameras; probing a port without moving anything |
+| `wizard_run.py` | Running a stop of the setup wizard: its steps one after another, as one operation, with progress for the Studio |
+| `wizard.py` | The setup wizard: each page's state (from the running machine, the checklist, the bring-up checklist's steps, and the pages the owner confirms), the machine's stage, and the limits `MachineService.start_task` holds it to until calibrated |
 | `recorder.py` | The flight recorder: every frame vision looked at and everything the machine did, and `replay_vision` to run today's vision on recorded frames |
 
 ### Parts, feeders, boards, and jobs
@@ -127,6 +129,7 @@ The core keeps the owner's data in one folder (`data.dir` in the config; by defa
 | `recordings/` | Flight recordings | `recorder.py` |
 | `bring-up.json` | Progress through the bring-up checklist | `bringup.py` |
 | `wizard.json` | The setup wizard's pages the owner confirmed or skipped | `wizard.py` |
+| `machine-setup.json` | The setup wizard's choices: the machine, its serial port and cameras, and the last probe | `machine_setup.py` |
 | `calibration.json` | What the machine has measured of itself (homing, the homing fiducial, the top camera's scale, the bottom camera, the nozzle offsets, each nozzle's Z offset and vacuum levels for each tip), when, and what is out of date | `calibration.py` |
 | `nozzle-tips.json` | Which tip is fitted on each nozzle | `machine/tips.py` |
 
@@ -158,9 +161,9 @@ client. Useful pieces:
 
 | Path | What is there |
 |---|---|
-| `App.tsx` | The shell: the top bar's workspaces, the status bar, E-stop |
+| `App.tsx` | The shell: the top bar's workspaces, the status bar, Pause and Resume |
 | `workspaces/` | One screen per tab: `PrepareWorkspace` (boards and jobs), `LibraryWorkspace` (Parts), `FeedersWorkspace`, `RunWorkspace`, `MachineWorkspace` |
-| `components/` | Panels and controls used by the workspaces; `machine/` holds the machine view (the overhead map and head inset), `wizard/` the setup wizard and the calibration banner, `job/` and `library/` their own pieces |
+| `components/` | Panels and controls used by the workspaces; `machine/` holds the machine view (the overhead map and head inset), `wizard/` the setup wizard (a panel over the map) and the calibration banner, `job/` and `library/` their own pieces |
 | `api/schema.ts` | **Generated** TypeScript types for the whole API (`make api`); never edit by hand |
 | `api/types.ts` | Short names for the generated types |
 | `tape.ts`, `runSteps.ts` | Pure logic with unit tests: tape geometry, fit check, pin-1 quadrant, and table-cell parsing; a run's step list |

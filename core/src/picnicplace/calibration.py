@@ -69,8 +69,6 @@ HOMING_OFF_WARN_MM = 1.0
 SCALE_WARN = 0.1
 """A measured camera scale this far (as a fraction) from the profile's is worth a look:
 the measured one is used, but so far off suggests the wrong lens or camera height."""
-ROTATION_WARN_DEG = 1.0
-"""A bottom camera image turned more than this is worth straightening."""
 NOZZLE_OFFSET_WARN_MM = 1.0
 """A nozzle measured farther than this from the profile's offset is worth a look: the
 measured offset is used, but so far off suggests a bent nozzle or a loose head."""
@@ -268,6 +266,7 @@ def apply_measurements(profile: MachineProfile, record: CalibrationRecord) -> No
                     dx, dy = nozzle.offset.x - v[kx], nozzle.offset.y - v[ky]
             camera.position = Point(x=v["x"] + dx, y=v["y"] + dy)
             camera.focus_height = v["focus"]
+            camera.image_rotation = v.get("rotation", 0.0)
             camera.field_of_view = Point(x=v["scale_x"] * v["width"], y=v["scale_y"] * v["height"])
 
 
@@ -395,14 +394,8 @@ def build_checklist(
     if not up:
         add("bottom_camera", "not_needed", "This machine has no bottom camera.")
     elif (line := _measured("bottom_camera", 0, record, "bottom_camera")) is not None:
-        turned = record.lines["bottom_camera"].values.get("rotation", 0.0)
-        warning = (
-            f"Its image is turned {turned:+.1f}°: turn the camera, or set its rotation in "
-            "the config"
-            if abs(turned) > ROTATION_WARN_DEG
-            else None
-        )
-        add_measured(line, warning)
+        # The measured turn is undone in what the camera sees: nothing to warn of.
+        add_measured(line)
     elif any(c.focus_height is None for c in up):
         add(
             "bottom_camera",

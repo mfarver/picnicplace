@@ -197,6 +197,14 @@ class Camera(ProfileModel):
             "part's height."
         ),
     )
+    image_rotation: float = Field(
+        default=0.0,
+        description=(
+            "Up-looking cameras: degrees the picture is turned from what the machine's axes "
+            "say (clockwise as shown), measured by calibrating the camera. What the camera "
+            "sees is turned back by this much."
+        ),
+    )
 
 
 class Location(ProfileModel):

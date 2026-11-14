@@ -1,0 +1,49 @@
+import { Pause, Play } from "lucide-react";
+import { api } from "../api/client";
+import { hasControl, useCore } from "../api/core";
+
+/**
+ * Pause and Resume, always in the top bar. Pause holds the machine before its next move
+ * (the move under way finishes) and anyone may press it; Resume, for the client in
+ * control, carries on. There is no software emergency stop here: Marlin acts on one only
+ * after the move under way and then stays halted until it is power-cycled. The stop for an
+ * emergency is the power switch, or an E-stop switch that cuts the motors' power.
+ */
+export function PauseButton() {
+  const core = useCore();
+  const { status, machine } = core;
+  const live = status === "open" && machine !== undefined;
+  if (machine?.paused) {
+    return (
+      <button
+        type="button"
+        className="pause resume"
+        disabled={!live || !hasControl(core)}
+        title={
+          hasControl(core)
+            ? "Carry on from where the machine was paused."
+            : "Only the client in control can resume the machine."
+        }
+        onClick={() => void api.POST("/api/v1/machine/resume")}
+      >
+        <Play size={16} strokeWidth={2.5} aria-hidden />
+        RESUME
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="pause"
+      disabled={!live || !machine?.connected}
+      title={
+        "Pause before the next move: the move under way finishes first. In an emergency, " +
+        "switch the machine off (or use an E-stop switch that cuts the motors' power)."
+      }
+      onClick={() => void api.POST("/api/v1/machine/pause")}
+    >
+      <Pause size={16} strokeWidth={2.5} aria-hidden />
+      PAUSE
+    </button>
+  );
+}

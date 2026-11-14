@@ -1092,7 +1092,10 @@ export interface paths {
         put?: never;
         /**
          * Estop
-         * @description Emergency stop. Allowed for any authenticated client, in any state.
+         * @description Emergency stop: the firmware's halt (``M112`` on Marlin), sent at once. Marlin acts
+         *     on it at once only when built with its emergency parser, and then stays halted until
+         *     the controller is power-cycled; the Studio pauses instead. Allowed for any
+         *     authenticated client, in any state.
          */
         post: operations["estop_api_v1_machine_estop_post"];
         delete?: never;
@@ -1279,6 +1282,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause
+         * @description Pause: the move under way finishes, then the running operation waits before its
+         *     next move, and nothing new starts, until resume or stop. Allowed for any
+         *     authenticated client, in any state.
+         */
+        post: operations["pause_api_v1_machine_pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/reset": {
         parameters: {
             query?: never;
@@ -1293,6 +1318,48 @@ export interface paths {
          * @description Clear a latched emergency stop. The machine must be homed again afterward.
          */
         post: operations["reset_api_v1_machine_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/machine/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume
+         * @description Carry on from where pause held the machine.
+         */
+        post: operations["resume_api_v1_machine_resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/machine/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop
+         * @description End the running operation before its next move (it may still raise the nozzles),
+         *     resuming the machine if it is paused. The machine stays homed. Allowed for any
+         *     authenticated client, in any state; does nothing if nothing runs.
+         */
+        post: operations["stop_api_v1_machine_stop_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1763,6 +1830,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Setup
+         * @description The wizard's choices, what the core is running, and what the config file pins.
+         */
+        get: operations["get_setup_api_v1_setup_get"];
+        /**
+         * Put Setup
+         * @description Keep the wizard's choices. They are used when the core next starts; the last
+         *     probe is kept while the serial port stays the same.
+         */
+        put: operations["put_setup_api_v1_setup_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/cameras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Cameras
+         * @description The cameras the wizard offers: stable paths on Linux, the first indexes elsewhere.
+         */
+        get: operations["list_cameras_api_v1_setup_cameras_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe
+         * @description Ask the firmware on a serial port what it is, and read its vacuum sensors. Nothing
+         *     moves or switches on. The result is kept with the wizard's choices.
+         */
+        post: operations["probe_api_v1_setup_probe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restart
+         * @description Restart the core, to use the wizard's choices. Studios reconnect when it is back.
+         */
+        post: operations["restart_api_v1_setup_restart_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/serial-ports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Serial Ports
+         * @description The serial devices a machine might be on, found by name: none is opened.
+         */
+        get: operations["list_serial_ports_api_v1_setup_serial_ports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/wizard": {
         parameters: {
             query?: never;
@@ -1794,12 +1967,33 @@ export interface paths {
         get?: never;
         /**
          * Set Page
-         * @description Finish a page the owner confirms (the tips fitted, the discard and park locations),
+         * @description Finish a page the owner confirms (the discard and park locations),
          *     skip an optional one (strips and trays), or open one again. Pages the machine
          *     measures are finished by measuring them.
          */
         put: operations["set_page_api_v1_wizard_pages__page_id__put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wizard/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Stop
+         * @description Run a stop of the wizard: its steps one after another, as one operation, stopping
+         *     at the first that fails. Progress is in the wizard's ``run``.
+         */
+        post: operations["run_stop_api_v1_wizard_run_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2100,6 +2294,12 @@ export interface components {
             focus_height: number | null;
             /** Id */
             id: string;
+            /**
+             * Image Rotation
+             * @description Up-looking cameras: degrees the picture is turned from what the machine's axes say (clockwise as shown), measured by calibrating the camera. What the camera sees is turned back by this much.
+             * @default 0
+             */
+            image_rotation: number;
             /** Label */
             label: string;
             /** Light Output */
@@ -2122,6 +2322,68 @@ export interface components {
              * @default 0.25
              */
             settle_s: number;
+        };
+        /** CameraChoice */
+        "CameraChoice-Input": {
+            /**
+             * Device
+             * @description A path or an index; None: the camera is off.
+             */
+            device?: string | null;
+            /**
+             * Flip X
+             * @description Mirror the picture left to right.
+             * @default false
+             */
+            flip_x: boolean;
+            /**
+             * Flip Y
+             * @description Mirror the picture top to bottom.
+             * @default false
+             */
+            flip_y: boolean;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, after the flips.
+             * @default 0
+             */
+            rotation: number;
+        };
+        /** CameraChoice */
+        "CameraChoice-Output": {
+            /**
+             * Device
+             * @description A path or an index; None: the camera is off.
+             */
+            device: string | null;
+            /**
+             * Flip X
+             * @description Mirror the picture left to right.
+             * @default false
+             */
+            flip_x: boolean;
+            /**
+             * Flip Y
+             * @description Mirror the picture top to bottom.
+             * @default false
+             */
+            flip_y: boolean;
+            /**
+             * Rotation
+             * @description Degrees counterclockwise, after the flips.
+             * @default 0
+             */
+            rotation: number;
+        };
+        /** CameraDevice */
+        CameraDevice: {
+            /**
+             * Device
+             * @description What to put in the camera's config: a path or an index.
+             */
+            device: string;
+            /** Label */
+            label: string;
         };
         /** CameraInfo */
         CameraInfo: {
@@ -3244,6 +3506,13 @@ export interface components {
             /** @description Where it is. Default: where the top camera is looking. */
             position?: components["schemas"]["Point"] | null;
         };
+        /** MachineChoice */
+        MachineChoice: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** MachineLocation */
         "MachineLocation-Input": {
             /**
@@ -3430,6 +3699,42 @@ export interface components {
              */
             y_points: "back" | "front";
         };
+        /** MachineSetup */
+        MachineSetup: {
+            /**
+             * Cameras
+             * @description Camera ID from the profile to its device and how its picture is turned.
+             */
+            cameras: {
+                [key: string]: components["schemas"]["CameraChoice-Output"];
+            };
+            /**
+             * Driver
+             * @description 'marlin': the real machine on serial_port. 'simulator': try it with none.
+             */
+            driver: ("simulator" | "marlin") | null;
+            /**
+             * Format
+             * @default picnicplace-machine-setup
+             * @constant
+             */
+            format: "picnicplace-machine-setup";
+            /** @description The last probe of serial_port. */
+            probe: components["schemas"]["ProbeResult"] | null;
+            /**
+             * Profile
+             * @description A built-in machine profile's ID, such as 'lumenpnp-v4.1'.
+             */
+            profile: string | null;
+            /** Serial Port */
+            serial_port: string | null;
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
         /** MachineState */
         MachineState: {
             /** Axes */
@@ -3479,6 +3784,11 @@ export interface components {
             outputs: {
                 [key: string]: boolean;
             };
+            /**
+             * Paused
+             * @description Paused: the running operation waits before its next move, and nothing new starts, until resume (or stop).
+             */
+            paused: boolean;
             /**
              * Position
              * @description Current position per axis, mm or degrees.
@@ -4350,6 +4660,50 @@ export interface components {
             /** Present */
             present: boolean;
         };
+        /** ProbeRequest */
+        ProbeRequest: {
+            /** Serial Port */
+            serial_port: string;
+        };
+        /**
+         * ProbeResult
+         * @description What a serial port's firmware said, asked without moving anything.
+         */
+        ProbeResult: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * Emergency Parser
+             * @description STOP acts mid-move (the firmware's emergency parser), if it says.
+             */
+            emergency_parser: boolean | null;
+            /**
+             * Expected Machine Type
+             * @description What the chosen machine's profile expects, if it says.
+             */
+            expected_machine_type: string | null;
+            /**
+             * Firmware
+             * @description Its name and version, from M115.
+             */
+            firmware: string | null;
+            /** Machine Type */
+            machine_type: string | null;
+            /** Serial Port */
+            serial_port: string;
+            /**
+             * Vacuum
+             * @description The vacuum sensors read in each firmware variant the profile knows: the one that gives numbers is the one this firmware speaks.
+             */
+            vacuum: {
+                [key: string]: {
+                    [key: string]: number | string;
+                };
+            };
+        };
         /** PublishRequest */
         PublishRequest: {
             /**
@@ -4628,6 +4982,21 @@ export interface components {
             /** Y */
             y: number;
         };
+        /** RunRequest */
+        RunRequest: {
+            /**
+             * Redo
+             * @description Redo every step (Run again), not only those still to do or out of date.
+             * @default false
+             */
+            redo: boolean;
+            /**
+             * Stop
+             * @description 1: everything the machine can do with a hand on the power switch (homing, visual homing, the cameras, naming the tips, the feeders). 2: with a paper disc on the datum board, each nozzle's offset, height and vacuum levels.
+             * @enum {integer}
+             */
+            stop: 1 | 2;
+        };
         /** RunState */
         RunState: {
             /**
@@ -4636,7 +5005,7 @@ export interface components {
              */
             board_z: number | null;
             /** @description The step under way. Kept when the run pauses on a problem, to show where it stopped; empty between batches and when the run ends. */
-            current: components["schemas"]["RunStep"] | null;
+            current: components["schemas"]["picnicplace__job__run__RunStep"] | null;
             /**
              * Error
              * @description Why the run paused, if it did.
@@ -4700,31 +5069,62 @@ export interface components {
              */
             stop_requested: boolean;
         };
-        /**
-         * RunStep
-         * @description What the run is doing now, or was doing when it paused on a problem.
-         */
-        RunStep: {
+        /** SerialPort */
+        SerialPort: {
+            /** Device */
+            device: string;
             /**
-             * Action
-             * @enum {string}
+             * Label
+             * @description What the device's name says, for people.
              */
-            action: "scanning" | "finding_fiducials" | "measuring_board" | "finding_feeder" | "picking" | "aligning" | "placing";
-            /**
-             * Index
-             * @description The placement, for stage 'item'.
-             */
-            index: number | null;
-            /** Nozzle */
-            nozzle: string | null;
-            /**
-             * Stage
-             * @description Scanning the feeders, finding the board, or working on a placement.
-             * @enum {string}
-             */
-            stage: "scan" | "board" | "item";
+            label: string;
         };
         ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
+        /** SetupChoice */
+        SetupChoice: {
+            /** Cameras */
+            cameras?: {
+                [key: string]: components["schemas"]["CameraChoice-Input"];
+            };
+            /** Driver */
+            driver?: ("simulator" | "marlin") | null;
+            /** Profile */
+            profile?: string | null;
+            /** Serial Port */
+            serial_port?: string | null;
+        };
+        /** SetupState */
+        SetupState: {
+            /**
+             * Can Restart
+             * @description The core can restart itself; otherwise the owner restarts it.
+             */
+            can_restart: boolean;
+            /**
+             * Machines
+             * @description The built-in machine profiles.
+             */
+            machines: components["schemas"]["MachineChoice"][];
+            /**
+             * Pinned
+             * @description Choices the config file sets itself, which win over the wizard's: machine.profile, machine.driver, machine.marlin.port, cameras.<id>.
+             */
+            pinned: string[];
+            /**
+             * Restart Needed
+             * @description The wizard's choices differ from what the core runs: restart it.
+             */
+            restart_needed: boolean;
+            /**
+             * Running
+             * @description What the core is running now: profile, driver, serial_port, and each camera's device (None: off or simulated).
+             */
+            running: {
+                [key: string]: string | null;
+            };
+            /** @description The wizard's choices, as kept. */
+            saved: components["schemas"]["MachineSetup"];
+        };
         /** Size */
         Size: {
             /**
@@ -5146,6 +5546,12 @@ export interface components {
              * @enum {string}
              */
             status: "done" | "todo" | "stale" | "skipped" | "not_needed" | "not_built";
+            /**
+             * Stop
+             * @description Which of the wizard's stops does it: 0 choosing the machine; 1 with a hand on the power switch; 2 with a paper disc on the datum board; 3 checking the discard and park spots.
+             * @enum {integer}
+             */
+            stop: 0 | 1 | 2 | 3;
             /** Title */
             title: string;
             /**
@@ -5153,6 +5559,21 @@ export interface components {
              * @description Something in its result worth a look.
              */
             warning: string | null;
+        };
+        /**
+         * WizardRun
+         * @description A stop being run (or the last one run): its steps, one after another.
+         */
+        WizardRun: {
+            /** Running */
+            running: boolean;
+            /** Steps */
+            steps: components["schemas"]["picnicplace__wizard__RunStep"][];
+            /**
+             * Stop
+             * @enum {integer}
+             */
+            stop: 1 | 2;
         };
         /** WizardState */
         WizardState: {
@@ -5166,8 +5587,15 @@ export interface components {
              * @description The first page still to do (or out of date), where Continue opens.
              */
             next_page: ("welcome" | "machine" | "connect" | "cameras" | "first_motion" | "bed" | "visual_homing" | "top_camera_scale" | "nozzle_tips" | "bottom_camera" | "nozzle_offsets" | "nozzle_runout" | "discard_park" | "feeders" | "strips_trays" | "done") | null;
+            /**
+             * Next Stop
+             * @description The first stop with a page still to do (or out of date).
+             */
+            next_stop: (0 | 1 | 2 | 3) | null;
             /** Pages */
             pages: components["schemas"]["WizardPage"][];
+            /** @description The stop being run, or the last one run. */
+            run: components["schemas"]["WizardRun"] | null;
             /**
              * Stage
              * @enum {string}
@@ -5199,6 +5627,47 @@ export interface components {
              * @description A feeder slot, or a strip or tray on the bed (T1, ...).
              */
             slot_id: string;
+        };
+        /**
+         * RunStep
+         * @description What the run is doing now, or was doing when it paused on a problem.
+         */
+        picnicplace__job__run__RunStep: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "scanning" | "finding_fiducials" | "measuring_board" | "finding_feeder" | "picking" | "aligning" | "placing";
+            /**
+             * Index
+             * @description The placement, for stage 'item'.
+             */
+            index: number | null;
+            /** Nozzle */
+            nozzle: string | null;
+            /**
+             * Stage
+             * @description Scanning the feeders, finding the board, or working on a placement.
+             * @enum {string}
+             */
+            stage: "scan" | "board" | "item";
+        };
+        /** RunStep */
+        picnicplace__wizard__RunStep: {
+            /** Id */
+            id: string;
+            /**
+             * Message
+             * @description What it found or did, or why it failed.
+             */
+            message: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "waiting" | "running" | "done" | "failed" | "skipped" | "stopped";
+            /** Title */
+            title: string;
         };
     };
     responses: never;
@@ -8233,6 +8702,26 @@ export interface operations {
             };
         };
     };
+    pause_api_v1_machine_pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineState"];
+                };
+            };
+        };
+    };
     reset_api_v1_machine_reset_post: {
         parameters: {
             query?: never;
@@ -8261,6 +8750,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_api_v1_machine_resume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_api_v1_machine_stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineState"];
                 };
             };
         };
@@ -9272,6 +9813,170 @@ export interface operations {
             };
         };
     };
+    get_setup_api_v1_setup_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupState"];
+                };
+            };
+        };
+    };
+    put_setup_api_v1_setup_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupChoice"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_cameras_api_v1_setup_cameras_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraDevice"][];
+                };
+            };
+        };
+    };
+    probe_api_v1_setup_probe_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restart_api_v1_setup_restart_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_serial_ports_api_v1_setup_serial_ports_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SerialPort"][];
+                };
+            };
+        };
+    };
     wizard_api_v1_wizard_get: {
         parameters: {
             query?: never;
@@ -9300,7 +10005,7 @@ export interface operations {
                 "X-PicnicPlace-Client"?: string | null;
             };
             path: {
-                page_id: "nozzle_tips" | "discard_park" | "strips_trays";
+                page_id: "discard_park" | "strips_trays";
             };
             cookie?: never;
         };
@@ -9317,6 +10022,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WizardState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_stop_api_v1_wizard_run_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
                 };
             };
             /** @description Validation Error */

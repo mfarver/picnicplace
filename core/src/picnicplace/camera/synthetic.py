@@ -635,6 +635,12 @@ class BottomRenderer:
             elif state.held.get(nozzle.id):
                 # Parts never sit exactly centered: a small, fixed pick error.
                 _chip(canvas, img, x + 0.12, y - 0.07, angle + 3.0)
+        if self.camera.image_rotation:
+            # The camera mounted turned: its whole picture is turned (clockwise as shown).
+            m = cv2.getRotationMatrix2D((w / 2, h / 2), -self.camera.image_rotation, 1.0)
+            img = np.asarray(
+                cv2.warpAffine(img, m, (w, h), borderValue=(12, 12, 14)), dtype=np.uint8
+            )
         return _finish(img, self._grain, self.camera, state)
 
 

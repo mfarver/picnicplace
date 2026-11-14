@@ -107,6 +107,10 @@ class DataConfig(_Section):
         return self.dir.expanduser() / "recordings"
 
     @property
+    def setup_path(self) -> Path:
+        return self.dir.expanduser() / "machine-setup.json"
+
+    @property
     def wizard_path(self) -> Path:
         return self.dir.expanduser() / "wizard.json"
 
@@ -211,6 +215,29 @@ class MachineConfig(_Section):
         description=(
             "Simulator only: the top camera's true field of view, as a multiple of the "
             "profile's. Measuring the camera's scale finds and corrects it."
+        ),
+    )
+    sim_bottom_camera_scale: float = Field(
+        default=1.0,
+        gt=0,
+        description=(
+            "Simulator only: the bottom camera's true field of view, as a multiple of the "
+            "profile's (a wider lens sees more). Calibrating the bottom camera finds it."
+        ),
+    )
+    sim_tips: dict[str, str] = Field(
+        default_factory=dict[str, str],
+        description=(
+            "Simulator only: the nozzle tip really fitted on each nozzle, by nozzle ID, "
+            "whatever the operator says: the bottom camera sees these."
+        ),
+    )
+    sim_bottom_camera_turn: float = Field(
+        default=0.0,
+        description=(
+            "Simulator only: degrees the bottom camera's picture is really turned "
+            "(clockwise as shown), as if mounted turned. Calibrating the bottom camera "
+            "measures it, and bottom vision undoes it."
         ),
     )
     sim_bottom_camera_error: tuple[float, float, float] = Field(
@@ -441,8 +468,13 @@ class Config(_Section):
 
 def load_config(path: Path | None) -> Config:
     """Load configuration from a TOML file, or return defaults when ``path`` is None."""
+    return Config.model_validate(load_raw(path))
+
+
+def load_raw(path: Path | None) -> dict[str, Any]:
+    """A TOML config file's data, before validation (none for no file)."""
     if path is None:
-        return Config()
+        return {}
     with path.open("rb") as f:
         data = tomllib.load(f)
     # A profile given as a relative path is relative to the config file.
@@ -450,4 +482,4 @@ def load_config(path: Path | None) -> Config:
     profile = machine.get("profile")
     if isinstance(profile, str) and is_profile_path(profile) and not Path(profile).is_absolute():
         machine["profile"] = str(path.parent / profile)
-    return Config.model_validate(data)
+    return data

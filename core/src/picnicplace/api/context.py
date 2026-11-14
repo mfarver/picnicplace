@@ -19,6 +19,7 @@ from picnicplace.lease import LeaseManager
 from picnicplace.library import Library
 from picnicplace.machine.local import LocalProfile
 from picnicplace.machine.service import MachineService
+from picnicplace.machine_setup import SetupStore
 from picnicplace.operations import OperationManager
 from picnicplace.placement import PlacementService
 from picnicplace.presence import PresenceTracker
@@ -40,6 +41,11 @@ class AppContext:
     captures: CaptureStore
     local_profile: LocalProfile
     wizard: Wizard
+    setup: SetupStore
+    pinned: frozenset[str] = frozenset()
+    """The setup wizard's keys the config file sets itself."""
+    restart: Callable[[], None] | None = None
+    """Restarts the core with the wizard's choices, when picnicd started it."""
     library: Library | None = None
     """Opened when the app starts, so building the app (as for the OpenAPI document)
     touches no files."""

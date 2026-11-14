@@ -1,11 +1,11 @@
 import { ArrowRight, TriangleAlert } from "lucide-react";
 import { hasControl, useCore } from "../../api/core";
 import { openWizard, useWizard } from "../../api/useWizard";
-import { stageMessage } from "./wizardPages";
+import { STOP_TEXT, stageMessage } from "./wizardPages";
 
 /**
  * Across the top of every workspace until the machine is calibrated: what is limited,
- * the next page to do, and Continue calibration, which opens the setup wizard there. It
+ * the next stop, and Continue calibration, which opens the setup wizard there. It
  * cannot be dismissed. A Studio another client controls sees it without the button.
  */
 export function CalibrationBanner({ onOpen }: { onOpen: () => void }) {
@@ -13,7 +13,7 @@ export function CalibrationBanner({ onOpen }: { onOpen: () => void }) {
   const [state] = useWizard();
   if (!state || state.stage === "calibrated") return null;
   const canContinue = !core.lease?.holder || hasControl(core);
-  const next = state.pages.find((p) => p.id === state.next_page);
+  const next = state.next_stop !== null ? STOP_TEXT[state.next_stop] : null;
 
   return (
     <div className="version-banner calibration-banner" role="status">

@@ -18,6 +18,10 @@ class MachineBusyError(MachineError):
     code = "busy"
 
 
+class MachinePausedError(MachineError):
+    code = "paused"
+
+
 class NotConnectedError(MachineError):
     code = "not_connected"
 
@@ -39,6 +43,12 @@ class InvalidTargetError(MachineError):
 
 class MotionInterruptedError(MachineError):
     code = "interrupted"
+
+
+class StoppedError(MachineError):
+    """The owner asked the running operation to stop (not an emergency stop)."""
+
+    code = "stopped"
 
 
 class UnknownOutputError(MachineError):

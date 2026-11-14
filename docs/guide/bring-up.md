@@ -10,127 +10,109 @@
 PicnicPlace runs on Linux for real machines. These steps are for a LumenPnP v4.1 or v4.2
 with stock firmware; other machines need their own machine profile.
 
-## 1. Probe the firmware
+## 1. Start the core and open the wizard
 
-`picnicplace-probe` asks the firmware about itself and never sends a motion command:
+Start the core (`uv run picnicd` in `core`) and open the Studio. Until a machine is
+chosen it runs the built-in simulator: it says so when it starts, and the Studio's status
+bar shows **Simulator**. A banner across the top says calibration is not complete;
+**Continue calibration** opens the **Setup wizard** in the Machine workspace at the next
+page. Each page says what it learns, what to do before it, and what will happen. You can
+leave at any page and pick up there later.
 
-```sh
-cd core
-uv run picnicplace-probe --serial-port /dev/ttyACM0 --with-pumps
-```
+What you choose in the wizard is kept in `machine-setup.json` in the core's data
+directory. Anything set in a config file (`picnicd -c path/to/picnicd.toml`, see
+[`core/picnicd.example.toml`](https://github.com/mfarver/picnicplace/blob/main/core/picnicd.example.toml))
+or on the command line wins over it, and the wizard says so on that page.
 
-It reports:
+## 2. Your machine and its serial port
 
-- the firmware's name and version, and whether STOP can act in the middle of a move
-  (Marlin's emergency parser)
-- endstop states, stored settings, and the position the firmware reports
-- vacuum readings in each firmware variant the profile knows, to show which one your
-  firmware speaks
-- with `--with-pumps`, each nozzle's vacuum with its pump and valve on for about a second
-- the cameras and their video formats
+- [ ] **Your machine** (page 2): choose LumenPnP v4.1 or v4.2, and **My machine, on a
+      serial port**. (**Try it in the simulator** keeps the simulator, with that
+      machine's layout.)
+- [ ] **Connect** (page 3): plug the machine in, turn it on, close OpenPnP, and choose
+      its port (on Linux, the stable `/dev/serial/by-id/` path if there is one).
+      **Probe** asks the firmware what it is, and never moves anything or switches
+      anything on. It shows the firmware and its version, the machine type (and whether
+      it is what the profile expects), whether STOP can act in the middle of a move
+      (Marlin's emergency parser), and which format the vacuum sensors read in.
+- [ ] **Restart the core**. It comes back on the machine, and the Studio reloads. Until
+      every page is done, every move runs at a quarter of full speed at most.
 
-It saves everything to a transcript file. Include that file when asking for help with a
+If the probe read the vacuum sensors only in the `vacuum-24bit` format, set
+`variant = "vacuum-24bit"` under `[machine.marlin]` in a config file (the wizard does not
+set it yet).
+
+For a full transcript to share when asking for help, stop the core and run
+`uv run picnicplace-probe --serial-port /dev/ttyACM0 --with-pumps` in `core`. It also
+reads each nozzle's vacuum with its pump and valve on for about a second, and lists the
+cameras and their video formats.
+
+## 3. Calibrate: three stops
+
+The **Setup wizard** floats over the machine map in the Machine workspace (the banner's
+**Continue calibration** opens it). It asks for you only where the machine cannot act or
+check for itself: each stop says what to do, then one **Start** runs every step after it,
+showing each as it runs and what it found. A step that fails stops the run and says what
+to check. **Start** again skips the steps already done and still good (homing, if the
+machine is homed), so it picks up where the last run stopped; once every page of a stop
+is done, the button reads **Run again** and redoes them all. **Pause** (in the wizard,
+or the top bar) lets the move under way finish, then holds the machine until **Resume**;
+**Stop** ends the run there, with the machine still homed. Neither is an emergency stop:
+for that, switch the machine off, or fit an E-stop switch that cuts the motors' power.
+You can close the wizard and come back to it from any Studio: what the machine measures is kept in `calibration.json` in the data
+directory, and the pages you confirm in `wizard.json`.
+
+1. **Hand on the power switch.** Keep a hand on the machine's power switch (the LumenPnP
+   has no E-stop), with the nozzle tips fitted and empty, and click **Start**. At a
+   quarter of full speed, it:
+    - homes. After homing, Z must read 0 with both nozzles level; if the firmware reports
+      anything else, homing fails saying so (the LumenPnP profile sends `G92 Z0`, because
+      its firmware calls level 31.5);
+    - runs visual homing: finding the datum board's dot where the profile says confirms
+      that X and Y move the right way and the top camera's picture is the right way
+      around, and places the keep-outs, which are measured from the dot;
+    - measures the top camera's scale (the line warns if it is more than 10% from the
+      profile's);
+    - calibrates the bottom camera with the left nozzle: it finds the tip by any round
+      mark near the middle (the profile's scale for the camera is a guess, and on one real
+      LumenPnP it was 3.7 times off), steps the head to measure the camera's real scale and
+      how far its picture is turned, centers the tip, and steps the nozzle up and down
+      for the sharpest picture, never more than 2 mm past the profile's focus height. A
+      turned picture is undone in everything the bottom camera sees;
+    - names the tip on each nozzle by the size of its end, seen from below;
+    - scans the feeders and calibrates their rails, if there are feeders at each rail's
+      ends (otherwise each feeder's fiducial is found on its first pick).
+2. **Paper disc on the datum board.** Punch a small paper disc (a hole punch is right),
+   lay it flat on the datum board, clear of its center dot, and click **Start**. The top
+   camera looks over the board for it (the brightest round mark, apart from the board's
+   own marks around the dot). Each nozzle then sniffs for the board's height on its dot:
+   with suction on, it steps down until the vacuum seals, never more than 1.5 mm below
+   the profile's height. Then it picks the disc up, turns it, and sets it down three
+   times, and the top camera finds it after each. A nozzle more than a millimeter from
+   the profile's offset is flagged. Where each nozzle touched the board corrects its
+   heights from then on, and its vacuum readings (open, sealed, holding the disc) set its
+   own pick threshold. Each tip's heights and vacuum levels are kept, and come back when
+   that tip is fitted again; a tip not measured yet marks this stop out of date.
+3. **Discard and park.** Check the two spots on the map: jog the top camera over the
+   discard tray and click **Set discard here**, and to a spot where the head can wait and
+   click **Set park here**, if they are not right. Then **They are right**.
+
+Until all three are done, the machine is limited, and a banner across the top of every
+workspace says so. Homing, jogging and the wizard's steps work, at a quarter of full
+speed at most. Picks, placements and runs are refused, and teaching feeders waits until
+homing and the top camera are done. Once calibrated, a stop going out of date (after a
+crash) pauses runs until it is run again; a single pick or placement still works, with a
+warning naming what is out of date.
+
+**Check by hand (optional)**, under stop 1, keeps the hand checks: jogging each axis,
+which nozzle is which, each light, pump and valve from the Head inset, and STOP during a
+slow move (the firmware probe already says whether STOP acts mid-move). What they find that
+differs from the profile (which way an axis points, keep-outs) can be saved to this
 machine.
-
-## 2. Configure the core
-
-Copy [`core/picnicd.example.toml`](https://github.com/mfarver/picnicplace/blob/main/core/picnicd.example.toml)
-and set at least:
-
-```toml
-[machine]
-driver = "marlin"
-profile = "lumenpnp-v4.1"   # or "lumenpnp-v4.2"
-speed_scale = 0.25         # quarter speed while you check the machine
-
-[machine.marlin]
-port = "/dev/ttyACM0"
-```
-
-If the probe showed vacuum readings only in the `vacuum-24bit` variant, also set
-`variant = "vacuum-24bit"` under `[machine.marlin]`.
-
-Start the core with the config: `uv run picnicd -c path/to/picnicd.toml`. Without `-c` it
-runs the built-in simulator instead: it says so when it starts, and the Studio's status
-bar shows **Simulator**.
-
-## 3. First motion
-
-Start the core with your config and open the Studio. The **Bring-up** panel in the
-Machine workspace walks through the steps below and the camera and feeder checks after
-them. It keeps your progress, notes, and findings in the core's data directory, and
-turns findings that differ from the machine profile (which way an axis points, measured
-keep-outs) into TOML you can copy into a profile. The same steps:
-
-- [ ] Keep a hand on the machine's power switch (or its E-stop, if it has one).
-- [ ] Check the Studio shows the "Slow 25%" badge.
-- [ ] Home, and watch that every axis reaches its switch. After homing, Z should read 0
-      with both nozzles level. If the firmware reports anything else, homing fails with
-      a message saying so: the profile's home commands need a `G92` (the LumenPnP
-      profile sends `G92 Z0`, because its firmware calls level 31.5).
-- [ ] Jog X and Y by 1 mm, then 10 mm. Check the head moves the way the arrows point:
-      +X to the right and +Y toward the back on a LumenPnP v4.1.
-- [ ] Jog Z down 1 mm and back up. The left nozzle (N1) should go down.
-- [ ] Turn each light, pump, and valve on and off from the Head inset.
-- [ ] Press STOP during a slow 50 mm move. Note whether it stops at once, and what it
-      takes to recover: Reset in the Studio, the board's reset button, or a power cycle.
-
-## 4. Cameras
-
-Add the cameras to your config (see the `[cameras]` section of the example), using the
-stable paths under `/dev/v4l/by-id/` that the probe listed. Then check:
-
-- [ ] Jog right: the top camera's picture slides left. Jog back: it slides down. If not,
-      adjust `flip_x`, `flip_y`, or `rotation`.
-- [ ] In the Machine workspace's **Setup wizard**, **Start** on the visual homing page
-      (page 7) finds the datum
-      fiducial and reports a correction of well under a millimeter.
-- [ ] **Start** on page 8 (the top camera's scale) reports a size close to the
-      profile's field of view; the line warns if it is more than 10% off. The measured
-      scale is used from then on, and the camera views' scale bars follow it.
-- [ ] With an empty nozzle tip fitted, **Start** on page 10 (the bottom camera)
-      centers the tip over the camera, steps it up and down for the sharpest picture,
-      and measures the camera's scale. The nozzle never goes more than 2 mm below the
-      profile's focus height. Check the place found is within a millimeter or two of
-      the profile's, and the image is not turned more than a degree. If you said which
-      tip is fitted (page 9, nozzle tips), it looks for a circle that tip's size and
-      says how big the tip's end looked; a note that it looks unlike the tip means the
-      wrong tip is fitted, or it is dirty.
-- [ ] Lay a small paper disc (from a hole punch, or a small round PCB) flat on the datum
-      board, clear of its center dot, center the top camera on it, and click
-      **Start** on page 11 (nozzle offsets, heights and vacuum). Each nozzle first sniffs for the
-      board's height on its center dot: with suction on, it steps down until the vacuum
-      seals, never more than 1.5 mm below the profile's height. Then it picks the disc
-      up, turns it, and sets it down three times, and the top camera finds it after
-      each. A nozzle more than a millimeter from the profile's offset is flagged. For a
-      PCB disc, give its thickness (`disc_thickness` in the API); the Studio assumes
-      paper. Where each nozzle touched the board also corrects its heights from then
-      on, so a longer or shorter tip picks at the part's top and places on the board.
-      First say which tip is on each nozzle (page 9), and calibrate once with
-      each tip you use: after a change, say which tip is now on, and its heights and
-      vacuum levels come back. A tip not calibrated yet marks page 11 out of date. The
-      same steps read each nozzle's vacuum open, sealed on the board, and holding the
-      disc, and set the nozzle's own pick threshold between them: a weak pump or a tip
-      that leaks a little still tells a part held from none. Page 11 shows the readings.
-
-The wizard's overview lists every page in order: what is done (with what it found and
-when), what is still to do, and what is out of date and why (a crash, Z losing steps).
-**Continue** opens the next page; **Exit, and finish later** leaves it, and any Studio
-finds it where it was. What the machine measures is kept in `calibration.json` in the
-data directory, and the pages you confirm or skip in `wizard.json`.
-
-Until every page is done, the machine is limited, and a banner across the top of every
-workspace says so, with **Continue calibration**. Homing, jogging and the wizard's steps
-work, at a quarter of full speed at most. Picks, placements and runs are refused, and
-teaching feeders waits until homing and the top camera are done. Once calibrated, a page
-going out of date (after a crash) pauses runs until it is redone; a single pick or
-placement still works, with a warning naming what is out of date. Pages 2 to 6 (setting
-the machine up) take their state from the bring-up checklist until they are built into
-the wizard.
 
 ### Discard and park
 
-On the setup wizard's **Discard and park** page (page 13):
+On the setup wizard's third stop:
 
 - [ ] Jog the top camera over the middle of the discard tray (or wherever rejected parts
       should go) and click **Set discard here**. A run drops a part the bottom camera
@@ -249,8 +231,8 @@ effect at once. The reset button next to one forgets it.
 
 ## 8. Measure what the profile only estimates
 
-With the camera centered on each point, record it in the checklist's last steps: the
-corners of the datum board, the camera opening, the aiming fiducial's holder, and the
+On the wizard's **The bed** page (page 6), center the camera on each point and record
+it: the corners of the datum board, the camera opening, the aiming fiducial's holder, and the
 rear staging plate. Points that share a first word become a keep-out rectangle in the
 suggested changes. **Save to this machine** keeps the suggested changes (axis directions
 and keep-outs) in the machine's local profile, over the built-in one; they take effect
@@ -259,5 +241,6 @@ when they hold for every machine of the model.
 
 ## 9. Full speed
 
-When everything above checks out, remove `speed_scale` (or set it to 1.0) and restart
-the core.
+When every page of the wizard is done, the banner goes and moves run at full speed. If a
+config file sets `speed_scale` under `[machine]`, remove it (or set it to 1.0) and
+restart the core.

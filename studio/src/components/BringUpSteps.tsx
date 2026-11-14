@@ -19,7 +19,6 @@ import type {
   MachineState,
   StepRecord,
 } from "../api/types";
-import { Panel } from "./Panel";
 
 type Status = StepRecord["status"];
 type Values = StepRecord["values"];
@@ -28,9 +27,6 @@ interface Actions {
   canMove: boolean;
   onHome: () => void;
   onJog: (axis: string, distance: number) => void;
-  onVisualHome: () => void;
-  onCameraScale: () => void;
-  onScanFeeders: () => void;
 }
 
 interface StepContext extends Actions {
@@ -76,25 +72,13 @@ function Choice({
 
 const STEPS: Step[] = [
   {
-    id: "probe",
-    title: "Probe the firmware",
-    body: () => (
-      <p>
-        Before starting the core on the machine, run{" "}
-        <code>uv run picnicplace-probe --serial-port /dev/ttyACM0 --with-pumps</code> in{" "}
-        <code>core</code>. It never moves the machine. Keep its transcript.
-      </p>
-    ),
-  },
-  {
     id: "slow",
     title: "Slow speed and a hand on the power switch",
     body: (c) => (
       <p>
-        Set <code>speed_scale = 0.25</code> under <code>[machine]</code> while checking the
-        machine. Now: {Math.round((c.machine?.speed_scale ?? 1) * 100)}%. Keep a hand on the
-        machine's power switch throughout (or its E-stop, if it has one; the LumenPnP has
-        none).
+        Until the setup wizard is finished, every move runs at a quarter of full speed at most.
+        Now: {Math.round((c.machine?.speed_scale ?? 1) * 100)}%. Keep a hand on the machine's
+        power switch throughout (or its E-stop, if it has one; the LumenPnP has none).
       </p>
     ),
     check: (c) => (c.machine ? c.machine.speed_scale <= 0.25 : null),
@@ -236,66 +220,13 @@ const STEPS: Step[] = [
     body: (c) => (
       <p>
         Jog +X: the picture should slide {c.description.x_points === "right" ? "left" : "right"}.
-        Jog +Y: it should slide {c.description.y_points === "back" ? "down" : "up"}. If not, set{" "}
-        <code>flip_x</code>, <code>flip_y</code>, or <code>rotation</code> under{" "}
-        <code>[cameras.top]</code>. The bottom camera looks up, so it shows the nozzle mirrored:
-        with a nozzle over it, jog +X and the nozzle should move{" "}
+        Jog +Y: it should slide {c.description.y_points === "back" ? "down" : "up"}. If not,
+        set its flips above and restart the core. The bottom camera looks up, so it shows the
+        nozzle mirrored: with a nozzle over it, jog +X and the nozzle should move{" "}
         {c.description.x_points === "right" ? "left" : "right"} in its picture, and +Y{" "}
-        {c.description.y_points === "back" ? "up" : "down"}; if not, set the flips under{" "}
-        <code>[cameras.bottom]</code>. Save a few frames with the Capture panel.
+        {c.description.y_points === "back" ? "up" : "down"}; if not, set its flips above. Save a
+        few frames with the Capture panel.
       </p>
-    ),
-  },
-  {
-    id: "visual_home",
-    title: "Visual homing and camera scale",
-    body: (c) => (
-      <>
-        <p>
-          Visual homing should find the datum fiducial and correct well under a millimeter. Camera
-          scale should come out close to the profile's field of view.
-        </p>
-        <div className="button-row">
-          <button
-            type="button"
-            className="button"
-            disabled={!c.canMove || !c.machine?.homed}
-            onClick={c.onVisualHome}
-          >
-            Visual home
-          </button>
-          <button
-            type="button"
-            className="button"
-            disabled={!c.canMove || !c.machine?.homed}
-            onClick={c.onCameraScale}
-          >
-            Camera scale
-          </button>
-        </div>
-      </>
-    ),
-  },
-  {
-    id: "feeders",
-    title: "Feeders",
-    body: (c) => (
-      <>
-        <p>
-          Scan the feeder bus. Then, in the Feeders workspace: feed one feeder, center the camera
-          over its pocket and teach the pick location, center it on the feeder's fiducial and
-          measure it, and calibrate all slots from their fiducials. Finally try Find pocket on a
-          few slots.
-        </p>
-        <button
-          type="button"
-          className="button"
-          disabled={!c.canMove}
-          onClick={c.onScanFeeders}
-        >
-          Scan feeders
-        </button>
-      </>
     ),
   },
   {
@@ -326,8 +257,9 @@ const STEPS: Step[] = [
     title: "Full speed",
     body: () => (
       <p>
-        When everything above checks out, remove <code>speed_scale</code> from the config (or set
-        it to 1.0) and restart the core.
+        Once every page of the wizard is done, moves run at full speed, unless the config sets{" "}
+        <code>speed_scale</code> under <code>[machine]</code>: remove it (or set it to 1.0) and
+        restart the core.
       </p>
     ),
   },
@@ -410,12 +342,17 @@ function suggestions(record: BringUpRecord, d: MachineProfile, found: Findings):
   return lines.join("\n").trim();
 }
 
-/** The machine bring-up checklist: progress and findings are kept by the core. */
-export function BringUpPanel({
+/**
+ * Steps of the bring-up checklist, shown on the setup wizard's pages: checks made by hand
+ * (which way the axes point, the pumps and valves, Stop), with notes, kept by the core.
+ * What they find that differs from the profile can be saved to this machine.
+ */
+export function BringUpSteps({
   description,
   machine,
+  steps,
   ...actions
-}: Actions & { description: MachineProfile; machine?: MachineState }) {
+}: Actions & { description: MachineProfile; machine?: MachineState; steps: string[] }) {
   const { status } = useCore();
   const [record, setRecord] = useState<BringUpRecord | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -474,7 +411,8 @@ export function BringUpPanel({
     setLabel("");
   };
 
-  const done = STEPS.filter((s) => stepRecord(s.id).status === "done").length;
+  const shown = STEPS.filter((s) => steps.includes(s.id));
+  const finds = steps.includes("jog") || steps.includes("keep_outs");
   const found = findings(record, description);
   const changes = suggestions(record, description, found);
   const canApply = Object.keys(found).length > 0;
@@ -488,10 +426,10 @@ export function BringUpPanel({
   };
 
   return (
-    <Panel title={`Bring-up (${done}/${STEPS.length})`} collapseId="bring-up">
+    <>
       {saveError && <p className="note note-danger">{saveError}</p>}
       <ol className="bringup-steps">
-        {STEPS.map((step) => {
+        {shown.map((step) => {
           const rec = stepRecord(step.id);
           const ctx: StepContext = {
             ...actions,
@@ -589,7 +527,7 @@ export function BringUpPanel({
           );
         })}
       </ol>
-      {changes && (
+      {finds && changes && (
         <details className="bringup-changes">
           <summary>Suggested profile changes</summary>
           <pre className="mono">{changes}</pre>
@@ -618,6 +556,6 @@ export function BringUpPanel({
           {applied && <p className="note text-muted">{applied}</p>}
         </details>
       )}
-    </Panel>
+    </>
   );
 }

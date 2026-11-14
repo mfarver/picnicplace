@@ -213,10 +213,10 @@ text(3, 2.2, "0,0", size=10, fill=INK, anchor="start")
 lx, ly = -58, -62
 notes = [
     ("PCB", "Datum PCB, 1.6 mm, ENIG", PCB),
-    ("print", "3D-printed holder (dashed): top level with", MUTED),
-    ("", "the LumenPnP board holders; a 10 mm ledge", MUTED),
-    ("", "supports the board's edges, so a 1.6 mm board's", MUTED),
-    ("", "top is level with the datum's", MUTED),
+    ("print", "3D-printed holder (dashed): top 8.4 mm above the", MUTED),
+    ("", "plate, level with the LumenPnP board holders", MUTED),
+    ("", "(to be measured); a 10 mm ledge carries the board,", MUTED),
+    ("", "so its top and the datum's are both 10.0 mm up", MUTED),
     ("pin", "3 mm dowels press-fit in plated holes; the", PIN),
     ("", "edges between them cut back 0.5 mm (red)", PIN),
     ("scr", "M3: PCB to holder (black); holder to the staging", INK),

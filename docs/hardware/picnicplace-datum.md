@@ -34,9 +34,10 @@ LumenPnP board holders, or later vacuum standoffs, support the other sides.
     one dot cannot.
 - **A 3D-printed holder** under the PCB:
   - It extends 4 mm beyond the PCB, with a 10 mm ledge under the board's edges.
-  - Its top is level with the LumenPnP board holders. The board then rests at the
-    level of the datum's underside, so a 1.6 mm board's top is level with the datum's
-    top, and the height the nozzles measure on the datum carries over.
+  - Its top is level with the LumenPnP board holders: 8.4 mm above the staging plate,
+    from published figures, to be checked with calipers. The board and the datum PCB
+    both rest on it, so a 1.6 mm board's top and the datum's top are both 10.0 mm
+    above the plate, and the height the nozzles measure on the datum carries over.
   - The PCB screws to it with M3 screws into heat-set inserts.
   - It screws to the staging plate with M3 screws, 30 mm apart, counterbored in the
     ledge, reached with no board in place. The 30 mm spacing fits v4.1's 15 mm
@@ -44,7 +45,8 @@ LumenPnP board holders, or later vacuum standoffs, support the other sides.
 
 ## Open questions
 
-- The LumenPnP board holders' height, which sets the holder's height: to be measured.
+- The LumenPnP board holders' height, which sets the holder's height: 8.4 mm from
+  published figures, to be confirmed with calipers.
 - The exact hole layout of v4.2's metal staging plates.
 - Where the datum goes on the plates. The two plates are about 240 mm deep. A Letter
   board (216 mm) plus the 30 mm leg needs about 250 mm, and the bottom camera and the

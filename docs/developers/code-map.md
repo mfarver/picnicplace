@@ -32,6 +32,67 @@ A request goes **route → service → machine service → driver**:
    rule (safe Z, homing, travel limits, E-stop, pause, resume and stop).
 4. A **driver** (`machine/simulator.py`, or the Marlin driver) talks to the hardware.
 
+New to the code? Read the next two sections, then keep the rest of this page open as a
+map.
+
+## Words used everywhere
+
+| Word | What it means |
+|---|---|
+| **Operation** | A long task (homing, a pick, a whole run). Starting one returns at once with its ID; its progress and end come as `operation` events on the socket (`operations.py`). |
+| **Control lease** | Only one client may move the machine at a time: the one holding the lease. A free lease is taken by the first motion request; any client may still pause (`lease.py`). |
+| **Built-in profile, local profile, config** | Three layers of settings. The built-in profile is a machine model's design (`profiles/*.toml`); the local profile is what is true of one machine, written by the Studio (`machine/local.py`); the config is how the owner runs it, edited by hand (`config.py`). See [AGENTS.md](https://github.com/mfarver/picnicplace/blob/main/AGENTS.md#rules). |
+| **Machine service** | `machine/service.py`: the one owner of the machine. Everything that moves it goes through here, and so does every safety rule. |
+| **Driver** | What turns the machine service's moves into hardware: the simulator, or the Marlin driver (`machine/driver.py` is the interface). |
+| **Slot, feeder** | A slot is a place on a feeder rail, from the profile's feeder banks; a feeder is a Photon feeder found on the bus, known by its ID, and sits in a slot. Strips and trays on the bed are **fixed feeders**. |
+| **Load** | A part held on a nozzle, with what is known of it (where it came from, how it was aligned). |
+| **Pick correction** | How picks are kept centered on their parts: by the top camera, the bottom camera, both, or neither. |
+| **Job, revision, setup** | A job is a board or panel to assemble; its working copy is edited in Prepare. Publishing makes a **revision**, written once, and only revisions run. A job's **setup** is this machine's part: where its panel sits on the bed and how high the board is. |
+| **Calibration checklist, stage** | What the machine has measured of itself, and when (`calibration.py`). From it the setup wizard gives the machine a **stage**: `limited`, `out_of_date`, or `calibrated`, and holds a limited machine to safe tasks (`wizard.py`). |
+| **Flight recording** | Every frame vision looked at and everything the machine did, saved so a developer can replay today's vision on a real machine's frames (`recorder.py`). |
+
+## One pick, through the code
+
+Following the Studio's **Pick** button shows most of the core's shape. Every task works
+the same way: a run in `job/run.py` calls the same placement code for each part.
+
+1. **The Studio** (`components/PlacementPanel.tsx`) posts to `/api/v1/placement/pick`
+   with the slot and nozzle, through the typed client (`api/client.ts`). It gets an
+   operation back and keeps its ID.
+2. **The route** (`api/placement.py`) depends on `require_control`
+   (`api/context.py`): the client must hold the control lease, or a free one is taken
+   for it. The route calls `PlacementService.start_pick`.
+3. **The placement service** (`placement.py`) checks what it can before anything moves
+   (the nozzle is empty, the slot has a part) so a mistake is a clear error, not a
+   failed operation. Then it calls `MachineService.start_task("pick", ...)`.
+4. **`start_task`** (`machine/service.py`) refuses if the machine cannot move or is not
+   homed, asks the setup wizard's limits whether a pick is allowed at this stage, marks
+   the machine busy, and starts the work as an operation (`operations.py`). The HTTP
+   request answers `202 Accepted` here.
+5. **The pick itself** runs in the background (`PlacementService.pick`): the feeder
+   service feeds the part and works out where its pocket is (`feeders/service.py`,
+   maybe looking at the sprocket holes with the top camera), and `_take` moves the
+   nozzle over it, lowers it, turns the suction on, raises it, and checks the vacuum
+   sensor to see the part was taken.
+6. **Each move** goes through `MachineService.move_axes`. `_plan_move` splits a move
+   that travels in X or Y into steps: up to safe Z, across, then down. `_run_steps`
+   checks each step before sending it: it waits there while the machine is paused, ends
+   the task if Stop was asked for, and refuses to travel unless the nozzles are up (the
+   safe-Z sensor decides, on a machine that has one). Then the step goes to the flight
+   recorder and to the driver.
+7. **The driver** moves the machine. The simulator moves its model and knows where the
+   part really is (`simparts.py`); the Marlin driver (`machine/marlin/driver.py`) sends
+   `G0` and waits for `M400`.
+8. **The operation ends.** `operations.py` stores it as succeeded, or failed with the
+   error's message, written for the user, and publishes it on the event bus
+   (`events.py`). The socket (`api/websocket.py`) sends it to every client, and the
+   machine's state (busy, now holding a part) goes with it.
+9. **The Studio** keeps every operation it hears of (`api/core.ts`). The Placement panel
+   finds its own by ID, shows the message or error, and enables its buttons again.
+
+To see it happen, run `make core`, open the Studio's Machine workspace, and pick a part
+with the simulator, or read `test_placement.py`, which does the same through the API.
+
 ## Repository layout
 
 | Path | What is there |
@@ -62,6 +123,7 @@ A request goes **route → service → machine service → driver**:
 | `events.py` | The in-process event bus that feeds the event socket |
 | `operations.py` | Long tasks as operations, with their status published as events |
 | `presence.py`, `lease.py`, `auth.py` | Who is connected, who has control, and what each client may do |
+| `storage.py` | Small helpers for the data directory's files, such as writing a file whole or not at all |
 
 ### The machine
 
@@ -76,6 +138,7 @@ A request goes **route → service → machine service → driver**:
 | `machine/nozzle_offsets.py` | Calibrating the nozzle offsets: sniffing for the datum board's height, then turning a disc on it with each nozzle; each nozzle's vacuum levels measured on the way |
 | `machine/driver.py` | The interface every motion driver implements |
 | `machine/simulator.py` | The simulated machine. Its errors are realistic (homing error, feeder steps, slot and board offsets, cameras and nozzles off the profile, tips longer than the profile's, the datum board's height), so calibration and vision have something to find. |
+| `machine/marlin/` | The Marlin driver (`driver.py`: one G-code command at a time, each waiting for its `ok`), the serial port (`transport.py`), how a profile's `[marlin]` table tells it what to send (`settings.py`), and a fake LumenPnP firmware that answers the way a real one does (`fake.py`) |
 | `machine/factory.py` | Picks the driver the config asks for (simulator, Marlin, or Marlin against a fake firmware) |
 | `machine/errors.py` | Machine errors; their messages are written to be shown to users |
 | `probe.py` | `picnicplace-probe`: records what a new machine is, without moving it |

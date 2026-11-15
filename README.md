@@ -20,8 +20,11 @@ Early development, working end to end in the built-in simulator: manual control,
 homing, the parts library, Photon feeders, strips and trays on the bed, single
 placements, and whole jobs from KiCad boards and KiKit panels (board fiducials, a planner
 and dry run, pause, step, and refills), with picks kept centered by the top or the bottom
-camera, and a flight recorder for sending real camera frames to developers. First tests on
-a real LumenPnP are next. Start with the [specification](docs/SPEC.md), or visit
+camera, a flight recorder for sending real camera frames to developers, and a setup wizard
+that calibrates the machine. On a real LumenPnP v4.1, homing, visual homing, jogging, the
+cameras, the vacuum sensors, and calibrating a feeder rail work; measuring the nozzles is
+under way, and it cannot assemble a board on a real machine yet. There is nothing to
+download: run it from source. Start with the [specification](docs/SPEC.md), or visit
 **[picnicplace.org](https://picnicplace.org)**.
 
 ## Find your way around

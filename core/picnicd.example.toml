@@ -26,6 +26,12 @@ driver = "simulator"
 profile = "lumenpnp-v4.1"    # Built-in profile ID ("lumenpnp-v4.1", "lumenpnp-v4.2"), or a
                              # path to a profile TOML file.
 sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times faster.
+# Simulator: how far the head really is from where homing says (X and Y in mm), as with
+# real endstops, for visual homing to find; and how far a job's board really is from where
+# the job puts it (X and Y in mm, and a turn in degrees about its front-left corner), for
+# board fiducials to find. Set them to zero for a perfect machine.
+# sim_home_error = [0.3, -0.2]
+# sim_board_error = [0.6, -0.4, 0.5]
 # Simulator and fake firmware: the feeder slots (by number) that hold a Photon feeder.
 # sim_feeders = [1, 2, 3, 4, 5, 26]
 # Simulator: feeder rails off the profile's place, to try rail calibration (by feeder bank

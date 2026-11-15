@@ -166,7 +166,14 @@ Each nozzle has a pump and a valve on Marlin fan outputs, switched together by O
 | N2 | `M106 P2 S255` and `M106 P3 S180` | `M107 P2` and `M107 P3` |
 
 **Inferred:** the outputs at PWM 180 (P1, P3) are the pumps and the full-on ones (P0, P2)
-are the valves.
+are the valves. The `lumenpnp-v4.1` profile follows this inference.
+
+**One real v4.1 disagrees:** on the project lead's machine the full-on outputs (P0, P2)
+are the pumps and the PWM 180 ones (P1, P3) the valves, and its owner's profile swaps
+them. Since OpenPnP switches each pair together, its log cannot tell them apart. The
+built-in profile keeps the inference until another machine settles it; if yours turns a
+valve on when you ask for a pump, swap the outputs in your machine's profile and say so in
+an issue.
 
 Reading a sensor (patched 24-bit firmware):
 

@@ -84,7 +84,7 @@ A request goes **route → service → machine service → driver**:
 
 | Module | What it does |
 |---|---|
-| `camera/` | Camera sources (`device.py` for real cameras, `synthetic.py` for the simulator's rendered views), and a hub per camera that shares frames among viewers |
+| `camera/` | Camera sources (`device.py` for real cameras, `synthetic.py` for the simulator's rendered views), a hub per camera that shares frames among viewers, and `v4l2.py`, which asks a Linux camera what formats, sizes, and frame rates it can send (for the probe) |
 | `vision/fiducial.py` | Finds round marks: homing and board fiducials, feeder fiducials, sprocket holes |
 | `vision/part.py` | The metal mask (bright, not yellowish plastic, no specks), and one box around a part's metal, for parts without a footprint |
 | `vision/pads.py` | Fits a footprint's pads to the metal in a bottom camera frame, for parts whose pads are off their body's center or whose body is as bright as their leads (bottom vision's finder whenever a footprint has two pads or more) |

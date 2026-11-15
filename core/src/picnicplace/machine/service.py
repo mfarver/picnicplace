@@ -23,8 +23,6 @@ import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
-import cv2
-
 from picnicplace.calibration import CRASH_STALES, CalibrationStore, apply_measurements
 from picnicplace.camera.source import Frame
 from picnicplace.camera.synthetic import BoardScene, SceneState, TapeScene
@@ -100,6 +98,12 @@ VACUUM_POLL_S = 0.05
 VACUUM_STEADY = 0.002
 """A vacuum reading that changes less than this (as a fraction of its sensor's range)
 from one poll to the next has settled."""
+
+
+def _open_px(min_diameter_px: float) -> int:
+    """How wide a line is wiped out before looking for marks at least this big: a tenth
+    of their diameter, which a 4 mm disc keeps and silkscreen lines do not."""
+    return max(3, round(min_diameter_px / 10))
 
 
 @dataclass(frozen=True)
@@ -429,6 +433,16 @@ class MachineService:
         """Raise unless outputs and feeders may be used now."""
         self._check_can_actuate()
 
+    def check_not_paused(self) -> None:
+        """Raise if the machine is paused: nothing new starts until it is resumed."""
+        if self._paused:
+            raise MachinePausedError("the machine is paused; resume it first")
+
+    async def hold(self) -> None:
+        """Before an action that is not a move, such as a feeder advance: wait while
+        paused, and end the operation if a stop was asked for."""
+        await self._hold()
+
     @property
     def homed(self) -> bool:
         return self._homed
@@ -679,8 +693,12 @@ class MachineService:
         """Every round mark the top camera sees: their machine positions."""
         return [m.at for m in await self.locate_round_marks(min_diameter, max_diameter)]
 
-    async def locate_round_marks(self, min_diameter: float, max_diameter: float) -> list[RoundMark]:
-        """Every round mark the top camera sees: where, how big, and how bright."""
+    async def locate_round_marks(
+        self, min_diameter: float, max_diameter: float, through_lines: bool = False
+    ) -> list[RoundMark]:
+        """Every round mark the top camera sees: where, how big, and how bright.
+        ``through_lines``: find marks crossed by thin lines, such as a paper disc lying on
+        a board's silkscreen."""
         camera = self.top_camera()
         if self._grab is None:
             raise VisionError("the cameras are not available")
@@ -696,12 +714,15 @@ class MachineService:
             frame.image,
             min_diameter / mm_per_px,
             max_diameter / mm_per_px,
+            _open_px(min_diameter / mm_per_px) if through_lines else 0,
             camera=camera.id,
             position=dict(self._driver.position),
             mm_per_px=mm_per_px,
         )
         here = self.camera_position()
-        gray = cv2.cvtColor(frame.image, cv2.COLOR_BGR2GRAY)
+        # The strongest channel, not gray: under a tinted light, white paper is bright in
+        # every channel the light has, but its gray can be no brighter than copper's.
+        value = frame.image.max(axis=2) if frame.image.ndim == 3 else frame.image
         out: list[RoundMark] = []
         for c in circles:
             dx, dy = self._profile.image_to_machine(
@@ -710,7 +731,7 @@ class MachineService:
             # How bright its middle is (0-255): white paper is far brighter than copper.
             r = max(1, round(c.diameter * 0.3))
             u, v = round(c.x), round(c.y)
-            middle = gray[max(0, v - r) : v + r + 1, max(0, u - r) : u + r + 1]
+            middle = value[max(0, v - r) : v + r + 1, max(0, u - r) : u + r + 1]
             brightness = float(middle.mean()) if middle.size else 0.0
             out.append(
                 RoundMark(Point(x=here.x + dx, y=here.y + dy), c.diameter * mm_per_px, brightness)
@@ -723,10 +744,11 @@ class MachineService:
         max_diameter: float,
         search_mm: float,
         expected_diameter: float | None = None,
+        through_lines: bool = False,
     ) -> Point | None:
         """Find a round mark near the top camera's center: its machine position, or None.
         With its expected diameter, marks of other sizes (such as silkscreen letters) are
-        less likely to be taken for it."""
+        less likely to be taken for it. ``through_lines``: as for ``locate_round_marks``."""
         camera = self.top_camera()
         if self._grab is None:
             raise VisionError("the cameras are not available")
@@ -744,6 +766,7 @@ class MachineService:
             max_diameter / mm_per_px,
             search_mm / mm_per_px,
             expected_diameter / mm_per_px if expected_diameter else None,
+            _open_px(min_diameter / mm_per_px) if through_lines else 0,
             camera=camera.id,
             position=dict(self._driver.position),
             mm_per_px=mm_per_px,

@@ -1294,8 +1294,8 @@ export interface paths {
         /**
          * Pause
          * @description Pause: the move under way finishes, then the running operation waits before its
-         *     next move, and nothing new starts, until resume or stop. Allowed for any
-         *     authenticated client, in any state.
+         *     next move or feeder advance, and nothing new starts, until resume or stop. Allowed
+         *     for any authenticated client, in any state.
          */
         post: operations["pause_api_v1_machine_pause_post"];
         delete?: never;
@@ -2400,9 +2400,15 @@ export interface components {
             label: string;
             /**
              * Looking
-             * @enum {string}
+             * @description Which way it looks; none for a monitor camera.
              */
-            looking: "down" | "up";
+            looking: ("down" | "up") | null;
+            /**
+             * Monitor
+             * @description Only for watching the machine: from the config's monitors, not the machine profile, and never used by vision.
+             * @default false
+             */
+            monitor: boolean;
             /**
              * Source
              * @enum {string}

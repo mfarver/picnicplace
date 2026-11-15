@@ -98,6 +98,19 @@ export function MachineWorkspace() {
             fieldOfView={camera.field_of_view.x}
           />
         ))}
+        {/* Monitor cameras, for watching the machine itself: from the config, not the
+            profile, so they come from the camera list. */}
+        {(cameras ?? [])
+          .filter((camera) => camera.monitor)
+          .map((camera) => (
+            <CameraView
+              key={camera.id}
+              id={camera.id}
+              title={camera.label}
+              info={camera}
+              crosshair={false}
+            />
+          ))}
 
         {/* Right under the cameras, so jogging and watching fit on one screen. */}
         {description && (

@@ -171,8 +171,9 @@ shows Python cannot hold target throughput.
   (such as the LumenPnP). Marlin acts on a software `M112` only after the move under way
   (unless built with its emergency parser) and then stays halted until the controller is
   power-cycled, so the Studio does not send one. Its **Pause** button, which any client
-  may press, holds the machine before its next move: the running operation waits, nothing
-  new starts, and **Resume** (by the client in control) carries on. **Stop** ends the
+  may press, holds the machine before its next move or feeder advance: the running
+  operation waits, nothing new starts, and **Resume** (by the client in control) carries
+  on. **Stop** ends the
   running operation before its next move. Both leave the firmware running and the
   machine homed. The API keeps `POST /machine/estop` for firmware that does act on it at
   once.
@@ -446,6 +447,11 @@ POST   /api/v1/lease                   request/release control lease
 
 Live video is for people only. Vision always runs inside the core on raw, uncompressed
 frames, so stream compression never affects placement accuracy.
+
+Besides the machine's cameras, the config may name **monitor cameras**: webcams for
+watching the machine itself, such as one in front of it looking at the head and the bed.
+They stream and capture like the others and appear in the Studio's camera list, with no
+crosshair. Vision never uses them, and they are not part of the machine profile.
 
 The core offers two transports from one capture pipeline per camera:
 

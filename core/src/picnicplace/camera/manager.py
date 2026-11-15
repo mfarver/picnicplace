@@ -1,11 +1,13 @@
-"""Builds a hub for every camera in the machine profile, from the config."""
+"""Builds a hub for every camera in the machine profile, and every monitor camera, from
+the config."""
 
 from collections.abc import Callable
+from typing import Literal
 
 from picnicplace.camera.device import DeviceCamera
 from picnicplace.camera.hub import CameraHub
 from picnicplace.camera.synthetic import SceneState, SyntheticCamera
-from picnicplace.config import Config
+from picnicplace.config import CameraConfig, Config
 from picnicplace.machine.profile import Camera, MachineProfile, Point
 from picnicplace.machine.simulator import sim_profile
 from picnicplace.schemas import CameraInfo
@@ -35,6 +37,7 @@ def sim_truth(camera: Camera, config: Config) -> Camera:
 class CameraManager:
     def __init__(self, config: Config, profile: MachineProfile, scene: Callable[[], SceneState]):
         self._profile = profile
+        self._monitors = config.monitors
         self._hubs: dict[str, CameraHub] = {}
         self._sources: dict[str, str] = {}
         for camera in profile.cameras:
@@ -50,17 +53,11 @@ class CameraManager:
                 )
                 self._hubs[camera.id] = CameraHub(camera.id, SyntheticCamera(seen, truth, scene))
             elif settings.source == "device":
-                assert settings.device is not None
-                source = DeviceCamera(
-                    settings.device,
-                    settings.width,
-                    settings.height,
-                    settings.fps,
-                    flip_x=settings.flip_x,
-                    flip_y=settings.flip_y,
-                    rotation=settings.rotation,
-                )
-                self._hubs[camera.id] = CameraHub(camera.id, source)
+                self._hubs[camera.id] = CameraHub(camera.id, _device(settings))
+        for monitor_id, settings in self._monitors.items():
+            self._sources[monitor_id] = settings.source
+            if settings.source == "device":
+                self._hubs[monitor_id] = CameraHub(monitor_id, _device(settings))
 
     def hub(self, camera_id: str) -> CameraHub | None:
         return self._hubs.get(camera_id)
@@ -69,17 +66,22 @@ class CameraManager:
         return camera_id in self._sources
 
     def info(self) -> list[CameraInfo]:
+        entries: list[tuple[str, str, Literal["down", "up"] | None]] = [
+            *((c.id, c.label, c.looking) for c in self._profile.cameras),
+            *((i, m.label, None) for i, m in self._monitors.items()),
+        ]
         result: list[CameraInfo] = []
-        for camera in self._profile.cameras:
-            hub = self._hubs.get(camera.id)
+        for camera_id, label, looking in entries:
+            hub = self._hubs.get(camera_id)
             running = hub is not None and hub.source.latest is not None and hub.viewers > 0
             size = hub.source.size if hub is not None else None
             result.append(
                 CameraInfo(
-                    id=camera.id,
-                    label=camera.label,
-                    looking=camera.looking,
-                    source=self._sources[camera.id],  # type: ignore[arg-type]
+                    id=camera_id,
+                    label=label,
+                    looking=looking,
+                    monitor=looking is None,
+                    source=self._sources[camera_id],  # type: ignore[arg-type]
                     width=size[0] if size else None,
                     height=size[1] if size else None,
                     streaming=running,
@@ -88,6 +90,23 @@ class CameraManager:
             )
         return result
 
+    @property
+    def monitor_ids(self) -> list[str]:
+        return [i for i in self._monitors if i in self._hubs]
+
     async def shutdown(self) -> None:
         for hub in self._hubs.values():
             await hub.shutdown()
+
+
+def _device(settings: CameraConfig) -> DeviceCamera:
+    assert settings.device is not None
+    return DeviceCamera(
+        settings.device,
+        settings.width,
+        settings.height,
+        settings.fps,
+        flip_x=settings.flip_x,
+        flip_y=settings.flip_y,
+        rotation=settings.rotation,
+    )

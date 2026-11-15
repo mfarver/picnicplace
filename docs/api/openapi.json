@@ -796,12 +796,26 @@
             "type": "string"
           },
           "looking": {
-            "enum": [
-              "down",
-              "up"
+            "anyOf": [
+              {
+                "enum": [
+                  "down",
+                  "up"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Looking",
-            "type": "string"
+            "description": "Which way it looks; none for a monitor camera.",
+            "title": "Looking"
+          },
+          "monitor": {
+            "default": false,
+            "description": "Only for watching the machine: from the config's monitors, not the machine profile, and never used by vision.",
+            "title": "Monitor",
+            "type": "boolean"
           },
           "source": {
             "enum": [
@@ -834,6 +848,7 @@
           "id",
           "label",
           "looking",
+          "monitor",
           "source",
           "width",
           "height",
@@ -12806,7 +12821,7 @@
     },
     "/api/v1/machine/pause": {
       "post": {
-        "description": "Pause: the move under way finishes, then the running operation waits before its\nnext move, and nothing new starts, until resume or stop. Allowed for any\nauthenticated client, in any state.",
+        "description": "Pause: the move under way finishes, then the running operation waits before its\nnext move or feeder advance, and nothing new starts, until resume or stop. Allowed\nfor any authenticated client, in any state.",
         "operationId": "pause_api_v1_machine_pause_post",
         "responses": {
           "200": {

@@ -96,7 +96,14 @@ class Operation(WireModel):
 class CameraInfo(WireModel):
     id: str
     label: str
-    looking: Literal["down", "up"]
+    looking: Literal["down", "up"] | None = Field(
+        description="Which way it looks; none for a monitor camera."
+    )
+    monitor: bool = Field(
+        default=False,
+        description="Only for watching the machine: from the config's monitors, not the "
+        "machine profile, and never used by vision.",
+    )
     source: Literal["synthetic", "device", "none"]
     width: int | None = Field(description="Native frame width, when the camera is on.")
     height: int | None

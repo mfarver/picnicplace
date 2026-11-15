@@ -52,7 +52,7 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/setup/serial-ports`, `GET /api/v1/setup/cameras` | The serial ports and cameras the wizard offers, found without opening them |
 | `POST /api/v1/setup/probe` | Ask a serial port's firmware what it is and read its vacuum sensors; nothing moves or switches on. Kept with the choices. Needs control |
 | `POST /api/v1/setup/restart` | Restart the core to use the wizard's choices (when `picnicd` started it). Needs control |
-| `POST /api/v1/machine/pause` | Hold the machine before its next move (the move under way finishes); nothing new starts; any client may call it |
+| `POST /api/v1/machine/pause` | Hold the machine before its next move or feeder advance (the move under way finishes); nothing new starts; any client may call it |
 | `POST /api/v1/machine/resume` | Carry on after a pause |
 | `POST /api/v1/machine/stop` | End the running operation before its next move (resuming if paused); the machine stays homed; any client may call it |
 | `POST /api/v1/machine/estop` | The firmware's halt (`M112`); Marlin then needs a power cycle, so the Studio pauses instead; any client may call it |
@@ -60,7 +60,7 @@ generate a client from it, as the Studio does.
 | `GET`, `POST`, `DELETE /api/v1/lease` | See, take, or release the control lease |
 | `GET /api/v1/operations/{id}` | Status of a long-running command |
 | `GET /api/v1/presence` | Connected clients |
-| `GET /api/v1/cameras` | Cameras and whether they are streaming |
+| `GET /api/v1/cameras` | Cameras and whether they are streaming, including the config's monitor cameras (`monitor`) |
 | `GET /api/v1/cameras/{id}/snapshot.jpg` | One JPEG frame |
 | `GET /api/v1/cameras/{id}/stream.mjpg` | A live MJPEG stream |
 | `GET`, `PUT`, `DELETE /api/v1/library/parts/{id}` | Parts (and `GET /library/parts` to list) |

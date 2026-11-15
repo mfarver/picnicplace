@@ -434,6 +434,8 @@ class FeederService:
         bus = self._need_bus()
         address = self._address(slot)
         mm = self.feed_distance(slot) if distance is None else distance
+        # Pause holds an advance as it holds a move.
+        await self._machine.hold()
         try:
             await bus.feed(address, mm)
         except FeederError as e:
@@ -448,6 +450,7 @@ class FeederService:
     def start_feed(self, slot_id: str, distance: float | None) -> Operation:
         slot = self.slot(slot_id)
         self._machine.check_can_actuate()
+        self._machine.check_not_paused()
         self.check_can_feed(slot)
 
         async def work() -> str:

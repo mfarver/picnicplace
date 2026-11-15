@@ -54,7 +54,7 @@ A request goes **route → service → machine service → driver**:
 | Module | What it does |
 |---|---|
 | `cli.py` | The `picnicd` command: flags that override the config, `--print-openapi`, `--replay` |
-| `config.py` | The config file (TOML), validated with Pydantic. Owner choices live here (discard and park locations, pick correction, cameras, recording). |
+| `config.py` | The config file (TOML), validated with Pydantic. Owner choices live here (discard and park locations, pick correction, cameras and monitor cameras, recording). |
 | `api/app.py` | Builds the application: creates every service and wires them together. **Start here** to see what depends on what. |
 | `api/context.py` | The shared objects (`AppContext`) and the FastAPI dependencies: authentication, permissions, the control lease |
 | `api/*.py` | One router per area: `routes.py` (machine), `cameras.py`, `library.py`, `boards.py`, `jobs.py`, `feeders.py`, `placement.py`, `run.py`, `recordings.py`, `websocket.py` |

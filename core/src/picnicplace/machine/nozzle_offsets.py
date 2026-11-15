@@ -38,8 +38,10 @@ from picnicplace.schemas import Operation
 
 TURNS = (90.0, -90.0, 180.0)
 """The turns each nozzle gives the disc, in degrees."""
-DISC_DIAMETER_MM = (2.0, 12.0)
-"""Discs the finder takes, smallest to largest, when the request gives no diameter."""
+DISC_DIAMETER_MM = (4.0, 12.0)
+"""Discs the finder takes, smallest to largest, when the request gives no diameter. A
+hole punch makes about 6 mm; the datum board's own fiducials, rings included, are
+smaller than 4 mm."""
 SEARCH_FRACTION = 0.4
 """The disc is looked for within this fraction of the top camera's smaller field of view."""
 CENTER_PASSES = 2
@@ -128,7 +130,7 @@ async def find_disc(machine: MachineService, near: Point, diameter: float | None
     at = near
     for _ in range(CENTER_PASSES):
         await machine.move_camera_to(at.x, at.y)
-        found = await machine.locate_circle(low, high, search, diameter)
+        found = await machine.locate_circle(low, high, search, diameter, through_lines=True)
         if found is None:
             raise VisionError(
                 f"the top camera cannot see the disc within {search:.0f} mm of "
@@ -296,7 +298,7 @@ async def search_disc(machine: MachineService, diameter: float | None) -> Point:
         await machine.move_camera_to(spot.x, spot.y)
         marks.extend(
             m
-            for m in await machine.locate_round_marks(low, high)
+            for m in await machine.locate_round_marks(low, high, through_lines=True)
             if math.hypot(m.at.x - dot.x, m.at.y - dot.y) > DOT_CLEARANCE_MM
         )
     # The board has round marks of its own (fiducials, a copper disc, mounting holes):

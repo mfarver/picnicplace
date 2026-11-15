@@ -130,3 +130,16 @@ max_mb = 5000              # and at most this many megabytes of them; older ones
 # device = "/dev/v4l/by-id/usb-..._LumenPnP_Bottom-video-index0"
 # flip_y = true
 # rotation = 0.09
+
+# Monitor cameras, for watching the machine itself (say, a webcam in front of it looking at
+# the head and the bed), by an ID of your choice. The Studio shows them with the machine's
+# cameras; vision never uses them, and they are not part of the machine profile. The
+# defaults are modest (1280 x 720 at 10 fps) because a webcam often shares a USB bus with
+# the top and bottom cameras, which vision relies on.
+#
+# [monitors.front]
+# label = "Front"
+# device = "/dev/v4l/by-id/usb-..._Webcam-video-index0"
+# width = 1280
+# height = 720
+# fps = 10

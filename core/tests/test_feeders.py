@@ -2,6 +2,7 @@
 
 import asyncio
 import math
+import time
 from collections.abc import Iterator
 from itertools import pairwise
 from typing import Any
@@ -243,6 +244,30 @@ def test_scan_assign_and_feed(lumen: TestClient) -> None:
 
         # The assignment is saved, by feeder ID, and survives a restart.
         assert service(lumen).setup.setup.feeders[uuid].part_id == "RC0603-10K"
+
+
+def test_pause_holds_a_feeder_advance(lumen: TestClient) -> None:
+    """Pause holds an advance as it holds a move: one asked for inside a run waits until
+    Resume, and a new feed is refused while paused."""
+    with connect(lumen) as s:
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        feeders = service(lumen)
+        sim = feeders._sim  # type: ignore[attr-defined]
+        assert sim is not None
+        assert s.post("/api/v1/machine/pause").status_code == 200
+
+        r = s.post("/api/v1/feeders/slots/2/feed", {})
+        assert r.status_code == 409 and "paused" in r.json()["detail"], r.json()
+
+        portal = lumen.portal
+        assert portal is not None
+        advance = portal.start_task_soon(feeders.feed, feeders.slot("2"))
+        time.sleep(1.0)
+        assert not advance.done() and sim.feeders[2].fed_mm == 0
+
+        assert s.post("/api/v1/machine/resume").status_code == 200
+        assert advance.result(timeout=10) == 4
+        assert sim.feeders[2].fed_mm == pytest.approx(4.04)
 
 
 def test_teach_measure_fiducial_and_calibrate(lumen: TestClient) -> None:

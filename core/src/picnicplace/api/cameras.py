@@ -6,6 +6,7 @@ presence: watching video alone does not enable motion.
 """
 
 import asyncio
+import time
 from collections.abc import AsyncIterator
 from typing import Annotated
 
@@ -19,12 +20,14 @@ from picnicplace.auth import Permission, Principal
 from picnicplace.camera.hub import CameraHub
 from picnicplace.camera.source import Frame
 from picnicplace.capture import CaptureInfo
-from picnicplace.machine.errors import MachineError
+from picnicplace.machine.errors import MachineError, VisionError
 from picnicplace.schemas import CameraInfo, ErrorResponse, WireModel
 
 BOUNDARY = "picnicplace-frame"
 FIRST_FRAME_TIMEOUT_S = 5.0
 KEEPALIVE_S = 2.0
+MONITOR_WAIT_S = 5.0
+"""How long a capture waits for a monitor camera's first frame (it may have to start)."""
 """With no new frame for this long, the last one is sent again so the stream stays open."""
 
 _bearer = HTTPBearer(auto_error=False)
@@ -92,14 +95,26 @@ async def list_captures(ctx: Context) -> list[CaptureInfo]:
 async def capture(ctx: Context, body: CaptureRequest) -> list[CaptureInfo]:
     """Save a full-resolution frame from each camera, losslessly, with the machine's
     position and outputs, to the data directory's captures folder."""
-    ids = body.cameras or [c.id for c in ctx.machine.profile.cameras if ctx.cameras.hub(c.id)]
+    ids = body.cameras or [
+        *(c.id for c in ctx.machine.profile.cameras if ctx.cameras.hub(c.id)),
+        *ctx.cameras.monitor_ids,
+    ]
     for camera_id in ids:
         _hub(ctx, camera_id)
     state = ctx.machine.state
     saved: list[CaptureInfo] = []
+    monitors = set(ctx.cameras.monitor_ids)
     for camera_id in ids:
         try:
-            frame = await ctx.machine.frame(camera_id, settle=False)
+            if camera_id in monitors:
+                # Not the machine's: no light to switch on, and nothing to settle.
+                async with _hub(ctx, camera_id).viewer() as source:
+                    found = await source.fresh_frame(time.time(), MONITOR_WAIT_S)
+                if found is None:
+                    raise VisionError(f"the {camera_id} camera sent no frame")
+                frame = found
+            else:
+                frame = await ctx.machine.frame(camera_id, settle=False)
         except MachineError as e:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e
         saved.append(

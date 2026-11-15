@@ -321,8 +321,8 @@ async def estop(ctx: Context) -> MachineState:
 @router.post("/machine/pause", tags=["machine"])
 async def pause(ctx: Context) -> MachineState:
     """Pause: the move under way finishes, then the running operation waits before its
-    next move, and nothing new starts, until resume or stop. Allowed for any
-    authenticated client, in any state."""
+    next move or feeder advance, and nothing new starts, until resume or stop. Allowed
+    for any authenticated client, in any state."""
     ctx.machine.pause()
     return ctx.machine.state
 

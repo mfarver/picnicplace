@@ -59,8 +59,11 @@ is done, the button reads **Run again** and redoes them all. **Pause** (in the w
 or the top bar) lets the move under way finish, then holds the machine until **Resume**;
 **Stop** ends the run there, with the machine still homed. Neither is an emergency stop:
 for that, switch the machine off, or fit an E-stop switch that cuts the motors' power.
-You can close the wizard and come back to it from any Studio: what the machine measures is kept in `calibration.json` in the data
-directory, and the pages you confirm in `wizard.json`.
+You can close the wizard and come back to it from any Studio: what the machine measures is
+kept in `calibration.json` in the data directory, and the pages you confirm in
+`wizard.json`.
+
+![The setup wizard over the machine map, at its third stop](../images/studio-wizard.jpg){ .pp-screenshot }
 
 1. **Hand on the power switch.** Keep a hand on the machine's power switch (the LumenPnP
    has no E-stop), with the nozzle tips fitted and empty, and click **Start**. At a
@@ -178,6 +181,8 @@ effect at once. The reset button next to one forgets it.
       data directory's `captures/` folder, for tuning vision on real images.
 
 ## 7. A whole job
+
+![A run of the demo panel, paused halfway](../images/studio-run.jpg){ .pp-screenshot }
 
 - [ ] In the Prepare workspace, import the board (and its panel), use **Find a place**,
       fasten the board where the map shows it, and save the job. Its parts may run to

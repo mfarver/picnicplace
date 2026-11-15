@@ -25,17 +25,68 @@ headless core runs the machine, and every interface connects to it over a docume
 
 !!! warning "Early development"
 
-    PicnicPlace can't assemble a board yet. Manual control (homing, jogging, vacuum,
-    cameras) and visual homing work against the built-in simulator; the first tests on a
-    real LumenPnP are next. Follow along on
+    PicnicPlace can't assemble a board on a real machine yet, and there is nothing to
+    download: run it from source. In the simulator it places whole panels. On a real
+    LumenPnP v4.1, homing, visual homing, jogging, the cameras, the vacuum sensors, and
+    calibrating a feeder rail work; measuring the nozzles is under way. Follow along on
     [GitHub](https://github.com/mfarver/picnicplace).
 
-![PicnicPlace Studio's machine view, running against the simulator](images/studio-machine.jpg){ .pp-screenshot }
-/// caption
-PicnicPlace Studio connected to the simulator: the machine map with staging plates, feeder
-rails, and the area every nozzle can reach, live camera views, and the head with vacuum,
-pumps, valves, and lights.
-///
+## A look at the Studio
+
+These are real screens from the Studio, connected to the built-in simulator and running
+the demo board from PicnicPlace's tests: a KiKit panel of four.
+
+=== "Machine"
+
+    ![The Machine workspace: the map, cameras, jog controls and head](images/studio-machine.jpg){ .pp-screenshot }
+    /// caption
+    The Machine workspace, with a run paused partway: the map of the bed (feeder rails,
+    staging plates, the panel, and where each nozzle is), the top and bottom cameras, jog
+    controls, the head's vacuum, pumps, valves and lights, and the run's next steps.
+    ///
+
+=== "Setup wizard"
+
+    ![The setup wizard at its third stop](images/studio-wizard.jpg){ .pp-screenshot }
+    /// caption
+    The setup wizard calibrates the machine in three stops, each started with one
+    button: homing, the cameras and the feeders; then, with a paper disc on the datum
+    board, each nozzle's offset, height and vacuum levels; then the discard and park
+    locations. Until it is done, the machine is limited and a banner says so.
+    ///
+
+=== "Prepare"
+
+    ![The Prepare workspace with the demo panel placed on the bed](images/studio-prepare.jpg){ .pp-screenshot }
+    /// caption
+    Prepare: a KiCad board and its KiKit panel, imported and placed on the bed where
+    every nozzle can reach every part, then published as a revision that runs exactly as
+    it was checked.
+    ///
+
+=== "Parts"
+
+    ![A part in the library with its footprint and a tape preview](images/studio-parts.jpg){ .pp-screenshot }
+    /// caption
+    The parts library: a part's footprint with pin 1 marked, and a preview of it in its
+    tape, with a check that it fits.
+    ///
+
+=== "Feeders"
+
+    ![The Feeders workspace with Photon feeders on the front rail](images/studio-feeders.jpg){ .pp-screenshot }
+    /// caption
+    Feeders: Photon feeders found on the bus, each with its part, and the rails
+    calibrated from the fiducials of the feeders farthest apart.
+    ///
+
+=== "Run"
+
+    ![The Run workspace partway through the demo panel](images/studio-run.jpg){ .pp-screenshot }
+    /// caption
+    A run, paused halfway: the board found by its fiducials, each placement checked off
+    with the nozzle that placed it, and the parts left out and why.
+    ///
 
 ## Why PicnicPlace
 
@@ -54,15 +105,16 @@ pumps, valves, and lights.
     ---
 
     Moves travel at safe Z, a physical safe-Z sensor is authoritative when the machine
-    has one, only one client controls the machine at a time, and STOP works from
-    anywhere.
+    has one, only one client controls the machine at a time, and any client can pause
+    it.
 
 -   **Vision built in**
 
     ---
 
-    OpenCV-based fiducial finding, visual homing on the machine's datum, and camera
-    calibration, with part alignment and board fiducials to come.
+    OpenCV-based visual homing on the machine's datum, camera and nozzle calibration,
+    board fiducials, pockets found by their tape's sprocket holes, and parts aligned on
+    the bottom camera.
 
 -   **Develop without a machine**
 
@@ -102,8 +154,8 @@ assumptions. See the [LumenPnP notes](hardware/lumenpnp-v4.md).
 | Milestone | Scope | Status |
 |---|---|---|
 | M0: Skeleton | Core, simulator, event socket, Studio shell | Done |
-| M1: Manual control | Machine profiles, machine view, jogging, safe-Z interlock, control lease, Marlin driver, camera streams | Done, awaiting real-machine tests |
-| M2: Calibration | Visual homing, camera scale, and discard and park locations set from the camera (done); lens calibration, nozzle offsets and runout, guided wizards | In progress |
+| M1: Manual control | Machine profiles, machine view, jogging, safe-Z interlock, control lease, Marlin driver, camera streams | Done, and working on a real LumenPnP v4.1 |
+| M2: Calibration | Visual homing (also on a real LumenPnP), camera scale, the bottom camera, nozzle offsets, heights by touch, vacuum levels, discard and park locations, and the setup wizard (done in the simulator); lens calibration and nozzle runout | In progress |
 | M3: Single placement | Parts library (with shared tapes, pin 1, and a tape preview), Photon feeders (discovery, part assignment, feeding, slots calibrated from feeder fiducials, pockets found from sprocket holes), pick, bottom-camera alignment (fitting the footprint's pads, tested on real frames), and place: done in the simulator, to be tried on a real machine | In progress |
 | M4: Jobs | KiCad board and KiKit panel import, placing a job within every nozzle's reach, board fiducials, planner and dry run, running a whole job with pause, step, and skip, strips and trays on the bed, feeders rescanned and each one's fiducial found on its first pick in a run, picks kept centered by the top or the bottom camera or both (auto), and a flight recorder (done in the simulator); run history | In progress |
 | M5: 1.0 | Packaging and user documentation; the operator app at the machine and the Creator, a website for preparing jobs (job revisions, accounts, house parts, problem reports), a calibration checklist, and parts counted on every reel and tray | Started: job revisions and job files, which runs run; the calibration checklist; the top and bottom cameras and the nozzle offsets calibrated; board and part heights found by touch; each nozzle's vacuum levels measured; heights and vacuum levels kept for each nozzle tip, and the fitted tip's size seen by the bottom camera; the setup wizard, choosing the machine, its serial port and cameras and calibrating it, with the machine limited until it is done |

@@ -22,6 +22,8 @@ make core      # build the Studio and start the core
 Open <http://127.0.0.1:7420> in a browser. Started without a config file (`-c`), the core
 runs the simulator and says so; the Studio's status bar shows **Simulator**.
 
+![The Studio's Machine workspace, connected to the simulator](../images/studio-machine.jpg){ .pp-screenshot }
+
 ## Things to try
 
 1. Press **Home**. The simulator's homing stops slightly off, like real endstops, and
@@ -33,8 +35,9 @@ runs the simulator and says so; the Studio's status bar shows **Simulator**.
    Lower the nozzle over the bottom camera with suction on to "pick" a part.
 4. Open the Studio in a second browser tab. Both tabs see the machine, but only one has
    control; the other can take control after confirming.
-5. Press **STOP**. Motion stops, outputs turn off, and the machine must be reset and
-   homed again.
+5. Press **PAUSE** in the top bar during a move. The move under way finishes, then the
+   machine holds until **Resume**; **Stop** ends the operation there, and the machine
+   stays homed. On a real machine, the emergency stop is its power switch.
 
 ## Use the real driver without a machine
 

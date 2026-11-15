@@ -12,6 +12,9 @@ the expected size is given, close to it. A silkscreen letter such as the "D" of 
 label can be round enough and in the size range, but it is found at few levels and is
 smaller than the fiducial (seen on a real board). Of the strong ones, the one nearest the
 image center wins, which picks the right one of several alike, such as sprocket holes.
+Where the mark's polarity is known, the other kind is not looked for: a feeder's copper
+fiducial is bright, and a sprocket hole in loose tape beside it is dark (seen on a real
+machine).
 Its center is the median of its detections, each from image moments, which gives
 subpixel accuracy.
 """
@@ -19,6 +22,7 @@ subpixel accuracy.
 import math
 from dataclasses import dataclass
 from statistics import median
+from typing import Literal
 
 import cv2
 from cv2.typing import MatLike
@@ -41,6 +45,10 @@ scale may not be calibrated yet."""
 STRONG_FRACTION = 0.5
 """Blobs weaker than this fraction of the strongest are not considered."""
 
+Polarity = Literal["bright", "dark"]
+"""Which marks to look for: brighter than around them (a copper fiducial on solder mask),
+or darker (a hole in paper tape). None looks for both."""
+
 
 @dataclass(frozen=True)
 class Circle:
@@ -55,12 +63,17 @@ class Circle:
 
 
 def find_circles(
-    image: Image, min_diameter_px: float, max_diameter_px: float, open_px: int = 0
+    image: Image,
+    min_diameter_px: float,
+    max_diameter_px: float,
+    open_px: int = 0,
+    polarity: Polarity | None = None,
 ) -> list[Circle]:
     """Every round blob with a diameter in range, each found at several threshold levels
     (or, if none is, every one found at all). ``open_px``: first wipe out anything
     narrower than this, such as silkscreen lines touching a paper disc, which would
-    otherwise merge with it at every level that finds it."""
+    otherwise merge with it at every level that finds it. ``polarity``: only bright marks,
+    or only dark ones."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
     h, w = gray.shape
@@ -69,13 +82,22 @@ def find_circles(
         if open_px > 1
         else None
     )
+    modes = {
+        None: (cv2.THRESH_BINARY, cv2.THRESH_BINARY_INV),
+        "bright": (cv2.THRESH_BINARY,),
+        "dark": (cv2.THRESH_BINARY_INV,),
+    }[polarity]
     hits: list[Circle] = []
     for level in THRESHOLDS:
-        for mode in (cv2.THRESH_BINARY, cv2.THRESH_BINARY_INV):
+        for mode in modes:
             _, mask = cv2.threshold(gray, level, 255, mode)
             if kernel is not None:
                 mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-            hits.extend(_round_blobs(mask, w, h, min_diameter_px, max_diameter_px))
+            hits.extend(
+                _round_blobs(
+                    mask, w, h, min_diameter_px, max_diameter_px, outer_only=polarity is not None
+                )
+            )
     if not hits:
         return []
 
@@ -110,13 +132,14 @@ def find_circle(
     max_offset_px: float | None = None,
     expected_diameter_px: float | None = None,
     open_px: int = 0,
+    polarity: Polarity | None = None,
 ) -> Circle | None:
     """The round blob with a diameter in range that is nearest the image center, among
     the strongest (see ``strength``), and within ``max_offset_px`` of the center if given.
     The limit keeps a search from locking onto a neighboring fiducial when the one wanted
-    is farther off than expected."""
+    is farther off than expected. ``polarity``: as for ``find_circles``."""
     h, w = image.shape[:2]
-    circles = find_circles(image, min_diameter_px, max_diameter_px, open_px)
+    circles = find_circles(image, min_diameter_px, max_diameter_px, open_px, polarity)
 
     def offset(c: Circle) -> float:
         return math.hypot(c.x - w / 2, c.y - h / 2)
@@ -139,9 +162,19 @@ def strength(circle: Circle, expected_diameter_px: float | None = None) -> float
     return circle.hits * math.exp(-(off**2))
 
 
-def _round_blobs(mask: MatLike, w: int, h: int, min_d: float, max_d: float) -> list[Circle]:
+def _round_blobs(
+    mask: MatLike, w: int, h: int, min_d: float, max_d: float, outer_only: bool = False
+) -> list[Circle]:
+    """Round blobs in a mask. Every edge counts, a hole's as well as a blob's, unless
+    ``outer_only``: then a dark hole in a bright area is not taken for a bright mark."""
     found: list[Circle] = []
-    contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    if outer_only:
+        # Two levels: the outer edges of blobs (no parent), and the edges of holes in them.
+        contours, hierarchy = cv2.findContours(mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+        if contours:  # with none, OpenCV gives no hierarchy either
+            contours = [c for c, link in zip(contours, hierarchy[0], strict=True) if link[3] < 0]
+    else:
+        contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     for contour in contours:
         area = cv2.contourArea(contour)
         if area < 12:

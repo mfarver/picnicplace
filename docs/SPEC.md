@@ -595,9 +595,13 @@ correction. Implementations:
     farthest apart on a rail (the feeders already mounted; only if a rail has fewer
     than two, far enough apart, does it ask for feeders at its ends). Fitting the
     profile's rail to them (a shift, a turn, and a stretch) places every slot between.
-    It searches about 10 mm around where it expects each fiducial; if that fails, it
-    asks the operator to jog the camera onto it. Feeder corrections that all come out
-    alike later say the rail has moved.
+    It searches around where it expects each fiducial, about 10 mm along the rail and
+    25 mm across it (one real rail was 17 mm across from its profile's place), nearest
+    first; if that fails, it asks the operator to jog the camera onto it. A feeder's
+    fiducial is bright copper, so only bright marks are taken: the dark sprocket holes
+    of loose tape lying near it are round and about its size, and on a real machine one
+    was taken for it. Feeder corrections that all come out alike later say the rail has
+    moved.
   - **At the start of a job** the feeders are scanned again, so a feeder moved or
     swapped since the job was planned is picked from where it is now (a part no longer
     loaded pauses the run). On the first pick from each feeder in the run, its fiducial

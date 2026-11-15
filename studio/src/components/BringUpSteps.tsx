@@ -73,12 +73,13 @@ function Choice({
 const STEPS: Step[] = [
   {
     id: "slow",
-    title: "Slow speed and a hand on the power switch",
+    title: "Slow speed and a hand on the power",
     body: (c) => (
       <p>
         Until the setup wizard is finished, every move runs at a quarter of full speed at most.
         Now: {Math.round((c.machine?.speed_scale ?? 1) * 100)}%. Keep a hand on the machine's
-        power switch throughout (or its E-stop, if it has one; the LumenPnP has none).
+        power throughout: unplugging the controller, or pressing its reset button, stops all
+        motion at once (as does an E-stop switch, if it has one; the LumenPnP has none).
       </p>
     ),
     check: (c) => (c.machine ? c.machine.speed_scale <= 0.25 : null),

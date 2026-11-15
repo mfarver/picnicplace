@@ -374,8 +374,8 @@ class MachineService:
         """Hold the machine before its next move: the move under way finishes (Marlin
         cannot cut one short without halting until it is power-cycled), then the running
         operation waits until resume or stop. Nothing new starts while paused. Always
-        allowed, from any client: the stop for an emergency is the power switch, or an
-        E-stop switch that cuts the motors' power."""
+        allowed, from any client: the stop for an emergency is unplugging the controller or
+        pressing its reset button, or an E-stop switch that cuts the motors' power."""
         if not self._paused:
             log.warning("paused")
             self._paused = True

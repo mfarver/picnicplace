@@ -2901,3 +2901,30 @@ code,
     animation: none;
   }
 }
+
+/* Asking that the nozzles be level before homing. */
+.home-check {
+  width: min(440px, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.home-check::backdrop {
+  background: rgb(0 0 0 / 50%);
+}
+
+.home-check h2 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+}
+
+.home-check p {
+  margin: 0 0 var(--space-3);
+}
+
+.home-check .button-row {
+  justify-content: flex-end;
+}

@@ -4,11 +4,35 @@
 
     These steps have been run against the fake firmware and one real LumenPnP v4.1
     (homing, jogging, and board fiducials), and will be refined as more machines are
-    brought up. The LumenPnP has no E-stop: keep a hand on its power switch throughout.
+    brought up. The LumenPnP has no E-stop: keep a hand on its controller's power
+    throughout (see [Stopping the machine](#stopping-the-machine-and-homing-safely)).
     STOP in the Studio waits for the current move to finish on its stock firmware.
 
 PicnicPlace runs on Linux for real machines. These steps are for a LumenPnP v4.1 or v4.2
 with stock firmware; other machines need their own machine profile.
+
+## Stopping the machine, and homing safely
+
+- **The emergency stop is the controller's power.** Unplugging the controller, or
+  pressing the reset button on the LumenPnP's controller board, stops all motion at once.
+  Keep a hand on the power cord whenever the machine moves: it also keeps your hands out of
+  the machine. An E-stop switch that cuts the motors' power does the same and is worth
+  fitting, but PicnicPlace does not require one. The Studio has no software emergency
+  stop: Marlin acts on `M112` only after the move under way, then hangs until the
+  controller is reset or power-cycled. **Pause** and **Stop** hold or end what the machine
+  is doing once the move under way has finished.
+- **Level the nozzles before homing.** On the LumenPnP both nozzles hang from one Z motor,
+  and nothing on the machine can tell whether they are level until Z is homed. A nozzle
+  hanging low can be dragged into feeders, boards or the bed as the head travels to its
+  home switches. Every **Home** in the Studio, and the wizard's first **Start**, asks you
+  to check first. A machine whose profile has a safe-Z sensor (`safe_z_input`) answers the
+  question itself: when it reads safe, homing goes ahead without asking. One is
+  recommended, never required.
+- **Z homes only at X/Y home.** The LumenPnP homes Z by lowering the left nozzle until the
+  right one reaches the Z switch, and only at X/Y home is there open space under the
+  nozzles; anywhere else, the left nozzle would hit the bed. The core homes only with the
+  profile's whole home commands (`G28`), never Z alone. If you send G-code by hand, never
+  send `G28 Z` away from X/Y home.
 
 ## 1. Start the core and open the wizard
 
@@ -59,15 +83,16 @@ machine is homed), so it picks up where the last run stopped; once every page of
 is done, the button reads **Run again** and redoes them all. **Pause** (in the wizard,
 or the top bar) lets the move under way finish, then holds the machine until **Resume**;
 **Stop** ends the run there, with the machine still homed. Neither is an emergency stop:
-for that, switch the machine off, or fit an E-stop switch that cuts the motors' power.
+for that, unplug the controller or press its reset button.
 You can close the wizard and come back to it from any Studio: what the machine measures is
 kept in `calibration.json` in the data directory, and the pages you confirm in
 `wizard.json`.
 
 ![The setup wizard over the machine map, at its third stop](../images/studio-wizard.jpg){ .pp-screenshot }
 
-1. **Hand on the power switch.** Keep a hand on the machine's power switch (the LumenPnP
-   has no E-stop), with the nozzle tips fitted and empty, and click **Start**. At a
+1. **Nozzles level, hand on the power.** Fit the nozzle tips, empty, check the nozzles
+   are level, keep a hand on the controller's power, and click **Start** (unless the
+   machine is homed, it asks once more about the nozzles before homing). At a
    quarter of full speed, it:
     - homes. After homing, Z must read 0 with both nozzles level; if the firmware reports
       anything else, homing fails saying so (the LumenPnP profile sends `G92 Z0`, because

@@ -63,6 +63,8 @@ interface Props {
   /** This client holds control, or may take it. */
   canConfirm: boolean;
   onHome: () => void;
+  /** Ask that the nozzles be level, then run `go` (homing elsewhere than `onHome`). */
+  onAskHome: (go: () => void) => void;
   onJog: (axis: string, distance: number) => void;
 }
 
@@ -192,6 +194,7 @@ function StopBody({
   canSet,
   canConfirm,
   onHome,
+  onAskHome,
   onJog,
 }: Props & {
   stop: Stop;
@@ -221,6 +224,9 @@ function StopBody({
       if (data) onState(data);
     }
   };
+  // Stop 1 homes first, unless the machine is homed: ask that the nozzles be level.
+  const begin = () =>
+    stop === 1 && !machine?.homed ? onAskHome(() => void start()) : void start();
   const confirm = async (pageId: "discard_park" | "strips_trays", status: "done" | "skipped") => {
     const updated = await run(() =>
       api.PUT("/api/v1/wizard/pages/{page_id}", {
@@ -260,7 +266,7 @@ function StopBody({
             type="button"
             className="button primary"
             disabled={!canMove || running || pending}
-            onClick={() => void start()}
+            onClick={begin}
           >
             <Play size={16} aria-hidden />
             {open(pages).length === 0 ? "Run again" : "Start"}

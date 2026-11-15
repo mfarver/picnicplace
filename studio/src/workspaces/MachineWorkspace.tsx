@@ -6,6 +6,7 @@ import { useAction } from "../api/useAction";
 import { useCameras } from "../api/useCameras";
 import { useDescription } from "../api/useDescription";
 import { useFeeders } from "../api/useFeeders";
+import { useHomeCheck } from "../api/useHomeCheck";
 import { useJobLayout, useRun } from "../api/useRun";
 import type { Operation } from "../api/types";
 import { CameraView } from "../components/CameraView";
@@ -16,6 +17,7 @@ import { LeaseStatus } from "../components/LeaseStatus";
 import { Panel } from "../components/Panel";
 import { FixedFeederPanel } from "../components/FixedFeederPanel";
 import { JobOverlay } from "../components/job/JobOverlay";
+import { HomeCheck } from "../components/HomeCheck";
 import { HeadInset } from "../components/machine/HeadInset";
 import { MachineView } from "../components/machine/MachineView";
 import { PlacementPanel } from "../components/PlacementPanel";
@@ -64,7 +66,9 @@ export function MachineWorkspace() {
     const op = await run(call);
     if (op) setLastOpId(op.id);
   };
-  const home = () => void track(() => api.POST("/api/v1/machine/home"));
+  // Every way to home asks first that the nozzles be level (unless a safe-Z sensor says so).
+  const [askHome, homeQuestion] = useHomeCheck(description, machine);
+  const home = () => askHome(() => void track(() => api.POST("/api/v1/machine/home")));
   const jog = (axis: string, distance: number) =>
     void track(() => api.POST("/api/v1/machine/jog", { body: { axis, distance } }));
   const moveTo = (position: Record<string, number>) =>
@@ -220,6 +224,7 @@ export function MachineWorkspace() {
                 canSet={status === "open" && !controlledElsewhere && !!machine?.homed}
                 canConfirm={status === "open" && !controlledElsewhere && !pending}
                 onHome={home}
+                onAskHome={askHome}
                 onJog={jog}
               />
             </div>
@@ -250,6 +255,7 @@ export function MachineWorkspace() {
           />
         )}
       </div>
+      <HomeCheck question={homeQuestion} />
     </div>
   );
 }

@@ -26,9 +26,9 @@ runs the simulator and says so; the Studio's status bar shows **Simulator**.
 
 ## Things to try
 
-1. Press **Home**. The simulator's homing stops slightly off, like real endstops, and
-   visual homing then centers the top camera on the datum fiducial and corrects the
-   position. The Control panel reports how far off it was.
+1. Press **Home**, and say the nozzles are level (on a real machine, look first). The
+   simulator's homing stops slightly off, like real endstops, and visual homing then
+   centers the top camera on the datum fiducial and corrects the position. The Control panel reports how far off it was.
 2. Jog with the arrows in the **Jog** panel, or click anywhere on the machine map to
    move there. Moves always lift the nozzles to safe Z first.
 3. In the **Head** inset, turn on a nozzle's pump and valve and watch its vacuum reading.
@@ -37,7 +37,8 @@ runs the simulator and says so; the Studio's status bar shows **Simulator**.
    control; the other can take control after confirming.
 5. Press **PAUSE** in the top bar during a move. The move under way finishes, then the
    machine holds until **Resume**; **Stop** ends the operation there, and the machine
-   stays homed. On a real machine, the emergency stop is its power switch.
+   stays homed. On a real machine, the emergency stop is unplugging the controller or
+   pressing its reset button.
 
 ## Use the real driver without a machine
 

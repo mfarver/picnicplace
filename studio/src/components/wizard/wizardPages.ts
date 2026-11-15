@@ -16,10 +16,11 @@ export const STOP_TEXT: Record<0 | 1 | 2 | 3, StopText> = {
     runs: "",
   },
   1: {
-    title: "Hand on the power switch",
+    title: "Nozzles level, hand on the power",
     ask:
-      "Keep a hand on the machine's power switch (or its E-stop, if it has one), with the " +
-      "nozzle tips fitted and empty.",
+      "Fit the nozzle tips, empty, and check the nozzles are level. Keep a hand on the " +
+      "machine's power: unplugging the controller, or pressing its reset button, stops all " +
+      "motion at once (as does an E-stop switch, if it has one).",
     runs:
       "Homes, then visual homing (which checks X, Y and the top camera), the top camera's " +
       "scale, the bottom camera, naming the tip on each nozzle, and the feeders. A few " +

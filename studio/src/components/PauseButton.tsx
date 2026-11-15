@@ -6,8 +6,9 @@ import { hasControl, useCore } from "../api/core";
  * Pause and Resume, always in the top bar. Pause holds the machine before its next move
  * (the move under way finishes) and anyone may press it; Resume, for the client in
  * control, carries on. There is no software emergency stop here: Marlin acts on one only
- * after the move under way and then stays halted until it is power-cycled. The stop for an
- * emergency is the power switch, or an E-stop switch that cuts the motors' power.
+ * after the move under way and then hangs until it is reset or power-cycled. The stop for an
+ * emergency is unplugging the controller or pressing its reset button, or an E-stop switch
+ * that cuts the motors' power.
  */
 export function PauseButton() {
   const core = useCore();

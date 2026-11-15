@@ -47,6 +47,7 @@ from picnicplace.machine.simulator import SimulatorDriver
 from picnicplace.operations import OperationManager
 from picnicplace.schemas import Operation, WireModel
 from picnicplace.simparts import PartShape, SimulatedParts
+from picnicplace.vision.fiducial import Polarity
 
 log = logging.getLogger(__name__)
 
@@ -55,9 +56,10 @@ DEFAULT_PITCH = 4.0
 
 FIDUCIAL_SEARCH_MM = 3.0
 
-RAIL_SEARCH_ACROSS_MM = 7.0
+RAIL_SEARCH_ACROSS_MM = (7.0, 14.0, 21.0)
 """Searching for a rail's end fiducial, the camera also looks this far to either side of
-where it is expected, across the rail."""
+where it is expected, across the rail: with the frame's search radius, up to 26 mm. A
+real rail was 17 mm across from its profile's place."""
 RAIL_SEARCH_ALONG_MM = 5.0
 """And this far along the rail. A fiducial found more than half a slot along the rail
 from where it was expected may be the next feeder's, so it is not taken."""
@@ -74,6 +76,11 @@ suspect: a fiducial was mistaken, or a rail is bent."""
 Z_OFFSET_SAME_MM = 0.005
 """A nozzle's Z offset closer than this to the one a part top was found with is the
 same: the top still holds."""
+FIDUCIAL_POLARITY: Polarity = "bright"
+"""A feeder's fiducial is copper on a black board: bright. Sprocket holes in tape lying
+near it are dark, and round, and about the right size, so the finder must not take them
+(seen on a real machine)."""
+
 FIDUCIAL_DIAMETERS = (0.5, 2.5)
 """Diameter range searched when the profile does not give the fiducial's size."""
 
@@ -226,6 +233,10 @@ class FeederService:
         self._by_id: dict[str, Slot] = {}
         self._apply_rails()
         self.sim_rail_errors: dict[str, tuple[float, float, float]] = {}
+        self.sim_loose_tapes: list[tuple[float, float, float]] = []
+        """In the simulator, lengths of empty tape lying loose on the machine, as (x, y,
+        direction in degrees) of a point on their pockets' line: their sprocket holes are
+        round and about a fiducial's size, but dark."""
         """Simulated rails: how far each bank really is from the profile, by bank ID: a
         shift (x, y) in mm and a turn in degrees about its first slot."""
         self.sim_part_height_error = 0.0
@@ -528,7 +539,7 @@ class FeederService:
         async def work() -> str:
             low, high = self._fiducial_size(bank)
             found = await self._machine.locate_circle(
-                low, high, FIDUCIAL_SEARCH_MM, bank.fiducial_diameter
+                low, high, FIDUCIAL_SEARCH_MM, bank.fiducial_diameter, polarity=FIDUCIAL_POLARITY
             )
             if found is None:
                 raise FeederError(
@@ -602,7 +613,7 @@ class FeederService:
         await self._machine.move_camera_to(guess.x, guess.y)
         low, high = self._fiducial_size(bank)
         found = await self._machine.locate_circle(
-            low, high, FIDUCIAL_SEARCH_MM, bank.fiducial_diameter
+            low, high, FIDUCIAL_SEARCH_MM, bank.fiducial_diameter, polarity=FIDUCIAL_POLARITY
         )
         if found is None:
             found = await self._search_fiducial(bank, guess)
@@ -754,7 +765,7 @@ class FeederService:
         async def work() -> str:
             low, high = self._fiducial_size(bank)
             found = await self._machine.locate_circle(
-                low, high, FIDUCIAL_SEARCH_MM, bank.fiducial_diameter
+                low, high, FIDUCIAL_SEARCH_MM, bank.fiducial_diameter, polarity=FIDUCIAL_POLARITY
             )
             if found is None:
                 raise FeederError(
@@ -822,23 +833,28 @@ class FeederService:
 
     async def _search_fiducial(self, bank: FeederBank, guess: Point) -> Point | None:
         """Look for a feeder fiducial around where it is expected, frame by frame, nearest
-        first. A fiducial more than half a slot along the rail from where it was expected
-        is not taken: it may be the next feeder's."""
+        first, skipping places the camera cannot reach. A fiducial more than half a slot
+        along the rail from where it was expected is not taken: it may be the next
+        feeder's."""
         length = math.hypot(bank.pitch.x, bank.pitch.y)
         ux, uy = (bank.pitch.x / length, bank.pitch.y / length) if length else (1.0, 0.0)
+        acrosses = (0.0, *RAIL_SEARCH_ACROSS_MM, *(-a for a in RAIL_SEARCH_ACROSS_MM))
         steps = [
             (along, across)
             for along in (0.0, -RAIL_SEARCH_ALONG_MM, RAIL_SEARCH_ALONG_MM)
-            for across in (0.0, -RAIL_SEARCH_ACROSS_MM, RAIL_SEARCH_ACROSS_MM)
+            for across in acrosses
         ]
         steps.sort(key=lambda s: math.hypot(*s))
         low, high = self._fiducial_size(bank)
         for along, across in steps:
             x = guess.x + ux * along - uy * across
             y = guess.y + uy * along + ux * across
-            await self._machine.move_camera_to(x, y)
+            try:
+                await self._machine.move_camera_to(x, y)
+            except InvalidTargetError:
+                continue  # beyond where the camera can go
             found = await self._machine.locate_circle(
-                low, high, RAIL_SEARCH_RADIUS_MM, bank.fiducial_diameter
+                low, high, RAIL_SEARCH_RADIUS_MM, bank.fiducial_diameter, polarity=FIDUCIAL_POLARITY
             )
             if found is None:
                 continue
@@ -1297,7 +1313,11 @@ class FeederService:
     def _scene_tapes(self) -> tuple[TapeScene, ...]:
         if self._tapes is None:
             self._tapes = self._build_tapes()
-        return self._tapes
+        loose = tuple(
+            TapeScene(pick=(x, y), rotation=angle, on_feeder=False)
+            for x, y, angle in self.sim_loose_tapes
+        )
+        return self._tapes + loose
 
     def _build_tapes(self) -> tuple[TapeScene, ...]:
         if self._sim is None:

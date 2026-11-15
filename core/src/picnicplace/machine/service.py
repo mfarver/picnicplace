@@ -61,6 +61,7 @@ from picnicplace.presence import PresenceTracker
 from picnicplace.recorder import FlightRecorder
 from picnicplace.schemas import MachineState, MachineStateEvent, Operation
 from picnicplace.simparts import HeldPart, PlacedPart
+from picnicplace.vision.fiducial import Polarity
 from picnicplace.wizard import LIMITED_SPEED, Limit
 
 log = logging.getLogger(__name__)
@@ -745,10 +746,12 @@ class MachineService:
         search_mm: float,
         expected_diameter: float | None = None,
         through_lines: bool = False,
+        polarity: Polarity | None = None,
     ) -> Point | None:
         """Find a round mark near the top camera's center: its machine position, or None.
         With its expected diameter, marks of other sizes (such as silkscreen letters) are
-        less likely to be taken for it. ``through_lines``: as for ``locate_round_marks``."""
+        less likely to be taken for it. ``through_lines``: as for ``locate_round_marks``.
+        ``polarity``: only bright marks, or only dark ones."""
         camera = self.top_camera()
         if self._grab is None:
             raise VisionError("the cameras are not available")
@@ -767,6 +770,7 @@ class MachineService:
             search_mm / mm_per_px,
             expected_diameter / mm_per_px if expected_diameter else None,
             _open_px(min_diameter / mm_per_px) if through_lines else 0,
+            polarity,
             camera=camera.id,
             position=dict(self._driver.position),
             mm_per_px=mm_per_px,

@@ -75,6 +75,24 @@ def test_find_circle_prefers_marks_found_at_many_levels() -> None:
     assert found is not None and (found.x, found.y) == pytest.approx((370, 230), abs=0.2)
 
 
+def test_find_circle_takes_only_marks_of_the_asked_polarity() -> None:
+    """A bright copper fiducial off center, and loose tape nearer the center: bright,
+    with dark sprocket holes of about the fiducial's size. Asked for bright marks, the
+    finder takes the fiducial, not a hole, not even the edge of a hole in the tape."""
+    image = np.full((400, 600, 3), 25, np.uint8)
+    cv2.rectangle(image, (120, 150), (480, 260), (200, 185, 150), -1)  # the tape
+    for x in (180, 280, 380):
+        cv2.circle(image, (x, 205), 19, (25, 25, 25), -1, cv2.LINE_AA)  # its holes
+    cv2.circle(image, (300, 340), 20, (230, 230, 230), -1, cv2.LINE_AA)  # the fiducial
+    found = find_circle(image, 24, 60, 300, 40, 0, "bright")
+    assert found is not None and (found.x, found.y) == pytest.approx((300, 340), abs=0.3)
+    # Either polarity: the hole nearest the center wins.
+    found = find_circle(image, 24, 60, 300, 40)
+    assert found is not None and (found.x, found.y) == pytest.approx((280, 205), abs=0.3)
+    found = find_circle(image, 24, 60, 300, 40, 0, "dark")
+    assert found is not None and (found.x, found.y) == pytest.approx((280, 205), abs=0.3)
+
+
 def visual_config(tmp_path: Path, **machine: Any) -> Any:
     profile = tmp_path / "visual.toml"
     profile.write_text(

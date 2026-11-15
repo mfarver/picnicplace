@@ -124,6 +124,8 @@ class TapeScene:
     tape. None: the tape shows its whole length."""
     feeder_width: float = 15.0
     feeder_length: float = 100.0
+    on_feeder: bool = True
+    """False: a loose length of tape lying on the machine, with no feeder under it."""
 
 
 class _Canvas:
@@ -409,7 +411,8 @@ def _tape(c: _Canvas, img: Image, t: TapeScene) -> None:
     # The feeder body, then the tape on it.
     behind = t.feeder_length - t.feeder_ahead
     bx, by = at(t.feeder_ahead - t.feeder_length / 2, t.feeder_center)
-    c.rect(img, bx, by, t.feeder_length, t.feeder_width, t.rotation, FEEDER_BODY)
+    if t.on_feeder:
+        c.rect(img, bx, by, t.feeder_length, t.feeder_width, t.rotation, FEEDER_BODY)
     holes_line = t.pocket_line
     edge = holes_line + SPROCKET_EDGE
     length = t.feeder_length * 0.8

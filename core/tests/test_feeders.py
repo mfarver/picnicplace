@@ -479,6 +479,30 @@ def test_rails_are_found_from_their_end_feeders() -> None:
         assert slot_state(s, "13")["calibration"] is None
 
 
+def test_a_rail_far_off_is_found_past_loose_tape() -> None:
+    """As on a real machine: the back rail 17 mm across from the profile's place, and
+    loose tape lying where the profile puts each end feeder's fiducial. The tape's
+    sprocket holes are round and about the fiducial's size, but dark: the search passes
+    them by and looks farther across, to the bright copper fiducials."""
+    with rails_client() as client, connect(client) as s:
+        feeders = service(client)
+        feeders.sim_rail_errors = {"back": (0.0, 17.0, 0.0)}
+        for number in ("26", "50"):
+            expected = feeders._expected_fiducial(feeders.slot(number))  # pyright: ignore[reportPrivateUsage]
+            # Along X, its sprocket holes' line through the expected fiducial, a hole on it.
+            feeders.sim_loose_tapes.append((expected.x - 6, expected.y - 3.5, 0.0))
+        s.home()
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        op = succeeded(s.wait(s.post("/api/v1/feeders/rails/calibrate", {"bank_ids": ["back"]})))
+        assert op["message"].startswith("Back rail placed:"), op["message"]
+        back = next(r for r in client.get("/api/v1/feeders").json()["rails"] if r["bank"] == "back")
+        shift = back["calibration"]["shift"]
+        assert (shift["x"], shift["y"]) == pytest.approx((0, 17), abs=0.6)
+        pick, _ = sim_truth(client, 38)
+        middle = slot_state(s, "38")
+        assert math.hypot(middle["pick"]["x"] - pick.x, middle["pick"]["y"] - pick.y) < 0.8
+
+
 def test_a_rail_needs_two_feeders_far_apart(lumen: TestClient) -> None:
     with connect(lumen) as s:
         s.home()

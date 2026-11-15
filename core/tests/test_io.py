@@ -170,9 +170,48 @@ def test_lost_z_steps_fault(sensed_client: TestClient) -> None:
             if x["id"] == "top_camera_scale"
         )
         assert line["status"] == "stale" and "Z lost steps" in line["stale"]
-        # Homing clears the fault.
+        assert "Raise the nozzles by hand" in op["error"]
+        # Homing with the nozzle still low is refused: it would be dragged across the bed.
+        op = s.wait(s.post("/api/v1/machine/home"))
+        assert op["status"] == "failed" and "safe-Z sensor reads not safe" in op["error"]
+        # Raised by hand, homing clears the fault.
+        machine.driver.inject_z_slip("Z", 5)
         s.home()
         assert s.move(X=20)["status"] == "succeeded"
+
+
+def test_homing_waits_for_the_safe_z_sensor(sensed_client: TestClient) -> None:
+    """X and Y home before Z on this machine (as on a LumenPnP), so a nozzle the safe-Z
+    sensor says is low would be dragged across it: homing is refused, with nothing moved,
+    until the nozzles are raised."""
+    with connect(sensed_client) as s:
+        machine = s.client.app.state.ctx.machine  # type: ignore[attr-defined]
+        machine.driver.inject_z_slip("Z", -5)  # a nozzle hangs low at power-up
+        before = s.state()["position"]
+        op = s.wait(s.post("/api/v1/machine/home"))
+        assert op["status"] == "failed" and "safe-Z sensor reads not safe" in op["error"], op
+        assert "Nothing moved" in op["error"]
+        state = s.state()
+        assert state["homed"] is False and state["position"] == before
+        machine.driver.inject_z_slip("Z", 5)  # raised by hand
+        s.home()
+        assert s.state()["homed"] is True
+
+
+def test_a_machine_that_raises_z_first_homes_with_a_nozzle_low(tmp_path: Path) -> None:
+    """Where the home commands raise Z before X and Y move, a low nozzle is safe to home."""
+    text = TEST_PROFILE.read_text().replace(
+        "safe_z = -1.0",
+        'safe_z = -1.0\nsafe_z_input = "safe_z"\nhomes_z_first = true',
+    )
+    text += '\n[[inputs]]\nid = "safe_z"\nlabel = "Safe Z"\nkind = "digital"\nrole = "safe_z"\n'
+    profile = tmp_path / "raises.toml"
+    profile.write_text(text)
+    config = fast_config(machine={"profile": str(profile)})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        client.app.state.ctx.machine.driver.inject_z_slip("Z", -5)  # type: ignore[attr-defined]
+        s.home()
+        assert s.state()["homed"] is True
 
 
 # --- Control lease -----------------------------------------------------------------------

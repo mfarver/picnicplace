@@ -5,6 +5,8 @@ import type { MachineProfile, MachineState } from "./types";
 export interface HomeQuestion {
   /** The machine has a safe-Z sensor, and it reads not safe. */
   sensorUnsafe: boolean;
+  /** ...and the machine homes X and Y before Z, so the core refuses to home. */
+  refused: boolean;
   onCancel: () => void;
   onHome: () => void;
 }
@@ -29,7 +31,9 @@ export function useHomeCheck(
     else setPending(() => go);
   };
   const question = pending && {
-    sensorUnsafe: sensor,
+    // Read live: raising the nozzles by hand while it is open turns the sensor safe.
+    sensorUnsafe: sensor && !machine?.z_safe,
+    refused: sensor && !machine?.z_safe && !description?.homes_z_first,
     onCancel: () => setPending(null),
     onHome: () => {
       setPending(null);

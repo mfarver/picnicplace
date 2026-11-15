@@ -192,10 +192,14 @@ shows Python cannot hold target throughput.
   that reads true when every nozzle is at or above safe-travel height). When present it is
   authoritative:
   - X/Y motion is refused unless the input reads safe, whatever the computed Z position.
-  - On power-up or reconnect, if it reads not safe, Z must be raised or homed before any
-    X/Y motion, including X/Y homing.
+  - Before homing, if it reads not safe, homing is refused with nothing moved until the
+    nozzles are raised by hand: on a machine that homes X and Y first (as the LumenPnP
+    does), homing would drag a low nozzle across the bed. A profile whose home commands
+    raise Z before X and Y move says so (`homes_z_first`), and homes anyway. The Studio's
+    question before homing says so too, and does not offer to home.
   - If the computed Z position says safe but the input says not safe, Z has lost steps.
-    The core stops motion, reports a fault, and requires re-homing.
+    The core stops motion, reports a fault, and requires re-homing (with the nozzles
+    raised by hand first, unless the machine raises Z before X and Y move).
   - Machines without the input use a computed safe-Z state, and clients label it as
     computed rather than sensed.
   - After homing, Z must read the profile's `home_z` (where the nozzles are level). If

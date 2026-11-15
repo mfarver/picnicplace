@@ -452,6 +452,14 @@ class MachineProfile(ProfileModel):
         default=None,
         description="A digital input that reads true when every nozzle is at safe height.",
     )
+    homes_z_first: bool = Field(
+        default=False,
+        description=(
+            "The home commands raise or home Z before X and Y move, so homing with a nozzle "
+            "low cannot drag it across the machine. Without this, a safe-Z input reading not "
+            "safe refuses homing (the LumenPnP homes X and Y first)."
+        ),
+    )
     board_height: float | None = Field(
         default=None,
         description=(

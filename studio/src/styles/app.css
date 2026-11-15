@@ -2834,6 +2834,49 @@ code,
   transform-origin: 50% 50%;
 }
 
+.camera-popout {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  display: flex;
+  padding: 3px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgb(0 0 0 / 55%);
+  color: #d9dde3;
+  cursor: pointer;
+}
+
+.camera-popout:hover {
+  color: #fff;
+}
+
+/* A camera view whose picture is in its own window: one line in place of the picture. */
+.camera-popped {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.camera-popped .button {
+  margin-left: auto;
+}
+
+/* A camera in its own window: as large as the window allows, on black. */
+.camera-window {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: #000;
+}
+
+.camera-window .camera-view {
+  border-radius: 0;
+}
+
 .camera-zoom-reset {
   position: absolute;
   top: 6px;

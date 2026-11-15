@@ -56,6 +56,15 @@ firmware.
   Lines starting with `//` or `echo:` are informational.
 - **Firmware variants.** The reference machine runs a patched firmware whose vacuum sensor
   read returns a signed 24-bit value. Stock Opulo firmware returns 8 bits (see Vacuum).
+- **The project lead's v4.1** (from `picnicplace-probe`, November 2026): stock firmware,
+  Marlin `bugfix-2.1.x` built Sep 19 2024, `AXIS_COUNT:5`. `M115` reports no emergency
+  parser (`EMERGENCY_PARSER:0`), so `M112` and `M410` wait behind a move in progress, and
+  no EEPROM (`EEPROM:0`): settings are compiled in, and the profile's connect commands
+  set them again each time. `M119` reports three endstops, `x_min`, `y_min`, and
+  `z_min`. `M503` reports steps per mm of X and Y 320, Z 40, A and B 4.44; maximum speeds
+  (mm/s) of X and Y 2000, Z 600, A and B 60000; maximum accelerations of X and Y 20000,
+  Z 15000, A and B 30000; travel acceleration 2500; junction deviation 0.02; and driver
+  currents (mA) of X 800, Y 1000 (two Y drivers), Z 800, A and B 200.
 
 ## Connect sequence
 
@@ -166,7 +175,14 @@ Each nozzle has a pump and a valve on Marlin fan outputs, switched together by O
 | N2 | `M106 P2 S255` and `M106 P3 S180` | `M107 P2` and `M107 P3` |
 
 **Inferred:** the outputs at PWM 180 (P1, P3) are the pumps and the full-on ones (P0, P2)
-are the valves.
+are the valves. The `lumenpnp-v4.1` profile follows this inference.
+
+**One real v4.1 disagrees:** on the project lead's machine the full-on outputs (P0, P2)
+are the pumps and the PWM 180 ones (P1, P3) the valves, and its owner's profile swaps
+them. Since OpenPnP switches each pair together, its log cannot tell them apart. The
+built-in profile keeps the inference until another machine settles it; if yours turns a
+valve on when you ask for a pump, swap the outputs in your machine's profile and say so in
+an issue.
 
 Reading a sensor (patched 24-bit firmware):
 
@@ -185,9 +201,12 @@ ok
   +200,000 as no part.
 - N2 on the reference machine only reached about −500,000 during the session (N2 probing
   was off in its config); worth checking on another machine.
-- **Stock firmware** reads one byte (`M261 A109 B1 S2`). **Inferred:** that is the top byte
-  of the same register, so the driver scales it by 2¹⁶ to report the same counts. This
-  needs a capture from stock firmware to confirm, including whether the byte is signed.
+- **Stock firmware** reads one byte (`M261 A109 B1 S2`): the top byte of the same
+  register, signed, so the driver scales it by 2¹⁶ to report the same counts. Confirmed on
+  the project lead's v4.1 (stock firmware): at rest it reads 255 (−1, so −65,536 counts),
+  and the setup wizard measured an open N24 tip at −327,680 and one holding a part at
+  −1,769,472: more vacuum reads more negative, as with the patched firmware. The 3-byte
+  read (`M261 A109 B3 S4`) gets raw bytes back from stock firmware, not a number.
 
 OpenPnP polls the sensor continuously while waiting for vacuum (every 3–4 ms).
 
@@ -315,10 +334,12 @@ ruler side) at −Y; the board is mounted with that edge facing the bottom camer
 
 Two USB (UVC) cameras named "LumenPnP Top" and "LumenPnP Bottom", 1920 × 1080. OpenPnP
 on the reference machine read them as uncompressed YUYV through V4L2, ran the top camera at
-5 frames per second, and flipped both images (top: X and Y, bottom: X). PicnicPlace asks
-for MJPEG first, since USB 2 cannot carry uncompressed 1080p quickly; whether these
-cameras offer MJPEG is not known yet (`v4l2-ctl --list-formats-ext -d /dev/videoN` shows
-it). PicnicPlace flips images as the config says (`flip_x`, `flip_y`): a real v4.1
+5 frames per second, and flipped both images (top: X and Y, bottom: X). Both cameras
+offer MJPEG at 1920 × 1080 and up to 30 frames per second, and YUYV at 1920 × 1080 at
+only 5, which is why OpenPnP's YUYV ran so slowly; on the project lead's v4.1 both run
+as MJPEG at 1920 × 1080 in PicnicPlace, which asks for MJPEG first. Smaller sizes run at
+30 frames per second in MJPEG, and in YUYV at 10 down to 848 × 480 and at 30 from
+640 × 480. PicnicPlace flips images as the config says (`flip_x`, `flip_y`): a real v4.1
 needed both flips for the top camera, the same as OpenPnP's, and `flip_y` for the bottom
 camera (not yet checked), so the images look like the machine seen from the front.
 
@@ -332,5 +353,6 @@ suction on, and the cameras with their formats. It saves everything to a transcr
 ## Not seen in the log
 
 - `M112` (emergency stop) and how the board recovers from it.
-- `M119` (endstop states) and `M503` (stored settings).
-- Replies from stock firmware.
+- `M119` (endstop states), `M503` (stored settings), and replies from stock firmware were
+  not in the log; the project lead's v4.1 has since supplied them (see Firmware and
+  Vacuum).

@@ -43,6 +43,9 @@ LumenPnP board holders, or later vacuum standoffs, support the other sides.
     ledge, reached with no board in place. The 30 mm spacing fits v4.1's 15 mm
     checkerboard and v4.2's 30 mm grid.
 
+The [demo board](demo-board.md) is its partner: the datum calibrates the machine, and the
+demo board shows that the calibration worked.
+
 ## Open questions
 
 - The LumenPnP board holders' height, which sets the holder's height: 8.4 mm from

@@ -24,6 +24,8 @@ nav = [
   ] },
   { "Hardware" = [
     { "LumenPnP v4" = "hardware/lumenpnp-v4.md" },
+    { "PicnicPlace datum (concept)" = "hardware/picnicplace-datum.md" },
+    { "Control panel (concept)" = "hardware/control-panel.md" },
   ] },
   { "Project" = [
     { "Contributing" = "contributing.md" },

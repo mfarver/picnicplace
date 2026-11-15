@@ -2,6 +2,7 @@ import { RotateCcw, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { Basis, Footprint, Part, Tape } from "../../api/types";
 import {
+  QUADRANT_PLACE,
   QUADRANT_ROTATION,
   TAPE_WIDTHS,
   formatRotation,
@@ -71,6 +72,20 @@ export function RotationHelp() {
         </li>
       </ol>
     </details>
+  );
+}
+
+/** A pocket seen as in the tape drawing, sprocket holes along the top, with a quadrant
+ * shaded: where Q1 to Q4 are, for anyone new to them. */
+function QuadrantIcon({ quadrant }: { quadrant: Quadrant }) {
+  const left = quadrant === "Q1" || quadrant === "Q3";
+  const top = quadrant === "Q1" || quadrant === "Q2";
+  return (
+    <svg className="quadrant-icon" viewBox="0 0 14 14" aria-hidden="true">
+      <rect className="quadrant-pin1" x={left ? 1 : 7} y={top ? 1 : 7} width={6} height={6} />
+      <rect className="quadrant-pocket" x={1} y={1} width={12} height={12} />
+      <path className="quadrant-pocket" d="M7 1V13M1 7H13" />
+    </svg>
   );
 }
 
@@ -221,9 +236,10 @@ export function TapeEditor({ tape, parts, footprints, busy, onSave, onDelete, on
                       ? "segment active"
                       : "segment"
                   }
-                  title={`Turn the part so pin 1 is in ${q}`}
+                  title={`Turn the part so pin 1 is in ${q}, the pocket's ${QUADRANT_PLACE[q]}`}
                   onClick={() => set({ rotation: rotationFor(q, footprint) })}
                 >
+                  <QuadrantIcon quadrant={q} />
                   {q}
                 </button>
               ))}

@@ -1,6 +1,7 @@
 import type { Footprint, Tape } from "../../api/types";
 import {
   POCKET_TO_SPROCKET,
+  QUADRANT_PLACE,
   SPROCKET_D,
   SPROCKET_EDGE,
   SPROCKET_PITCH,
@@ -9,18 +10,11 @@ import {
   pin1Quadrant,
   pocketLine,
   turnedSize,
-  type Quadrant,
 } from "../../tape";
 import { FootprintShape } from "./FootprintShape";
 
 const POCKETS = 3;
 const ARROW = 0.5;
-const WHERE: Record<Quadrant, string> = {
-  Q1: "top left",
-  Q2: "top right",
-  Q3: "bottom left",
-  Q4: "bottom right",
-};
 
 /**
  * A short length of tape in the EIA-481 view (looking down on the cover tape, sprocket
@@ -127,7 +121,9 @@ export function TapeDrawing({ tape, footprint }: { tape: Tape; footprint?: Footp
                   width={room.x / 2}
                   height={room.y / 2}
                 >
-                  <title>{`Pin 1 is in ${quadrant} (${WHERE[quadrant]}) of the pocket`}</title>
+                  <title>
+                    {`Pin 1 is in ${quadrant} (${QUADRANT_PLACE[quadrant]}) of the pocket`}
+                  </title>
                 </rect>
               )}
               {showPart && (

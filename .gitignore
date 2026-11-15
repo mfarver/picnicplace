@@ -231,3 +231,9 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# KiCad: per-user view settings, locks, backups and caches
+*.kicad_prl
+*.lck
+*-backups/
+fp-info-cache

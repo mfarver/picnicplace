@@ -2905,6 +2905,9 @@ code,
 /* Asking that the nozzles be level before homing. */
 .home-check {
   width: min(440px, calc(100vw - 2 * var(--space-4)));
+/* The machine asking the operator to do something (a tip change), over every workspace. */
+.machine-asks {
+  width: min(460px, calc(100vw - 2 * var(--space-4)));
   padding: var(--space-4);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
@@ -2917,6 +2920,11 @@ code,
 }
 
 .home-check h2 {
+.machine-asks::backdrop {
+  background: rgb(0 0 0 / 50%);
+}
+
+.machine-asks h2 {
   margin: 0 0 var(--space-3);
   font-size: var(--text-lg);
 }
@@ -2926,5 +2934,18 @@ code,
 }
 
 .home-check .button-row {
+.machine-asks p {
+  margin: 0 0 var(--space-3);
+}
+
+.machine-asks .nozzle-tip {
+  margin-bottom: var(--space-3);
+}
+
+.machine-asks .nozzle-tip-name {
+  white-space: nowrap;
+}
+
+.machine-asks .button-row {
   justify-content: flex-end;
 }

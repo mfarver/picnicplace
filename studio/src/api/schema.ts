@@ -997,6 +997,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer
+         * @description Answer what the machine is asking (the machine state's ``request``), once it is
+         *     done: for a tip change, which tip is on each nozzle now. The operation carries on.
+         *     Stop ends it instead.
+         */
+        post: operations["answer_api_v1_machine_answer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/bottom-camera": {
         parameters: {
             query?: never;
@@ -1360,6 +1382,28 @@ export interface paths {
          *     authenticated client, in any state; does nothing if nothing runs.
          */
         post: operations["stop_api_v1_machine_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/machine/tip-change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tip Change
+         * @description Raise the nozzles, bring the head to the front and center, and ask the operator
+         *     (the machine state's ``request``) to change tips by hand and say which is on each
+         *     nozzle; answered with ``POST /machine/answer``.
+         */
+        post: operations["tip_change_api_v1_machine_tip_change_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3809,6 +3853,11 @@ export interface components {
                 [key: string]: number;
             };
             /**
+             * @description What the running operation is waiting for the operator to do, if anything.
+             * @default null
+             */
+            request: components["schemas"]["OperatorRequest"] | null;
+            /**
              * Speed Scale
              * @description Moves run at no more than this fraction of full speed (bring-up mode).
              */
@@ -4124,6 +4173,57 @@ export interface components {
              * @enum {string}
              */
             type: "operation";
+        };
+        /** OperatorAnswer */
+        OperatorAnswer: {
+            /**
+             * Request Id
+             * @description The request being answered.
+             */
+            request_id: string;
+            /**
+             * Tips
+             * @description tip_change: the tip now on each nozzle listed, by nozzle ID (null: none).
+             */
+            tips?: {
+                [key: string]: string | null;
+            };
+        };
+        /**
+         * OperatorRequest
+         * @description The machine is waiting for the operator to do something only a person can (spec
+         *     section 8.2, "When the machine needs help, it asks"), then answer. Stop ends the
+         *     operation instead.
+         */
+        OperatorRequest: {
+            /**
+             * After
+             * @description What the machine does once answered.
+             */
+            after: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @description tip_change: the head is at the front, nozzles up; change the tips on the nozzles listed, then say which tip is on each.
+             * @constant
+             */
+            kind: "tip_change";
+            /**
+             * Message
+             * @description What to do and why, in a sentence or two.
+             */
+            message: string;
+            /**
+             * Nozzles
+             * @description tip_change: the nozzles to change.
+             */
+            nozzles: components["schemas"]["TipChangeNozzle"][];
+            /**
+             * Title
+             * @description What is needed, in a few words.
+             */
+            title: string;
         };
         /** Output */
         Output: {
@@ -5459,6 +5559,29 @@ export interface components {
              * @enum {string}
              */
             which: "first" | "row_end" | "last";
+        };
+        /** TipChangeNozzle */
+        TipChangeNozzle: {
+            /**
+             * Choices
+             * @description Tips that would do here, smallest first. Empty: any, or none.
+             */
+            choices: string[];
+            /**
+             * Fitted
+             * @description The tip said to be on it now, if any.
+             */
+            fitted: string | null;
+            /** Nozzle Id */
+            nozzle_id: string;
+        };
+        /** TipChangeRequest */
+        TipChangeRequest: {
+            /**
+             * Nozzle Ids
+             * @description The nozzles to change tips on. Empty: all of them.
+             */
+            nozzle_ids?: string[] | null;
         };
         /**
          * VacuumLevels
@@ -8143,6 +8266,51 @@ export interface operations {
             };
         };
     };
+    answer_api_v1_machine_answer_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperatorAnswer"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     calibrate_bottom_camera_api_v1_machine_bottom_camera_post: {
         parameters: {
             query?: never;
@@ -8814,6 +8982,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MachineState"];
+                };
+            };
+        };
+    };
+    tip_change_api_v1_machine_tip_change_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TipChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -24,6 +24,7 @@ from picnicplace.schemas import (
     MachineState,
     MoveRequest,
     Operation,
+    OperatorAnswer,
     OutputRequest,
     PresenceState,
     WireModel,
@@ -332,6 +333,40 @@ async def resume(ctx: Context) -> MachineState:
     """Carry on from where pause held the machine."""
     ctx.machine.resume()
     return ctx.machine.state
+
+
+@router.post(
+    "/machine/answer",
+    tags=["machine"],
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def answer(ctx: Context, body: OperatorAnswer) -> MachineState:
+    """Answer what the machine is asking (the machine state's ``request``), once it is
+    done: for a tip change, which tip is on each nozzle now. The operation carries on.
+    Stop ends it instead."""
+    ctx.machine.answer(body)
+    return ctx.machine.state
+
+
+class TipChangeRequest(WireModel):
+    nozzle_ids: list[str] | None = Field(
+        default=None, description="The nozzles to change tips on. Empty: all of them."
+    )
+
+
+@router.post(
+    "/machine/tip-change",
+    tags=["machine"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def tip_change(ctx: Context, body: TipChangeRequest) -> Operation:
+    """Raise the nozzles, bring the head to the front and center, and ask the operator
+    (the machine state's ``request``) to change tips by hand and say which is on each
+    nozzle; answered with ``POST /machine/answer``."""
+    return ctx.machine.start_tip_change(body.nozzle_ids)
 
 
 @router.post("/machine/stop", tags=["machine"])

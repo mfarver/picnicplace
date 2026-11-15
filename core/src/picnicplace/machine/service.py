@@ -20,6 +20,7 @@ import contextlib
 import logging
 import math
 import time
+import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
@@ -59,7 +60,14 @@ from picnicplace.machine.tips import TipStore
 from picnicplace.operations import OperationManager
 from picnicplace.presence import PresenceTracker
 from picnicplace.recorder import FlightRecorder
-from picnicplace.schemas import MachineState, MachineStateEvent, Operation
+from picnicplace.schemas import (
+    MachineState,
+    MachineStateEvent,
+    Operation,
+    OperatorAnswer,
+    OperatorRequest,
+    TipChangeNozzle,
+)
 from picnicplace.simparts import HeldPart, PlacedPart
 from picnicplace.vision.fiducial import Polarity
 from picnicplace.wizard import LIMITED_SPEED, Limit
@@ -94,6 +102,12 @@ EPSILON = 1e-6
 
 TRAVEL_HEIGHT = 0.0
 """Z axis position used for travel: every nozzle at the top of its travel."""
+
+APPROACH_MM = 2.0
+"""A nozzle going down slows for this last stretch, so it meets a part, a pocket, or the
+board gently, whatever the machine's speed."""
+APPROACH_SPEED = 10.0
+"""mm/s, for a nozzle's last ``APPROACH_MM`` down, and for lifting a part off gently."""
 
 VACUUM_POLL_S = 0.05
 VACUUM_STEADY = 0.002
@@ -169,6 +183,8 @@ class MachineService:
         self._busy = False
         self._stop_requested = False
         self._paused = False
+        self._request: OperatorRequest | None = None
+        self._answer: OperatorAnswer | None = None
         self._wake = asyncio.Event()
         self._connection_error: str | None = None
         self._connect_lock = asyncio.Lock()
@@ -254,6 +270,7 @@ class MachineService:
             z_safe=self.z_safe,
             speed_scale=self.speed_scale,
             warnings=list(self._driver.warnings),
+            request=self._request,
         )
 
     async def start(self) -> None:
@@ -444,6 +461,119 @@ class MachineService:
         paused, and end the operation if a stop was asked for."""
         await self._hold()
 
+    # --- Asking the operator ----------------------------------------------------------------
+
+    @property
+    def request(self) -> OperatorRequest | None:
+        """What the running operation is waiting for the operator to do, if anything."""
+        return self._request
+
+    async def ask(self, request: OperatorRequest) -> OperatorAnswer:
+        """Within an operation: wait for the operator to do what ``request`` says and
+        answer it (``answer``). Stop ends the operation instead."""
+        self._request = request
+        self._answer = None
+        log.info("asking the operator: %s", request.title)
+        self._publish_state()
+        try:
+            while self._answer is None:
+                if self._stop_requested:
+                    raise StoppedError("stopped by the operator")
+                if not self._driver.connected or self._estop:
+                    raise NotConnectedError("the machine dropped off while it waited")
+                self._wake.clear()
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(self._wake.wait(), 0.5)
+            return self._answer
+        finally:
+            self._request = None
+            self._answer = None
+            self._publish_state()
+
+    def answer(self, answer: OperatorAnswer) -> None:
+        """The operator's answer to what the machine asked: the operation carries on."""
+        request = self._request
+        if request is None or request.id != answer.request_id:
+            raise InvalidTargetError("the machine is not asking that (now): nothing to answer")
+        if request.kind == "tip_change":
+            for wanted in request.nozzles:
+                if wanted.nozzle_id not in answer.tips:
+                    raise InvalidTargetError(
+                        f"say which tip is on {self.nozzle(wanted.nozzle_id).label.lower()} now"
+                    )
+            for nozzle_id, tip_id in answer.tips.items():
+                self.nozzle(nozzle_id)
+                if tip_id is not None and self._profile.nozzle_tip(tip_id) is None:
+                    raise InvalidTargetError(f"this machine's profile has no nozzle tip {tip_id!r}")
+        self._answer = answer
+        self._wake.set()
+
+    def tip_change_spot(self) -> dict[str, float]:
+        """Where the head goes for a tip change: front and center, within reach."""
+        x, y = self._axes["X"], self._axes["Y"]
+        return {"X": (x.min + x.max) / 2, "Y": y.min if self._profile.y_sign > 0 else y.max}
+
+    async def change_tips(
+        self,
+        nozzles: list[TipChangeNozzle],
+        title: str,
+        message: str,
+        after: str,
+    ) -> dict[str, str | None]:
+        """Within an operation: raise the nozzles, bring the head to the front, and ask the
+        operator to change the tips on ``nozzles`` and say which is on each now. Returns
+        the tips said; they are fitted from then on."""
+        for wanted in nozzles:
+            nozzle = self.nozzle(wanted.nozzle_id)
+            outputs = [o for o in (nozzle.pump_output, nozzle.valve_output) if o is not None]
+            if any(self._driver.outputs.get(o) for o in outputs):
+                raise InvalidTargetError(
+                    f"{nozzle.label} has suction on, so it may be holding a part: put it down "
+                    "or discard it before changing its tip"
+                )
+        await self.raise_nozzles()
+        await self.move_axes(self.tip_change_spot())
+        answer = await self.ask(
+            OperatorRequest(
+                id=uuid.uuid4().hex,
+                kind="tip_change",
+                title=title,
+                message=message,
+                after=after,
+                nozzles=nozzles,
+            )
+        )
+        for nozzle_id, tip_id in answer.tips.items():
+            self.set_tip(nozzle_id, tip_id, in_task=True)
+            if self.sim_tips:
+                # The simulated operator did what they said.
+                if tip_id is None:
+                    self.sim_tips.pop(nozzle_id, None)
+                else:
+                    self.sim_tips[nozzle_id] = tip_id
+        return answer.tips
+
+    def start_tip_change(self, nozzle_ids: list[str] | None) -> Operation:
+        """Bring the head to the front for changing tips by hand, and wait for the operator
+        to say which tip is on each nozzle (all, unless given)."""
+        nozzles = [self.nozzle(i) for i in nozzle_ids] if nozzle_ids else self._profile.nozzles
+        self._check_can_move()
+        self._check_homed()
+
+        async def work() -> str:
+            tips = await self.change_tips(
+                [TipChangeNozzle(nozzle_id=n.id, fitted=n.tip, choices=[]) for n in nozzles],
+                "Change nozzle tips",
+                "The head is at the front with the nozzles up. Change the tips you want to, "
+                "then say which tip is on each nozzle.",
+                "The machine uses each tip's own heights and vacuum levels, if it has been "
+                "calibrated with it.",
+            )
+            said = [f"{self.nozzle(i).label}: {t or 'none'}" for i, t in tips.items()]
+            return "Tips: " + "; ".join(said) + "."
+
+        return self._start_operation("tip_change", work)
+
     @property
     def homed(self) -> bool:
         return self._homed
@@ -543,10 +673,11 @@ class MachineService:
         here = self._driver.position
         return Point(x=here["X"] + nozzle.offset.x, y=here["Y"] + nozzle.offset.y)
 
-    async def move_axes(self, target: Mapping[str, float]) -> None:
-        """Move to an absolute position, at safe Z if X or Y change. For use in a task."""
+    async def move_axes(self, target: Mapping[str, float], speed: float | None = None) -> None:
+        """Move to an absolute position, at safe Z if X or Y change, no faster than
+        ``speed`` (mm/s) if given. For use in a task."""
         self._check_target(target)
-        await self._run_steps(self._plan_move(target), None)
+        await self._run_steps(self._plan_move(target), speed)
 
     async def move_nozzle_over(
         self, nozzle: Nozzle, x: float, y: float, angle: float | None = None
@@ -557,12 +688,18 @@ class MachineService:
             target[nozzle.rotation_axis] = angle
         await self.move_axes(target)
 
-    async def lower_nozzle(self, nozzle: Nozzle, height: float) -> None:
+    async def lower_nozzle(self, nozzle: Nozzle, height: float, speed: float | None = None) -> None:
         """Move a nozzle down (or up) to a height: 0 at the top, negative down. The
         nozzle's measured Z offset is added, so a height means the same for every nozzle
-        and tip."""
-        raw = height + nozzle.z_offset
-        await self.move_axes({nozzle.z_axis: nozzle.z_sign * min(0.0, raw)})
+        and tip. Going down, it slows to ``APPROACH_SPEED`` for the last ``APPROACH_MM``
+        (or all the way, if nearer); ``speed`` (mm/s) limits the move further."""
+        raw = min(0.0, height + nozzle.z_offset)
+        now = nozzle_height(nozzle, self._driver.position[nozzle.z_axis])
+        if raw < now - EPSILON:
+            if now - raw > APPROACH_MM:
+                await self.move_axes({nozzle.z_axis: nozzle.z_sign * (raw + APPROACH_MM)}, speed)
+            speed = APPROACH_SPEED if speed is None else min(speed, APPROACH_SPEED)
+        await self.move_axes({nozzle.z_axis: nozzle.z_sign * raw}, speed)
 
     async def raise_nozzles(self) -> None:
         await self.move_axes({axis: TRAVEL_HEIGHT for axis in sorted(self._z_axes)})

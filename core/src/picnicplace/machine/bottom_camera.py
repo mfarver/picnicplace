@@ -340,6 +340,14 @@ def start_bottom_camera_calibration(machine: MachineService, nozzle_id: str | No
 
 TIP_NAME_TOLERANCE = 0.15
 """A tip's end found within this fraction of its size fits it."""
+TIP_EDGE_PX = 2.0
+"""A tip's end can look up to this many pixels larger or smaller than it is (blur, and its
+edge falling between pixels). On a coarse camera that is more than the tolerance: an N045
+seen at 0.11 mm per pixel looked 1.31 mm across, and fitted an N08. A tip within the
+tolerance plus this of the same circle could be it too, and the camera cannot tell."""
+SAME_CIRCLE_PX = 2.0
+"""Two tips' searches that found circles this close in size may have found the same edge
+(each search sizes it a little differently)."""
 
 
 def tip_window(tip: NozzleTip) -> tuple[float, float]:
@@ -353,12 +361,21 @@ def tip_window(tip: NozzleTip) -> tuple[float, float]:
     return low, high
 
 
-async def measure_tip(machine: MachineService, nozzle: Nozzle) -> tuple[NozzleTip | None, float]:
+def _outer(tip: NozzleTip) -> float:
+    return tip.outer_diameter or 0.0
+
+
+async def measure_tip(
+    machine: MachineService, nozzle: Nozzle
+) -> tuple[NozzleTip | None, float, list[str]]:
     """Which of the profile's tips a nozzle has, by how its end looks from the calibrated
     bottom camera. Each tip is looked for in its own size window; it fits if a circle is
     found there within ``TIP_NAME_TOLERANCE`` of its size. A smaller tip's window can also
-    fit a larger tip's end merged with its hole, so the largest that fits wins. Returns it
-    (None: none fits) and the size seen, in mm."""
+    fit a larger tip's end merged with its hole, so the largest that fits wins, unless
+    another tip, allowing ``TIP_EDGE_PX`` more, could be the same circle: then the camera
+    cannot tell them apart.
+    Returns the tip (None: none fits, or it cannot tell), the size seen, in mm, and the
+    tips it cannot tell apart (empty unless so)."""
     camera = bottom_camera(machine)
     if camera.focus_height is None:
         raise VisionError("calibrate the bottom camera first")
@@ -367,6 +384,7 @@ async def measure_tip(machine: MachineService, nozzle: Nozzle) -> tuple[NozzleTi
     frame = await machine.frame(camera.id)
     mm = camera.field_of_view.x / frame.image.shape[1]
     fits: list[tuple[NozzleTip, float]] = []
+    near: list[tuple[NozzleTip, float]] = []  # within the tolerance plus TIP_EDGE_PX
     nearest: float | None = None
     for tip in machine.profile.nozzle_tips:
         if not tip.outer_diameter:
@@ -389,14 +407,21 @@ async def measure_tip(machine: MachineService, nozzle: Nozzle) -> tuple[NozzleTi
         nearest = seen if nearest is None else nearest
         if abs(math.log(seen / tip.outer_diameter)) <= math.log(1 + TIP_NAME_TOLERANCE):
             fits.append((tip, seen))
+        slack = TIP_NAME_TOLERANCE * tip.outer_diameter + TIP_EDGE_PX * mm
+        if abs(seen - tip.outer_diameter) <= slack:
+            near.append((tip, seen))
     if fits:
-        return max(fits, key=lambda f: f[0].outer_diameter or 0.0)
+        best, seen = max(fits, key=lambda f: f[0].outer_diameter or 0.0)
+        alike = [t for t, d in near if t is not best and abs(d - seen) <= SAME_CIRCLE_PX * mm]
+        if alike:
+            return None, seen, [t.id for t in sorted([*alike, best], key=_outer)]
+        return best, seen, []
     if nearest is None:
         raise VisionError(
             f"the {camera.label.lower()} cannot see {nozzle.label.lower()}'s tip: check a "
             "tip is fitted and empty"
         )
-    return None, nearest
+    return None, nearest, []
 
 
 async def identify_tips(machine: MachineService) -> str:
@@ -405,7 +430,14 @@ async def identify_tips(machine: MachineService) -> str:
     notes: list[str] = []
     try:
         for nozzle in machine.profile.nozzles:
-            tip, seen = await measure_tip(machine, nozzle)
+            tip, seen, alike = await measure_tip(machine, nozzle)
+            if alike:
+                notes.append(
+                    f"{nozzle.label}: its end looked {seen:.2f} mm across, which could be "
+                    f"{' or '.join(alike)}: the camera's pixels are too coarse to tell them "
+                    "apart; say which it is"
+                )
+                continue
             if tip is None:
                 notes.append(
                     f"{nozzle.label}: its end looked {seen:.2f} mm across, like none of the "

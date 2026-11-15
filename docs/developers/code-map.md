@@ -132,11 +132,11 @@ with the simulator, or read `test_placement.py`, which does the same through the
 |---|---|
 | `machine/profile.py` | Machine profiles: axes, nozzles, cameras, feeder banks, locations, keep-outs. Built-in profiles hold a model's **design facts only**, and can `extends` another. |
 | `machine/local.py` | The local profile: what is true of one machine (discard and park locations, measured keep-outs), laid over the built-in profile. Written by the Studio. |
-| `machine/service.py` | The machine service: the one owner of the machine, and where the safety rules live. Also camera frames and vision calls for tasks. |
+| `machine/service.py` | The machine service: the one owner of the machine, and where the safety rules live. Also camera frames and vision calls for tasks, and asking the operator mid-task (`ask`, `change_tips`). |
 | `machine/bottom_camera.py` | Calibrating the bottom camera with a nozzle tip: its place, focus height, scale, and turn, and how big the fitted tip looked; naming the tip on each nozzle by the size of its end |
-| `machine/sniff.py` | Finding a height by touch: a nozzle steps down with suction on until the vacuum jumps from its open reading (the datum board, a board's fiducial, a part in its pocket) |
+| `machine/sniff.py` | Finding a height by touch: a nozzle steps down with suction on until the vacuum jumps from its open reading (the calibration disc, a board's fiducial, a part in its pocket) |
 | `machine/tips.py` | Which nozzle tip is fitted on each nozzle, kept in the data directory |
-| `machine/nozzle_offsets.py` | Calibrating the nozzle offsets: sniffing for the datum board's height, then turning a disc on it with each nozzle; each nozzle's vacuum levels measured on the way |
+| `machine/nozzle_offsets.py` | Calibrating the nozzle offsets: sniffing for the disc's top on the datum board, then turning the disc with each nozzle; each nozzle's vacuum levels measured on the way |
 | `machine/driver.py` | The interface every motion driver implements |
 | `machine/simulator.py` | The simulated machine. Its errors are realistic (homing error, feeder steps, slot and board offsets, cameras and nozzles off the profile, tips longer than the profile's, the datum board's height), so calibration and vision have something to find. |
 | `machine/marlin/` | The Marlin driver (`driver.py`: one G-code command at a time, each waiting for its `ok`), the serial port (`transport.py`), how a profile's `[marlin]` table tells it what to send (`settings.py`), and a fake LumenPnP firmware that answers the way a real one does (`fake.py`) |

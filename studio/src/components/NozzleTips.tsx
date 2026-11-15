@@ -1,3 +1,4 @@
+import { Replace } from "lucide-react";
 import { api } from "../api/client";
 import { useAction } from "../api/useAction";
 import { publishDescription } from "../api/useDescription";
@@ -11,10 +12,13 @@ import type { MachineProfile } from "../api/types";
 export function NozzleTips({
   description,
   canSet,
+  canMove,
 }: {
   description: MachineProfile;
   /** This client may change the machine. */
   canSet: boolean;
+  /** This client may move the machine, and it is homed. */
+  canMove: boolean;
 }) {
   const { run, pending, error } = useAction();
   if (description.nozzle_tips.length === 0) return null;
@@ -53,6 +57,18 @@ export function NozzleTips({
           </select>
         </label>
       ))}
+      <button
+        type="button"
+        className="button"
+        disabled={!canMove || pending}
+        onClick={() => void run(() => api.POST("/api/v1/machine/tip-change", { body: {} }))}
+      >
+        <Replace size={16} aria-hidden />
+        Change tips
+      </button>
+      <p className="text-muted note">
+        Brings the head to the front with the nozzles up, then asks which tip is on each.
+      </p>
       {error && <p className="note note-danger">{error}</p>}
     </div>
   );

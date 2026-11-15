@@ -1,7 +1,9 @@
 """The calibration checklist: what it says before and after measuring, what a crash makes
 out of date, and what it stops in a run."""
 
+import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,6 +17,8 @@ from picnicplace.calibration import (
     run_issues,
 )
 from picnicplace.config import Config
+from picnicplace.machine.nozzle_offsets import DISC_FIT_MM, search_spots
+from picnicplace.machine.service import APPROACH_SPEED
 from tests.conftest import Session, connect, fast_config
 from tests.test_placement import feeders, ok, placed, set_up
 from tests.test_vision import home, visual_config
@@ -223,7 +227,7 @@ def test_calibrate_the_nozzle_offsets() -> None:
             )
         )
         op = s.wait(s.post("/api/v1/machine/nozzle-offsets", {}))
-        assert op["status"] == "succeeded", op
+        assert op["status"] == "succeeded", op.get("error")
         nozzles = client.get("/api/v1/machine/description").json()["nozzles"]
         for before, after in zip(design, nozzles, strict=True):
             dx, dy = errors[after["id"]]
@@ -238,6 +242,179 @@ def test_calibrate_the_nozzle_offsets() -> None:
     with TestClient(create_app(config)) as client:
         nozzles = client.get("/api/v1/machine/description").json()["nozzles"]
         assert nozzles[0]["offset"]["x"] == pytest.approx(design[0]["offset"]["x"] + 0.4, abs=0.03)
+
+
+def test_heights_come_from_the_paper_not_the_bare_board() -> None:
+    """As on a real LumenPnP (2026-11-14), a tip on the bare datum board leaks until it is
+    pressed 3 mm into it, so stepping down onto the board would find it 3 mm too low.
+    Paper seals a tip as soon as it touches: the heights come from the disc, less its
+    thickness, and are right."""
+    config = offsets_config(sim_datum_seal_press=3.0, sim_datum_height_error=0.3)
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        disc = config.machine.sim_calibration_disc
+        assert disc is not None
+        cam = client.get("/api/v1/machine/description").json()["cameras"][0]["position"]
+        s.wait(
+            s.post(
+                "/api/v1/machine/move",
+                {"position": {"X": disc[0] - cam["x"], "Y": disc[1] - cam["y"]}},
+            )
+        )
+        op = s.wait(s.post("/api/v1/machine/nozzle-offsets", {}))
+        assert op["status"] == "succeeded", op.get("error")
+        detail = str(lines(client)["nozzle_offsets"]["detail"])
+        assert detail.count("touching the datum board at Z -27.20") == 2, detail
+        assert not feeders_parts_crashed(client)
+
+
+def test_the_disc_search_sees_a_disc_whole_anywhere() -> None:
+    """On a real LumenPnP (2026-11-15) the search's frames, 11.6 mm tall and stepped 8.1 mm
+    apart, cut a 4.9 mm disc off at the edge of every one, so it was never found. Now some
+    frame holds a disc that size, or a hole punch's, whole wherever it lies."""
+    fov = (20.217, 11.631)  # the v4.1 top camera's, as measured
+    area = (173.1, 167.3, 263.1, 212.3)  # around the datum board's keep-out
+    spots = search_spots(area, fov, DISC_FIT_MM)
+    for d in (4.9, 6.4):
+        half = ((fov[0] - d) / 2, (fov[1] - d) / 2)
+        for i in range(361):
+            for j in range(181):
+                x, y = area[0] + i * 0.25, area[1] + j * 0.25
+                assert any(
+                    abs(x - p.x) <= half[0] + 1e-9 and abs(y - p.y) <= half[1] + 1e-9 for p in spots
+                ), (d, x, y)
+
+
+def asked(s: Session, timeout: float = 60.0) -> dict[str, Any]:
+    """Wait for the machine to ask the operator something, and return what."""
+    deadline = time.monotonic() + timeout
+    while (request := s.state()["request"]) is None:
+        assert time.monotonic() < deadline, "the machine asked nothing"
+        time.sleep(0.05)
+    return request
+
+
+def test_a_tip_too_big_for_the_disc_is_changed_before_anything_goes_down() -> None:
+    """An N24 tip (4 mm across) on a real 4.9 mm disc sealed half over its edge and dropped
+    it. Before any nozzle goes down, a tip without a millimeter of paper all round is
+    changed: the head comes to the front, nozzles up, and asks for tips that leave that
+    much, and asks again until they do. Then each nozzle is measured with its new tip."""
+    config = offsets_config()
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        disc = config.machine.sim_calibration_disc
+        assert disc is not None
+        cam = client.get("/api/v1/machine/description").json()["cameras"][0]["position"]
+        s.wait(
+            s.post(
+                "/api/v1/machine/move",
+                {"position": {"X": disc[0] - cam["x"], "Y": disc[1] - cam["y"]}},
+            )
+        )
+        assert s.put("/api/v1/machine/nozzles/N1/tip", {"tip_id": "N40"}).status_code == 200
+        assert s.put("/api/v1/machine/nozzles/N2/tip", {"tip_id": "N08"}).status_code == 200
+        started = s.post("/api/v1/machine/nozzle-offsets", {})
+        assert started.status_code == 202, started.json()
+
+        request = asked(s)
+        assert request["kind"] == "tip_change"
+        assert "N40 (6.2 mm)" in request["message"], request
+        wanted = {n["nozzle_id"]: n for n in request["nozzles"]}
+        assert wanted["N1"]["fitted"] == "N40"
+        # A 6 mm disc leaves room for tips up to 4 mm across, smallest first.
+        assert wanted["N1"]["choices"] == ["N045", "N08", "N14", "N24"]
+        at = s.state()["position"]
+        assert (at["X"], at["Y"], at["Z"]) == pytest.approx((216.5, 44.454, 0.0), abs=0.01)
+
+        # An answer to some other question, or one leaving a nozzle out, is refused.
+        r = s.post("/api/v1/machine/answer", {"request_id": "x", "tips": {"N1": "N08"}})
+        assert r.status_code == 422, r.json()
+        r = s.post("/api/v1/machine/answer", {"request_id": request["id"], "tips": {"N1": "N08"}})
+        assert r.status_code == 422 and "right nozzle" in r.json()["detail"], r.json()
+        # Still too big: asked again.
+        tips = {"N1": "N75", "N2": "N08"}
+        r = s.post("/api/v1/machine/answer", {"request_id": request["id"], "tips": tips})
+        assert r.status_code == 200, r.json()
+        again = asked(s)
+        assert again["id"] != request["id"] and "N75 (9 mm)" in again["message"], again
+        tips = {"N1": "N045", "N2": "N08"}
+        s.post("/api/v1/machine/answer", {"request_id": again["id"], "tips": tips})
+
+        op = s.wait(started)
+        assert op["status"] == "succeeded", op.get("error")
+        nozzles = client.get("/api/v1/machine/description").json()["nozzles"]
+        assert [n["tip"] for n in nozzles] == ["N045", "N08"]
+        assert lines(client)["nozzle_offsets"]["status"] == "done"
+
+
+def test_a_tip_change_waits_at_the_front_until_answered_or_stopped() -> None:
+    """Changing tips by hand: the head comes to the front and center with the nozzles up,
+    and waits for the operator to say which tip is on each nozzle. Stop ends it with the
+    tips as they were."""
+    with TestClient(create_app(offsets_config())) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        started = s.post("/api/v1/machine/tip-change", {})
+        assert started.status_code == 202, started.json()
+        request = asked(s)
+        assert [n["nozzle_id"] for n in request["nozzles"]] == ["N1", "N2"]
+        assert all(n["choices"] == [] for n in request["nozzles"])
+        tips = {"N1": "N14", "N2": None}
+        r = s.post("/api/v1/machine/answer", {"request_id": request["id"], "tips": tips})
+        assert r.status_code == 200, r.json()
+        op = s.wait(started)
+        assert op["status"] == "succeeded", op
+        assert op["message"] == "Tips: Left nozzle: N14; Right nozzle: none."
+        nozzles = client.get("/api/v1/machine/description").json()["nozzles"]
+        assert [n["tip"] for n in nozzles] == ["N14", None]
+
+        started = s.post("/api/v1/machine/tip-change", {"nozzle_ids": ["N2"]})
+        asked(s)
+        s.post("/api/v1/machine/stop")
+        op = s.wait(started)
+        assert op["status"] == "failed" and "stopped" in op["error"], op
+        assert s.state()["request"] is None
+        nozzles = client.get("/api/v1/machine/description").json()["nozzles"]
+        assert [n["tip"] for n in nozzles] == ["N14", None]
+
+
+def test_a_nozzle_slows_for_the_last_two_millimeters_down() -> None:
+    """Going down, a nozzle moves at speed until 2 mm above where it is going, then at
+    10 mm/s, so it meets a part or the board gently whatever the machine's speed; going up,
+    it is not slowed."""
+    config = offsets_config()
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        machine = client.app.state.ctx.machine  # type: ignore[attr-defined]
+        driver = machine.driver
+        moves: list[tuple[dict[str, float], float | None]] = []
+        real = driver.move_to
+
+        async def logged(target: dict[str, float], speed: float | None) -> None:
+            moves.append((dict(target), speed))
+            await real(target, speed)
+
+        driver.move_to = logged
+        nozzle = machine.profile.nozzles[0]
+        portal = client.portal
+        assert portal is not None
+        portal.call(machine.lower_nozzle, nozzle, -20.0)
+        z = nozzle.z_axis
+        down = [(t[z], v) for t, v in moves if z in t]
+        assert [round(h * nozzle.z_sign, 3) for h, _ in down] == [-18.0, -20.0], down
+        assert down[0][1] is None or down[0][1] > APPROACH_SPEED
+        assert down[1][1] == APPROACH_SPEED
+
+        moves.clear()
+        portal.call(machine.lower_nozzle, nozzle, -19.5)  # half a millimeter up
+        assert [v for t, v in moves if z in t] == [None]
+
+        moves.clear()
+        portal.call(machine.lower_nozzle, nozzle, -20.5)  # half a millimeter down
+        assert [v for t, v in moves if z in t] == [APPROACH_SPEED]
+
+
+def feeders_parts_crashed(client: TestClient) -> list[str]:
+    return client.app.state.ctx.feeders.sim_parts.crashes  # type: ignore[attr-defined,no-any-return]
 
 
 def test_the_bottom_camera_moves_with_its_nozzle(tmp_path: Path) -> None:

@@ -13,12 +13,17 @@ What is found is the nozzle's turning axis, which is what placing needs: a part 
 turned about it.
 
 The height to pick the disc at is found by sniffing: each nozzle, with suction on, steps
-down onto the datum board's center until the vacuum says the tip has sealed on it. The
-disc's top is that plus its thickness. The nozzle never goes more than
-``SNIFF_BELOW_MM`` below the profile's height for the board.
+down onto the disc itself until the vacuum says the tip has sealed on it. Paper seals a
+tip the moment it touches; bare datum board does not. Its printing and the mask opening
+around its dot let a tip leak until it is pressed well into its spring (seen on a real
+LumenPnP: 2.5 mm for an N24 tip, more than 5 mm for an N75). The datum board's top, for
+the nozzle's Z offset, is the disc's top less its thickness. A seal too weak to be a
+touch is refused, and the nozzle never goes more than ``SNIFF_BELOW_MM`` below the
+profile's height for the board. While a nozzle is measured, its old Z offset is set
+aside, so a wrong one cannot move the search.
 
 The same steps measure each nozzle's vacuum levels (line 9): open, before the sniff;
-sealed on the board; and holding the disc. Its threshold, from then on, is halfway from
+sealed on the disc; and holding the disc. Its threshold, from then on, is halfway from
 open to whichever of the other two is nearer.
 """
 
@@ -31,10 +36,10 @@ import numpy as np
 
 from picnicplace.calibration import datum_key, nozzle_key, vacuum_key
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
-from picnicplace.machine.profile import Location, Nozzle, Point, VacuumLevels
-from picnicplace.machine.service import MachineService, RoundMark
+from picnicplace.machine.profile import Location, Nozzle, NozzleTip, Point, VacuumLevels
+from picnicplace.machine.service import APPROACH_SPEED, MachineService, RoundMark
 from picnicplace.machine.sniff import SniffError, VacuumMeasure, floor_message, sniff
-from picnicplace.schemas import Operation
+from picnicplace.schemas import Operation, TipChangeNozzle
 
 TURNS = (90.0, -90.0, 180.0)
 """The turns each nozzle gives the disc, in degrees."""
@@ -48,6 +53,11 @@ CENTER_PASSES = 2
 """The camera is centered on the disc this many times before it is measured, so it is
 measured in the middle of the image, where the camera's scale matters least."""
 PICK_DWELL_S = 0.2
+"""How long the nozzle stays down once the vacuum says it holds the disc."""
+PICK_SEAL_TIMEOUT_S = 2.0
+"""How long the nozzle, down on the disc, waits for the vacuum to say it holds it."""
+LIFT_SLOW_MM = 1.0
+"""The disc is lifted this far at ``APPROACH_SPEED`` before the nozzle rises at speed."""
 PLACE_DWELL_S = 0.2
 VACUUM_TIMEOUT_S = 1.0
 SPREAD_LIMIT_MM = 0.15
@@ -91,24 +101,29 @@ def _datum(machine: MachineService) -> Location:
     return fiducial
 
 
-async def sniff_datum(
-    machine: MachineService, nozzle: Nozzle, measure: VacuumMeasure | None = None
+async def sniff_disc(
+    machine: MachineService,
+    nozzle: Nozzle,
+    disc: Point,
+    thickness: float,
+    measure: VacuumMeasure,
 ) -> float:
-    """Step the nozzle down onto the datum board's center fiducial, with suction on, until
-    the vacuum seals: the board's top, as this nozzle reaches it, in heights shifted by its
-    Z offset as it stands (add the offset for the raw height). ``measure``: fill in its
-    vacuum levels, open and sealed."""
+    """Step the nozzle down onto the disc lying on the datum board, with suction on, until
+    the vacuum seals: the board's top under it, as this nozzle reaches it (the disc's top
+    less its thickness), in heights shifted by its Z offset as it stands (add the offset
+    for the raw height). Fills in its vacuum levels, open and sealed."""
     fiducial = _datum(machine)
     assert fiducial.z is not None
+    expected = fiducial.z + thickness
     try:
         z = await sniff(
             machine,
             nozzle,
-            fiducial.position,
-            fiducial.z,
+            disc,
+            expected,
             SNIFF_ABOVE_MM,
             SNIFF_BELOW_MM,
-            "the datum board",
+            "the disc",
             angle=0.0,
             measure=measure,
         )
@@ -116,10 +131,28 @@ async def sniff_datum(
         raise NozzleOffsetError(str(e)) from e
     if z is None:
         raise NozzleOffsetError(
-            f"{floor_message(nozzle, 'the datum board', fiducial.z, SNIFF_BELOW_MM)}: check "
-            "the tip seals (a tip that leaks never does), and the board's height in the profile"
+            f"{floor_message(nozzle, 'the disc', expected, SNIFF_BELOW_MM)}: check the tip "
+            "seals (a tip that leaks never does), and the datum board's height in the profile"
         )
-    return z
+    return z - thickness
+
+
+def check_seal(nozzle: Nozzle, measure: VacuumMeasure, held: float | None, z: float) -> None:
+    """Refuse a seal on the disc much weaker than holding the disc: a leak pressed shut as
+    the tip went on down, not a touch, and its height would be too low."""
+    if measure.open is None or measure.sealed is None or held is None:
+        return
+    holding = abs(held - measure.open)
+    if holding <= 0:
+        return
+    rise = abs(measure.sealed - measure.open) / holding
+    if rise < SEAL_MIN_FRACTION:
+        raise NozzleOffsetError(
+            f"{nozzle.label} sealed only weakly on the disc at Z {z:.2f} (the vacuum rose "
+            f"{rise:.0%} as far as holding the disc, less than {SEAL_MIN_FRACTION:.0%}): a "
+            "leak pressed shut, not a touch, so the height would be too low. Check the tip "
+            "is pushed fully on, and that the disc lies flat under it"
+        )
 
 
 async def find_disc(machine: MachineService, near: Point, diameter: float | None) -> Point:
@@ -141,6 +174,62 @@ async def find_disc(machine: MachineService, near: Point, diameter: float | None
     return at
 
 
+async def disc_size(machine: MachineService) -> float | None:
+    """How big the disc the top camera is centered on looks, in mm; None if unseen."""
+    marks = await machine.locate_round_marks(*DISC_DIAMETER_MM, through_lines=True)
+    here = machine.camera_position()
+    near = min(marks, key=lambda m: math.hypot(m.at.x - here.x, m.at.y - here.y), default=None)
+    return near.diameter if near else None
+
+
+def tips_for_disc(machine: MachineService, disc: float) -> list[str]:
+    """The profile's tips small enough to seal on a disc, smallest first."""
+    fit = [
+        t
+        for t in machine.profile.nozzle_tips
+        if t.outer_diameter is not None and t.outer_diameter <= disc - 2 * DISC_RIM_MM
+    ]
+    return [t.id for t in sorted(fit, key=lambda t: t.outer_diameter or 0.0)]
+
+
+def too_big(machine: MachineService, nozzle: Nozzle, disc: float) -> NozzleTip | None:
+    """The tip on a nozzle, if it is too big to seal on the disc."""
+    tip = machine.profile.nozzle_tip(nozzle.tip)
+    if tip is None or tip.outer_diameter is None:
+        return None
+    return tip if tip.outer_diameter > disc - 2 * DISC_RIM_MM else None
+
+
+async def fit_disc_tips(machine: MachineService, nozzles: list[Nozzle], disc: float | None) -> bool:
+    """Before any nozzle touches the disc: if a tip is too big to seal on it, bring the
+    head to the front and ask for small tips, until they fit. Says whether tips changed."""
+    if disc is None:
+        return False
+    changed = False
+    while big := [(n, t) for n in nozzles if (t := too_big(machine, n, disc)) is not None]:
+        choices = tips_for_disc(machine, disc)
+        if not choices:
+            nozzle, tip = big[0]
+            raise NozzleOffsetError(
+                f"{nozzle.label}'s {tip.id} tip is {tip.outer_diameter:g} mm across, too big "
+                f"to seal on the {disc:.1f} mm disc, and this machine's profile has no smaller "
+                "tip: use a bigger disc"
+            )
+        which = ", ".join(f"{n.label.lower()}'s {t.id} ({t.outer_diameter:g} mm)" for n, t in big)
+        await machine.change_tips(
+            [TipChangeNozzle(nozzle_id=n.id, fitted=n.tip, choices=choices) for n in nozzles],
+            "Fit small tips for the disc",
+            f"A tip needs {DISC_RIM_MM:g} mm of paper all round to seal on the {disc:.1f} mm "
+            f"disc, too little for {which}. Fit one of {', '.join(choices)} on each nozzle "
+            "(a different one on each is fine: a LumenPnP comes with one of each), then say "
+            "which tip is on each.",
+            "Each nozzle then finds the disc's height and measures its offset, with the tip "
+            "it has now.",
+        )
+        changed = True
+    return changed
+
+
 async def turn_disc(
     machine: MachineService,
     nozzle: Nozzle,
@@ -153,17 +242,31 @@ async def turn_disc(
     vacuum reading that means it is held, in place of the nozzle's threshold. Returns the
     reading while it was held."""
     await machine.move_nozzle_over(nozzle, at.x, at.y, 0.0)
-    await machine.lower_nozzle(nozzle, height)
+    # Suction on before going down, so it is already pulling when the tip arrives, and
+    # the disc lifted only once the vacuum says it is held: a pump started with the tip
+    # already down, and lifted after a fixed wait, left a disc that sealed weakly behind.
     await machine.suction(nozzle, True)
+    await machine.lower_nozzle(nozzle, height)
+    held = await machine.holds_part(nozzle, True, PICK_SEAL_TIMEOUT_S, level)
+    if held is False:
+        await machine.suction(nozzle, False)
+        await machine.raise_nozzles()
+        raise NozzleOffsetError(
+            f"{nozzle.label} did not seal on the disc at height {height:g}: check the disc "
+            "lies flat (a punched disc often curls at its edge), and that the nozzle tip is "
+            "fitted and clear"
+        )
     await asyncio.sleep(PICK_DWELL_S)
+    # The first millimeter slowly, so the disc is not torn off before the seal holds it.
+    await machine.lower_nozzle(nozzle, height + LIFT_SLOW_MM, APPROACH_SPEED)
     await machine.raise_nozzles()
     held = await machine.holds_part(nozzle, True, VACUUM_TIMEOUT_S, level)
     reading = await machine.settled_vacuum(nozzle, 0.0, HELD_SETTLE_S) if held else None
     if held is False:
         await machine.suction(nozzle, False)
         raise NozzleOffsetError(
-            f"{nozzle.label} did not pick up the disc at height {height:g}: check the disc "
-            "lies flat, and that the nozzle tip is fitted and clear"
+            f"{nozzle.label} sealed on the disc at height {height:g} but dropped it as it "
+            "lifted: check the disc lies flat, and that the nozzle tip is fitted and clear"
         )
     await machine.move_nozzle_over(nozzle, at.x, at.y, turn)
     await machine.lower_nozzle(nozzle, height)
@@ -253,6 +356,14 @@ async def calibrate_nozzle(
     return fix, disc, sum(readings) / len(readings) if readings else None
 
 
+DISC_PRESS_MM = 1.0
+"""The disc is picked and set down this far below where its top was touched, pressing the
+tip firmly onto it so it cannot slip as it is let go. A LumenPnP nozzle gives about 3 mm;
+lighter presses (0.2 and 0.4 mm) let a real disc's turns disagree by 0.4 mm."""
+SEAL_MIN_FRACTION = 0.6
+"""A seal on the disc must raise the vacuum from the open reading at least this much as
+far as holding the disc does. On a real LumenPnP, paper sealed an N24 tip about 90% as
+far; bare datum board pressed shut gave 36% (N24) and 20% (N75)."""
 DISC_MIN_BRIGHTNESS = 150.0
 """A round mark this bright (of 255) in its middle may be white paper; copper and bare
 board are darker."""
@@ -264,6 +375,15 @@ DISC_EDGE_MM = 5.0
 DISC_SEARCH_MARGIN_MM = 15.0
 """Without a datum board keep-out in the profile, the disc is looked for this far around
 the homing fiducial."""
+DISC_FIT_MM = 7.0
+"""The search's frames overlap by this much, so a disc up to this size (a hole punch's,
+6.4 mm, or the LumenPnP's, about 5) lies wholly inside at least one of them: the finder
+leaves out round marks cut off by a frame's edge. Overlapping by a fixed fraction of a
+LumenPnP's top camera's short side (3.5 mm) cut a 4.9 mm disc off in every frame."""
+SEARCH_MIN_STEP_MM = 1.0
+DISC_RIM_MM = 1.0
+"""A tip seals on the disc only with this much paper all round its face: an N24 tip (4 mm
+across) on a 4.9 mm disc sealed weakly and dropped it, its rim half over the disc's edge."""
 
 
 def _search_area(machine: MachineService) -> tuple[float, float, float, float]:
@@ -277,22 +397,33 @@ def _search_area(machine: MachineService) -> tuple[float, float, float, float]:
     return dot.x - m, dot.y - m, dot.x + m, dot.y + m
 
 
-async def search_disc(machine: MachineService, diameter: float | None) -> Point:
+def search_spots(
+    area: tuple[float, float, float, float], fov: tuple[float, float], fit: float
+) -> list[Point]:
+    """Where to look, to cover an area: a grid whose frames (``fov``: width, height) overlap
+    by ``fit``, so that a disc that size anywhere in the area lies wholly inside at least
+    one frame."""
+    x0, y0, x1, y1 = area
+
+    def centers(lo: float, hi: float, view: float) -> list[float]:
+        # Every point is at most half a step from a frame's center, so a disc there is
+        # at most (view - fit) / 2 off it, and fits.
+        step = max(SEARCH_MIN_STEP_MM, view - fit)
+        n = max(1, math.ceil((hi - lo) / step))
+        return [lo + (i + 0.5) * (hi - lo) / n for i in range(n)]
+
+    return [Point(x=x, y=y) for x in centers(x0, x1, fov[0]) for y in centers(y0, y1, fov[1])]
+
+
+async def search_disc(machine: MachineService, diameter: float | None) -> tuple[Point, float]:
     """Look over the datum board with the top camera for the disc, nearest its dot first,
-    and center on it."""
+    and center on it: where it is, and how big."""
     camera = machine.top_camera()
     dot = _datum(machine).position
-    x0, y0, x1, y1 = _search_area(machine)
-    step = 0.7 * min(camera.field_of_view.x, camera.field_of_view.y)
-    nx = max(1, math.ceil((x1 - x0) / step))
-    ny = max(1, math.ceil((y1 - y0) / step))
-    spots = [
-        Point(x=x0 + (i + 0.5) * (x1 - x0) / nx, y=y0 + (j + 0.5) * (y1 - y0) / ny)
-        for i in range(nx)
-        for j in range(ny)
-    ]
-    spots.sort(key=lambda p: math.hypot(p.x - dot.x, p.y - dot.y))
     low, high = (diameter * 0.7, diameter * 1.4) if diameter else DISC_DIAMETER_MM
+    fov = (camera.field_of_view.x, camera.field_of_view.y)
+    spots = search_spots(_search_area(machine), fov, min(high, DISC_FIT_MM))
+    spots.sort(key=lambda p: math.hypot(p.x - dot.x, p.y - dot.y))
     marks: list[RoundMark] = []
     for spot in spots:
         await machine.move_camera_to(spot.x, spot.y)
@@ -306,7 +437,8 @@ async def search_disc(machine: MachineService, diameter: float | None) -> Point:
     paper = [m for m in marks if m.brightness >= DISC_MIN_BRIGHTNESS]
     if paper:
         disc = max(paper, key=lambda m: m.brightness)
-        return await find_disc(machine, disc.at, diameter or disc.diameter)
+        size = diameter or disc.diameter
+        return await find_disc(machine, disc.at, size), size
     raise VisionError(
         "the top camera found no disc on the datum board: lay a small paper disc (from a "
         "hole punch) flat on it, clear of the center dot, and check the top light"
@@ -329,24 +461,46 @@ def nozzle_offsets_work(
     machine.top_camera()
     _datum(machine)
     disc_thickness = PAPER_MM if thickness is None else thickness
+    tips = {n.id: n.tip for n in nozzles}
 
     async def work() -> str:
+        # Each nozzle is measured afresh: an old Z offset, perhaps wrong, would move where
+        # it looks for the disc. Kept if the measuring fails.
+        old = {n.id: n.z_offset for n in nozzles}
+        for n in nozzles:
+            n.z_offset = 0.0
+        done = False
         try:
-            return await measure()
+            message = await measure()
+            done = True
+            return message
         finally:
+            if not done:
+                for n in nozzles:
+                    n.z_offset = old[n.id]
+                # Tips changed: each nozzle's offset is its new tip's, if it has one.
+                if any(n.tip != tips[n.id] for n in nozzles):
+                    machine.apply_calibration()
             await machine.raise_nozzles()
 
     async def measure() -> str:
         if search:
-            disc = await search_disc(machine, diameter)
+            disc, size = await search_disc(machine, diameter)
         else:
             disc = await find_disc(machine, machine.camera_position(), diameter)
+            size = diameter or await disc_size(machine)
+        if await fit_disc_tips(machine, nozzles, size):
+            # Fitting them applied each tip's own offset: measure afresh, as above.
+            for n in nozzles:
+                n.z_offset = 0.0
         fixes: list[NozzleFix] = []
         heights: dict[str, float] = {}
         levels: dict[str, VacuumLevels] = {}
         for nozzle in nozzles:
             measure = VacuumMeasure()
-            heights[nozzle.id] = await sniff_datum(machine, nozzle, measure)
+            heights[nozzle.id] = await sniff_disc(machine, nozzle, disc, disc_thickness, measure)
+            # Touching it can shift the disc (paper clings to the tip as it lifts): look again.
+            disc = await find_disc(machine, disc, diameter)
             # Until its levels are known, the disc is held at a reading halfway to sealed.
             level = (
                 measure.open + (measure.sealed - measure.open) / 2
@@ -354,8 +508,14 @@ def nozzle_offsets_work(
                 else None
             )
             fix, disc, held = await calibrate_nozzle(
-                machine, nozzle, disc, diameter, heights[nozzle.id] + disc_thickness, level
+                machine,
+                nozzle,
+                disc,
+                diameter,
+                heights[nozzle.id] + disc_thickness - DISC_PRESS_MM,
+                level,
             )
+            check_seal(nozzle, measure, held, heights[nozzle.id] + disc_thickness)
             fixes.append(fix)
             found = vacuum_levels(machine, nozzle, measure, held)
             if found is not None:

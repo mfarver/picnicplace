@@ -368,7 +368,11 @@ function StopBody({
           <p className="text-muted">
             If the bottom camera could not name a tip, say which it is:
           </p>
-          <NozzleTips description={description} canSet={canConfirm} />
+          <NozzleTips
+            description={description}
+            canSet={canConfirm}
+            canMove={canMove && !!machine?.homed}
+          />
         </>
       )}
       {stop === 1 && (

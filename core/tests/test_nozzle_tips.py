@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
-from picnicplace.machine.bottom_camera import tip_size_note
+from picnicplace.machine.bottom_camera import measure_tip, tip_size_note
 from picnicplace.machine.profile import NozzleTip
 from tests.conftest import Session, connect, fast_config
 from tests.test_calibration import lines, move_camera_over_disc, offsets_config
@@ -136,6 +136,39 @@ def test_the_bottom_camera_sees_the_fitted_tip(tip: str, diameter: float) -> Non
         found = bottom()["position"]
         assert found["x"] == pytest.approx(design["position"]["x"] - 0.8, abs=0.03)
         assert found["y"] == pytest.approx(design["position"]["y"] + 0.5, abs=0.03)
+
+
+@pytest.mark.parametrize(
+    ("tip", "scale", "named", "alike"),
+    [
+        ("N045", 2.17, "N045", []),
+        ("N08", 2.17, "N08", []),
+        ("N14", 2.17, "N14", []),
+        ("N045", 3.7, None, ["N045", "N08"]),
+    ],
+)
+def test_small_tips_are_named_or_said_to_be_too_alike(
+    tip: str, scale: float, named: str | None, alike: list[str]
+) -> None:
+    """The small tips are named by the size of their ends at a real LumenPnP's bottom
+    camera scale (0.067 mm per pixel). On a camera half as fine, an N045's 1 mm end looks
+    about 1.3 mm across, more like an N08: rather than name it wrong, the camera says it
+    cannot tell the two apart."""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_tips": {"N1": tip},
+            "sim_bottom_camera_scale": scale,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        assert s.wait(s.post("/api/v1/machine/bottom-camera", {}))["status"] == "succeeded"
+        machine = client.app.state.ctx.machine  # type: ignore[attr-defined]
+        assert client.portal is not None
+        found, _, said = client.portal.call(measure_tip, machine, machine.profile.nozzles[0])
+        assert (found.id if found else None, said) == (named, alike)
 
 
 def test_a_bottom_camera_far_from_the_profiles_scale() -> None:

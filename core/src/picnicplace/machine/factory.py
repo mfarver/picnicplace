@@ -92,6 +92,7 @@ def build_driver(config: MachineConfig) -> DriverBundle:
             tip_kind_errors=config.sim_tip_z_error,
         )
         driver.surface_at = sim_surface(config)
+        driver.datum_seal_press = config.sim_datum_seal_press
         return DriverBundle(driver, photon_sim=photon)
 
     assert profile.marlin is not None  # checked when the config was loaded

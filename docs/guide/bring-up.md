@@ -113,13 +113,22 @@ kept in `calibration.json` in the data directory, and the pages you confirm in
     - names the tip on each nozzle by the size of its end, seen from below;
     - scans the feeders and calibrates their rails, if there are feeders at each rail's
       ends (otherwise each feeder's fiducial is found on its first pick).
-2. **Paper disc on the datum board.** Punch a small paper disc (a hole punch is right),
-   lay it flat on the datum board, clear of its center dot, and click **Start**. The top
-   camera looks over the board for it (the brightest round mark, apart from the board's
-   own marks around the dot). Each nozzle then sniffs for the board's height on its dot:
+2. **Paper disc on the datum board.** Fit a small tip on each nozzle: a tip seals on the
+   disc only with a millimeter of paper all round its face. A LumenPnP comes with one tip
+   of each size, so fit a different one on each, such as the N045 on the left and the
+   N08 on the right. If a tip is too big for the disc (an N24 on a LumenPnP's 4.9 mm
+   disc), the head comes to the front with the nozzles up before anything goes down, and
+   asks you to change it and say which tips are on. Lay a small paper disc (one that came with the machine, or from a hole
+   punch) flat on the datum board, clear of its center dot, and click **Start**. The top
+   camera looks over the board for it, in frames that overlap enough that a disc up to
+   7 mm lies whole in one of them (the brightest round mark, apart from the board's own
+   marks around the dot). Each nozzle then sniffs for the board's height on its dot:
    with suction on, it steps down until the vacuum seals, never more than 1.5 mm below
    the profile's height. Then it picks the disc up, turns it, and sets it down three
-   times, and the top camera finds it after each. A nozzle more than a millimeter from
+   times, and the top camera finds it after each: suction comes on before the tip comes
+   down, the nozzle waits there for the vacuum to say it holds the disc, and lifts the
+   first millimeter slowly. A disc that never seals, and one that seals but drops as it
+   lifts, are told apart. A nozzle more than a millimeter from
    the profile's offset is flagged. Where each nozzle touched the board corrects its
    heights from then on, and its vacuum readings (open, sealed, holding the disc) set its
    own pick threshold. Each tip's heights and vacuum levels are kept, and come back when

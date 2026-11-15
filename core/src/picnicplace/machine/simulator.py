@@ -103,6 +103,8 @@ class SimulatorDriver(MotionDriver):
         """Each nozzle's readings open and holding a part (or sealed), by ID, as fractions
         of its sensor's range; the rest read as ``VACUUM_OPEN`` and ``VACUUM_HELD`` say."""
         self.surface_at: Callable[[float, float], float | None] | None = None
+        self.datum_seal_press = 0.0
+        """How far a tip must be pressed into a bare surface before it seals."""
         """The height of a surface under a physical X/Y, if any, for a nozzle to seal on."""
         self._home_error = home_error
         self._offset = {"X": 0.0, "Y": 0.0}
@@ -322,7 +324,7 @@ class SimulatorDriver(MotionDriver):
             if self._suction(n) and not self._held[n.id] and self.surface_at is not None:
                 x, y, _ = self._nozzle_at(n)
                 surface = self.surface_at(x, y)
-                sealed = surface is not None and self._tip(n) <= surface
+                sealed = surface is not None and self._tip(n) <= surface - self.datum_seal_press
             self._sealed[n.id] = sealed
         self._io_wake.set()
 

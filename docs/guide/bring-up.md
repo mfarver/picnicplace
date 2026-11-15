@@ -45,7 +45,8 @@ set it yet).
 For a full transcript to share when asking for help, stop the core and run
 `uv run picnicplace-probe --serial-port /dev/ttyACM0 --with-pumps` in `core`. It also
 reads each nozzle's vacuum with its pump and valve on for about a second, and lists the
-cameras and their video formats.
+cameras with their video formats, sizes, and frame rates (on Linux, with nothing to
+install).
 
 ## 3. Calibrate: three stops
 

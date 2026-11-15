@@ -8,7 +8,7 @@ It records every line the firmware sends into a transcript, then prints a summar
 - vacuum sensor reads in every firmware variant the machine profile knows, to show which
   variant this firmware speaks
 - with ``--with-pumps``: vacuum readings with each nozzle's pump and valve on briefly
-- on Linux: the cameras under /dev/v4l/by-id and their formats (if v4l2-ctl is installed)
+- on Linux: the cameras under /dev/v4l/by-id, with their formats, sizes, and frame rates
 
 Share the transcript file when asking for help with a machine.
 """
@@ -17,13 +17,12 @@ import argparse
 import asyncio
 import contextlib
 import re
-import shutil
-import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from picnicplace.camera.v4l2 import camera_formats
 from picnicplace.machine.marlin.settings import MarlinSettings
 from picnicplace.machine.marlin.transport import LineTransport, SerialTransport
 from picnicplace.machine.profile import MachineProfile, load_profile
@@ -204,24 +203,25 @@ def list_cameras(report: ProbeReport) -> None:
     if not by_id.is_dir():
         report.cameras.append("no /dev/v4l/by-id (not Linux, or no cameras)")
         return
-    v4l2 = shutil.which("v4l2-ctl")
     for path in sorted(by_id.iterdir()):
         report.cameras.append(f"{path} -> {path.resolve()}")
-        if v4l2 is None:
+        try:
+            found = camera_formats(path)
+        except OSError as e:
+            report.cameras.append(f"    cannot open: {e.strerror or e}")
             continue
-        result = subprocess.run(
-            [v4l2, "--list-formats-ext", "-d", str(path)],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        report.log(f"$ v4l2-ctl --list-formats-ext -d {path}")
-        report.transcript.extend(f"    {line}" for line in result.stdout.splitlines())
-        formats = sorted(set(re.findall(r"'(\w+)'", result.stdout)))
-        report.cameras.append(f"    formats: {', '.join(formats) or 'unknown'}")
-    if v4l2 is None:
-        report.cameras.append("install v4l-utils to list camera formats")
+        report.log(f"formats of {path}")
+        if not found.formats:
+            report.transcript.append("    none (not a video node)")
+            report.cameras.append("    no video formats (a metadata node)")
+            continue
+        if found.current:
+            fourcc, width, height = found.current
+            report.transcript.append(f"    set now: {fourcc} {width}x{height}")
+        for fmt in found.formats:
+            sizes = ", ".join(str(s) for s in fmt.sizes) or "a range of sizes"
+            report.transcript.append(f"    {fmt.fourcc} ({fmt.description}): {sizes}")
+        report.cameras.append(f"    formats: {'; '.join(f.summary() for f in found.formats)}")
 
 
 def summarize(report: ProbeReport, profile: MachineProfile) -> str:

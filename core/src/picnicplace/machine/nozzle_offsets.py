@@ -24,6 +24,7 @@ open to whichever of the other two is nearer.
 
 import asyncio
 import math
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -31,14 +32,16 @@ import numpy as np
 from picnicplace.calibration import datum_key, nozzle_key, vacuum_key
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
 from picnicplace.machine.profile import Location, Nozzle, Point, VacuumLevels
-from picnicplace.machine.service import MachineService
+from picnicplace.machine.service import MachineService, RoundMark
 from picnicplace.machine.sniff import SniffError, VacuumMeasure, floor_message, sniff
 from picnicplace.schemas import Operation
 
 TURNS = (90.0, -90.0, 180.0)
 """The turns each nozzle gives the disc, in degrees."""
-DISC_DIAMETER_MM = (2.0, 12.0)
-"""Discs the finder takes, smallest to largest, when the request gives no diameter."""
+DISC_DIAMETER_MM = (4.0, 12.0)
+"""Discs the finder takes, smallest to largest, when the request gives no diameter. A
+hole punch makes about 6 mm; the datum board's own fiducials, rings included, are
+smaller than 4 mm."""
 SEARCH_FRACTION = 0.4
 """The disc is looked for within this fraction of the top camera's smaller field of view."""
 CENTER_PASSES = 2
@@ -127,7 +130,7 @@ async def find_disc(machine: MachineService, near: Point, diameter: float | None
     at = near
     for _ in range(CENTER_PASSES):
         await machine.move_camera_to(at.x, at.y)
-        found = await machine.locate_circle(low, high, search, diameter)
+        found = await machine.locate_circle(low, high, search, diameter, through_lines=True)
         if found is None:
             raise VisionError(
                 f"the top camera cannot see the disc within {search:.0f} mm of "
@@ -250,14 +253,76 @@ async def calibrate_nozzle(
     return fix, disc, sum(readings) / len(readings) if readings else None
 
 
-def start_nozzle_offset_calibration(
+DISC_MIN_BRIGHTNESS = 150.0
+"""A round mark this bright (of 255) in its middle may be white paper; copper and bare
+board are darker."""
+DOT_CLEARANCE_MM = 5.0
+"""Round marks this near the datum board's dot are the board's own (the dot and its
+ring), not the disc, which is laid clear of it."""
+DISC_EDGE_MM = 5.0
+"""The disc is looked for this far past the datum board's keep-out, near its edge."""
+DISC_SEARCH_MARGIN_MM = 15.0
+"""Without a datum board keep-out in the profile, the disc is looked for this far around
+the homing fiducial."""
+
+
+def _search_area(machine: MachineService) -> tuple[float, float, float, float]:
+    """Where to look for the disc: the datum board's keep-out, or around its dot."""
+    keep = next((k for k in machine.profile.keep_outs if k.id == "datum"), None)
+    if keep is not None:
+        a, m = keep.area, DISC_EDGE_MM
+        return a.x_min - m, a.y_min - m, a.x_max + m, a.y_max + m
+    dot = _datum(machine).position
+    m = DISC_SEARCH_MARGIN_MM
+    return dot.x - m, dot.y - m, dot.x + m, dot.y + m
+
+
+async def search_disc(machine: MachineService, diameter: float | None) -> Point:
+    """Look over the datum board with the top camera for the disc, nearest its dot first,
+    and center on it."""
+    camera = machine.top_camera()
+    dot = _datum(machine).position
+    x0, y0, x1, y1 = _search_area(machine)
+    step = 0.7 * min(camera.field_of_view.x, camera.field_of_view.y)
+    nx = max(1, math.ceil((x1 - x0) / step))
+    ny = max(1, math.ceil((y1 - y0) / step))
+    spots = [
+        Point(x=x0 + (i + 0.5) * (x1 - x0) / nx, y=y0 + (j + 0.5) * (y1 - y0) / ny)
+        for i in range(nx)
+        for j in range(ny)
+    ]
+    spots.sort(key=lambda p: math.hypot(p.x - dot.x, p.y - dot.y))
+    low, high = (diameter * 0.7, diameter * 1.4) if diameter else DISC_DIAMETER_MM
+    marks: list[RoundMark] = []
+    for spot in spots:
+        await machine.move_camera_to(spot.x, spot.y)
+        marks.extend(
+            m
+            for m in await machine.locate_round_marks(low, high, through_lines=True)
+            if math.hypot(m.at.x - dot.x, m.at.y - dot.y) > DOT_CLEARANCE_MM
+        )
+    # The board has round marks of its own (fiducials, a copper disc, mounting holes):
+    # the paper disc is the brightest.
+    paper = [m for m in marks if m.brightness >= DISC_MIN_BRIGHTNESS]
+    if paper:
+        disc = max(paper, key=lambda m: m.brightness)
+        return await find_disc(machine, disc.at, diameter or disc.diameter)
+    raise VisionError(
+        "the top camera found no disc on the datum board: lay a small paper disc (from a "
+        "hole punch) flat on it, clear of the center dot, and check the top light"
+    )
+
+
+def nozzle_offsets_work(
     machine: MachineService,
     nozzle_ids: list[str] | None,
     diameter: float | None,
     thickness: float | None,
-) -> Operation:
-    """Measure the offsets of some nozzles (all, unless given) with a disc the top camera
-    is over, keep them, and use them from now on."""
+    search: bool = False,
+) -> Callable[[], Awaitable[str]]:
+    """Measuring the offsets of some nozzles (all, unless given) with a disc, keeping them
+    and using them from now on: checked now, run when awaited. The disc is the one the top
+    camera is over, or with ``search``, found on the datum board."""
     nozzles = [machine.nozzle(i) for i in nozzle_ids] if nozzle_ids else machine.profile.nozzles
     if not nozzles:
         raise InvalidTargetError("no nozzles to calibrate")
@@ -266,16 +331,16 @@ def start_nozzle_offset_calibration(
     disc_thickness = PAPER_MM if thickness is None else thickness
 
     async def work() -> str:
-        camera = machine.top_camera()
-        await machine.set_light(camera, True)
         try:
             return await measure()
         finally:
             await machine.raise_nozzles()
-            await machine.set_light(camera, False)
 
     async def measure() -> str:
-        disc = await find_disc(machine, machine.camera_position(), diameter)
+        if search:
+            disc = await search_disc(machine, diameter)
+        else:
+            disc = await find_disc(machine, machine.camera_position(), diameter)
         fixes: list[NozzleFix] = []
         heights: dict[str, float] = {}
         levels: dict[str, VacuumLevels] = {}
@@ -322,6 +387,18 @@ def start_nozzle_offset_calibration(
         machine.apply_calibration()
         return message
 
+    return work
+
+
+def start_nozzle_offset_calibration(
+    machine: MachineService,
+    nozzle_ids: list[str] | None,
+    diameter: float | None,
+    thickness: float | None,
+) -> Operation:
+    """Measure the offsets of some nozzles (all, unless given) with a disc the top camera
+    is over, keep them, and use them from now on."""
+    work = nozzle_offsets_work(machine, nozzle_ids, diameter, thickness)
     return machine.start_task("nozzle_offsets", work)
 
 

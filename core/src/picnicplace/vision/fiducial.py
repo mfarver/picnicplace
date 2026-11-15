@@ -54,16 +54,27 @@ class Circle:
     """How many threshold levels found it."""
 
 
-def find_circles(image: Image, min_diameter_px: float, max_diameter_px: float) -> list[Circle]:
+def find_circles(
+    image: Image, min_diameter_px: float, max_diameter_px: float, open_px: int = 0
+) -> list[Circle]:
     """Every round blob with a diameter in range, each found at several threshold levels
-    (or, if none is, every one found at all)."""
+    (or, if none is, every one found at all). ``open_px``: first wipe out anything
+    narrower than this, such as silkscreen lines touching a paper disc, which would
+    otherwise merge with it at every level that finds it."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
     h, w = gray.shape
+    kernel = (
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (open_px | 1, open_px | 1))
+        if open_px > 1
+        else None
+    )
     hits: list[Circle] = []
     for level in THRESHOLDS:
         for mode in (cv2.THRESH_BINARY, cv2.THRESH_BINARY_INV):
             _, mask = cv2.threshold(gray, level, 255, mode)
+            if kernel is not None:
+                mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
             hits.extend(_round_blobs(mask, w, h, min_diameter_px, max_diameter_px))
     if not hits:
         return []
@@ -98,13 +109,14 @@ def find_circle(
     max_diameter_px: float,
     max_offset_px: float | None = None,
     expected_diameter_px: float | None = None,
+    open_px: int = 0,
 ) -> Circle | None:
     """The round blob with a diameter in range that is nearest the image center, among
     the strongest (see ``strength``), and within ``max_offset_px`` of the center if given.
     The limit keeps a search from locking onto a neighboring fiducial when the one wanted
     is farther off than expected."""
     h, w = image.shape[:2]
-    circles = find_circles(image, min_diameter_px, max_diameter_px)
+    circles = find_circles(image, min_diameter_px, max_diameter_px, open_px)
 
     def offset(c: Circle) -> float:
         return math.hypot(c.x - w / 2, c.y - h / 2)

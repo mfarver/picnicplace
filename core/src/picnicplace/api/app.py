@@ -1,6 +1,6 @@
 """Application factory."""
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -23,6 +23,7 @@ from picnicplace.api import placement as placement_routes
 from picnicplace.api import recordings as recording_routes
 from picnicplace.api import routes, websocket
 from picnicplace.api import run as run_routes
+from picnicplace.api import setup as setup_routes
 from picnicplace.api import wizard as wizard_routes
 from picnicplace.api.context import AppContext
 from picnicplace.api.fingerprint import openapi_text
@@ -45,6 +46,7 @@ from picnicplace.machine.factory import build_driver
 from picnicplace.machine.local import LocalProfile, LocalProfileStore
 from picnicplace.machine.service import MachineService
 from picnicplace.machine.tips import TipStore
+from picnicplace.machine_setup import SetupStore, setup_facts
 from picnicplace.operations import OperationManager
 from picnicplace.placement import PlacementService
 from picnicplace.presence import PresenceTracker
@@ -56,12 +58,20 @@ from picnicplace.simparts import (
     PartShape,
     PlacedPart,
 )
-from picnicplace.wizard import Wizard, WizardStore
+from picnicplace.wizard import SetupFacts, Wizard, WizardStore
 
 TITLE = "PicnicPlace Core API"
 
 
-def create_app(config: Config | None = None) -> FastAPI:
+def create_app(
+    config: Config | None = None,
+    *,
+    pinned: frozenset[str] = frozenset(),
+    restart: Callable[[], None] | None = None,
+) -> FastAPI:
+    """The core's app. ``pinned``: the setup wizard's keys the config file sets itself.
+    ``restart``: stops the core and starts it again, with the wizard's choices (given by
+    ``picnicd``; without it, the owner restarts the core)."""
     config = config or Config()
     bus = EventBus()
     presence = PresenceTracker(bus, config.presence.grace_period_s)
@@ -101,15 +111,22 @@ def create_app(config: Config | None = None) -> FastAPI:
             return await source.fresh_frame(after, wait_s)
 
     machine.use_calibration(CalibrationStore(config.data.calibration_path))
+    machine.sim_tips = dict(config.machine.sim_tips)
     machine.use_tips(TipStore(config.data.tips_path))
     machine.attach_cameras(grab)
     lease.on_holder_left.append(machine.stop_manual_motion)
     bring_up = BringUpStore(config.data.bringup_path)
+    setup = SetupStore(config.data.setup_path)
+
+    def facts() -> SetupFacts:
+        return setup_facts(config, setup.get(), pinned, machine.connected, machine.firmware)
+
     wizard = Wizard(
         machine,
         WizardStore(config.data.wizard_path),
         bring_up,
         enforced=config.machine.driver != "simulator" or config.machine.sim_calibration_limits,
+        facts=facts,
     )
     if wizard.enforced:
         machine.limits = wizard.limit
@@ -127,6 +144,9 @@ def create_app(config: Config | None = None) -> FastAPI:
         captures=CaptureStore(config.data.captures_dir),
         local_profile=LocalProfile(local_store, config.machine.with_local, profile, applied),
         wizard=wizard,
+        setup=setup,
+        pinned=pinned,
+        restart=restart,
     )
 
     @asynccontextmanager
@@ -198,6 +218,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(run_routes.router)
     app.include_router(calibration_routes.router)
     app.include_router(wizard_routes.router)
+    app.include_router(setup_routes.router)
     app.include_router(recording_routes.router)
     app.include_router(websocket.router)
 

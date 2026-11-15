@@ -45,13 +45,22 @@ generate a client from it, as the Studio does.
 | `PUT /api/v1/machine/nozzles/{nozzle_id}/tip` | Say which of the profile's nozzle tips is now fitted on a nozzle (`tip_id`, or null), after changing it by hand. Kept; the nozzle's Z offset and vacuum levels become those measured with that tip. Refused while the nozzle has suction on. Returns the machine profile |
 | `GET /api/v1/calibration` | The calibration checklist: every calibration the machine needs, in order, each done (with its value and when), to do, out of date (and why), or from the profile |
 | `GET /api/v1/wizard` | The setup wizard: every page in order with where it stands, the machine's stage (`limited`, `out_of_date`, `calibrated`), the page Continue opens, and whether the limits are enforced. Until calibrated, picks, placements and runs are refused with code `calibration_required` |
-| `PUT /api/v1/wizard/pages/{page_id}` | Confirm a page the owner finishes by hand (`nozzle_tips`, `discard_park`), skip an optional one (`strips_trays`), or open it again (`status`: `done`, `skipped`, `todo`). Needs control |
-| `POST /api/v1/machine/estop` | Emergency stop; any client may call it |
+| `POST /api/v1/wizard/run` | Run a stop of the wizard (`stop`: 1, with a hand on the power switch: homing, visual homing, both cameras, naming the tips, the feeders; 2, with a paper disc on the datum board: each nozzle's offset, height and vacuum) as one operation, stopping at the first step that fails. Progress is in the wizard's `run`. Needs control |
+| `PUT /api/v1/wizard/pages/{page_id}` | Confirm a page the owner finishes by hand (`discard_park`), skip an optional one (`strips_trays`), or open it again (`status`: `done`, `skipped`, `todo`). Needs control |
+| `GET /api/v1/setup` | The setup wizard's choices (machine, driver, serial port, cameras, last probe), what the core is running, what the config file pins, the built-in machines, and whether a restart is needed |
+| `PUT /api/v1/setup` | Keep the wizard's choices; used when the core next starts. Needs control |
+| `GET /api/v1/setup/serial-ports`, `GET /api/v1/setup/cameras` | The serial ports and cameras the wizard offers, found without opening them |
+| `POST /api/v1/setup/probe` | Ask a serial port's firmware what it is and read its vacuum sensors; nothing moves or switches on. Kept with the choices. Needs control |
+| `POST /api/v1/setup/restart` | Restart the core to use the wizard's choices (when `picnicd` started it). Needs control |
+| `POST /api/v1/machine/pause` | Hold the machine before its next move or feeder advance (the move under way finishes); nothing new starts; any client may call it |
+| `POST /api/v1/machine/resume` | Carry on after a pause |
+| `POST /api/v1/machine/stop` | End the running operation before its next move (resuming if paused); the machine stays homed; any client may call it |
+| `POST /api/v1/machine/estop` | The firmware's halt (`M112`); Marlin then needs a power cycle, so the Studio pauses instead; any client may call it |
 | `POST /api/v1/machine/reset` | Clear a latched emergency stop |
 | `GET`, `POST`, `DELETE /api/v1/lease` | See, take, or release the control lease |
 | `GET /api/v1/operations/{id}` | Status of a long-running command |
 | `GET /api/v1/presence` | Connected clients |
-| `GET /api/v1/cameras` | Cameras and whether they are streaming |
+| `GET /api/v1/cameras` | Cameras and whether they are streaming, including the config's monitor cameras (`monitor`) |
 | `GET /api/v1/cameras/{id}/snapshot.jpg` | One JPEG frame |
 | `GET /api/v1/cameras/{id}/stream.mjpg` | A live MJPEG stream |
 | `GET`, `PUT`, `DELETE /api/v1/library/parts/{id}` | Parts (and `GET /library/parts` to list) |

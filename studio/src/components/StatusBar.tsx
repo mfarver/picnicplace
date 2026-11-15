@@ -37,6 +37,7 @@ export function StatusBar() {
             Control <strong className={hasControl(core) ? "text-ok" : undefined}>{control}</strong>
           </span>
           {machine.estop && <span className="status-item badge-danger">E-STOP LATCHED</span>}
+          {machine.paused && <span className="status-item badge-warn">PAUSED</span>}
           {machine.driver === "simulator" && (
             <span
               className="status-item badge-warn"

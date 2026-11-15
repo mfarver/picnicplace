@@ -93,13 +93,23 @@ def test_running_the_simulator_without_a_config_says_so(
     warned: bool,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     """Started without -c, picnicd quietly ran the simulator, and someone at a real
     machine took a while to notice. Now it says so (unless a driver was chosen)."""
     import picnicplace.cli as cli
 
-    monkeypatch.setattr(cli, "create_app", lambda config: config)  # pyright: ignore[reportUnknownLambdaType]
-    monkeypatch.setattr(cli.uvicorn, "run", lambda *a, **k: None)  # pyright: ignore[reportUnknownLambdaType]
+    class Server:
+        def __init__(self, *_: object) -> None:
+            self.should_exit = False
+
+        def run(self) -> None:
+            pass
+
+    # Not the real data directory, where the setup wizard may have chosen a machine.
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    monkeypatch.setattr(cli, "create_app", lambda config, **_: config)  # pyright: ignore[reportUnknownLambdaType]
+    monkeypatch.setattr(cli.uvicorn, "Server", Server)
     cli.main(argv)
     err = capsys.readouterr().err
     assert ("SIMULATOR, not a real machine" in err) is warned

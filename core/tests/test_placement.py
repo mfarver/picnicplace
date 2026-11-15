@@ -125,6 +125,42 @@ def test_alignment_corrects_an_off_center_pick(lumen: TestClient) -> None:
         assert angle_error(part.angle, 180.0) < 0.5
 
 
+def test_alignment_with_a_turned_bottom_camera() -> None:
+    """A real LumenPnP's bottom camera was mounted turned a quarter turn, and saw 3.7 times
+    the profile's field of view. Calibrating it measures both; bottom vision then undoes
+    the turn, so the off-center pick is still found and removed the right way."""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_home_error": (0.3, -0.2),
+            "sim_bottom_camera_turn": 90.0,
+            "sim_bottom_camera_scale": 3.7,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s, slots=("3",), calibrate=False)
+        op = ok(s.wait(s.post("/api/v1/machine/bottom-camera", {})))
+        assert "image turned +90" in op["message"] or "image turned 90" in op["message"], op
+        bottom = next(
+            c
+            for c in client.get("/api/v1/machine/description").json()["cameras"]
+            if c["looking"] == "up"
+        )
+        assert bottom["image_rotation"] == pytest.approx(90.0, abs=0.5)
+
+        pick = {"slot_id": "3", "nozzle_id": "N1", "feed": False, "pick_correction": "off"}
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"})))
+        alignment = client.get("/api/v1/placement").json()["loads"][0]["alignment"]
+        assert math.hypot(alignment["dx"], alignment["dy"]) == pytest.approx(0.447, abs=0.08)
+        target = {"nozzle_id": "N1", "x": 150.0, "y": 280.0, "rotation": 30.0}
+        ok(s.wait(s.post("/api/v1/placement/place", target)))
+        part = placed(client)[-1]
+        assert (part.x, part.y) == pytest.approx((150.0, 280.0), abs=0.08)
+        assert angle_error(part.angle, 30.0) < 1.0
+
+
 def test_a_part_whose_leads_are_off_its_center_lands_on_them(lumen: TestClient) -> None:
     """Three leads 0.8 mm to one side of the body's center, as on a connector, in a tape
     on a rail turned 2 degrees: bottom vision fits the footprint's pads, finds the turn,

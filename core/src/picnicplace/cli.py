@@ -2,7 +2,9 @@
 
 import argparse
 import logging
+import os
 import sys
+import threading
 from pathlib import Path
 
 import uvicorn
@@ -10,7 +12,7 @@ from pydantic import ValidationError
 
 from picnicplace import __version__
 from picnicplace.api.app import create_app, openapi_json
-from picnicplace.config import Config, load_config
+from picnicplace.machine_setup import Layered, load_layered
 from picnicplace.recorder import RecorderError, replay_vision
 
 
@@ -68,30 +70,27 @@ def replay(source: Path) -> int:
 
 
 SIMULATOR_NOTICE = """\
-picnicd: no config file given, so this is the built-in SIMULATOR, not a real machine.
-  To run your machine, give its config: picnicd -c ~/.config/picnicplace/picnicd.toml
+picnicd: no machine chosen, so this is the built-in SIMULATOR, not a real machine.
+  To run your machine, choose it in the Studio's setup wizard (Machine workspace), or
+  give a config: picnicd -c ~/.config/picnicplace/picnicd.toml
   (see core/picnicd.example.toml; set driver = "marlin" under [machine]).
 """
 
 
-def _build_config(args: argparse.Namespace) -> Config:
-    config = load_config(args.config)
-    data = config.model_dump()
+def _build_config(args: argparse.Namespace) -> Layered:
+    """The config file, with the command line's overrides, over the setup wizard's
+    choices."""
     overrides = {
-        ("server", "host"): args.host,
-        ("server", "port"): args.port,
-        ("server", "studio_dir"): args.studio_dir,
-        ("machine", "profile"): args.profile,
-        ("machine", "driver"): args.driver,
-        ("machine", "sim_time_scale"): args.sim_time_scale,
-        ("machine", "speed_scale"): args.speed_scale,
+        "server.host": args.host,
+        "server.port": args.port,
+        "server.studio_dir": str(args.studio_dir) if args.studio_dir else None,
+        "machine.profile": args.profile,
+        "machine.driver": args.driver,
+        "machine.sim_time_scale": args.sim_time_scale,
+        "machine.speed_scale": args.speed_scale,
+        "machine.marlin.port": args.serial_port,
     }
-    for (section, key), value in overrides.items():
-        if value is not None:
-            data[section][key] = value
-    if args.serial_port is not None:
-        data["machine"]["marlin"]["port"] = args.serial_port
-    return Config.model_validate(data)
+    return load_layered(args.config, {k: v for k, v in overrides.items() if v is not None})
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -109,14 +108,32 @@ def main(argv: list[str] | None = None) -> None:
         except (OSError, RecorderError, ValueError) as e:
             sys.exit(f"picnicd: cannot replay {args.replay}: {e}")
     try:
-        config = _build_config(args)
+        layered = _build_config(args)
     except (ValidationError, OSError) as e:
         sys.exit(f"picnicd: invalid configuration: {e}")
+    config = layered.config
+    if layered.warning:
+        logging.getLogger("picnicd").warning("%s", layered.warning)
 
-    if args.config is None and args.driver is None:
+    if config.machine.driver == "simulator" and "machine.driver" not in layered.pinned:
         sys.stderr.write(SIMULATOR_NOTICE)
-    app = create_app(config)
-    uvicorn.run(app, host=config.server.host, port=config.server.port, log_config=None)
+    restart = threading.Event()
+    server: uvicorn.Server | None = None
+
+    def request_restart() -> None:
+        """Stop serving, close the machine and cameras, and start again (below)."""
+        restart.set()
+        if server is not None:
+            server.should_exit = True
+
+    app = create_app(config, pinned=layered.pinned, restart=request_restart)
+    server = uvicorn.Server(
+        uvicorn.Config(app, host=config.server.host, port=config.server.port, log_config=None)
+    )
+    server.run()
+    if restart.is_set():
+        logging.getLogger("picnicd").info("restarting with the setup wizard's choices")
+        os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
 if __name__ == "__main__":

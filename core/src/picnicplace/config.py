@@ -107,6 +107,10 @@ class DataConfig(_Section):
         return self.dir.expanduser() / "recordings"
 
     @property
+    def setup_path(self) -> Path:
+        return self.dir.expanduser() / "machine-setup.json"
+
+    @property
     def wizard_path(self) -> Path:
         return self.dir.expanduser() / "wizard.json"
 
@@ -213,6 +217,29 @@ class MachineConfig(_Section):
             "profile's. Measuring the camera's scale finds and corrects it."
         ),
     )
+    sim_bottom_camera_scale: float = Field(
+        default=1.0,
+        gt=0,
+        description=(
+            "Simulator only: the bottom camera's true field of view, as a multiple of the "
+            "profile's (a wider lens sees more). Calibrating the bottom camera finds it."
+        ),
+    )
+    sim_tips: dict[str, str] = Field(
+        default_factory=dict[str, str],
+        description=(
+            "Simulator only: the nozzle tip really fitted on each nozzle, by nozzle ID, "
+            "whatever the operator says: the bottom camera sees these."
+        ),
+    )
+    sim_bottom_camera_turn: float = Field(
+        default=0.0,
+        description=(
+            "Simulator only: degrees the bottom camera's picture is really turned "
+            "(clockwise as shown), as if mounted turned. Calibrating the bottom camera "
+            "measures it, and bottom vision undoes it."
+        ),
+    )
     sim_bottom_camera_error: tuple[float, float, float] = Field(
         default=(0.0, 0.0, 0.0),
         description=(
@@ -267,6 +294,15 @@ class MachineConfig(_Section):
         description=(
             "Simulator only: how far (mm, up positive) the datum board's top really is from "
             "the profile's height. Sniffing for it with a nozzle finds it."
+        ),
+    )
+    sim_datum_seal_press: float = Field(
+        default=0.0,
+        ge=0,
+        description=(
+            "Simulator only: how far (mm) a tip must be pressed into the bare datum board "
+            "before it seals, as a real tip leaks on the board's printing until pressed "
+            "into its spring. A paper disc seals at once."
         ),
     )
     sim_board_height_error: float = Field(
@@ -382,6 +418,26 @@ class CameraConfig(_Section):
         return self
 
 
+class MonitorConfig(CameraConfig):
+    """A camera for people to watch the machine through, such as one in front of it
+    looking at the head and the bed. It is not part of the machine profile, and nothing
+    in the core uses its pictures."""
+
+    source: Literal["device", "none"] = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
+        default="device", description="'device': a real camera. 'none': off."
+    )
+    label: str = Field(default="Monitor", description="Its name in the Studio.")
+    width: int = Field(default=1280, gt=0)
+    height: int = Field(default=720, gt=0)
+    fps: float = Field(
+        default=10.0,
+        gt=0,
+        description=(
+            "Kept low by default: it may share a USB bus with the cameras vision relies on."
+        ),
+    )
+
+
 class RecorderConfig(_Section):
     record_runs: bool = Field(
         default=False,
@@ -410,6 +466,14 @@ class Config(_Section):
         ),
     )
 
+    monitors: dict[str, MonitorConfig] = Field(
+        default_factory=dict[str, MonitorConfig],
+        description=(
+            "Cameras for watching the machine, by an ID of your choice: shown in the "
+            "Studio, never used by vision. Not part of the machine profile."
+        ),
+    )
+
     @model_validator(mode="after")
     def _known_cameras(self) -> Self:
         known = {c.id for c in self.machine.machine_profile.cameras}
@@ -417,7 +481,14 @@ class Config(_Section):
             if camera_id not in known:
                 raise ValueError(
                     f"cameras.{camera_id}: the machine profile has no such camera "
-                    f"(it has: {', '.join(sorted(known)) or 'none'})"
+                    f"(it has: {', '.join(sorted(known)) or 'none'}); a camera only for "
+                    "watching the machine goes under [monitors] instead"
+                )
+        for camera_id in self.monitors:
+            if camera_id in known:
+                raise ValueError(
+                    f"monitors.{camera_id}: the machine profile already has a camera with "
+                    "this ID; give the monitor another"
                 )
         return self
 
@@ -441,8 +512,13 @@ class Config(_Section):
 
 def load_config(path: Path | None) -> Config:
     """Load configuration from a TOML file, or return defaults when ``path`` is None."""
+    return Config.model_validate(load_raw(path))
+
+
+def load_raw(path: Path | None) -> dict[str, Any]:
+    """A TOML config file's data, before validation (none for no file)."""
     if path is None:
-        return Config()
+        return {}
     with path.open("rb") as f:
         data = tomllib.load(f)
     # A profile given as a relative path is relative to the config file.
@@ -450,4 +526,4 @@ def load_config(path: Path | None) -> Config:
     profile = machine.get("profile")
     if isinstance(profile, str) and is_profile_path(profile) and not Path(profile).is_absolute():
         machine["profile"] = str(path.parent / profile)
-    return Config.model_validate(data)
+    return data

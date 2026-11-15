@@ -12,7 +12,7 @@ its fiducial with the camera.
 
 import logging
 import math
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from picnicplace.camera.synthetic import TapeScene
@@ -434,6 +434,8 @@ class FeederService:
         bus = self._need_bus()
         address = self._address(slot)
         mm = self.feed_distance(slot) if distance is None else distance
+        # Pause holds an advance as it holds a move.
+        await self._machine.hold()
         try:
             await bus.feed(address, mm)
         except FeederError as e:
@@ -448,6 +450,7 @@ class FeederService:
     def start_feed(self, slot_id: str, distance: float | None) -> Operation:
         slot = self.slot(slot_id)
         self._machine.check_can_actuate()
+        self._machine.check_not_paused()
         self.check_can_feed(slot)
 
         async def work() -> str:
@@ -688,6 +691,13 @@ class FeederService:
         on it, and the profile's rail fitted to them. Every slot on the rail moves with
         it, and the rail's slot corrections and what was learned of its picks are
         cleared, since they were measured from the old places."""
+        return self._machine.start_task("rail_calibrate", self.calibrate_rails_work(bank_ids))
+
+    def calibrate_rails_work(
+        self, bank_ids: list[str] | None = None
+    ) -> Callable[[], Awaitable[str]]:
+        """Calibrating the rails (see ``start_calibrate_rails``): checked now, run when
+        awaited."""
         banks = [self._bank(b) for b in bank_ids] if bank_ids else list(self._profile.feeder_banks)
         if not banks:
             raise FeederError("this machine has no feeder rails")
@@ -732,7 +742,7 @@ class FeederService:
                 )
             return message
 
-        return self._machine.start_task("rail_calibrate", work)
+        return work
 
     def start_rail_fiducial_here(self, slot_id: str) -> Operation:
         """The operator has centered the top camera on a slot's feeder fiducial (when the

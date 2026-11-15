@@ -20,16 +20,18 @@ interface Props {
   info?: CameraInfo;
   /** Width of the view in mm (the profile's, or as measured), for the scale bar. */
   fieldOfView?: number;
+  /** Draw the crosshair: off for a monitor camera, whose center means nothing. */
+  crosshair?: boolean;
 }
 
 /**
  * A live camera feed (MJPEG) with a crosshair overlay. The overlay is drawn here, not in
  * the video, so it stays sharp at any stream quality (spec section 6.5).
  */
-export function CameraView({ id, title, info, fieldOfView }: Props) {
+export function CameraView({ id, title, info, fieldOfView, crosshair = true }: Props) {
   return (
     <Panel title={title} collapseId={`camera-${id}`}>
-      <CameraFeed id={id} info={info} fieldOfView={fieldOfView} />
+      <CameraFeed id={id} info={info} fieldOfView={fieldOfView} crosshair={crosshair} />
     </Panel>
   );
 }
@@ -38,10 +40,12 @@ function CameraFeed({
   id,
   info,
   fieldOfView,
+  crosshair = true,
 }: {
   id: string;
   info?: CameraInfo;
   fieldOfView?: number;
+  crosshair?: boolean;
 }) {
   const { status, clientId } = useCore();
   const [attempt, setAttempt] = useState(0);
@@ -122,10 +126,17 @@ function CameraFeed({
           {info?.error ?? "No video"}
         </span>
       )}
-      <svg className="camera-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-        <line x1="50" y1="0" x2="50" y2="100" />
-        <line x1="0" y1="50" x2="100" y2="50" />
-      </svg>
+      {crosshair && (
+        <svg
+          className="camera-overlay"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden
+        >
+          <line x1="50" y1="0" x2="50" y2="100" />
+          <line x1="0" y1="50" x2="100" y2="50" />
+        </svg>
+      )}
       {info?.source === "synthetic" && <span className="camera-badge">simulated</span>}
       {zoom > 1 && (
         <button

@@ -310,8 +310,36 @@ async def jog(ctx: Context, body: JogRequest) -> Operation:
 
 @router.post("/machine/estop", tags=["machine"])
 async def estop(ctx: Context) -> MachineState:
-    """Emergency stop. Allowed for any authenticated client, in any state."""
+    """Emergency stop: the firmware's halt (``M112`` on Marlin), sent at once. Marlin acts
+    on it at once only when built with its emergency parser, and then stays halted until
+    the controller is power-cycled; the Studio pauses instead. Allowed for any
+    authenticated client, in any state."""
     await ctx.machine.emergency_stop()
+    return ctx.machine.state
+
+
+@router.post("/machine/pause", tags=["machine"])
+async def pause(ctx: Context) -> MachineState:
+    """Pause: the move under way finishes, then the running operation waits before its
+    next move or feeder advance, and nothing new starts, until resume or stop. Allowed
+    for any authenticated client, in any state."""
+    ctx.machine.pause()
+    return ctx.machine.state
+
+
+@router.post("/machine/resume", tags=["machine"], dependencies=[Depends(require_control)])
+async def resume(ctx: Context) -> MachineState:
+    """Carry on from where pause held the machine."""
+    ctx.machine.resume()
+    return ctx.machine.state
+
+
+@router.post("/machine/stop", tags=["machine"])
+async def stop(ctx: Context) -> MachineState:
+    """End the running operation before its next move (it may still raise the nozzles),
+    resuming the machine if it is paused. The machine stays homed. Allowed for any
+    authenticated client, in any state; does nothing if nothing runs."""
+    ctx.machine.request_stop()
     return ctx.machine.state
 
 

@@ -21,6 +21,7 @@ import logging
 import math
 import time
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
 
 from picnicplace.calibration import CRASH_STALES, CalibrationStore, apply_measurements
 from picnicplace.camera.source import Frame
@@ -35,10 +36,12 @@ from picnicplace.machine.errors import (
     InvalidTargetError,
     MachineBusyError,
     MachineError,
+    MachinePausedError,
     NoClientPresentError,
     NotConnectedError,
     NotHomedError,
     SafeZFaultError,
+    StoppedError,
     UnknownOutputError,
     VisionError,
     ZNotSafeError,
@@ -95,6 +98,25 @@ VACUUM_POLL_S = 0.05
 VACUUM_STEADY = 0.002
 """A vacuum reading that changes less than this (as a fraction of its sensor's range)
 from one poll to the next has settled."""
+
+
+def _open_px(min_diameter_px: float) -> int:
+    """How wide a line is wiped out before looking for marks at least this big: a tenth
+    of their diameter, which a 4 mm disc keeps and silkscreen lines do not."""
+    return max(3, round(min_diameter_px / 10))
+
+
+@dataclass(frozen=True)
+class RoundMark:
+    """A round mark the top camera saw."""
+
+    at: Point
+    diameter: float
+    """In mm."""
+    brightness: float
+    """Its middle's mean brightness, 0 to 255."""
+
+
 LIMITED_CACHE_S = 1.0
 """How long whether the machine is limited (to a quarter of full speed) is taken as
 known, so every move does not work it out again."""
@@ -116,6 +138,8 @@ class MachineService:
         self.limits: Callable[[str], Limit] | None = None
         """Set by the setup wizard: whether a task of a kind may start now, and what to
         warn of if it may."""
+        self.sim_tips: dict[str, str] = {}
+        """Simulator only: the tips really fitted, by nozzle, whatever the operator said."""
         self.limited: Callable[[], bool] | None = None
         """Set by the setup wizard: moves are capped at a quarter of full speed."""
         self._limited_cache = (-math.inf, False)
@@ -139,8 +163,12 @@ class MachineService:
         self._presence = presence
         self._operations = operations
         self._homed = False
+        self._visually_homed = False
         self._estop = False
         self._busy = False
+        self._stop_requested = False
+        self._paused = False
+        self._wake = asyncio.Event()
         self._connection_error: str | None = None
         self._connect_lock = asyncio.Lock()
         self._grab: Grab | None = None
@@ -201,7 +229,9 @@ class MachineService:
             held_parts=held_parts,
             placed=placed,
             boards=self.scene_boards() if self.scene_boards is not None else (),
-            tips=tuple((n.id, n.tip) for n in self._profile.nozzles if n.tip is not None),
+            tips=tuple(self.sim_tips.items())
+            if self.sim_tips
+            else tuple((n.id, n.tip) for n in self._profile.nozzles if n.tip is not None),
         )
 
     @property
@@ -213,6 +243,7 @@ class MachineService:
             connection_error=self._connection_error,
             homed=self._homed,
             estop=self._estop,
+            paused=self._paused,
             busy=self._busy,
             motion_enabled=self._driver.connected and self._presence.present and not self._estop,
             axes=list(self._driver.axes),
@@ -338,6 +369,58 @@ class MachineService:
             self._homed = False
         self._publish_state()
 
+    def pause(self) -> None:
+        """Hold the machine before its next move: the move under way finishes (Marlin
+        cannot cut one short without halting until it is power-cycled), then the running
+        operation waits until resume or stop. Nothing new starts while paused. Always
+        allowed, from any client: the stop for an emergency is the power switch, or an
+        E-stop switch that cuts the motors' power."""
+        if not self._paused:
+            log.warning("paused")
+            self._paused = True
+            self._publish_state()
+
+    def resume(self) -> None:
+        """Carry on from where pause held the machine."""
+        if self._paused:
+            log.info("resumed")
+            self._paused = False
+            self._wake.set()
+            self._publish_state()
+
+    @property
+    def paused(self) -> bool:
+        return self._paused
+
+    def request_stop(self) -> bool:
+        """End the running operation before its next move (raising the nozzles to travel
+        height is still allowed, so the work can tidy up), and resume the machine if it is
+        paused. The firmware keeps running and the machine stays homed. Says whether
+        anything was running."""
+        if self._paused:
+            self.resume()
+        if not self._busy:
+            return False
+        log.warning("stop requested")
+        self._stop_requested = True
+        self._wake.set()
+        return True
+
+    async def _hold(self, step: Mapping[str, float] | None = None) -> None:
+        """Before a move: wait while paused, and end the operation if a stop was asked
+        for, or the machine dropped off or halted while it waited."""
+        while self._paused and not self._stop_requested:
+            self._wake.clear()
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._wake.wait(), 0.5)
+            if not self._driver.connected or self._estop:
+                raise NotConnectedError("the machine dropped off while it was paused")
+        if not self._stop_requested:
+            return
+        if step and all(a in self._z_axes and v == TRAVEL_HEIGHT for a, v in step.items()):
+            return
+        raise StoppedError("stopped by the operator")
+
     async def stop_manual_motion(self) -> None:
         """Stop the current manual move, keeping position (the controlling client left)."""
         if self._busy:
@@ -350,9 +433,27 @@ class MachineService:
         """Raise unless outputs and feeders may be used now."""
         self._check_can_actuate()
 
+    def check_not_paused(self) -> None:
+        """Raise if the machine is paused: nothing new starts until it is resumed."""
+        if self._paused:
+            raise MachinePausedError("the machine is paused; resume it first")
+
+    async def hold(self) -> None:
+        """Before an action that is not a move, such as a feeder advance: wait while
+        paused, and end the operation if a stop was asked for."""
+        await self._hold()
+
     @property
     def homed(self) -> bool:
         return self._homed
+
+    @property
+    def connected(self) -> bool:
+        return self._driver.connected
+
+    @property
+    def firmware(self) -> str | None:
+        return self._driver.firmware
 
     @property
     def speed_scale(self) -> float:
@@ -366,6 +467,31 @@ class MachineService:
             limited = self.limited()
             self._limited_cache = (now, limited)
         return min(self._speed_scale, LIMITED_SPEED) if limited else self._speed_scale
+
+    async def home_now(self) -> str | None:
+        """Home, within a task."""
+        return await self._home()
+
+    @property
+    def visually_homed(self) -> bool:
+        """Homed, and visual homing has corrected X and Y since."""
+        return self._homed and self._visually_homed
+
+    async def visual_home_now(self) -> str:
+        """Visual homing, within a task."""
+        self._check_homed()
+        return await self._visual_home()
+
+    async def measure_camera_scale_now(self) -> str:
+        """Measure the top camera's scale, within a task."""
+        self._check_homed()
+        return await self._measure_camera_scale()
+
+    def start_sequence(self, kind: str, work: _Work) -> Operation:
+        """Run steps that begin by homing (so the machine need not be homed yet) as one
+        operation, with the machine busy."""
+        self._check_can_move()
+        return self._start_operation(kind, work)
 
     def start_task(self, kind: str, work: _Work) -> Operation:
         """Run work that moves the machine as an operation, with the machine busy. The
@@ -394,6 +520,7 @@ class MachineService:
         if self._grab is None:
             raise VisionError("the cameras are not available")
         if settle:
+            await self._light_for(camera)
             await asyncio.sleep(camera.settle_s)
         frame = await self._grab(camera_id, time.time(), FRAME_WAIT_S)
         if frame is None:
@@ -517,14 +644,26 @@ class MachineService:
             return None
         return float(value)
 
-    async def set_light(self, camera: Camera, on: bool) -> None:
-        if camera.light_output is not None:
-            await self._driver.set_output(camera.light_output, on)
+    async def _light_for(self, camera: Camera) -> None:
+        """Vision needs the camera's light: switch it on if it is off, and leave it on
+        (switching it for every look would flicker through a run). The caller then waits
+        the camera's settle time, which lets the picture brighten."""
+        if camera.light_output is not None and not self._driver.outputs.get(camera.light_output):
+            await self._driver.set_output(camera.light_output, True)
 
-    def image_to_machine(self, camera: Camera, right: float, down: float) -> tuple[float, float]:
+    def image_to_machine(
+        self, camera: Camera, right: float, down: float, turned: bool = True
+    ) -> tuple[float, float]:
         """A displacement seen in a camera's image (mm right and mm down, as shown) as a
         machine X/Y displacement. Up-looking cameras see the machine mirrored left to
-        right, as from below."""
+        right, as from below, and their picture's measured turn is undone (unless
+        ``turned`` is false: how the profile alone says the picture should be)."""
+        if turned and camera.looking == "up" and camera.image_rotation:
+            t = math.radians(-camera.image_rotation)
+            right, down = (
+                right * math.cos(t) - down * math.sin(t),
+                right * math.sin(t) + down * math.cos(t),
+            )
         x, y = self._profile.image_to_machine(right, down)
         return (-x, y) if camera.looking == "up" else (x, y)
 
@@ -552,9 +691,18 @@ class MachineService:
 
     async def locate_circles(self, min_diameter: float, max_diameter: float) -> list[Point]:
         """Every round mark the top camera sees: their machine positions."""
+        return [m.at for m in await self.locate_round_marks(min_diameter, max_diameter)]
+
+    async def locate_round_marks(
+        self, min_diameter: float, max_diameter: float, through_lines: bool = False
+    ) -> list[RoundMark]:
+        """Every round mark the top camera sees: where, how big, and how bright.
+        ``through_lines``: find marks crossed by thin lines, such as a paper disc lying on
+        a board's silkscreen."""
         camera = self.top_camera()
         if self._grab is None:
             raise VisionError("the cameras are not available")
+        await self._light_for(camera)
         await asyncio.sleep(camera.settle_s)
         frame = await self._grab(camera.id, time.time(), FRAME_WAIT_S)
         if frame is None:
@@ -566,17 +714,28 @@ class MachineService:
             frame.image,
             min_diameter / mm_per_px,
             max_diameter / mm_per_px,
+            _open_px(min_diameter / mm_per_px) if through_lines else 0,
             camera=camera.id,
             position=dict(self._driver.position),
             mm_per_px=mm_per_px,
         )
         here = self.camera_position()
-        out: list[Point] = []
+        # The strongest channel, not gray: under a tinted light, white paper is bright in
+        # every channel the light has, but its gray can be no brighter than copper's.
+        value = frame.image.max(axis=2) if frame.image.ndim == 3 else frame.image
+        out: list[RoundMark] = []
         for c in circles:
             dx, dy = self._profile.image_to_machine(
                 (c.x - w / 2) * mm_per_px, (c.y - h / 2) * mm_per_px
             )
-            out.append(Point(x=here.x + dx, y=here.y + dy))
+            # How bright its middle is (0-255): white paper is far brighter than copper.
+            r = max(1, round(c.diameter * 0.3))
+            u, v = round(c.x), round(c.y)
+            middle = value[max(0, v - r) : v + r + 1, max(0, u - r) : u + r + 1]
+            brightness = float(middle.mean()) if middle.size else 0.0
+            out.append(
+                RoundMark(Point(x=here.x + dx, y=here.y + dy), c.diameter * mm_per_px, brightness)
+            )
         return out
 
     async def locate_circle(
@@ -585,13 +744,15 @@ class MachineService:
         max_diameter: float,
         search_mm: float,
         expected_diameter: float | None = None,
+        through_lines: bool = False,
     ) -> Point | None:
         """Find a round mark near the top camera's center: its machine position, or None.
         With its expected diameter, marks of other sizes (such as silkscreen letters) are
-        less likely to be taken for it."""
+        less likely to be taken for it. ``through_lines``: as for ``locate_round_marks``."""
         camera = self.top_camera()
         if self._grab is None:
             raise VisionError("the cameras are not available")
+        await self._light_for(camera)
         await asyncio.sleep(camera.settle_s)
         frame = await self._grab(camera.id, time.time(), FRAME_WAIT_S)
         if frame is None:
@@ -605,6 +766,7 @@ class MachineService:
             max_diameter / mm_per_px,
             search_mm / mm_per_px,
             expected_diameter / mm_per_px if expected_diameter else None,
+            _open_px(min_diameter / mm_per_px) if through_lines else 0,
             camera=camera.id,
             position=dict(self._driver.position),
             mm_per_px=mm_per_px,
@@ -629,6 +791,8 @@ class MachineService:
 
     def _check_can_move(self) -> None:
         self._check_can_actuate()
+        if self._paused:
+            raise MachinePausedError("the machine is paused; resume it first")
         if self._busy:
             raise MachineBusyError("the machine is busy")
 
@@ -691,6 +855,7 @@ class MachineService:
 
     async def _run_steps(self, steps: list[dict[str, float]], speed: float | None) -> None:
         for step in steps:
+            await self._hold(step)
             position = self._driver.position
             travels = any(
                 abs(value - position[axis]) > EPSILON
@@ -713,6 +878,8 @@ class MachineService:
         return cap if speed is None else min(speed, cap)
 
     async def _home(self) -> str | None:
+        await self._hold()
+        self._visually_homed = False
         await self._driver.home()
         self._check_home_z()
         if self._profile.safe_z_input is not None and not self.z_safe:
@@ -762,16 +929,17 @@ class MachineService:
             self._driver.tip_fitted(nozzle.id, nozzle.tip)
         self.apply_calibration()
 
-    def set_tip(self, nozzle_id: str, tip_id: str | None) -> Nozzle:
+    def set_tip(self, nozzle_id: str, tip_id: str | None, in_task: bool = False) -> Nozzle:
         """Say which tip is now fitted on a nozzle (None: not said). Its Z offset and
-        vacuum levels become those measured with that tip, if it has been."""
+        vacuum levels become those measured with that tip, if it has been. ``in_task``:
+        the machine's own task found it (by camera), so the machine being busy is fine."""
         nozzle = self.nozzle(nozzle_id)
         if tip_id is not None and self._profile.nozzle_tip(tip_id) is None:
             raise InvalidTargetError(
                 f"this machine's profile has no nozzle tip {tip_id!r}: add it to the local "
                 "profile's nozzle_tips first"
             )
-        if self._busy:
+        if self._busy and not in_task:
             raise MachineBusyError("the machine is busy: change tips once it has stopped")
         outputs = [o for o in (nozzle.pump_output, nozzle.valve_output) if o is not None]
         if any(self._driver.outputs.get(o) for o in outputs):
@@ -829,6 +997,7 @@ class MachineService:
     ) -> tuple[float, float, int, int]:
         """Find the fiducial in a fresh frame: its center in pixels, and the frame size."""
         assert self._grab is not None
+        await self._light_for(camera)
         await asyncio.sleep(camera.settle_s)
         frame = await self._grab(camera.id, time.time(), FRAME_WAIT_S)
         if frame is None:
@@ -919,6 +1088,7 @@ class MachineService:
         off_x, off_y = target["X"] - here["X"], target["Y"] - here["Y"]
         await self._driver.set_position(target)
         log.info("visual homing: machine was off by X %+.3f mm, Y %+.3f mm", off_x, off_y)
+        self._visually_homed = True
         off = math.hypot(off_x, off_y)
         self.calibration.record(
             "homing_fiducial",
@@ -933,6 +1103,7 @@ class MachineService:
 
     def _start_operation(self, kind: str, work: _Work) -> Operation:
         self._busy = True
+        self._stop_requested = False
         self._publish_state()
 
         async def run() -> str | None:
@@ -940,6 +1111,7 @@ class MachineService:
                 return await work()
             finally:
                 self._busy = False
+                self._stop_requested = False
                 self._publish_state()
 
         return self._operations.start(kind, run)

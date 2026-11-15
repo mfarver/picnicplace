@@ -138,6 +138,40 @@ def test_the_bottom_camera_sees_the_fitted_tip(tip: str, diameter: float) -> Non
         assert found["y"] == pytest.approx(design["position"]["y"] + 0.5, abs=0.03)
 
 
+def test_a_bottom_camera_far_from_the_profiles_scale() -> None:
+    """A real LumenPnP's bottom camera saw 3.7 times the profile's field of view: the
+    fitted tip, looked for at the profile's scale, was too small to be found. The tip is
+    found first by any round mark near the middle, the scale measured by stepping the head,
+    and then the tip is centered and sized with the measured scale."""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_bottom_camera_error": (-0.8, 0.5, -0.4),
+            "sim_bottom_camera_scale": 3.7,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+
+    def bottom() -> dict[str, dict[str, float]]:
+        cameras = client.get("/api/v1/machine/description").json()["cameras"]
+        return next(c for c in cameras if c["looking"] == "up")
+
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        design = bottom()
+        fit(s, "N1", "N24")
+        assert home(s)["status"] == "succeeded"
+        op = s.wait(s.post("/api/v1/machine/bottom-camera", {}))
+        assert op["status"] == "succeeded", op
+        found = bottom()
+        assert found["field_of_view"]["x"] == pytest.approx(
+            design["field_of_view"]["x"] * 3.7, rel=0.02
+        )
+        assert found["position"]["x"] == pytest.approx(design["position"]["x"] - 0.8, abs=0.05)
+        assert found["position"]["y"] == pytest.approx(design["position"]["y"] + 0.5, abs=0.05)
+        detail = str(lines(client)["bottom_camera"]["detail"])
+        assert "as the N24 tip should" in detail, detail
+
+
 def test_a_tip_unlike_the_fitted_one_is_noted() -> None:
     n08 = NozzleTip(id="N08", label="N08", inner_diameter=0.8, outer_diameter=1.5)
     assert tip_size_note(n08, 1.6).endswith("as the N08 tip should.")

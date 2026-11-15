@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { Moon, Sun } from "lucide-react";
 import type { Theme } from "../theme";
-import { EStopButton } from "./EStopButton";
+import { PauseButton } from "./PauseButton";
 
 export interface WorkspaceTab {
   id: string;
@@ -49,7 +49,7 @@ export function TopBar({ tabs, active, onSelect, theme, onToggleTheme }: Props) 
         >
           {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
         </button>
-        <EStopButton />
+        <PauseButton />
       </div>
     </header>
   );

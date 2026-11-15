@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
@@ -16,6 +17,14 @@ from tests.conftest import Session, connect, fast_config, operation_done, receiv
 from tests.test_placement import set_up
 
 BRING_UP = ("probe", "camera", "slow", "home", "jog", "nozzles", "outputs", "stop", "keep_outs")
+
+
+PINNED = frozenset({"machine.profile"})
+"""As if the config file named the machine: the setup wizard's machine page is done."""
+
+
+def app(config: Config) -> FastAPI:
+    return create_app(config, pinned=PINNED)
 
 
 def limited_config(data_dir: Path, **machine: object) -> Config:
@@ -60,13 +69,15 @@ def test_a_new_machine_is_limited(tmp_path: Path) -> None:
     feeders waits for homing and the top camera; moves are capped at a quarter of full
     speed. Homing and the wizard's own steps go ahead."""
     config = limited_config(tmp_path, profile="lumenpnp-v4.1")
-    with TestClient(create_app(config)) as client, connect(client) as s:
+    with TestClient(app(config)) as client, connect(client) as s:
         state = wizard(client)
         assert state["stage"] == "limited" and state["enforced"]
-        assert state["next_page"] == "connect"
+        # The simulator needs no serial port, and draws its own cameras.
+        assert state["next_page"] == "first_motion"
+        assert pages(client)["connect"]["status"] == "not_needed"
         assert [p["number"] for p in state["pages"]] == list(range(1, 17))
         tips = pages(client)["nozzle_tips"]
-        assert tips["status"] == "todo" and "Say which tip is on Left nozzle" in tips["detail"]
+        assert tips["status"] == "todo" and "say which tip is on Left nozzle" in tips["detail"]
         assert pages(client)["nozzle_runout"]["status"] == "not_built"
 
         set_up(client, s, calibrate=False)
@@ -77,7 +88,7 @@ def test_a_new_machine_is_limited(tmp_path: Path) -> None:
         body = r.json()
         assert body["code"] == "calibration_required"
         assert "picks and placements wait until the machine is calibrated" in body["detail"]
-        assert "continue the setup wizard (next: Connect, then " in body["detail"]
+        assert "continue the setup wizard (next: Top camera scale, then " in body["detail"]
 
         limit = machine(client).limits
         assert limit is not None
@@ -94,10 +105,12 @@ def test_finishing_the_wizard_lifts_the_limits(tmp_path: Path) -> None:
     pick goes ahead with a warning naming what is out of date. Confirmed pages are kept
     across a restart."""
     config = limited_config(tmp_path)
-    with TestClient(create_app(config)) as client, connect(client) as s:
+    with TestClient(app(config)) as client, connect(client) as s:
         s.home()
         finish_bring_up(s)
-        assert wizard(client)["next_page"] == "visual_homing"
+        # The hand checks are kept, but first motion is done when visual homing finds the
+        # datum board's dot where the profile says.
+        assert wizard(client)["next_page"] == "first_motion"
 
         store: CalibrationStore = machine(client).calibration
         store.record("homing_fiducial", "Found the datum board's center dot.")
@@ -140,7 +153,7 @@ def test_finishing_the_wizard_lifts_the_limits(tmp_path: Path) -> None:
         )
 
     # Only the client holding control confirms pages; confirmed pages are kept.
-    with TestClient(create_app(config)) as client:
+    with TestClient(app(config)) as client:
         assert pages(client)["discard_park"]["status"] == "done"
         assert pages(client)["strips_trays"]["status"] == "skipped"
         assert [p["id"] for p in wizard(client)["pages"] if p["status"] == "todo"] == []
@@ -154,7 +167,7 @@ def test_finishing_the_wizard_lifts_the_limits(tmp_path: Path) -> None:
 def test_a_single_pick_warns_while_out_of_date(tmp_path: Path) -> None:
     """Out of date after a crash, a pick still runs, and its result begins with a
     warning naming what is out of date."""
-    with TestClient(create_app(limited_config(tmp_path))) as client, connect(client) as s:
+    with TestClient(app(limited_config(tmp_path))) as client, connect(client) as s:
         s.home()
         finish_bring_up(s)
         measure_everything(client)
@@ -175,7 +188,7 @@ def test_a_single_pick_warns_while_out_of_date(tmp_path: Path) -> None:
 
 def test_the_simulator_is_not_limited_unless_asked(tmp_path: Path) -> None:
     config = fast_config(data={"dir": str(tmp_path)})
-    with TestClient(create_app(config)) as client, connect(client) as s:
+    with TestClient(app(config)) as client, connect(client) as s:
         state = wizard(client)
         assert state["stage"] == "limited" and not state["enforced"]
         assert machine(client).limits is None

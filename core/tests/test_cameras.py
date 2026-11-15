@@ -74,6 +74,28 @@ def test_cameras_config_must_name_profile_cameras() -> None:
         fast_config(cameras={"side": {"source": "synthetic"}})
 
 
+def test_monitor_cameras_are_listed_apart_from_the_profile() -> None:
+    """A monitor camera, for watching the machine, comes from the config's monitors: it
+    is listed with its label, marked as a monitor, and looks neither down nor up. It has
+    its own IDs, apart from the profile's cameras."""
+    config = fast_config(monitors={"front": {"device": "/dev/video9", "label": "Front"}})
+    assert config.monitors["front"].width == 1280 and config.monitors["front"].fps == 10
+    with TestClient(create_app(config)) as client:
+        info = {c["id"]: c for c in client.get("/api/v1/cameras").json()}
+        front = info["front"]
+        assert front["monitor"] and front["looking"] is None, front
+        assert front["label"] == "Front" and front["source"] == "device"
+        assert not info["top"]["monitor"] and info["top"]["looking"] == "down"
+        # There is no camera at /dev/video9: a capture from it says so.
+        r = client.post("/api/v1/cameras/captures", json={"label": "x", "cameras": ["front"]})
+        assert r.status_code == 503 and "front camera sent no frame" in r.json()["detail"]
+
+    with pytest.raises(ValueError, match="already has a camera with this ID"):
+        fast_config(monitors={"top": {"device": "/dev/video9"}})
+    with pytest.raises(ValueError, match="goes under \\[monitors\\]"):
+        fast_config(cameras={"front": {"source": "device", "device": "/dev/video9"}})
+
+
 def test_token_in_query() -> None:
     config = fast_config(server={"token": TOKEN})
     with TestClient(create_app(config)) as client:

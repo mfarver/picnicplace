@@ -7,8 +7,7 @@ import { useCameras } from "../api/useCameras";
 import { useDescription } from "../api/useDescription";
 import { useFeeders } from "../api/useFeeders";
 import { useJobLayout, useRun } from "../api/useRun";
-import type { Operation, WizardPage } from "../api/types";
-import { BringUpPanel } from "../components/BringUpPanel";
+import type { Operation } from "../api/types";
 import { CameraView } from "../components/CameraView";
 import { CapturePanel } from "../components/CapturePanel";
 import { RecordingsPanel } from "../components/RecordingsPanel";
@@ -22,7 +21,7 @@ import { MachineView } from "../components/machine/MachineView";
 import { PlacementPanel } from "../components/PlacementPanel";
 import { Placeholder } from "../components/Placeholder";
 import { RunOverlay, RunSteps } from "../components/RunSteps";
-import { WizardPanel } from "../components/wizard/WizardPanel";
+import { WizardPopover } from "../components/wizard/WizardPopover";
 
 export function MachineWorkspace() {
   const core = useCore();
@@ -66,22 +65,6 @@ export function MachineWorkspace() {
     if (op) setLastOpId(op.id);
   };
   const home = () => void track(() => api.POST("/api/v1/machine/home"));
-  const calibrate = (action: NonNullable<WizardPage["action"]>) => {
-    switch (action) {
-      case "home":
-        return home();
-      case "visual_home":
-        return void track(() => api.POST("/api/v1/machine/visual-home"));
-      case "camera_scale":
-        return void track(() => api.POST("/api/v1/machine/camera-scale"));
-      case "bottom_camera":
-        return void track(() => api.POST("/api/v1/machine/bottom-camera", { body: {} }));
-      case "nozzle_offsets":
-        return void track(() => api.POST("/api/v1/machine/nozzle-offsets", { body: {} }));
-      case "calibrate_feeders":
-        return void track(() => api.POST("/api/v1/feeders/rails/calibrate", { body: {} }));
-    }
-  };
   const jog = (axis: string, distance: number) =>
     void track(() => api.POST("/api/v1/machine/jog", { body: { axis, distance } }));
   const moveTo = (position: Record<string, number>) =>
@@ -115,6 +98,19 @@ export function MachineWorkspace() {
             fieldOfView={camera.field_of_view.x}
           />
         ))}
+        {/* Monitor cameras, for watching the machine itself: from the config, not the
+            profile, so they come from the camera list. */}
+        {(cameras ?? [])
+          .filter((camera) => camera.monitor)
+          .map((camera) => (
+            <CameraView
+              key={camera.id}
+              id={camera.id}
+              title={camera.label}
+              info={camera}
+              crosshair={false}
+            />
+          ))}
 
         {/* Right under the cameras, so jogging and watching fit on one screen. */}
         {description && (
@@ -186,30 +182,7 @@ export function MachineWorkspace() {
         <CapturePanel />
         <RecordingsPanel />
 
-        {description && (
-          <WizardPanel
-            description={description}
-            operations={operations}
-            canRun={canMove && !!machine?.homed}
-            canSet={status === "open" && !controlledElsewhere && !!machine?.homed}
-            canConfirm={status === "open" && !controlledElsewhere && !pending}
-            onAction={calibrate}
-            onStop={() => void run(() => api.POST("/api/v1/machine/estop"))}
-          />
-        )}
 
-        {description && (
-          <BringUpPanel
-            description={description}
-            machine={machine}
-            canMove={canMove}
-            onHome={home}
-            onJog={jog}
-            onVisualHome={() => void track(() => api.POST("/api/v1/machine/visual-home"))}
-            onCameraScale={() => void track(() => api.POST("/api/v1/machine/camera-scale"))}
-            onScanFeeders={() => void track(() => api.POST("/api/v1/feeders/scan"))}
-          />
-        )}
 
       </aside>
 
@@ -239,6 +212,15 @@ export function MachineWorkspace() {
                 readOnly={controlledElsewhere}
                 busy={pending}
                 onSetOutput={setOutput}
+              />
+              <WizardPopover
+                description={description}
+                machine={machine}
+                canMove={canMove}
+                canSet={status === "open" && !controlledElsewhere && !!machine?.homed}
+                canConfirm={status === "open" && !controlledElsewhere && !pending}
+                onHome={home}
+                onJog={jog}
               />
             </div>
             {jobRun && (

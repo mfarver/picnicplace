@@ -202,6 +202,9 @@ def test_visual_homing_on_the_lumenpnp_profile() -> None:
         assert found_offset(op["message"]) == pytest.approx((0.4, -0.25), abs=0.02)
         state = s.state()
         assert (state["position"]["X"], state["position"]["Y"]) == pytest.approx((217, 106))
+        # Visual homing switched the top camera's light on to see the dot, and left it on.
+        assert state["outputs"]["light_top"] is True
+        assert state["outputs"]["light_bottom"] is False
 
 
 def test_rotated_view_puts_the_front_at_the_bottom() -> None:

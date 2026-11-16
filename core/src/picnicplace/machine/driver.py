@@ -46,6 +46,12 @@ class MotionDriver(ABC):
         their position; the simulator adds its simulated homing error."""
         return self.position
 
+    @property
+    def scene_runout(self) -> Mapping[str, tuple[float, float]]:
+        """Where each nozzle's tip end is from the axis it turns about, as it is turned
+        now (machine X/Y, mm), for synthetic cameras. Only the simulator knows."""
+        return {}
+
     async def rs485(self, packet: bytes) -> bytes | None:
         """Send a packet on the feeder bus and return the reply, or None if none came."""
         raise NotSupportedError(f"the {self.name} driver has no feeder bus")

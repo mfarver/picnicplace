@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Literal
 from picnicplace.machine.bottom_camera import bottom_camera_work, identify_tips
 from picnicplace.machine.errors import FeederError, InvalidTargetError, StoppedError
 from picnicplace.machine.nozzle_offsets import nozzle_offsets_work
+from picnicplace.machine.runout import nozzle_runout_work
 from picnicplace.machine.tip_heights import measured_offset, tip_heights_work, tips_to_measure
 from picnicplace.schemas import Operation
 from picnicplace.wizard import RunStep, WizardRun
@@ -129,11 +130,26 @@ def _stop2(machine: "MachineService", redo: bool) -> list[Step]:
         and line.stale is None
         and all(measured_offset(machine, n) for n in machine.profile.nozzles)
     )
+    runout = _runout_step(machine, redo)
     if not redo and offsets_kept and tips_to_measure(machine):
         work = tip_heights_work(machine, None)
-        return [("nozzle_offsets", "Find the paper, and measure each new tip's height", work)]
+        return [
+            ("nozzle_offsets", "Find the paper, and measure each new tip's height", work),
+            runout,
+        ]
     work = nozzle_offsets_work(machine, None, None, None, search=True)
-    return [("nozzle_offsets", "Find the disc, and measure each nozzle", work)]
+    return [("nozzle_offsets", "Find the disc, and measure each nozzle", work), runout]
+
+
+def _runout_step(machine: "MachineService", redo: bool) -> Step:
+    """Turning each tip over the bottom camera for its runout: those not measured yet (all,
+    with ``redo``), chosen when it runs, after any tip changed in the step before."""
+    title = "Turn each tip over the bottom camera"
+    try:
+        ids = [n.id for n in machine.profile.nozzles] if redo else None
+        return ("nozzle_runout", title, nozzle_runout_work(machine, ids))
+    except InvalidTargetError as e:
+        return ("nozzle_runout", title, str(e))
 
 
 def start_stop(

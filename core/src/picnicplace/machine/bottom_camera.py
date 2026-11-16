@@ -56,6 +56,9 @@ class BottomCameraFix:
     height: int
     tip_diameter: float
     """How big the tip's end looked, in mm, at the measured scale."""
+    runout: float = 0.0
+    """How far the tip's end was from the axis it turns about, in mm: the place found is
+    the axis's, not the tip's."""
 
 
 def bottom_camera(machine: MachineService) -> Camera:
@@ -90,7 +93,7 @@ TIP_SEARCH_FRACTION = (0.01, 0.25)
 image's width across: the profile's field of view may be far off (a wider lens)."""
 
 
-async def _find_tip(
+async def find_tip(
     machine: MachineService,
     camera: Camera,
     nozzle: Nozzle,
@@ -184,10 +187,12 @@ async def _calibrate(
 ) -> BottomCameraFix:
     x, y = camera.position.x, camera.position.y
 
-    async def look(at_x: float, at_y: float, z: float, search: float | None, mm: float | None):
-        await machine.move_nozzle_over(nozzle, at_x, at_y)
+    async def look(
+        at_x: float, at_y: float, z: float, search: float | None, mm: float | None, turn: float = 0
+    ):
+        await machine.move_nozzle_over(nozzle, at_x, at_y, turn)
         await machine.lower_nozzle(nozzle, z)
-        return await _find_tip(machine, camera, nozzle, search, mm)
+        return await find_tip(machine, camera, nozzle, search, mm)
 
     async def step(at_x: float, at_y: float, z: float, mm: float | None) -> _Steps:
         """Step the head each way and watch the tip move in the image."""
@@ -272,8 +277,29 @@ async def _calibrate(
         turns.append(math.degrees(math.remainder(actual - expected, math.tau)))
     rotation = sum(turns) / len(turns)
     tip_diameter = final.tip_px * (scale_x + scale_y) / 2
+
+    # The tip's end is centered with the nozzle at 0 degrees. A tip a little off the axis
+    # it turns about (runout) is as far off the other way at 180: the axis is halfway, and
+    # where the part is seen from is the axis, which does not move as the nozzle turns.
+    ends: list[Vector] = []
+    for turn in (0, 180):
+        search = SHARPNESS_RADIUS_MM / final.mm_per_px
+        u, v, w, h, _ = await look(x, y, focus, search, final.mm_per_px, turn)
+        ends.append(final.to_machine(u - w / 2, v - h / 2))
+    await machine.move_nozzle_over(nozzle, x, y, 0)
+    (ax, ay), (bx, by) = ends
+    dx, dy = bx - ax, by - ay
     return BottomCameraFix(
-        x, y, focus, scale_x, scale_y, rotation, final.width, final.height, tip_diameter
+        x - (ax + bx) / 2,
+        y - (ay + by) / 2,
+        focus,
+        scale_x,
+        scale_y,
+        rotation,
+        final.width,
+        final.height,
+        tip_diameter,
+        math.hypot(dx, dy) / 2,
     )
 
 
@@ -305,7 +331,8 @@ def bottom_camera_work(
             f"{camera.label}: at ({fix.x:.3f}, {fix.y:.3f}), {moved:.2f} mm from the "
             f"profile's place; in focus with the nozzle at Z {fix.focus:.2f}; "
             f"{(fix.scale_x + fix.scale_y) / 2:.5f} mm/pixel; image turned "
-            f"{fix.rotation:+.2f}°. Measured with {nozzle.label}. "
+            f"{fix.rotation:+.2f}°. Measured with {nozzle.label}, on the axis it turns "
+            f"about (its tip's end was {fix.runout:.2f} mm off it). "
             + tip_size_note(fitted_tip(machine, nozzle), fix.tip_diameter)
         )
         machine.calibration.record(

@@ -164,6 +164,14 @@ class Nozzle(ProfileModel):
             "open, sealed, and holding a part. None: its sensor's threshold is used."
         ),
     )
+    runout: Point = Field(
+        default_factory=lambda: Point(x=0.0, y=0.0),
+        description=(
+            "Measured, not set by hand: where this nozzle's tip end is from the axis it "
+            "turns about, with the nozzle at 0 degrees (mm; it turns with the nozzle). "
+            "Picks put the tip end, not the axis, over the part."
+        ),
+    )
     tip: str | None = Field(
         default=None,
         description=(

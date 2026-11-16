@@ -90,6 +90,7 @@ def build_driver(config: MachineConfig) -> DriverBundle:
             tip_errors=config.sim_nozzle_z_error,
             vacuum_levels=config.sim_vacuum_levels,
             tip_kind_errors=config.sim_tip_z_error,
+            runout=config.sim_nozzle_runout,
         )
         driver.surface_at = sim_surface(config)
         driver.datum_seal_press = config.sim_datum_seal_press

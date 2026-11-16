@@ -464,6 +464,7 @@
                   "camera_scale",
                   "bottom_camera",
                   "nozzle_offsets",
+                  "nozzle_runout",
                   "calibrate_feeders"
                 ],
                 "type": "string"
@@ -4271,6 +4272,10 @@
             "title": "Rotation Axis",
             "type": "string"
           },
+          "runout": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Measured, not set by hand: where this nozzle's tip end is from the axis it turns about, with the nozzle at 0 degrees (mm; it turns with the nozzle). Picks put the tip end, not the axis, over the part."
+          },
           "tip": {
             "anyOf": [
               {
@@ -4349,6 +4354,7 @@
           "valve_output",
           "z_offset",
           "vacuum",
+          "runout",
           "tip"
         ],
         "title": "Nozzle",
@@ -4511,6 +4517,27 @@
           "nozzle_id"
         ],
         "title": "NozzleRequest",
+        "type": "object"
+      },
+      "NozzleRunoutRequest": {
+        "properties": {
+          "nozzle_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The nozzles to measure. Empty: those whose tip has no runout yet.",
+            "title": "Nozzle Ids"
+          }
+        },
+        "title": "NozzleRunoutRequest",
         "type": "object"
       },
       "NozzleTip": {
@@ -7731,6 +7758,7 @@
                   "camera_scale",
                   "bottom_camera",
                   "nozzle_offsets",
+                  "nozzle_runout",
                   "calibrate_feeders"
                 ],
                 "type": "string"
@@ -12883,6 +12911,83 @@
           }
         ],
         "summary": "Calibrate Nozzle Offsets",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/nozzle-runout": {
+      "post": {
+        "description": "Measure how far the tip's end on some nozzles is from the axis it turns about:\neach nozzle turns over the bottom camera, and the circle its tip's end makes gives\nit. Picks then put the tip's end, not the axis, over the part. Kept for the tip\nfitted, and used from then on.",
+        "operationId": "measure_nozzle_runout_api_v1_machine_nozzle_runout_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NozzleRunoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Measure Nozzle Runout",
         "tags": [
           "machine"
         ]

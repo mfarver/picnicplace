@@ -771,6 +771,21 @@ class MachineService:
                 return held
             await asyncio.sleep(0.03)
 
+    async def holds_after_lift(
+        self, nozzle: Nozzle, most_s: float, level: float | None = None
+    ) -> tuple[bool | None, float | None]:
+        """Whether a nozzle that has just lifted a part still holds it, and the vacuum
+        reading that says so, judged once the reading has settled (within ``most_s``): just
+        after the lift it still reads the seal, so a part that fell off on the way up looks
+        held until the reading falls. ``level``: as for ``holds_part``. None, None if the
+        nozzle has no vacuum sensor."""
+        reading = await self.settled_vacuum(nozzle, 0.0, most_s)
+        if reading is None:
+            return None, None
+        held = self.reads_held(nozzle, reading, level)
+        self.recorder.event("vacuum", nozzle=nozzle.id, expect=True, held=held, reading=reading)
+        return held, reading
+
     async def settled_vacuum(self, nozzle: Nozzle, least_s: float, most_s: float) -> float | None:
         """The nozzle's vacuum reading once it has stopped changing: after at least
         ``least_s`` (for the pump to start), and at most ``most_s``. None if the nozzle

@@ -59,7 +59,6 @@ PICK_SEAL_TIMEOUT_S = 2.0
 LIFT_SLOW_MM = 1.0
 """The disc is lifted this far at ``APPROACH_SPEED`` before the nozzle rises at speed."""
 PLACE_DWELL_S = 0.2
-VACUUM_TIMEOUT_S = 1.0
 SPREAD_LIMIT_MM = 0.15
 """Turns that disagree by more than this (root mean square) mean the disc slipped."""
 SNIFF_ABOVE_MM = 2.0
@@ -268,15 +267,11 @@ async def turn_disc(
     # The first millimeter slowly, so the disc is not torn off before the seal holds it.
     await machine.lower_nozzle(nozzle, height + LIFT_SLOW_MM, APPROACH_SPEED)
     await machine.raise_nozzles()
-    # Judged once the vacuum has settled: just after the lift it still reads the seal, and
-    # a disc that slipped off on the way up looked held until the reading fell.
-    reading = await machine.settled_vacuum(nozzle, 0.0, HELD_SETTLE_S)
-    if reading is not None and not machine.reads_held(nozzle, reading, level):
+    # Judged once the vacuum has settled: a disc that slipped off on the way up looked
+    # held until the reading fell.
+    held, reading = await machine.holds_after_lift(nozzle, HELD_SETTLE_S, level)
+    if not held:
         reading = None
-        held = False
-    else:
-        held = await machine.holds_part(nozzle, True, VACUUM_TIMEOUT_S, level)
-        reading = reading if held else None
     if held is False:
         await machine.suction(nozzle, False)
         raise NozzleOffsetError(

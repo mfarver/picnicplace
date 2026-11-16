@@ -211,10 +211,12 @@ effect at once. The reset button next to one forgets it.
       plate.
 - [ ] In the Machine workspace's **Single placement** panel, choose the nozzle and the
       feeder, then **Pick**. It feeds, finds the pocket, lowers onto the part, lifts, and
-      checks the vacuum says a part is held. The first pick from a feeder steps down
-      0.1 mm at a time with suction on until the vacuum seals on the part: its message
-      says where the part's top was, against the profile's height. Later picks from that
-      feeder go straight there, until one comes up empty or the part is changed.
+      checks the vacuum says a part is held once the reading has settled (just after the
+      lift it still reads the seal, even if the part fell off). The first pick from a
+      feeder steps down 0.1 mm at a time with suction on until the vacuum seals on the
+      part: its message says where the part's top was, against the profile's height.
+      Later picks from that feeder go straight there, until one comes up empty or the
+      part is changed.
 - [ ] **Align**: the part is shown to the bottom camera with its underside in focus, and
       the panel reports how far off center and how turned it sits on the nozzle.
 - [ ] Center the top camera on a spot on the board, click the crosshair button to use

@@ -221,6 +221,35 @@ def test_picking_from_an_empty_pocket_fails(lumen: TestClient) -> None:
         assert "already holds a part" in r.json()["detail"]
 
 
+def test_a_part_lost_on_the_way_up_is_a_mispick() -> None:
+    """N1 seals on its next two parts but drops each as it lifts. Just after the lift the
+    vacuum still reads the seal: each pick waits for it to settle, and fails, both going
+    straight to the part's known top and finding it by touch. The third pick holds."""
+    config = fast_config(machine={"profile": "lumenpnp-v4.1", "sim_drops_on_lift": {"N1": 2}})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        parts = feeders(client).sim_parts
+        assert parts is not None
+        # N2 finds the part's top by touch, so N1's first pick goes straight to it.
+        ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "1", "nozzle_id": "N2"})))
+        pick = {"slot_id": "1", "nozzle_id": "N1"}
+        op = s.wait(s.post("/api/v1/placement/pick", pick))
+        assert op["status"] == "failed", op
+        assert "N1 picked nothing from Slot 1" in op["error"]
+        assert "N1" not in parts.held
+
+        # The top is forgotten after a miss: found by touch again, and lost again.
+        op = s.wait(s.post("/api/v1/placement/pick", pick))
+        assert op["status"] == "failed", op
+        assert "N1 sealed at Z" in op["error"] and "lifted nothing" in op["error"]
+        assert "N1" not in parts.held
+        loads = client.get("/api/v1/placement").json()["loads"]
+        assert [load["nozzle"] for load in loads] == ["N2"]
+
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        assert sorted(parts.held) == ["N1", "N2"]
+
+
 def test_the_first_pick_finds_the_parts_top_by_touch() -> None:
     """The parts in the feeders sit 0.4 mm lower than the profile's pick height, too low
     for a pick there to reach them. The first pick from a feeder steps down onto its part

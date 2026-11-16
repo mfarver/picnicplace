@@ -15,7 +15,9 @@ Besides motion, it simulates the profile's I/O:
   that leaks or a weak pump.
 - A tip whose face comes within ``WEAK_RIM_MM`` of a paper disc's edge (``rim_at``, for
   the tip the operator says they fitted) seals on it, but drops it once lifted
-  ``SLIP_LIFT_MM``, as a real tip did with its rim near the edge.
+  ``SLIP_LIFT_MM``, as a real tip did with its rim near the edge. A nozzle may also be
+  set to drop the next parts it picks the same way (``drops_on_lift``), as a worn tip
+  or a part caught in its pocket would.
 - Each nozzle's tip may be longer than the profile's (``tip_errors``), and each kind of
   tip too (``tip_kind_errors``, by tip ID, for the tip the operator says they fitted): it
   reaches that much lower than its axis says, for touching parts and surfaces. The safe-Z sensor
@@ -116,6 +118,8 @@ class SimulatorDriver(MotionDriver):
         self.rim_at: Callable[[float, float], float | None] | None = None
         """How far a physical X/Y is from the edge of the paper disc under it, if any."""
         self._slips: dict[str, float] = {}
+        self.drops_on_lift: dict[str, int] = {}
+        """How many of its next picks each nozzle drops once lifted, by ID."""
         """Nozzles holding a disc they cannot lift, by ID: the tip's height as it sealed."""
         self.surface_at: Callable[[float, float], float | None] | None = None
         self.datum_seal_press = 0.0
@@ -342,10 +346,12 @@ class SimulatorDriver(MotionDriver):
                 if self.pick_source is None:
                     self._held[n.id] = True
                 else:
-                    weak = self._weak_rim(n)
+                    weak = self._weak_rim(n) or self.drops_on_lift.get(n.id, 0) > 0
                     self._held[n.id] = self.pick_source(n.id, *self._nozzle_at(n), self._tip(n))
                     if self._held[n.id] and weak:
                         self._slips[n.id] = self._tip(n)
+                        if self.drops_on_lift.get(n.id, 0) > 0:
+                            self.drops_on_lift[n.id] -= 1
             sealed = False
             if self._suction(n) and not self._held[n.id] and self.surface_at is not None:
                 x, y, _ = self._nozzle_at(n)

@@ -289,6 +289,14 @@ class MachineConfig(_Section):
             "part well past it."
         ),
     )
+    sim_drops_on_lift: dict[str, int] = Field(
+        default_factory=dict[str, int],
+        description=(
+            "Simulator only: how many of its next picks each nozzle drops as it lifts, by "
+            "nozzle ID: it seals on the part, then loses it on the way up, as a worn tip "
+            "might. A pick checks the part is still held once the vacuum has settled."
+        ),
+    )
     sim_datum_height_error: float = Field(
         default=0.0,
         description=(

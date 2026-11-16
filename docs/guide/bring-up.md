@@ -147,7 +147,10 @@ kept in `calibration.json` in the data directory, and the pages you confirm in
    eight angles. A tip's end a little off the axis it turns about (a slightly bent tip,
    or one not pushed on straight) draws a circle; how far off it is, is kept for that
    tip, and picks put the tip's end over the part. More than 0.15 mm off is flagged:
-   check the tip. A tip not measured is taken as having none.
+   check the tip. A tip not measured is taken as having none. From then on, **Change
+   tips** measures each tip you fit, and a tip pushed on again is measured again, since it
+   sits differently each time. After reseating a tip without changing it, click **Measure
+   runout** in this stop.
 3. **Discard and park.** Check the two spots on the map: jog the top camera over the
    discard tray and click **Set discard here**, and to a spot where the head can wait and
    click **Set park here**, if they are not right. Then **They are right**.

@@ -137,7 +137,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `machine/sniff.py` | Finding a height by touch: a nozzle steps down with suction on until the vacuum jumps from its open reading (the calibration disc, a board's fiducial, a part in its pocket) |
 | `machine/tips.py` | Which nozzle tip is fitted on each nozzle, kept in the data directory |
 | `machine/nozzle_offsets.py` | Calibrating the nozzle offsets: sniffing for the disc's top on the datum board, then turning the disc with each nozzle; each nozzle's vacuum levels measured on the way |
-| `machine/runout.py` | Nozzle runout: each tip turned over the bottom camera, and a circle fitted to its end, giving the axis and how far the end is off it; kept per tip, and used by picks |
+| `machine/runout.py` | Nozzle runout: each tip turned over the bottom camera, and a circle fitted to its end, giving the axis and how far the end is off it; kept per tip, forgotten when a tip is fitted again, measured after a tip change by hand (hooked up in `api/app.py`), and used by picks |
 | `machine/tip_heights.py` | A tip's height and vacuum levels measured on a paper square, for tips too big for the calibration disc |
 | `machine/driver.py` | The interface every motion driver implements |
 | `machine/simulator.py` | The simulated machine. Its errors are realistic (homing error, feeder steps, slot and board offsets, cameras and nozzles off the profile, tips longer than the profile's, the datum board's height, a tip too near the disc's edge that seals but drops it as it lifts), so calibration and vision have something to find. |

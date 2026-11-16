@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
 from tests.conftest import connect, fast_config
-from tests.test_calibration import lines
+from tests.test_calibration import asked, lines
 from tests.test_nozzle_tips import fit
 from tests.test_placement import feeders, ok, placed, set_up
 from tests.test_vision import home
@@ -83,6 +83,46 @@ def test_runout_is_measured_for_each_tip() -> None:
         runout = description(client)["N2"]["runout"]
         assert isinstance(runout, dict)
         assert (runout["x"], runout["y"]) == pytest.approx(RUNOUT["N2"], abs=0.02)
+
+
+def test_a_tip_change_measures_the_new_tips_runout() -> None:
+    """Changing tips by hand ends by turning each tip just fitted over the bottom camera,
+    once it is calibrated; a tip left as it was is not measured again. Saying a tip by
+    hand forgets the runout kept for it: pushed on again, it sits differently."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_nozzle_runout": RUNOUT},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        fit(s, "N1", "N08")
+        fit(s, "N2", "N14")
+        ok(s.wait(s.post("/api/v1/machine/bottom-camera", {})))
+        ok(s.wait(s.post("/api/v1/machine/nozzle-runout", {})))
+        right = description(client)["N2"]["runout"]
+
+        started = s.post("/api/v1/machine/tip-change", {})
+        assert started.status_code == 202, started.json()
+        request = asked(s)
+        tips = {"N1": "N045", "N2": "N14"}
+        r = s.post("/api/v1/machine/answer", {"request_id": request["id"], "tips": tips})
+        assert r.status_code == 200, r.json()
+        op = ok(s.wait(started))
+        assert "Left nozzle with the N045 tip: its end is 0.18" in op["message"], op
+        assert "Right nozzle with" not in op["message"], op
+        nozzles = description(client)
+        runout = nozzles["N1"]["runout"]
+        assert isinstance(runout, dict)
+        assert (runout["x"], runout["y"]) == pytest.approx(RUNOUT["N1"], abs=0.02)
+        assert nozzles["N2"]["runout"] == right
+        assert lines(client)["nozzle_runout"]["status"] == "done"
+        assert s.state()["z_safe"]
+
+        # Back to the N08 by hand: its old runout is forgotten, not brought back.
+        fit(s, "N1", "N08")
+        assert description(client)["N1"]["runout"] == {"x": 0.0, "y": 0.0}
+        line = lines(client)["nozzle_runout"]
+        assert line["status"] == "assumed" and "Left nozzle (N08)" in str(line["detail"])
 
 
 def test_picks_put_the_tips_end_over_the_part() -> None:

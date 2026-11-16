@@ -169,6 +169,11 @@ class MachineService:
         """What the machine has measured of itself, for the calibration checklist."""
         self.tips = TipStore(None)
         """Which tip is fitted on each nozzle."""
+        self.on_tip_changed: list[Callable[[str, str | None], None]] = []
+        """Called with a nozzle's ID and its new tip whenever the tip said changes."""
+        self.after_tip_change: Callable[[list[str]], Awaitable[str]] | None = None
+        """Run at the end of a tip change by hand, with the nozzles given a new tip; what
+        it returns is added to the operation's message."""
         self._design = profile.model_copy(deep=True)
         """The profile as loaded, before measurements took the place of its values."""
         self._profile = profile
@@ -569,6 +574,7 @@ class MachineService:
         self._check_homed()
 
         async def work() -> str:
+            before = {n.id: n.tip for n in nozzles}
             tips = await self.change_tips(
                 [TipChangeNozzle(nozzle_id=n.id, fitted=n.tip, choices=[]) for n in nozzles],
                 "Change nozzle tips",
@@ -590,7 +596,9 @@ class MachineService:
                 if new and line is not None
                 else ""
             )
-            return "Tips: " + "; ".join(said) + "." + then
+            changed = [i for i, t in tips.items() if t is not None and t != before.get(i)]
+            after = await self.after_tip_change(changed) if self.after_tip_change else ""
+            return "Tips: " + "; ".join(said) + "." + then + after
 
         return self._start_operation("tip_change", work)
 
@@ -1144,9 +1152,13 @@ class MachineService:
                 f"{nozzle.label} has suction on, so it may be holding a part: put the part "
                 "down or discard it, and turn suction off, before changing its tip"
             )
+        changed = tip_id != nozzle.tip
         self.tips.put(nozzle.id, tip_id)
         self._driver.tip_fitted(nozzle.id, tip_id)
         nozzle.tip = tip_id
+        if changed:
+            for listener in self.on_tip_changed:
+                listener(nozzle.id, tip_id)
         self.apply_calibration()
         self.recorder.event("nozzle_tip", nozzle=nozzle.id, tip=tip_id)
         return nozzle

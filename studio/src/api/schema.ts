@@ -3629,6 +3629,12 @@ export interface components {
              * @default 0
              */
             home_z: number;
+            /**
+             * Homes Z First
+             * @description The home commands raise or home Z before X and Y move, so homing with a nozzle low cannot drag it across the machine. Without this, a safe-Z input reading not safe refuses homing (the LumenPnP homes X and Y first).
+             * @default false
+             */
+            homes_z_first: boolean;
             /** Id */
             id: string;
             /** Inputs */

@@ -829,9 +829,14 @@ class MachineService:
                     f"Z lost steps at {time.strftime('%Y-%m-%d %H:%M')}: a crash may have moved it",
                 )
                 self._publish_state()
+                then = (
+                    "Home the machine again."
+                    if self._profile.homes_z_first
+                    else "Raise the nozzles by hand until it reads safe, then home again."
+                )
                 raise SafeZFaultError(
                     "the safe-Z sensor reads not safe although Z is at a safe height; "
-                    "Z may have lost steps. Home the machine again."
+                    f"Z may have lost steps. {then}"
                 )
             raise ZNotSafeError("raise Z to a safe height before moving X or Y")
         if not computed:
@@ -883,6 +888,7 @@ class MachineService:
 
     async def _home(self) -> str | None:
         await self._hold()
+        await self._check_home_from_safe_z()
         self._visually_homed = False
         await self._driver.home()
         self._check_home_z()
@@ -900,6 +906,21 @@ class MachineService:
             message = await self._visual_home()
         self._homed = True
         return message
+
+    async def _check_home_from_safe_z(self) -> None:
+        """Refuse homing while a safe-Z sensor says a nozzle is low, unless the machine
+        raises Z before X and Y move: homing would drag the nozzle across the machine
+        (spec section 5.2). Without a sensor, the operator is asked instead."""
+        sensor = self._profile.safe_z_input
+        if sensor is None or self._profile.homes_z_first:
+            return
+        await self._driver.refresh_input(sensor)
+        if not self.z_safe:
+            raise ZNotSafeError(
+                "the safe-Z sensor reads not safe: a nozzle is low, and homing would drag it "
+                "across the machine. Nothing moved. Raise the nozzles by hand until it reads "
+                "safe, then home"
+            )
 
     def _check_home_z(self) -> None:
         """Refuse a homing that leaves Z in another frame than the profile's: every height

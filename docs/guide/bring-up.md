@@ -26,8 +26,10 @@ with stock firmware; other machines need their own machine profile.
   hanging low can be dragged into feeders, boards or the bed as the head travels to its
   home switches. Every **Home** in the Studio, and the wizard's first **Start**, asks you
   to check first. A machine whose profile has a safe-Z sensor (`safe_z_input`) answers the
-  question itself: when it reads safe, homing goes ahead without asking. One is
-  recommended, never required.
+  question itself: when it reads safe, homing goes ahead without asking, and when it reads
+  not safe, the machine will not home until you raise the nozzles by hand (unless its
+  profile says it raises Z before X and Y move, `homes_z_first`). One is recommended,
+  never required.
 - **Z homes only at X/Y home.** The LumenPnP homes Z by lowering the left nozzle until the
   right one reaches the Z switch, and only at X/Y home is there open space under the
   nozzles; anywhere else, the left nozzle would hit the bed. The core homes only with the

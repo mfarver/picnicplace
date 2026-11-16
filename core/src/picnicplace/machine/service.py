@@ -710,11 +710,30 @@ class MachineService:
     async def move_nozzle_over(
         self, nozzle: Nozzle, x: float, y: float, angle: float | None = None
     ) -> None:
-        """Put a nozzle over a point (at safe Z), turned to ``angle`` if given."""
+        """Put a nozzle over a point (at safe Z), turned to ``angle`` if given (see
+        ``nozzle_turn``)."""
         target = {"X": x - nozzle.offset.x, "Y": y - nozzle.offset.y}
         if angle is not None:
-            target[nozzle.rotation_axis] = angle
+            target[nozzle.rotation_axis] = self.nozzle_turn(nozzle, angle)
         await self.move_axes(target)
+
+    def nozzle_turn(self, nozzle: Nozzle, angle: float) -> float:
+        """Where to turn a nozzle's rotation axis for ``angle``. A continuous axis (one
+        with a rotating coupling, such as the LumenPnP's) turns to it as given. An axis
+        with limits, on a head whose hoses or wires would twist, turns to the same angle
+        a whole number of turns away that lies within them, the nearest to where it is,
+        so it never winds up past them however many parts it turns."""
+        axis = self._axes[nozzle.rotation_axis]
+        if axis.continuous:
+            return angle
+        lowest = math.ceil((axis.min - angle) / 360.0 - 1e-9)
+        highest = math.floor((axis.max - angle) / 360.0 + 1e-9)
+        if lowest > highest:
+            return angle  # No turn of it fits: the limits refuse it, saying why.
+        now = self.nozzle_angle(nozzle)
+        return min(
+            (angle + 360.0 * k for k in range(lowest, highest + 1)), key=lambda a: abs(a - now)
+        )
 
     async def lower_nozzle(self, nozzle: Nozzle, height: float, speed: float | None = None) -> None:
         """Move a nozzle down (or up) to a height: 0 at the top, negative down. The

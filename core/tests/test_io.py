@@ -320,3 +320,30 @@ def test_firmware_halt_latches_estop() -> None:
         assert state["homed"] is False
         assert s.post("/api/v1/machine/reset").status_code == 200
         assert s.state()["estop"] is False
+
+
+def test_a_limited_rotation_axis_never_winds_up(client: TestClient) -> None:
+    """A rotation axis with limits (a head whose hoses or wires would twist) turns to an
+    angle within them, the nearest of its whole turns to where it is, so turning a part
+    the same way again and again never winds it up past them. A continuous axis turns to
+    the angle as given."""
+    with connect(client) as s:
+        s.home()
+        machine = client.app.state.ctx.machine  # type: ignore[attr-defined]
+        portal = client.portal
+        assert portal is not None
+        left, right = machine.profile.nozzles
+        angles: list[float] = []
+        for i in range(1, 13):
+            # Placing turns the shortest way from where the nozzle is: +90 each time.
+            portal.call(machine.move_nozzle_over, left, 50.0, 40.0, 90.0 * i)
+            angles.append(s.state()["position"]["A"])
+        assert all(-360 <= a <= 360 for a in angles), angles
+        assert angles[:4] == pytest.approx([90, 180, 270, 360])
+        assert angles[4] == pytest.approx(90)  # 450: one turn back, not past 360
+        # From -300, 300 is reached at -60 (a 240-degree turn), not at 300 (600).
+        portal.call(machine.move_nozzle_over, left, 50.0, 40.0, -300.0)
+        portal.call(machine.move_nozzle_over, left, 50.0, 40.0, 300.0)
+        assert s.state()["position"]["A"] == pytest.approx(-60)
+        portal.call(machine.move_nozzle_over, right, 50.0, 40.0, 1000.0)
+        assert s.state()["position"]["B"] == pytest.approx(1000)

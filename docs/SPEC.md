@@ -515,7 +515,11 @@ Requirements:
 A declarative, data-driven model, loaded from config:
 
 - **Axes** (X, Y, Z per nozzle or shared, rotation per nozzle), with limits, safe Z, and
-  backlash compensation settings.
+  backlash compensation settings. A rotation axis is either continuous (a rotating
+  coupling on the vacuum line, as on the LumenPnP) or kept within its limits: on a head
+  whose hoses or wires would twist, every turn goes to the same angle a whole number of
+  turns away that lies within the limits, the nearest to where the nozzle is, so it never
+  winds up however many parts it turns.
 - **Head** containing **nozzles**, **cameras** (top/"down-looking"), and **actuators**.
 - **Fixed cameras** (bottom/"up-looking").
 - **Nozzle tips** with sizes, vacuum thresholds, and tool-changer positions. Today the

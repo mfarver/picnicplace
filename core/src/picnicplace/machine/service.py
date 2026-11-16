@@ -24,7 +24,12 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
-from picnicplace.calibration import CRASH_STALES, CalibrationStore, apply_measurements
+from picnicplace.calibration import (
+    CRASH_STALES,
+    CalibrationStore,
+    apply_measurements,
+    datum_key,
+)
 from picnicplace.camera.source import Frame
 from picnicplace.camera.synthetic import BoardScene, SceneState, TapeScene
 from picnicplace.events import EventBus
@@ -570,7 +575,19 @@ class MachineService:
                 "calibrated with it.",
             )
             said = [f"{self.nozzle(i).label}: {t or 'none'}" for i, t in tips.items()]
-            return "Tips: " + "; ".join(said) + "."
+            line = self.calibration.get().lines.get("nozzle_offsets")
+            new = [
+                t
+                for i, t in tips.items()
+                if t is not None and (line is None or datum_key(i, t) not in line.values)
+            ]
+            then = (
+                f" Not measured yet: {', '.join(dict.fromkeys(new))}. Lay a square of plain "
+                "paper on the datum board and measure their heights (the paper stop's Start)."
+                if new and line is not None
+                else ""
+            )
+            return "Tips: " + "; ".join(said) + "." + then
 
         return self._start_operation("tip_change", work)
 

@@ -7605,6 +7605,27 @@
         "title": "TipChangeRequest",
         "type": "object"
       },
+      "TipHeightsRequest": {
+        "properties": {
+          "nozzle_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The nozzles to measure. Empty: those whose tip has no height yet.",
+            "title": "Nozzle Ids"
+          }
+        },
+        "title": "TipHeightsRequest",
+        "type": "object"
+      },
       "VacuumLevels": {
         "additionalProperties": false,
         "description": "What a nozzle's vacuum sensor reads, in the sensor's units, measured while\ncalibrating the nozzle offsets (spec \u00a77.7, line 9).",
@@ -13289,6 +13310,83 @@
           }
         ],
         "summary": "Tip Change",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/tip-heights": {
+      "post": {
+        "description": "Measure the height and vacuum levels of the tip on some nozzles, with a square of\nplain paper on the datum board: the top camera finds the paper, then each nozzle\nsniffs it for its height, and picks it up and sets it down to read its vacuum. For a\ntip too big for the calibration disc, once the nozzle offsets are measured with a\nsmall one. Kept and used from then on.",
+        "operationId": "measure_tip_heights_api_v1_machine_tip_heights_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TipHeightsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Measure Tip Heights",
         "tags": [
           "machine"
         ]

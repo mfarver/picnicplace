@@ -430,8 +430,11 @@ def build_checklist(
         ]
         if missing:
             lines[-1].status = "stale"
-            lines[-1].stale = "not measured with the tip fitted on " + ", ".join(
-                f"{n.label} ({n.tip or 'none said'})" for n in missing
+            lines[-1].stale = (
+                "not measured with the tip fitted on "
+                + ", ".join(f"{n.label} ({n.tip or 'none said'})" for n in missing)
+                + ": lay a square of plain paper on the datum board and measure the tip's "
+                "height (the paper stop's Start)"
             )
 
     # 6. Nozzle offsets from the top camera.

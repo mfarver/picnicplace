@@ -133,6 +133,13 @@ kept in `calibration.json` in the data directory, and the pages you confirm in
    heights from then on, and its vacuum readings (open, sealed, holding the disc) set its
    own pick threshold. Each tip's heights and vacuum levels are kept, and come back when
    that tip is fitted again; a tip not measured yet marks this stop out of date.
+
+   **Bigger tips**, such as the N24, N40 and N75 you place with, are too big for the disc.
+   Fit one (**Change tips**, next to Home, brings the head to the front first), lay a
+   square of plain paper, 25 mm or so and not a sticky note, flat on the datum board, and
+   click this stop's **Start** again. The top camera finds the paper, and each new tip
+   finds its height on it and picks it up and sets it down to measure its vacuum. Where
+   the nozzle is, measured with the small tip, is kept.
 3. **Discard and park.** Check the two spots on the map: jog the top camera over the
    discard tray and click **Set discard here**, and to a spot where the head can wait and
    click **Set park here**, if they are not right. Then **They are right**.

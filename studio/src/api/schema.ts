@@ -1410,6 +1410,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/tip-heights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Measure Tip Heights
+         * @description Measure the height and vacuum levels of the tip on some nozzles, with a square of
+         *     plain paper on the datum board: the top camera finds the paper, then each nozzle
+         *     sniffs it for its height, and picks it up and sets it down to read its vacuum. For a
+         *     tip too big for the calibration disc, once the nozzle offsets are measured with a
+         *     small one. Kept and used from then on.
+         */
+        post: operations["measure_tip_heights_api_v1_machine_tip_heights_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/visual-home": {
         parameters: {
             query?: never;
@@ -5583,6 +5607,14 @@ export interface components {
              */
             nozzle_ids?: string[] | null;
         };
+        /** TipHeightsRequest */
+        TipHeightsRequest: {
+            /**
+             * Nozzle Ids
+             * @description The nozzles to measure. Empty: those whose tip has no height yet.
+             */
+            nozzle_ids?: string[] | null;
+        };
         /**
          * VacuumLevels
          * @description What a nozzle's vacuum sensor reads, in the sensor's units, measured while
@@ -8999,6 +9031,51 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TipChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    measure_tip_heights_api_v1_machine_tip_heights_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TipHeightsRequest"];
             };
         };
         responses: {

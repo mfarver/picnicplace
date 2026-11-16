@@ -30,12 +30,15 @@ export const STOP_TEXT: Record<0 | 1 | 2 | 3, StopText> = {
   2: {
     title: "Paper disc on the datum board",
     ask:
-      "Punch a small paper disc (a hole punch is right) and lay it flat on the datum board, " +
-      "clear of the center dot.",
+      "Fit a small tip on each nozzle (a different one on each is fine: the N045 and the " +
+      "N08, say). Punch a small paper disc (a hole punch is right) and lay it flat on the " +
+      "datum board, clear of the center dot.",
     runs:
       "The top camera finds the disc. Each nozzle touches the datum board to find its " +
       "height, then picks up the disc, turns it and sets it down three times, measuring its " +
-      "vacuum on the way. About a minute per nozzle.",
+      "vacuum on the way. About a minute per nozzle. For a tip fitted since, too big for " +
+      "the disc, lay a square of plain paper (25 mm or so) on the datum board instead: " +
+      "only the new tip's height and vacuum are measured.",
   },
   3: {
     title: "Discard and park",

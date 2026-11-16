@@ -5,7 +5,13 @@ import { publishDescription, useDescription } from "./useDescription";
 import type { WizardState } from "./types";
 
 /** Operations whose results take the place of the profile's values. */
-const MEASURING = new Set(["camera_scale", "bottom_camera", "nozzle_offsets"]);
+const MEASURING = new Set([
+  "camera_scale",
+  "bottom_camera",
+  "nozzle_offsets",
+  "tip_heights",
+  "tip_change",
+]);
 
 /** Asks the Machine workspace to open the setup wizard, at a page if one is given. */
 export const OPEN_WIZARD = "picnicplace:open-wizard";

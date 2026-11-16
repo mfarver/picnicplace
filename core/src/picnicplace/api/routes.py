@@ -14,6 +14,7 @@ from picnicplace.machine.errors import NotHomedError
 from picnicplace.machine.local import LocalProfileState, LocationKind
 from picnicplace.machine.nozzle_offsets import start_nozzle_offset_calibration
 from picnicplace.machine.profile import KeepOut, MachineProfile, Point
+from picnicplace.machine.tip_heights import start_tip_heights
 from picnicplace.schemas import (
     PROTOCOL_VERSION,
     ErrorResponse,
@@ -291,6 +292,29 @@ async def calibrate_nozzle_offsets(ctx: Context, body: NozzleOffsetsRequest) -> 
     return start_nozzle_offset_calibration(
         ctx.machine, body.nozzle_ids, body.disc_diameter, body.disc_thickness
     )
+
+
+class TipHeightsRequest(WireModel):
+    nozzle_ids: list[str] | None = Field(
+        default=None,
+        description="The nozzles to measure. Empty: those whose tip has no height yet.",
+    )
+
+
+@router.post(
+    "/machine/tip-heights",
+    tags=["machine"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def measure_tip_heights(ctx: Context, body: TipHeightsRequest) -> Operation:
+    """Measure the height and vacuum levels of the tip on some nozzles, with a square of
+    plain paper on the datum board: the top camera finds the paper, then each nozzle
+    sniffs it for its height, and picks it up and sets it down to read its vacuum. For a
+    tip too big for the calibration disc, once the nozzle offsets are measured with a
+    small one. Kept and used from then on."""
+    return start_tip_heights(ctx.machine, body.nozzle_ids)
 
 
 @router.post(

@@ -107,6 +107,7 @@ async def sniff_disc(
     disc: Point,
     thickness: float,
     measure: VacuumMeasure,
+    what: str = "the disc",
 ) -> float:
     """Step the nozzle down onto the disc lying on the datum board, with suction on, until
     the vacuum seals: the board's top under it, as this nozzle reaches it (the disc's top
@@ -123,7 +124,7 @@ async def sniff_disc(
             expected,
             SNIFF_ABOVE_MM,
             SNIFF_BELOW_MM,
-            "the disc",
+            what,
             angle=0.0,
             measure=measure,
         )
@@ -131,13 +132,19 @@ async def sniff_disc(
         raise NozzleOffsetError(str(e)) from e
     if z is None:
         raise NozzleOffsetError(
-            f"{floor_message(nozzle, 'the disc', expected, SNIFF_BELOW_MM)}: check the tip "
+            f"{floor_message(nozzle, what, expected, SNIFF_BELOW_MM)}: check the tip "
             "seals (a tip that leaks never does), and the datum board's height in the profile"
         )
     return z - thickness
 
 
-def check_seal(nozzle: Nozzle, measure: VacuumMeasure, held: float | None, z: float) -> None:
+def check_seal(
+    nozzle: Nozzle,
+    measure: VacuumMeasure,
+    held: float | None,
+    z: float,
+    what: str = "the disc",
+) -> None:
     """Refuse a seal on the disc much weaker than holding the disc: a leak pressed shut as
     the tip went on down, not a touch, and its height would be too low."""
     if measure.open is None or measure.sealed is None or held is None:
@@ -148,10 +155,10 @@ def check_seal(nozzle: Nozzle, measure: VacuumMeasure, held: float | None, z: fl
     rise = abs(measure.sealed - measure.open) / holding
     if rise < SEAL_MIN_FRACTION:
         raise NozzleOffsetError(
-            f"{nozzle.label} sealed only weakly on the disc at Z {z:.2f} (the vacuum rose "
-            f"{rise:.0%} as far as holding the disc, less than {SEAL_MIN_FRACTION:.0%}): a "
+            f"{nozzle.label} sealed only weakly on {what} at Z {z:.2f} (the vacuum rose "
+            f"{rise:.0%} as far as holding {what}, less than {SEAL_MIN_FRACTION:.0%}): a "
             "leak pressed shut, not a touch, so the height would be too low. Check the tip "
-            "is pushed fully on, and that the disc lies flat under it"
+            f"is pushed fully on, and that {what} lies flat under it"
         )
 
 
@@ -237,10 +244,11 @@ async def turn_disc(
     turn: float,
     height: float,
     level: float | None = None,
+    what: str = "the disc",
 ) -> float | None:
-    """Pick the disc up at a point, turn it, and set it down there again. ``level``: the
-    vacuum reading that means it is held, in place of the nozzle's threshold. Returns the
-    reading while it was held."""
+    """Pick the disc (or ``what``) up at a point, turn it, and set it down there again.
+    ``level``: the vacuum reading that means it is held, in place of the nozzle's
+    threshold. Returns the reading while it was held."""
     await machine.move_nozzle_over(nozzle, at.x, at.y, 0.0)
     # Suction on before going down, so it is already pulling when the tip arrives, and
     # the disc lifted only once the vacuum says it is held: a pump started with the tip
@@ -252,9 +260,9 @@ async def turn_disc(
         await machine.suction(nozzle, False)
         await machine.raise_nozzles()
         raise NozzleOffsetError(
-            f"{nozzle.label} did not seal on the disc at height {height:g}: check the disc "
-            "lies flat (a punched disc often curls at its edge), and that the nozzle tip is "
-            "fitted and clear"
+            f"{nozzle.label} did not seal on {what} at height {height:g}: check it lies flat "
+            "(a punched disc often curls at its edge), and that the nozzle tip is fitted and "
+            "clear"
         )
     await asyncio.sleep(PICK_DWELL_S)
     # The first millimeter slowly, so the disc is not torn off before the seal holds it.
@@ -265,8 +273,9 @@ async def turn_disc(
     if held is False:
         await machine.suction(nozzle, False)
         raise NozzleOffsetError(
-            f"{nozzle.label} sealed on the disc at height {height:g} but dropped it as it "
-            "lifted: check the disc lies flat, and that the nozzle tip is fitted and clear"
+            f"{nozzle.label} sealed on {what} at height {height:g} but dropped it as it "
+            "lifted: check it lies flat and is loose (not stuck down), and that the nozzle "
+            "tip is fitted and clear"
         )
     await machine.move_nozzle_over(nozzle, at.x, at.y, turn)
     await machine.lower_nozzle(nozzle, height)
@@ -289,7 +298,11 @@ def reading(value: float | None) -> str:
 
 
 def vacuum_levels(
-    machine: MachineService, nozzle: Nozzle, measure: VacuumMeasure, held: float | None
+    machine: MachineService,
+    nozzle: Nozzle,
+    measure: VacuumMeasure,
+    held: float | None,
+    what: str = "the disc",
 ) -> VacuumLevels | None:
     """A nozzle's vacuum levels from its readings open, sealed, and holding the disc;
     None if its sensor gave no readings. Raises if it cannot tell a part held from none."""
@@ -303,7 +316,7 @@ def vacuum_levels(
     if sensor.range.fraction(nearer) - sensor.range.fraction(o) < VACUUM_GAP_MIN:
         raise NozzleOffsetError(
             f"{nozzle.label}'s vacuum barely changes between open ({reading(o)}) and holding "
-            f"the disc ({reading(h)}): it cannot tell a part held from none. Check the tip "
+            f"{what} ({reading(h)}): it cannot tell a part held from none. Check the tip "
             "seals, the tubing for leaks, and the pump"
         )
     return VacuumLevels(open=o, sealed=s, held=h, threshold=o + (nearer - o) / 2)
@@ -386,7 +399,7 @@ DISC_RIM_MM = 1.0
 across) on a 4.9 mm disc sealed weakly and dropped it, its rim half over the disc's edge."""
 
 
-def _search_area(machine: MachineService) -> tuple[float, float, float, float]:
+def search_area(machine: MachineService) -> tuple[float, float, float, float]:
     """Where to look for the disc: the datum board's keep-out, or around its dot."""
     keep = next((k for k in machine.profile.keep_outs if k.id == "datum"), None)
     if keep is not None:
@@ -422,7 +435,7 @@ async def search_disc(machine: MachineService, diameter: float | None) -> tuple[
     dot = _datum(machine).position
     low, high = (diameter * 0.7, diameter * 1.4) if diameter else DISC_DIAMETER_MM
     fov = (camera.field_of_view.x, camera.field_of_view.y)
-    spots = search_spots(_search_area(machine), fov, min(high, DISC_FIT_MM))
+    spots = search_spots(search_area(machine), fov, min(high, DISC_FIT_MM))
     spots.sort(key=lambda p: math.hypot(p.x - dot.x, p.y - dot.y))
     marks: list[RoundMark] = []
     for spot in spots:

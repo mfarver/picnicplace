@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Literal
 from picnicplace.machine.bottom_camera import bottom_camera_work, identify_tips
 from picnicplace.machine.errors import FeederError, InvalidTargetError, StoppedError
 from picnicplace.machine.nozzle_offsets import nozzle_offsets_work
+from picnicplace.machine.tip_heights import measured_offset, tip_heights_work, tips_to_measure
 from picnicplace.schemas import Operation
 from picnicplace.wizard import RunStep, WizardRun
 
@@ -119,7 +120,18 @@ def _stop1(
     ]
 
 
-def _stop2(machine: "MachineService") -> list[Step]:
+def _stop2(machine: "MachineService", redo: bool) -> list[Step]:
+    # Offsets measured, and up to date but for a tip fitted since: only its height is new,
+    # measured on a paper square (a tip too big for the disc needs it).
+    line = machine.calibration.get().lines.get("nozzle_offsets")
+    offsets_kept = (
+        line is not None
+        and line.stale is None
+        and all(measured_offset(machine, n) for n in machine.profile.nozzles)
+    )
+    if not redo and offsets_kept and tips_to_measure(machine):
+        work = tip_heights_work(machine, None)
+        return [("nozzle_offsets", "Find the paper, and measure each new tip's height", work)]
     work = nozzle_offsets_work(machine, None, None, None, search=True)
     return [("nozzle_offsets", "Find the disc, and measure each nozzle", work)]
 
@@ -135,7 +147,7 @@ def start_stop(
     still good are skipped, unless ``redo`` (Run again)."""
     if stop == 2 and not machine.homed:
         raise InvalidTargetError("home the machine first (the first stop does)")
-    steps = _stop1(wizard, machine, feeders, redo) if stop == 1 else _stop2(machine)
+    steps = _stop1(wizard, machine, feeders, redo) if stop == 1 else _stop2(machine, redo)
     run = WizardRun(
         stop=stop,
         steps=[

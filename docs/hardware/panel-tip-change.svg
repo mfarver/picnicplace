@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 600" width="1024" height="600" role="img" aria-label="Control panel, asking for a tip change: the head is at the front, and the operator says which tips they fitted">
+<title>Control panel, asking for a tip change: the head is at the front, and the operator says which tips they fitted</title>
+<rect width="1024" height="600" fill="#121418"/>
+<rect x="0" y="0" width="1024" height="56" rx="0" fill="#1a1d23"/>
+<line x1="0" y1="56" x2="1024" y2="56" stroke="#2c313a"/>
+<text x="16" y="36" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="700" fill="#e7e9ee" text-anchor="start">PicnicPlace</text>
+<text x="140" y="36" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="500" fill="#8b93a1" text-anchor="start">LumenPnP v4</text>
+<rect x="260.0" y="12" width="118.8" height="32" rx="16" fill="#173a2d"/>
+<circle cx="275.0" cy="28" r="5" fill="#2fbf86"/>
+<text x="287.0" y="34" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="500" fill="#e7e9ee" text-anchor="start">Connected</text>
+<rect x="386.8" y="12" width="82.0" height="32" rx="16" fill="#173a2d"/>
+<circle cx="401.8" cy="28" r="5" fill="#2fbf86"/>
+<text x="413.8" y="34" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="500" fill="#e7e9ee" text-anchor="start">Homed</text>
+<rect x="476.8" y="12" width="192.39999999999998" height="32" rx="16" fill="#173a2d"/>
+<circle cx="491.8" cy="28" r="5" fill="#2fbf86"/>
+<text x="503.8" y="34" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="500" fill="#e7e9ee" text-anchor="start">Panel has control</text>
+<text x="1008" y="36" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="700" fill="#f2b84b" text-anchor="end">Waiting for you</text>
+<rect x="16" y="72" width="314" height="408" rx="10" fill="#1a1d23" stroke="#2c313a" stroke-width="1.5"/>
+<text x="36" y="104" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600" fill="#8b93a1" text-anchor="start">POSITION  (mm)</text>
+<text x="36" y="164" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="30" font-weight="600" fill="#8b93a1" text-anchor="start">X</text>
+<text x="310" y="164" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" font-size="44" font-weight="600" fill="#e7e9ee" text-anchor="end">  216.50</text>
+<text x="36" y="234" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="30" font-weight="600" fill="#8b93a1" text-anchor="start">Y</text>
+<text x="310" y="234" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" font-size="44" font-weight="600" fill="#e7e9ee" text-anchor="end">   44.45</text>
+<text x="36" y="304" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="30" font-weight="600" fill="#8b93a1" text-anchor="start">Z</text>
+<text x="310" y="304" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" font-size="44" font-weight="600" fill="#e7e9ee" text-anchor="end">    0.00</text>
+<line x1="36" y1="358" x2="310" y2="358" stroke="#2c313a"/>
+<text x="36" y="394" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="17" font-weight="500" fill="#8b93a1" text-anchor="start">Left C</text>
+<text x="310" y="394" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" font-size="22" font-weight="500" fill="#e7e9ee" text-anchor="end">    0.0°</text>
+<text x="36" y="426" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="17" font-weight="500" fill="#8b93a1" text-anchor="start">Right C</text>
+<text x="310" y="426" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" font-size="22" font-weight="500" fill="#e7e9ee" text-anchor="end">    0.0°</text>
+<text x="36" y="462" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="500" fill="#8b93a1" text-anchor="start">Tips: left N24, right N08</text>
+<rect x="346" y="72" width="662" height="408" rx="10" fill="#1a1d23" stroke="#f2b84b" stroke-width="2"/>
+<text x="370" y="112" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="700" fill="#e7e9ee" text-anchor="start">Change the left nozzle's tip</text>
+<text x="370" y="144" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="400" fill="#8b93a1" text-anchor="start">The N24 tip is too big for the paper disc. The head is at</text>
+<text x="370" y="166" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="400" fill="#8b93a1" text-anchor="start">the front: fit a smaller tip, then say which one.</text>
+<text x="370" y="212" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600" fill="#8b93a1" text-anchor="start">LEFT NOZZLE  ·  now N24</text>
+<rect x="370" y="228" width="136" height="72" rx="12" fill="#173a2d" stroke="#2fbf86" stroke-width="2"/>
+<text x="438" y="266" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="700" fill="#e7e9ee" text-anchor="middle">N045</text>
+<text x="438" y="288" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="500" fill="#8b93a1" text-anchor="middle">0.45 mm</text>
+<rect x="520" y="228" width="136" height="72" rx="12" fill="#22262e" stroke="#3a404b" stroke-width="2"/>
+<text x="588" y="266" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="700" fill="#e7e9ee" text-anchor="middle">N08</text>
+<text x="588" y="288" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="500" fill="#8b93a1" text-anchor="middle">0.8 mm</text>
+<rect x="670" y="228" width="136" height="72" rx="12" fill="#22262e" stroke="#3a404b" stroke-width="2"/>
+<text x="738" y="266" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="700" fill="#e7e9ee" text-anchor="middle">N14</text>
+<text x="738" y="288" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="500" fill="#8b93a1" text-anchor="middle">1.4 mm</text>
+<text x="370" y="342" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600" fill="#8b93a1" text-anchor="start">RIGHT NOZZLE  ·  N08, keep it</text>
+<text x="370" y="372" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="400" fill="#8b93a1" text-anchor="start">The N08 is already fitted, and fits the disc.</text>
+<rect x="0" y="496" width="1024" height="104" rx="0" fill="#1a1d23"/>
+<line x1="0" y1="496" x2="1024" y2="496" stroke="#2c313a"/>
+<rect x="16" y="508" width="660" height="76" rx="12" fill="#2fbf86"/>
+<text x="346.0" y="542.0" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="26" font-weight="700" fill="#08130e" text-anchor="middle">Fitted</text>
+<text x="346.0" y="568.0" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="500" fill="#08130e" text-anchor="middle">the left nozzle has N045</text>
+<rect x="692" y="508" width="316" height="76" rx="12" fill="#3a1f23" stroke="#ef4d55" stroke-width="2"/>
+<text x="850.0" y="555.0" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="26" font-weight="700" fill="#ef4d55" text-anchor="middle">Stop</text>
+</svg>

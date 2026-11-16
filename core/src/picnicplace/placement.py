@@ -463,10 +463,9 @@ class PlacementService:
         await self._machine.suction(nozzle, True)
         await asyncio.sleep(PICK_DWELL_S)
         await self._machine.raise_nozzles()
-        held = await self._machine.holds_part(nozzle, True, VACUUM_TIMEOUT_S)
+        held, reading = await self._machine.holds_after_lift(nozzle, VACUUM_TIMEOUT_S)
         if held is False:
             await self._machine.suction(nozzle, False)
-            reading = self._machine.vacuum_reading(nozzle)
             raise MispickError(
                 f"{nozzle.id} picked nothing from {label}: the vacuum reads "
                 f"{reading:g}, not a part. Check the pocket and the pick height."
@@ -496,7 +495,7 @@ class PlacementService:
                 f"{floor_message(nozzle, f'a part at {label}', expected, PART_SNIFF_BELOW_MM)}: "
                 "check there is a part in the pocket, and the pick height"
             )
-        held = await self._machine.holds_part(nozzle, True, VACUUM_TIMEOUT_S)
+        held, _ = await self._machine.holds_after_lift(nozzle, VACUUM_TIMEOUT_S)
         if held is False:
             await self._machine.suction(nozzle, False)
             raise MispickError(

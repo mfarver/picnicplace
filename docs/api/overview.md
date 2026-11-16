@@ -41,7 +41,7 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/machine/visual-home` | Center the top camera on the homing fiducial and correct the position |
 | `POST /api/v1/machine/camera-scale` | Measure the top camera's scale, kept and used by vision |
 | `POST /api/v1/machine/bottom-camera` | Calibrate the bottom camera with an empty nozzle tip: its place, focus height, and scale, kept and used |
-| `POST /api/v1/machine/nozzle-offsets` | Calibrate the nozzle offsets with a small disc on the datum board, the top camera centered on it: each nozzle sniffs for the board's height, then turns the disc. Its vacuum levels (open, sealed, holding the disc) are measured on the way, setting its own pick threshold. Kept and used |
+| `POST /api/v1/machine/nozzle-offsets` | Calibrate the nozzle offsets with a small disc on the datum board, the top camera centered on it: each nozzle sniffs for the disc's top (the board's height is that less its thickness), then turns the disc. Its vacuum levels (open, sealed, holding the disc) are measured on the way, setting its own pick threshold. A tip too big to seal on the disc is changed first: the machine asks for one, with the head at the front. Kept and used |
 | `PUT /api/v1/machine/nozzles/{nozzle_id}/tip` | Say which of the profile's nozzle tips is now fitted on a nozzle (`tip_id`, or null), after changing it by hand. Kept; the nozzle's Z offset and vacuum levels become those measured with that tip. Refused while the nozzle has suction on. Returns the machine profile |
 | `GET /api/v1/calibration` | The calibration checklist: every calibration the machine needs, in order, each done (with its value and when), to do, out of date (and why), or from the profile |
 | `GET /api/v1/wizard` | The setup wizard: every page in order with where it stands, the machine's stage (`limited`, `out_of_date`, `calibrated`), the page Continue opens, and whether the limits are enforced. Until calibrated, picks, placements and runs are refused with code `calibration_required` |
@@ -54,6 +54,9 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/setup/restart` | Restart the core to use the wizard's choices (when `picnicd` started it). Needs control |
 | `POST /api/v1/machine/pause` | Hold the machine before its next move or feeder advance (the move under way finishes); nothing new starts; any client may call it |
 | `POST /api/v1/machine/resume` | Carry on after a pause |
+| `POST /api/v1/machine/tip-heights` | Measure the height and vacuum levels of the tip on some nozzles (`nozzle_ids`: those whose tip has none yet, unless given) on a square of plain paper on the datum board, found by the top camera. For tips too big for the calibration disc, once the nozzle offsets are measured. Kept and used. Needs control |
+| `POST /api/v1/machine/tip-change` | Raise the nozzles, bring the head to the front and center, and ask the operator (the machine state's `request`) to change tips by hand and say which tip is on each nozzle (`nozzle_ids`: all, unless given). Needs control |
+| `POST /api/v1/machine/answer` | Answer what the machine is asking (the machine state's `request`, by its `id`): for a tip change, the tip now on each nozzle listed (`tips`, by nozzle ID; null for none). The running operation carries on; Stop ends it instead. Needs control |
 | `POST /api/v1/machine/stop` | End the running operation before its next move (resuming if paused); the machine stays homed; any client may call it |
 | `POST /api/v1/machine/estop` | The firmware's halt (`M112`); Marlin then needs a power cycle, so the Studio pauses instead; any client may call it |
 | `POST /api/v1/machine/reset` | Clear a latched emergency stop |

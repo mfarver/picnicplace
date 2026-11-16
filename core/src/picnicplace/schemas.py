@@ -22,6 +22,42 @@ class WireModel(BaseModel):
 # --- State -------------------------------------------------------------------------------
 
 
+class TipChangeNozzle(WireModel):
+    nozzle_id: str
+    fitted: str | None = Field(description="The tip said to be on it now, if any.")
+    choices: list[str] = Field(
+        description="Tips that would do here, smallest first. Empty: any, or none."
+    )
+
+
+class OperatorRequest(WireModel):
+    """The machine is waiting for the operator to do something only a person can (spec
+    section 8.2, "When the machine needs help, it asks"), then answer. Stop ends the
+    operation instead."""
+
+    id: str
+    kind: Literal["tip_change"] = Field(
+        description=(
+            "tip_change: the head is at the front, nozzles up; change the tips on the "
+            "nozzles listed, then say which tip is on each."
+        )
+    )
+    title: str = Field(description="What is needed, in a few words.")
+    message: str = Field(description="What to do and why, in a sentence or two.")
+    after: str = Field(description="What the machine does once answered.")
+    nozzles: list[TipChangeNozzle] = Field(
+        default_factory=list[TipChangeNozzle], description="tip_change: the nozzles to change."
+    )
+
+
+class OperatorAnswer(WireModel):
+    request_id: str = Field(description="The request being answered.")
+    tips: dict[str, str | None] = Field(
+        default_factory=dict[str, str | None],
+        description="tip_change: the tip now on each nozzle listed, by nozzle ID (null: none).",
+    )
+
+
 class MachineState(WireModel):
     driver: str
     firmware: str | None = Field(description="Firmware name and version, when known.")
@@ -58,6 +94,10 @@ class MachineState(WireModel):
             "Every nozzle is at safe travel height. From the safe-Z input when the profile "
             "has one, otherwise computed from the Z position."
         )
+    )
+    request: OperatorRequest | None = Field(
+        default=None,
+        description="What the running operation is waiting for the operator to do, if anything.",
     )
 
 

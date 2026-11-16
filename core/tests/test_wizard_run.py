@@ -28,17 +28,18 @@ def pages(client: TestClient) -> dict[str, dict[str, Any]]:
 
 
 def test_three_stops_calibrate_the_machine(tmp_path: Path) -> None:
-    """Not homed, with an N24 on the left nozzle and an N08 on the right (none said), a
-    bottom camera turned a quarter turn that sees 3.7 times the profile's view, and a paper
-    disc lying on the datum board: stop 1 homes, homes visually, measures both cameras and
-    names both tips; stop 2 finds the disc and measures each nozzle; confirming the
-    discard and park spots finishes it."""
+    """Not homed, with an N045 on the left nozzle and an N08 on the right (none said; a
+    LumenPnP comes with one tip of each size), a bottom camera turned a quarter turn that
+    sees 3.7 times the profile's view, and a paper disc lying on the datum board: stop 1
+    homes, homes visually, measures both cameras and names the N08 (the N045's end is too
+    few pixels across to name, so the owner says it); stop 2 finds the disc
+    and measures each nozzle; confirming the discard and park spots finishes it."""
     config = fast_config(
         machine={
             "profile": "lumenpnp-v4.1",
             "sim_calibration_limits": True,
             "sim_home_error": (0.3, -0.2),
-            "sim_tips": {"N1": "N24", "N2": "N08"},
+            "sim_tips": {"N1": "N045", "N2": "N08"},
             "sim_bottom_camera_scale": 3.7,
             "sim_bottom_camera_turn": 90.0,
             "sim_calibration_disc": (FIDUCIAL[0] + 14.0, FIDUCIAL[1] + 6.0),
@@ -67,9 +68,13 @@ def test_three_stops_calibrate_the_machine(tmp_path: Path) -> None:
             "done",
         ], steps
         assert steps["bottom_camera"]["status"] == "done", steps
-        assert "N24" in str(steps["tips"]["message"]) and "N08" in str(steps["tips"]["message"])
+        said = str(steps["tips"]["message"])
+        # Not named wrong: said to be like none of the tips, or too like an N08 to tell.
+        assert "Left nozzle: its end looked" in said and "say which it is" in said, said
+        assert "Right nozzle: N08" in said, said
         nozzles = {n["id"]: n for n in client.get("/api/v1/machine/description").json()["nozzles"]}
-        assert (nozzles["N1"]["tip"], nozzles["N2"]["tip"]) == ("N24", "N08")
+        assert (nozzles["N1"]["tip"], nozzles["N2"]["tip"]) == (None, "N08")
+        assert s.put("/api/v1/machine/nozzles/N1/tip", {"tip_id": "N045"}).status_code == 200
         status = {p["id"]: p["status"] for p in wizard(client)["pages"]}
         for page in ("first_motion", "bed", "visual_homing", "top_camera_scale"):
             assert status[page] == "done", (page, status)

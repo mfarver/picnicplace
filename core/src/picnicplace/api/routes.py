@@ -14,6 +14,7 @@ from picnicplace.machine.errors import NotHomedError
 from picnicplace.machine.local import LocalProfileState, LocationKind
 from picnicplace.machine.nozzle_offsets import start_nozzle_offset_calibration
 from picnicplace.machine.profile import KeepOut, MachineProfile, Point
+from picnicplace.machine.tip_heights import start_tip_heights
 from picnicplace.schemas import (
     PROTOCOL_VERSION,
     ErrorResponse,
@@ -24,6 +25,7 @@ from picnicplace.schemas import (
     MachineState,
     MoveRequest,
     Operation,
+    OperatorAnswer,
     OutputRequest,
     PresenceState,
     WireModel,
@@ -292,6 +294,29 @@ async def calibrate_nozzle_offsets(ctx: Context, body: NozzleOffsetsRequest) -> 
     )
 
 
+class TipHeightsRequest(WireModel):
+    nozzle_ids: list[str] | None = Field(
+        default=None,
+        description="The nozzles to measure. Empty: those whose tip has no height yet.",
+    )
+
+
+@router.post(
+    "/machine/tip-heights",
+    tags=["machine"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def measure_tip_heights(ctx: Context, body: TipHeightsRequest) -> Operation:
+    """Measure the height and vacuum levels of the tip on some nozzles, with a square of
+    plain paper on the datum board: the top camera finds the paper, then each nozzle
+    sniffs it for its height, and picks it up and sets it down to read its vacuum. For a
+    tip too big for the calibration disc, once the nozzle offsets are measured with a
+    small one. Kept and used from then on."""
+    return start_tip_heights(ctx.machine, body.nozzle_ids)
+
+
 @router.post(
     "/machine/jog",
     tags=["machine"],
@@ -332,6 +357,40 @@ async def resume(ctx: Context) -> MachineState:
     """Carry on from where pause held the machine."""
     ctx.machine.resume()
     return ctx.machine.state
+
+
+@router.post(
+    "/machine/answer",
+    tags=["machine"],
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def answer(ctx: Context, body: OperatorAnswer) -> MachineState:
+    """Answer what the machine is asking (the machine state's ``request``), once it is
+    done: for a tip change, which tip is on each nozzle now. The operation carries on.
+    Stop ends it instead."""
+    ctx.machine.answer(body)
+    return ctx.machine.state
+
+
+class TipChangeRequest(WireModel):
+    nozzle_ids: list[str] | None = Field(
+        default=None, description="The nozzles to change tips on. Empty: all of them."
+    )
+
+
+@router.post(
+    "/machine/tip-change",
+    tags=["machine"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def tip_change(ctx: Context, body: TipChangeRequest) -> Operation:
+    """Raise the nozzles, bring the head to the front and center, and ask the operator
+    (the machine state's ``request``) to change tips by hand and say which is on each
+    nozzle; answered with ``POST /machine/answer``."""
+    return ctx.machine.start_tip_change(body.nozzle_ids)
 
 
 @router.post("/machine/stop", tags=["machine"])

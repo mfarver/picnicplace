@@ -13,6 +13,9 @@ Besides motion, it simulates the profile's I/O:
   suction on seals, and reads as holding a part, as when sniffing for a height. Each
   nozzle's readings open and holding a part may be set (``vacuum_levels``), as for a tip
   that leaks or a weak pump.
+- A tip whose face comes within ``WEAK_RIM_MM`` of a paper disc's edge (``rim_at``, for
+  the tip the operator says they fitted) seals on it, but drops it once lifted
+  ``SLIP_LIFT_MM``, as a real tip did with its rim near the edge.
 - Each nozzle's tip may be longer than the profile's (``tip_errors``), and each kind of
   tip too (``tip_kind_errors``, by tip ID, for the tip the operator says they fitted): it
   reaches that much lower than its axis says, for touching parts and surfaces. The safe-Z sensor
@@ -56,6 +59,14 @@ SETTLED_FRACTION = 0.0005
 
 VACUUM_TAU_S = 0.15
 """Time constant of the simulated vacuum response."""
+
+WEAK_RIM_MM = 0.5
+"""A tip with less paper than this round its face seals on a disc but cannot lift it: a
+real N24 tip (4 mm across) on a 4.9 mm disc, 0.45 mm of paper round it, dropped it."""
+
+SLIP_LIFT_MM = 2.0
+"""...and drops it once lifted this far from where it sealed: off the board, past any
+press into the disc."""
 
 
 def sim_profile(
@@ -102,7 +113,13 @@ class SimulatorDriver(MotionDriver):
         self._vacuum_levels = dict(vacuum_levels or {})
         """Each nozzle's readings open and holding a part (or sealed), by ID, as fractions
         of its sensor's range; the rest read as ``VACUUM_OPEN`` and ``VACUUM_HELD`` say."""
+        self.rim_at: Callable[[float, float], float | None] | None = None
+        """How far a physical X/Y is from the edge of the paper disc under it, if any."""
+        self._slips: dict[str, float] = {}
+        """Nozzles holding a disc they cannot lift, by ID: the tip's height as it sealed."""
         self.surface_at: Callable[[float, float], float | None] | None = None
+        self.datum_seal_press = 0.0
+        """How far a tip must be pressed into a bare surface before it seals."""
         """The height of a surface under a physical X/Y, if any, for a nozzle to seal on."""
         self._home_error = home_error
         self._offset = {"X": 0.0, "Y": 0.0}
@@ -307,24 +324,47 @@ class SimulatorDriver(MotionDriver):
     def _update_parts(self) -> None:
         """Apply the pick and drop rules, and wake the vacuum loop if anything changed."""
         for n in self._profile.nozzles:
-            if not self._suction(n):
+            sealed_at = self._slips.get(n.id)
+            slipped = sealed_at is not None and self._tip(n) > sealed_at + SLIP_LIFT_MM
+            if not self._suction(n) or slipped:
+                self._slips.pop(n.id, None)
                 if self._held[n.id]:
                     self._held[n.id] = False
                     if self.on_drop is not None:
                         x, y, angle = self._nozzle_at(n)
-                        self.on_drop(n.id, x, y, angle, self._tip(n))
+                        # A slipping disc lets go where it slipped, however far the nozzle
+                        # went on up before this update.
+                        tip = self._tip(n)
+                        if slipped and sealed_at is not None:
+                            tip = sealed_at + SLIP_LIFT_MM
+                        self.on_drop(n.id, x, y, angle, tip)
             elif self._height(n) <= -PICK_DEPTH and not self._held[n.id]:
                 if self.pick_source is None:
                     self._held[n.id] = True
                 else:
+                    weak = self._weak_rim(n)
                     self._held[n.id] = self.pick_source(n.id, *self._nozzle_at(n), self._tip(n))
+                    if self._held[n.id] and weak:
+                        self._slips[n.id] = self._tip(n)
             sealed = False
             if self._suction(n) and not self._held[n.id] and self.surface_at is not None:
                 x, y, _ = self._nozzle_at(n)
                 surface = self.surface_at(x, y)
-                sealed = surface is not None and self._tip(n) <= surface
+                sealed = surface is not None and self._tip(n) <= surface - self.datum_seal_press
             self._sealed[n.id] = sealed
         self._io_wake.set()
+
+    def _weak_rim(self, nozzle: Nozzle) -> bool:
+        """Whether the nozzle's tip has too little paper round its face to lift the disc
+        under it (False with no disc under it, or no tip said)."""
+        if self.rim_at is None:
+            return False
+        tip = self._profile.nozzle_tip(self._fitted.get(nozzle.id))
+        if tip is None or tip.outer_diameter is None:
+            return False
+        x, y, _ = self._nozzle_at(nozzle)
+        rim = self.rim_at(x, y)
+        return rim is not None and rim - tip.outer_diameter / 2 < WEAK_RIM_MM
 
     def _vacuum_target(self, nozzle: Nozzle) -> float:
         sensor = self._inputs_by_id.get(nozzle.vacuum_input or "")

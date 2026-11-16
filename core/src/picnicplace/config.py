@@ -328,6 +328,14 @@ class MachineConfig(_Section):
             "calibrating the nozzle offsets. None: there is none."
         ),
     )
+    sim_paper: tuple[float, float, float] | None = Field(
+        default=None,
+        description=(
+            "Simulator only: a sheet of plain paper lying on the bed (X, Y of its center, "
+            "and its size, in mm; drawn round), for measuring tip heights. None: there is "
+            "none."
+        ),
+    )
     sim_rail_error: dict[str, tuple[float, float, float]] = Field(
         default_factory=dict[str, tuple[float, float, float]],
         description=(

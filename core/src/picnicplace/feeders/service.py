@@ -270,6 +270,7 @@ class FeederService:
                 self.sim_parts = parts
                 driver.pick_source = parts.pick
                 driver.on_drop = parts.drop
+                driver.rim_at = parts.rim_at
                 machine.scene_parts = parts.scene
 
     # --- State ---------------------------------------------------------------------------

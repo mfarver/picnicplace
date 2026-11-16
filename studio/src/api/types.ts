@@ -71,3 +71,5 @@ export type PickLearning = Schemas["PickLearning"];
 export type PickCorrection = PlacementState["pick_correction"];
 /** How one pick was corrected: never "auto". */
 export type PickMethod = Exclude<PickCorrection, "auto">;
+export type OperatorRequest = Schemas["OperatorRequest"];
+export type OperatorAnswer = Schemas["OperatorAnswer"];

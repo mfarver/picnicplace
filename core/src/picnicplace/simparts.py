@@ -57,6 +57,11 @@ SIM_DISC_DIAMETER_MM = 6.0
 SIM_DISC_THICKNESS_MM = 0.1
 """...and paper's thickness."""
 
+DISC_PRESS_LIMIT_MM = 1.5
+"""A paper disc may be pressed this far (it gives, and so does the nozzle) before it is a
+crash."""
+DISC_REACH_MM = 0.02
+"""How close above a paper disc's top a tip must come to take it: on contact."""
 REACH_MM = 0.25
 """A nozzle's tip this far above a part's top still picks it up: the vacuum pulls it in."""
 PRESS_MM = 0.5
@@ -92,9 +97,12 @@ class SimulatedParts:
         there, if any, and if the tip reaches it."""
         top = self._top(x, y)
         if top is not None:
-            if tip > top + REACH_MM:
+            # A paper disc is taken only when touched: a sniff finds its top by the seal.
+            disc = self._disc_under(x, y)
+            reach = DISC_REACH_MM if disc else REACH_MM
+            if tip > top + reach:
                 return False
-            if tip < top - PRESS_MM:
+            if tip < top - (DISC_PRESS_LIMIT_MM if disc else PRESS_MM):
                 self.crashes.append(
                     f"{nozzle} pressed {top - tip:.2f} mm into a part at ({x:.1f}, {y:.1f})"
                 )
@@ -105,6 +113,21 @@ class SimulatedParts:
         dx, dy = _turn(px - x, py - y, -nozzle_angle)
         self.held[nozzle] = HeldPart(shape, dx, dy, part_angle - nozzle_angle)
         return True
+
+    def _disc_under(self, x: float, y: float) -> bool:
+        return any(
+            part.shape.disc is not None
+            and math.hypot(part.x - x, part.y - y) <= part.shape.disc / 2
+            for part in self.placed
+        )
+
+    def rim_at(self, x: float, y: float) -> float | None:
+        """How far a point is from the edge of the disc under it, if any."""
+        for part in self.placed:
+            d = part.shape.disc
+            if d is not None and math.hypot(part.x - x, part.y - y) <= d / 2:
+                return d / 2 - math.hypot(part.x - x, part.y - y)
+        return None
 
     def _top(self, x: float, y: float) -> float | None:
         """The top of the part under a point: a disc's on what it lies on, or a feeder's."""
@@ -136,7 +159,8 @@ class SimulatedParts:
         board = self.board_at(px, py) if self.board_at is not None else None
         if board is not None and part.shape.height is not None:
             bottom = tip - part.shape.height
-            if bottom < board - PRESS_MM:
+            limit = DISC_PRESS_LIMIT_MM if part.shape.disc is not None else PRESS_MM
+            if bottom < board - limit:
                 self.crashes.append(
                     f"{nozzle} pressed its part {board - bottom:.2f} mm into the board at "
                     f"({px:.1f}, {py:.1f})"

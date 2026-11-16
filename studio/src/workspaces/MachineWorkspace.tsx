@@ -1,4 +1,4 @@
-import { House, Map as MapIcon, Plug, RotateCcw } from "lucide-react";
+import { House, Map as MapIcon, Plug, Replace, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { api } from "../api/client";
 import { hasControl, useCore } from "../api/core";
@@ -156,6 +156,20 @@ export function MachineWorkspace() {
               <House size={16} aria-hidden />
               Home
             </button>
+            {(description?.nozzle_tips.length ?? 0) > 0 && (
+              <button
+                type="button"
+                className="button"
+                disabled={!canMove || !machine?.homed}
+                title="Bring the head to the front with the nozzles up, and say which tip is on each"
+                onClick={() =>
+                  void track(() => api.POST("/api/v1/machine/tip-change", { body: {} }))
+                }
+              >
+                <Replace size={16} aria-hidden />
+                Change tips
+              </button>
+            )}
             {machine?.estop && (
               <button type="button" className="button" disabled={pending} onClick={reset}>
                 <RotateCcw size={16} aria-hidden />

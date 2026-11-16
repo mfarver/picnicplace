@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
-from picnicplace.machine.bottom_camera import tip_size_note
+from picnicplace.machine.bottom_camera import measure_tip, tip_size_note
 from picnicplace.machine.profile import NozzleTip
 from tests.conftest import Session, connect, fast_config
 from tests.test_calibration import lines, move_camera_over_disc, offsets_config
@@ -109,6 +109,84 @@ def test_each_tip_keeps_its_own_heights() -> None:
         assert n1["tip"] == "N14" and n1["z_offset"] == pytest.approx(0.6, abs=0.1)
 
 
+def test_a_tip_near_the_discs_edge_seals_but_drops_it() -> None:
+    """The left nozzle is 1.3 mm from where the profile says. Before it is calibrated it
+    comes down that far from the disc's center: an N14 tip (2.7 mm across) has only 0.35 mm
+    of paper beyond its face there, seals, and drops the disc as it lifts. The calibration
+    stops and says so, keeping nothing, and the disc lies on the board, not on the nozzle.
+    The N08 tip (1.5 mm) has room, and finds the nozzle."""
+    config = offsets_config(sim_nozzle_offset_error={"N1": (1.3, 0.0)})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        fit(s, "N1", "N14")
+        move_camera_over_disc(client, s, config)
+        op = s.wait(s.post("/api/v1/machine/nozzle-offsets", {"nozzle_ids": ["N1"]}))
+        assert op["status"] == "failed", op
+        assert "sealed on the disc" in op["error"] and "dropped it as it lifted" in op["error"]
+        parts = feeders(client).sim_parts
+        assert parts is not None and not parts.held
+        assert [p.shape.disc for p in parts.placed] == [6.0]
+        outputs = s.state()["outputs"]
+        assert not any(on for name, on in outputs.items() if name.startswith(("pump", "valve")))
+        assert lines(client)["nozzle_offsets"]["status"] != "done"
+        nozzles = {n["id"]: n for n in client.get("/api/v1/machine/description").json()["nozzles"]}
+        assert nozzles["N1"]["z_offset"] == 0.0
+        assert s.state()["z_safe"]
+
+        fit(s, "N1", "N08")
+        move_camera_over_disc(client, s, config)
+        ok(s.wait(s.post("/api/v1/machine/nozzle-offsets", {"nozzle_ids": ["N1"]})))
+        assert lines(client)["nozzle_offsets"]["status"] == "done"
+
+
+def test_a_big_tips_height_is_measured_on_paper() -> None:
+    """A LumenPnP comes with one tip of each size, and the N24 is too big for its disc. The
+    offsets are measured with small tips; then, with the N24 fitted, the paper stop's
+    Start finds a sheet of paper on the datum board and measures only its height (it is
+    0.8 mm longer) and vacuum, leaving where the nozzle is as it was."""
+    paper = (245.0, 120.0, 25.0)  # on the datum board, clear of its dot and the disc
+    config = offsets_config(sim_tip_z_error={"N24": 0.8}, sim_paper=paper)
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        r = s.post("/api/v1/machine/tip-heights", {})
+        assert r.status_code == 422 and "every nozzle" in r.json()["detail"], r.json()
+        fit(s, "N1", "N045")
+        fit(s, "N2", "N08")
+        r = s.post("/api/v1/machine/tip-heights", {"nozzle_ids": ["N1"]})
+        assert r.status_code == 422 and "has not been measured yet" in r.json()["detail"]
+        move_camera_over_disc(client, s, config)
+        ok(s.wait(s.post("/api/v1/machine/nozzle-offsets", {})))
+        before = client.get("/api/v1/machine/description").json()["nozzles"][0]["offset"]
+
+        fit(s, "N1", "N24")
+        line = lines(client)["nozzle_offsets"]
+        assert line["status"] == "stale" and "square of plain paper" in str(line["stale"])
+        op = s.wait(s.post("/api/v1/wizard/run", {"stop": 2}))
+        assert op["status"] == "succeeded", (op, client.get("/api/v1/wizard").json()["run"])
+        step = client.get("/api/v1/wizard").json()["run"]["steps"][0]
+        assert step["title"] == "Find the paper, and measure each new tip's height", step
+        assert "Left nozzle with the N24 tip touched at Z" in str(step["message"]), step
+
+        line = lines(client)["nozzle_offsets"]
+        assert line["status"] == "done" and "Tip heights on paper" in str(line["detail"])
+        n1 = client.get("/api/v1/machine/description").json()["nozzles"][0]
+        assert n1["z_offset"] == pytest.approx(0.8, abs=0.1) and n1["vacuum"] is not None
+        assert n1["offset"] == before
+        assert lines(client)["vacuum"]["status"] == "done"
+        # The paper was picked up and set down where it lay.
+        parts = feeders(client).sim_parts
+        assert parts is not None
+        sheet = next(p for p in parts.placed if p.shape.disc == paper[2])
+        assert (sheet.x, sheet.y) == pytest.approx(paper[:2], abs=0.5)
+
+        # Without the paper, the camera says what to lay down, and nothing goes down.
+        parts.placed.remove(sheet)
+        fit(s, "N2", "N40")
+        op = s.wait(s.post("/api/v1/machine/tip-heights", {}))
+        assert op["status"] == "failed" and "found no paper" in op["error"], op
+        assert "at least 12 mm across" in op["error"], op
+
+
 @pytest.mark.parametrize(("tip", "diameter"), [("N045", 1.0), ("N08", 1.5), ("N75", 9.0)])
 def test_the_bottom_camera_sees_the_fitted_tip(tip: str, diameter: float) -> None:
     """The simulated bottom camera draws the end of the tip fitted, in front of its body.
@@ -136,6 +214,39 @@ def test_the_bottom_camera_sees_the_fitted_tip(tip: str, diameter: float) -> Non
         found = bottom()["position"]
         assert found["x"] == pytest.approx(design["position"]["x"] - 0.8, abs=0.03)
         assert found["y"] == pytest.approx(design["position"]["y"] + 0.5, abs=0.03)
+
+
+@pytest.mark.parametrize(
+    ("tip", "scale", "named", "alike"),
+    [
+        ("N045", 2.17, "N045", []),
+        ("N08", 2.17, "N08", []),
+        ("N14", 2.17, "N14", []),
+        ("N045", 3.7, None, ["N045", "N08"]),
+    ],
+)
+def test_small_tips_are_named_or_said_to_be_too_alike(
+    tip: str, scale: float, named: str | None, alike: list[str]
+) -> None:
+    """The small tips are named by the size of their ends at a real LumenPnP's bottom
+    camera scale (0.067 mm per pixel). On a camera half as fine, an N045's 1 mm end looks
+    about 1.3 mm across, more like an N08: rather than name it wrong, the camera says it
+    cannot tell the two apart."""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_tips": {"N1": tip},
+            "sim_bottom_camera_scale": scale,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        assert s.wait(s.post("/api/v1/machine/bottom-camera", {}))["status"] == "succeeded"
+        machine = client.app.state.ctx.machine  # type: ignore[attr-defined]
+        assert client.portal is not None
+        found, _, said = client.portal.call(measure_tip, machine, machine.profile.nozzles[0])
+        assert (found.id if found else None, said) == (named, alike)
 
 
 def test_a_bottom_camera_far_from_the_profiles_scale() -> None:

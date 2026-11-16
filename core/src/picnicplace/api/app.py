@@ -172,6 +172,16 @@ def create_app(
                     0.0,
                 )
             )
+        paper = config.machine.sim_paper
+        if paper is not None and ctx.feeders.sim_parts is not None:
+            ctx.feeders.sim_parts.placed.append(
+                PlacedPart(
+                    PartShape(disc=paper[2], height=SIM_DISC_THICKNESS_MM),
+                    paper[0],
+                    paper[1],
+                    0.0,
+                )
+            )
         ctx.placement = PlacementService(
             machine, ctx.feeders, lambda: ctx.library, config.machine.pick_correction
         )

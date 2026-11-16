@@ -3893,6 +3893,18 @@
             "title": "Position",
             "type": "object"
           },
+          "request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OperatorRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "What the running operation is waiting for the operator to do, if anything."
+          },
           "speed_scale": {
             "description": "Moves run at no more than this fraction of full speed (bring-up mode).",
             "title": "Speed Scale",
@@ -3928,7 +3940,8 @@
           "outputs",
           "speed_scale",
           "warnings",
-          "z_safe"
+          "z_safe",
+          "request"
         ],
         "title": "MachineState",
         "type": "object"
@@ -4712,6 +4725,83 @@
           "operation"
         ],
         "title": "OperationEvent",
+        "type": "object"
+      },
+      "OperatorAnswer": {
+        "properties": {
+          "request_id": {
+            "description": "The request being answered.",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "tips": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": "tip_change: the tip now on each nozzle listed, by nozzle ID (null: none).",
+            "title": "Tips",
+            "type": "object"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "OperatorAnswer",
+        "type": "object"
+      },
+      "OperatorRequest": {
+        "description": "The machine is waiting for the operator to do something only a person can (spec\nsection 8.2, \"When the machine needs help, it asks\"), then answer. Stop ends the\noperation instead.",
+        "properties": {
+          "after": {
+            "description": "What the machine does once answered.",
+            "title": "After",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "tip_change",
+            "description": "tip_change: the head is at the front, nozzles up; change the tips on the nozzles listed, then say which tip is on each.",
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "description": "What to do and why, in a sentence or two.",
+            "title": "Message",
+            "type": "string"
+          },
+          "nozzles": {
+            "description": "tip_change: the nozzles to change.",
+            "items": {
+              "$ref": "#/components/schemas/TipChangeNozzle"
+            },
+            "title": "Nozzles",
+            "type": "array"
+          },
+          "title": {
+            "description": "What is needed, in a few words.",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "message",
+          "after",
+          "nozzles"
+        ],
+        "title": "OperatorRequest",
         "type": "object"
       },
       "Output": {
@@ -7457,6 +7547,83 @@
           "which"
         ],
         "title": "TeachPartRequest",
+        "type": "object"
+      },
+      "TipChangeNozzle": {
+        "properties": {
+          "choices": {
+            "description": "Tips that would do here, smallest first. Empty: any, or none.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "fitted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The tip said to be on it now, if any.",
+            "title": "Fitted"
+          },
+          "nozzle_id": {
+            "title": "Nozzle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nozzle_id",
+          "fitted",
+          "choices"
+        ],
+        "title": "TipChangeNozzle",
+        "type": "object"
+      },
+      "TipChangeRequest": {
+        "properties": {
+          "nozzle_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The nozzles to change tips on. Empty: all of them.",
+            "title": "Nozzle Ids"
+          }
+        },
+        "title": "TipChangeRequest",
+        "type": "object"
+      },
+      "TipHeightsRequest": {
+        "properties": {
+          "nozzle_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The nozzles to measure. Empty: those whose tip has no height yet.",
+            "title": "Nozzle Ids"
+          }
+        },
+        "title": "TipHeightsRequest",
         "type": "object"
       },
       "VacuumLevels": {
@@ -11861,6 +12028,83 @@
         ]
       }
     },
+    "/api/v1/machine/answer": {
+      "post": {
+        "description": "Answer what the machine is asking (the machine state's ``request``), once it is\ndone: for a tip change, which tip is on each nozzle now. The operation carries on.\nStop ends it instead.",
+        "operationId": "answer_api_v1_machine_answer_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorAnswer"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Answer",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
     "/api/v1/machine/bottom-camera": {
       "post": {
         "description": "Calibrate the bottom camera with an empty nozzle tip: center the tip in its image\n(its place), step the nozzle within 2 mm of the profile's focus height for the\nsharpest picture (its focus), and step the head to measure its scale and turn. The\nresult is kept (the calibration checklist) and used from then on.",
@@ -12989,6 +13233,160 @@
           }
         ],
         "summary": "Stop",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/tip-change": {
+      "post": {
+        "description": "Raise the nozzles, bring the head to the front and center, and ask the operator\n(the machine state's ``request``) to change tips by hand and say which is on each\nnozzle; answered with ``POST /machine/answer``.",
+        "operationId": "tip_change_api_v1_machine_tip_change_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TipChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Tip Change",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/tip-heights": {
+      "post": {
+        "description": "Measure the height and vacuum levels of the tip on some nozzles, with a square of\nplain paper on the datum board: the top camera finds the paper, then each nozzle\nsniffs it for its height, and picks it up and sets it down to read its vacuum. For a\ntip too big for the calibration disc, once the nozzle offsets are measured with a\nsmall one. Kept and used from then on.",
+        "operationId": "measure_tip_heights_api_v1_machine_tip_heights_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TipHeightsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Measure Tip Heights",
         "tags": [
           "machine"
         ]

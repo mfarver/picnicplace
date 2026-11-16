@@ -78,7 +78,9 @@ def test_a_new_machine_is_limited(tmp_path: Path) -> None:
         assert [p["number"] for p in state["pages"]] == list(range(1, 17))
         tips = pages(client)["nozzle_tips"]
         assert tips["status"] == "todo" and "say which tip is on Left nozzle" in tips["detail"]
-        assert pages(client)["nozzle_runout"]["status"] == "not_built"
+        # Runout refines picks: optional, taken as none until measured.
+        runout = pages(client)["nozzle_runout"]
+        assert runout["status"] == "todo" and runout["optional"]
 
         set_up(client, s, calibrate=False)
         assert s.state()["speed_scale"] == LIMITED_SPEED
@@ -156,7 +158,8 @@ def test_finishing_the_wizard_lifts_the_limits(tmp_path: Path) -> None:
     with TestClient(app(config)) as client:
         assert pages(client)["discard_park"]["status"] == "done"
         assert pages(client)["strips_trays"]["status"] == "skipped"
-        assert [p["id"] for p in wizard(client)["pages"] if p["status"] == "todo"] == []
+        todo = [p["id"] for p in wizard(client)["pages"] if p["status"] == "todo"]
+        assert todo == ["nozzle_runout"]  # optional, and not measured here
         with connect(client) as s, connect(client, "other") as other:
             assert s.put("/api/v1/wizard/pages/discard_park", {"status": "todo"}).status_code == 200
             assert pages(client)["discard_park"]["status"] == "todo"

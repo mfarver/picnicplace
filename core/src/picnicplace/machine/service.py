@@ -254,6 +254,9 @@ class MachineService:
             tips=tuple(self.sim_tips.items())
             if self.sim_tips
             else tuple((n.id, n.tip) for n in self._profile.nozzles if n.tip is not None),
+            runout=tuple(
+                (n, round(x, 4), round(y, 4)) for n, (x, y) in self._driver.scene_runout.items()
+            ),
         )
 
     @property

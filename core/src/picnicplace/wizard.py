@@ -70,10 +70,11 @@ some are out of date. ``calibrated``: every page is done and current."""
 ConfirmedPage = Literal["discard_park", "strips_trays"]
 """Pages the owner finishes by confirming them, rather than by measuring."""
 
-OPTIONAL: frozenset[PageId] = frozenset({"feeders", "strips_trays"})
+OPTIONAL: frozenset[PageId] = frozenset({"feeders", "nozzle_runout", "strips_trays"})
 """Pages that need not be done to be calibrated: feeder rails refine where feeders are, but
 each feeder's fiducial is still found on its first pick in a run, and rails can only be
-calibrated with feeders at their ends."""
+calibrated with feeders at their ends. Runout refines where picks go; without it, it is
+taken as none."""
 
 STOPS: dict[PageId, Literal[0, 1, 2, 3]] = {
     "welcome": 0,
@@ -452,7 +453,7 @@ def build_pages(
             action="nozzle_offsets",
         )
 
-    add("nozzle_runout", "not_built", "Not measured yet: taken as none.")
+    from_line("nozzle_runout", "nozzle_runout")
 
     places = [loc.label for loc in profile.locations if loc.kind in ("discard", "park")]
     add(

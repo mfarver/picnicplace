@@ -69,6 +69,8 @@ class SceneState:
     """Boards loaded for a job. Without any, the demo board is drawn."""
     tips: tuple[tuple[str, str], ...] = ()
     """Nozzle ID and the tip fitted on it, where the operator has said."""
+    runout: tuple[tuple[str, float, float], ...] = ()
+    """Nozzle ID and where its tip end is from the axis it turns about, as turned now."""
 
 
 @dataclass(frozen=True)
@@ -617,8 +619,10 @@ class BottomRenderer:
         if canvas.visible(head_x, head_y, 60):
             canvas.rect(img, head_x, head_y - 40, 90, 70, 0, HEAD_UNDERSIDE)
         tips = dict(state.tips)
+        runout = {n: (rx, ry) for n, rx, ry in state.runout}
         for nozzle in self.profile.nozzles:
-            x, y = head_x + nozzle.offset.x, head_y + nozzle.offset.y
+            rx, ry = runout.get(nozzle.id, (0.0, 0.0))
+            x, y = head_x + nozzle.offset.x + rx, head_y + nozzle.offset.y + ry
             if not canvas.visible(x, y, 5):
                 continue
             end = _tip_end(canvas, img, x, y, self.profile.nozzle_tip(tips.get(nozzle.id)))

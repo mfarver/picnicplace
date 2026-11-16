@@ -38,7 +38,8 @@ export const STOP_TEXT: Record<0 | 1 | 2 | 3, StopText> = {
       "height, then picks up the disc, turns it and sets it down three times, measuring its " +
       "vacuum on the way. About a minute per nozzle. For a tip fitted since, too big for " +
       "the disc, lay a square of plain paper (25 mm or so) on the datum board instead: " +
-      "only the new tip's height and vacuum are measured.",
+      "only the new tip's height and vacuum are measured. Then each new tip turns over the " +
+      "bottom camera, to measure how far its end is off the axis it turns about.",
   },
   3: {
     title: "Discard and park",

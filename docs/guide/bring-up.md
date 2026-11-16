@@ -108,8 +108,10 @@ kept in `calibration.json` in the data directory, and the pages you confirm in
       mark near the middle (the profile's scale for the camera is a guess, and on one real
       LumenPnP it was 3.7 times off), steps the head to measure the camera's real scale and
       how far its picture is turned, centers the tip, and steps the nozzle up and down
-      for the sharpest picture, never more than 2 mm past the profile's focus height. A
-      turned picture is undone in everything the bottom camera sees;
+      for the sharpest picture, never more than 2 mm past the profile's focus height. It
+      then finds the tip at 0° and 180°: the camera's place is the axis the nozzle turns
+      about, halfway between, not the tip's end. A turned picture is undone in everything
+      the bottom camera sees;
     - names the tip on each nozzle by the size of its end, seen from below;
     - scans the feeders and calibrates their rails, if there are feeders at each rail's
       ends (otherwise each feeder's fiducial is found on its first pick).
@@ -140,6 +142,12 @@ kept in `calibration.json` in the data directory, and the pages you confirm in
    click this stop's **Start** again. The top camera finds the paper, and each new tip
    finds its height on it and picks it up and sets it down to measure its vacuum. Where
    the nozzle is, measured with the small tip, is kept.
+
+   **Runout.** Last, each tip not measured yet turns over the bottom camera, through
+   eight angles. A tip's end a little off the axis it turns about (a slightly bent tip,
+   or one not pushed on straight) draws a circle; how far off it is, is kept for that
+   tip, and picks put the tip's end over the part. More than 0.15 mm off is flagged:
+   check the tip. A tip not measured is taken as having none.
 3. **Discard and park.** Check the two spots on the map: jog the top camera over the
    discard tray and click **Set discard here**, and to a spot where the head can wait and
    click **Set park here**, if they are not right. Then **They are right**.

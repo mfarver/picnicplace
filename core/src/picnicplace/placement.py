@@ -456,9 +456,16 @@ class PlacementService:
         self._machine.recorder.event("pick", load=load)
         return load
 
+    def _axis_over(self, nozzle: Nozzle, at: Point) -> Point:
+        """Where the nozzle's axis goes to put its tip's end over a point, as it is turned
+        now: the end is off the axis by the tip's measured runout, turning with it."""
+        end = rotate(nozzle.runout, self._machine.nozzle_angle(nozzle))
+        return Point(x=at.x - end.x, y=at.y - end.y)
+
     async def _take(self, nozzle: Nozzle, at: Point, height: float, label: str) -> None:
         """Lower onto a part, take it with suction, lift, and check it came up."""
-        await self._machine.move_nozzle_over(nozzle, at.x, at.y)
+        axis = self._axis_over(nozzle, at)
+        await self._machine.move_nozzle_over(nozzle, axis.x, axis.y)
         await self._machine.lower_nozzle(nozzle, height)
         await self._machine.suction(nozzle, True)
         await asyncio.sleep(PICK_DWELL_S)
@@ -480,7 +487,7 @@ class PlacementService:
             found = await sniff(
                 self._machine,
                 nozzle,
-                at,
+                self._axis_over(nozzle, at),
                 expected,
                 PART_SNIFF_ABOVE_MM,
                 PART_SNIFF_BELOW_MM,
@@ -636,9 +643,12 @@ class PlacementService:
             name = self._source_name(source)
         except InvalidTargetError:
             return ""  # the strip or tray was removed since the pick
-        # The nozzle may have turned since the pick; the part turned with it.
-        off = rotate(seen, (load.pick_angle or 0.0) - nozzle_angle)
-        part_at = Point(x=load.picked_at.x + off.x, y=load.picked_at.y + off.y)
+        # The nozzle may have turned since the pick; the part turned with it. ``seen`` is
+        # from the axis, which was off the tip's end (over the pick place) by its runout.
+        pick_angle = load.pick_angle or 0.0
+        off = rotate(seen, pick_angle - nozzle_angle)
+        end = rotate(self._machine.nozzle(load.nozzle).runout, pick_angle)
+        part_at = Point(x=load.picked_at.x - end.x + off.x, y=load.picked_at.y - end.y + off.y)
         miss = math.hypot(off.x, off.y)
         learning = self._feeders.learn_pick(source, load.base, part_at, miss, load.correction)
         self._machine.recorder.event(

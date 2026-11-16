@@ -14,6 +14,7 @@ from picnicplace.machine.errors import NotHomedError
 from picnicplace.machine.local import LocalProfileState, LocationKind
 from picnicplace.machine.nozzle_offsets import start_nozzle_offset_calibration
 from picnicplace.machine.profile import KeepOut, MachineProfile, Point
+from picnicplace.machine.runout import start_nozzle_runout
 from picnicplace.machine.tip_heights import start_tip_heights
 from picnicplace.schemas import (
     PROTOCOL_VERSION,
@@ -315,6 +316,28 @@ async def measure_tip_heights(ctx: Context, body: TipHeightsRequest) -> Operatio
     tip too big for the calibration disc, once the nozzle offsets are measured with a
     small one. Kept and used from then on."""
     return start_tip_heights(ctx.machine, body.nozzle_ids)
+
+
+class NozzleRunoutRequest(WireModel):
+    nozzle_ids: list[str] | None = Field(
+        default=None,
+        description="The nozzles to measure. Empty: those whose tip has no runout yet.",
+    )
+
+
+@router.post(
+    "/machine/nozzle-runout",
+    tags=["machine"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def measure_nozzle_runout(ctx: Context, body: NozzleRunoutRequest) -> Operation:
+    """Measure how far the tip's end on some nozzles is from the axis it turns about:
+    each nozzle turns over the bottom camera, and the circle its tip's end makes gives
+    it. Picks then put the tip's end, not the axis, over the part. Kept for the tip
+    fitted, and used from then on."""
+    return start_nozzle_runout(ctx.machine, body.nozzle_ids)
 
 
 @router.post(

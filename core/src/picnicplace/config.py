@@ -263,6 +263,14 @@ class MachineConfig(_Section):
             "while calibrating the nozzle offsets finds and corrects it."
         ),
     )
+    sim_nozzle_runout: dict[str, tuple[float, float]] = Field(
+        default_factory=dict[str, tuple[float, float]],
+        description=(
+            "Simulator only: where each nozzle's tip end really is from the axis it turns "
+            "about, by nozzle ID, as X and Y in mm with the nozzle at 0 degrees (it turns "
+            "with the nozzle), as for a bent tip. Measuring the nozzle runout finds it."
+        ),
+    )
     sim_tip_z_error: dict[str, float] = Field(
         default_factory=dict[str, float],
         description=(

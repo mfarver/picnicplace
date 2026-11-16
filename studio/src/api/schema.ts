@@ -1262,6 +1262,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/nozzle-runout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Measure Nozzle Runout
+         * @description Measure how far the tip's end on some nozzles is from the axis it turns about:
+         *     each nozzle turns over the bottom camera, and the circle its tip's end makes gives
+         *     it. Picks then put the tip's end, not the axis, over the part. Kept for the tip
+         *     fitted, and used from then on.
+         */
+        post: operations["measure_nozzle_runout_api_v1_machine_nozzle_runout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/nozzles/{nozzle_id}/tip": {
         parameters: {
             query?: never;
@@ -2315,7 +2338,7 @@ export interface components {
              * Action
              * @description What starts it, if the core can.
              */
-            action: ("home" | "visual_home" | "camera_scale" | "bottom_camera" | "nozzle_offsets" | "calibrate_feeders") | null;
+            action: ("home" | "visual_home" | "camera_scale" | "bottom_camera" | "nozzle_offsets" | "nozzle_runout" | "calibrate_feeders") | null;
             /**
              * Detail
              * @description Its value, or what to do, in words.
@@ -4036,6 +4059,8 @@ export interface components {
             pump_output: string | null;
             /** Rotation Axis */
             rotation_axis: string;
+            /** @description Measured, not set by hand: where this nozzle's tip end is from the axis it turns about, with the nozzle at 0 degrees (mm; it turns with the nozzle). Picks put the tip end, not the axis, over the part. */
+            runout: components["schemas"]["Point"];
             /**
              * Tip
              * @description Which of the profile's nozzle tips is fitted, by ID: set by the operator when they change it, and kept in the data directory. None: not said. The Z offset and vacuum levels are those measured with this tip.
@@ -4103,6 +4128,14 @@ export interface components {
         NozzleRequest: {
             /** Nozzle Id */
             nozzle_id: string;
+        };
+        /** NozzleRunoutRequest */
+        NozzleRunoutRequest: {
+            /**
+             * Nozzle Ids
+             * @description The nozzles to measure. Empty: those whose tip has no runout yet.
+             */
+            nozzle_ids?: string[] | null;
         };
         /**
          * NozzleTip
@@ -5672,7 +5705,7 @@ export interface components {
              * Action
              * @description What starts its measurement, if anything does.
              */
-            action: ("home" | "visual_home" | "camera_scale" | "bottom_camera" | "nozzle_offsets" | "calibrate_feeders") | null;
+            action: ("home" | "visual_home" | "camera_scale" | "bottom_camera" | "nozzle_offsets" | "nozzle_runout" | "calibrate_feeders") | null;
             /**
              * Confirm
              * @description The owner finishes it by confirming it (or skipping).
@@ -8779,6 +8812,51 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["NozzleOffsetsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    measure_nozzle_runout_api_v1_machine_nozzle_runout_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NozzleRunoutRequest"];
             };
         };
         responses: {

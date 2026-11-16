@@ -14,6 +14,7 @@ parts on the bottom camera does not start until the bottom camera has a focus he
 and the plan says which line to do.
 """
 
+import math
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -52,7 +53,13 @@ profile or the config, and the machine cannot measure it yet. ``every_run``: don
 the start of each run. ``not_needed``: this machine or setup has nothing to calibrate."""
 
 Action = Literal[
-    "home", "visual_home", "camera_scale", "bottom_camera", "nozzle_offsets", "calibrate_feeders"
+    "home",
+    "visual_home",
+    "camera_scale",
+    "bottom_camera",
+    "nozzle_offsets",
+    "nozzle_runout",
+    "calibrate_feeders",
 ]
 """What starts a line's calibration, for the Studio's button."""
 
@@ -70,6 +77,9 @@ SCALE_WARN = 0.1
 """A measured camera scale this far (as a fraction) from the profile's is worth a look:
 the measured one is used, but so far off suggests the wrong lens or camera height."""
 NOZZLE_OFFSET_WARN_MM = 1.0
+RUNOUT_WARN_MM = 0.15
+"""A tip end further than this from the axis it turns about may be bent or not pushed on
+straight: its runout is corrected, but it is worth a look."""
 """A nozzle measured farther than this from the profile's offset is worth a look: the
 measured offset is used, but so far off suggests a bent nozzle or a loose head."""
 
@@ -201,6 +211,12 @@ def nozzle_key(nozzle_id: str, axis: Literal["x", "y"]) -> str:
     return f"nozzle.{nozzle_id}.{axis}"
 
 
+def runout_key(nozzle_id: str, axis: Literal["x", "y"], tip_id: str | None = None) -> str:
+    """The key of where a nozzle's tip end is from its turning axis, at 0 degrees, with a
+    tip fitted (or none said), in the nozzle runout's values."""
+    return f"runout.{nozzle_id}{tip_suffix(tip_id)}.{axis}"
+
+
 VacuumName = Literal["open", "sealed", "held", "threshold"]
 
 
@@ -244,6 +260,10 @@ def apply_measurements(profile: MachineProfile, record: CalibrationRecord) -> No
         nozzle.vacuum = None
         if levels and all(x is not None for x in levels.values()):
             nozzle.vacuum = VacuumLevels.model_validate(levels)
+        runout = record.lines.get("nozzle_runout")
+        r = runout.values if runout else {}
+        rx, ry = runout_key(nozzle.id, "x", nozzle.tip), runout_key(nozzle.id, "y", nozzle.tip)
+        nozzle.runout = Point(x=r.get(rx, 0.0), y=r.get(ry, 0.0))
     for camera in profile.cameras:
         if camera.looking == "down" and camera.mount == "head":
             m = record.lines.get("top_camera_scale")
@@ -459,8 +479,39 @@ def build_checklist(
             "nozzle_offsets",
         )
 
-    # 7-8. Not measured yet, or not alone.
-    add("nozzle_runout", "assumed", "Not measured: taken as none.")
+    # 7. Nozzle runout, for the tip fitted on each nozzle.
+    runout = record.lines.get("nozzle_runout")
+    have = runout.values if runout else {}
+    unmeasured = [n for n in profile.nozzles if runout_key(n.id, "x", n.tip) not in have]
+    if runout is not None and not unmeasured:
+        line = _measured("nozzle_runout", 0, record, "nozzle_runout")
+        assert line is not None
+        worst = max(
+            (
+                math.hypot(have[runout_key(n.id, "x", n.tip)], have[runout_key(n.id, "y", n.tip)])
+                for n in profile.nozzles
+            ),
+            default=0.0,
+        )
+        add_measured(
+            line,
+            f"A tip end is {worst:.2f} mm off the axis it turns about (corrected): check the "
+            "tip is straight and pushed fully on"
+            if worst > RUNOUT_WARN_MM
+            else None,
+        )
+    else:
+        which = ", ".join(f"{n.label} ({n.tip or 'none said'})" for n in unmeasured)
+        add(
+            "nozzle_runout",
+            "assumed",
+            f"Not measured with the tip fitted on {which}: taken as none. Each tip is turned "
+            "over the bottom camera, and the circle its end makes gives how far off its axis "
+            "it is.",
+            "nozzle_runout",
+        )
+
+    # 8. Heights.
     fixed = feeders.fixed if feeders else []
     no_height = [f.id for f in fixed if f.feeder.pick_height is None]
     if no_height:

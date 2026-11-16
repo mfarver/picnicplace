@@ -9,6 +9,7 @@ const MEASURING = new Set([
   "camera_scale",
   "bottom_camera",
   "nozzle_offsets",
+  "nozzle_runout",
   "tip_heights",
   "tip_change",
 ]);

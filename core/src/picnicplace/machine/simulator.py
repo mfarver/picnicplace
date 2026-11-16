@@ -18,6 +18,8 @@ Besides motion, it simulates the profile's I/O:
   ``SLIP_LIFT_MM``, as a real tip did with its rim near the edge. A nozzle may also be
   set to drop the next parts it picks the same way (``drops_on_lift``), as a worn tip
   or a part caught in its pocket would.
+- Each nozzle's tip end may sit off the axis it turns about (``runout``, at 0 degrees,
+  turning with it): it touches, picks and is seen there.
 - Each nozzle's tip may be longer than the profile's (``tip_errors``), and each kind of
   tip too (``tip_kind_errors``, by tip ID, for the tip the operator says they fitted): it
   reaches that much lower than its axis says, for touching parts and surfaces. The safe-Z sensor
@@ -30,6 +32,7 @@ the commanded one, as if the motor lost steps. Sensors see the real position.
 
 import asyncio
 import contextlib
+import math
 from collections.abc import Callable, Mapping, Sequence
 
 from picnicplace.feeders.sim import SimulatedPhotonBus
@@ -96,6 +99,7 @@ class SimulatorDriver(MotionDriver):
         tip_errors: Mapping[str, float] | None = None,
         vacuum_levels: Mapping[str, tuple[float, float]] | None = None,
         tip_kind_errors: Mapping[str, float] | None = None,
+        runout: Mapping[str, tuple[float, float]] | None = None,
     ) -> None:
         super().__init__()
         self.photon = photon
@@ -111,6 +115,8 @@ class SimulatorDriver(MotionDriver):
         self._tip_kind_errors = dict(tip_kind_errors or {})
         """How much longer each kind of tip really is, by tip ID."""
         self._fitted: dict[str, str | None] = {}
+        self._runout = dict(runout or {})
+        """Where each nozzle's tip end is from its turning axis at 0 degrees, by ID."""
         """The kind of tip on each nozzle, as the operator said when they fitted it."""
         self._vacuum_levels = dict(vacuum_levels or {})
         """Each nozzle's readings open and holding a part (or sealed), by ID, as fractions
@@ -314,10 +320,20 @@ class SimulatorDriver(MotionDriver):
         return self._profile.board_height
 
     def _nozzle_at(self, nozzle: Nozzle) -> tuple[float, float, float]:
-        """Where a nozzle physically is, and its angle."""
+        """Where a nozzle's tip end physically is, and its angle."""
         at = self.scene_position
         angle = self._position.get(nozzle.rotation_axis, 0.0)
-        return at["X"] + nozzle.offset.x, at["Y"] + nozzle.offset.y, angle
+        rx, ry = self._turned_runout(nozzle)
+        return at["X"] + nozzle.offset.x + rx, at["Y"] + nozzle.offset.y + ry, angle
+
+    def _turned_runout(self, nozzle: Nozzle) -> tuple[float, float]:
+        x, y = self._runout.get(nozzle.id, (0.0, 0.0))
+        a = math.radians(self._position.get(nozzle.rotation_axis, 0.0))
+        return x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a)
+
+    @property
+    def scene_runout(self) -> Mapping[str, tuple[float, float]]:
+        return {n.id: self._turned_runout(n) for n in self._profile.nozzles if n.id in self._runout}
 
     def _suction(self, nozzle: Nozzle) -> bool:
         outputs = (nozzle.pump_output, nozzle.valve_output)

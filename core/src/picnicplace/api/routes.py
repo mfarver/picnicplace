@@ -120,8 +120,8 @@ async def update_local_profile(ctx: Context, body: LocalProfileUpdate) -> LocalP
     dependencies=[Depends(require_control)],
 )
 async def set_location(ctx: Context, kind: LocationKind, body: LocationRequest) -> MachineProfile:
-    """Set this machine's discard or park location, by default to where the top camera is
-    looking. It takes effect at once, and is kept in the local profile."""
+    """Set this machine's discard, park or paper pad location, by default to where the top
+    camera is looking. It takes effect at once, and is kept in the local profile."""
     position = body.position
     if position is None:
         if not ctx.machine.state.homed:
@@ -135,8 +135,8 @@ async def set_location(ctx: Context, kind: LocationKind, body: LocationRequest) 
     "/machine/locations/{kind}", tags=["machine"], dependencies=[Depends(require_control)]
 )
 async def reset_location(ctx: Context, kind: LocationKind) -> MachineProfile:
-    """Forget this machine's own discard or park location: the profile's or the config's,
-    if any, applies again."""
+    """Forget this machine's own discard, park or paper pad location: the profile's or the
+    config's, if any, applies again."""
     ctx.local_profile.reset_location(kind)
     return ctx.machine.profile
 

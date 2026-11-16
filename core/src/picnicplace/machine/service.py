@@ -171,9 +171,9 @@ class MachineService:
         """Which tip is fitted on each nozzle."""
         self.on_tip_changed: list[Callable[[str, str | None], None]] = []
         """Called with a nozzle's ID and its new tip whenever the tip said changes."""
-        self.after_tip_change: Callable[[list[str]], Awaitable[str]] | None = None
-        """Run at the end of a tip change by hand, with the nozzles given a new tip; what
-        it returns is added to the operation's message."""
+        self.after_tip_change: Callable[[list[str], list[str]], Awaitable[str]] | None = None
+        """Run at the end of a tip change by hand, with the nozzles whose tip was said, and
+        those given a new tip; what it returns is added to the operation's message."""
         self._design = profile.model_copy(deep=True)
         """The profile as loaded, before measurements took the place of its values."""
         self._profile = profile
@@ -597,7 +597,8 @@ class MachineService:
                 else ""
             )
             changed = [i for i, t in tips.items() if t is not None and t != before.get(i)]
-            after = await self.after_tip_change(changed) if self.after_tip_change else ""
+            fitted = [i for i, t in tips.items() if t is not None]
+            after = await self.after_tip_change(fitted, changed) if self.after_tip_change else ""
             return "Tips: " + "; ".join(said) + "." + then + after
 
         return self._start_operation("tip_change", work)

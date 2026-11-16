@@ -37,6 +37,7 @@ import numpy as np
 from picnicplace.calibration import datum_key, nozzle_key, vacuum_key
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
 from picnicplace.machine.profile import Location, Nozzle, NozzleTip, Point, VacuumLevels
+from picnicplace.machine.seat_check import keep_references, near_pad
 from picnicplace.machine.service import APPROACH_SPEED, MachineService, RoundMark
 from picnicplace.machine.sniff import SniffError, VacuumMeasure, floor_message, sniff
 from picnicplace.schemas import Operation, TipChangeNozzle
@@ -446,6 +447,7 @@ async def search_disc(machine: MachineService, diameter: float | None) -> tuple[
             m
             for m in await machine.locate_round_marks(low, high, through_lines=True)
             if math.hypot(m.at.x - dot.x, m.at.y - dot.y) > DOT_CLEARANCE_MM
+            and not near_pad(machine, m.at)
         )
     # The board has round marks of its own (fiducials, a copper disc, mounting holes):
     # the paper disc is the brightest.
@@ -560,7 +562,7 @@ def nozzle_offsets_work(
         if levels:
             record_vacuum(machine, levels)
         machine.apply_calibration()
-        return message
+        return message + await keep_references(machine, nozzles)
 
     return work
 

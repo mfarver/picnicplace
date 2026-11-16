@@ -151,6 +151,17 @@ kept in `calibration.json` in the data directory, and the pages you confirm in
    tips** measures each tip you fit, and a tip pushed on again is measured again, since it
    sits differently each time. After reseating a tip without changing it, click **Measure
    runout** in this stop.
+
+   **Paper pad (optional).** A tip pushed back on may sit a little higher or lower than
+   when its height was measured. To have each tip checked after a tip change, glue a
+   square of plain paper, about 10 mm across, flat on the datum board, clear of its dot,
+   and keep it there. Jog the top camera over it and click **Set paper pad here** in this
+   stop. From then on, each tip touches the pad right after its height is measured, and
+   **Change tips** touches it again with each tip: one that reaches more than 0.15 mm
+   higher or lower is flagged. Push it fully on, or measure its height again on paper. The
+   bare board will not do: a tip leaks on its printing until pressed about 3 mm into its
+   spring. Set the pad before running this stop, so the first heights take their
+   references.
 3. **Discard and park.** Check the two spots on the map: jog the top camera over the
    discard tray and click **Set discard here**, and to a spot where the head can wait and
    click **Set park here**, if they are not right. Then **They are right**.

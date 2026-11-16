@@ -206,6 +206,13 @@ def datum_key(nozzle_id: str, tip_id: str | None = None) -> str:
     return f"datum.{nozzle_id}{tip_suffix(tip_id)}"
 
 
+def board_key(nozzle_id: str, tip_id: str | None = None) -> str:
+    """The key of where a nozzle, with a tip fitted, touched the bare datum board right
+    after its height was measured on paper (its raw height): the reference a tip change
+    checks the tip's seat against, in the nozzle offsets' values."""
+    return f"board.{nozzle_id}{tip_suffix(tip_id)}"
+
+
 def nozzle_key(nozzle_id: str, axis: Literal["x", "y"]) -> str:
     """The key of a nozzle's offset in a measurement's values."""
     return f"nozzle.{nozzle_id}.{axis}"

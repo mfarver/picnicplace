@@ -37,6 +37,7 @@ from picnicplace.machine.nozzle_offsets import (
     with_tip,
 )
 from picnicplace.machine.profile import Nozzle, Point, VacuumLevels
+from picnicplace.machine.seat_check import hide_pad, keep_references
 from picnicplace.machine.service import MachineService
 from picnicplace.machine.sniff import VacuumMeasure
 from picnicplace.schemas import Operation
@@ -98,7 +99,7 @@ async def find_paper(machine: MachineService, radius: float) -> Point:
         frame = await machine.frame(camera.id)
         h, w = frame.image.shape[:2]
         mm = camera.field_of_view.x / w
-        x, y, depth = deepest_white(frame.image)
+        x, y, depth = deepest_white(hide_pad(machine, camera, spot, frame.image, mm))
         dx, dy = machine.image_to_machine(camera, (x - w / 2) * mm, (y - h / 2) * mm)
         at = Point(x=spot.x + dx, y=spot.y + dy)
         if best is None or depth * mm > best[0]:
@@ -190,7 +191,7 @@ def tip_heights_work(
         if levels:
             record_vacuum(machine, levels)
         machine.apply_calibration()
-        return f"On the paper: {said}."
+        return f"On the paper: {said}." + await keep_references(machine, nozzles)
 
     return work
 

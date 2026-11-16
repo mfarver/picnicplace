@@ -45,6 +45,7 @@ from picnicplace.machine.errors import MachineError
 from picnicplace.machine.factory import build_driver
 from picnicplace.machine.local import LocalProfile, LocalProfileStore
 from picnicplace.machine.runout import forget_runout, runout_after_tip_change
+from picnicplace.machine.seat_check import check_seats
 from picnicplace.machine.service import MachineService
 from picnicplace.machine.tips import TipStore
 from picnicplace.machine_setup import SetupStore, setup_facts
@@ -115,7 +116,13 @@ def create_app(
     machine.sim_tips = dict(config.machine.sim_tips)
     machine.use_tips(TipStore(config.data.tips_path))
     machine.on_tip_changed.append(lambda n, tip: forget_runout(machine, n, tip))
-    machine.after_tip_change = lambda ids: runout_after_tip_change(machine, ids)
+
+    async def after_tip_change(fitted: list[str], changed: list[str]) -> str:
+        # How each tip sits, then the runout of each new one.
+        seats = await check_seats(machine, fitted)
+        return seats + await runout_after_tip_change(machine, changed)
+
+    machine.after_tip_change = after_tip_change
     machine.attach_cameras(grab)
     lease.on_holder_left.append(machine.stop_manual_motion)
     bring_up = BringUpStore(config.data.bringup_path)

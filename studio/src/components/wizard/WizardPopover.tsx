@@ -395,6 +395,12 @@ function StopBody({
             Runout is measured by itself after each tip change. Measure it again after
             pushing a tip back on.
           </p>
+          <p className="text-muted">
+            Optional: glue a square of plain paper, about 10 mm across, flat on the datum
+            board, clear of its dot, and set it here. Each tip touches it after its height is
+            measured, and again after a tip change, to check it sits as it did.
+          </p>
+          <MachineLocations description={description} canSet={canSet} kinds={["paper_pad"]} />
           {runoutOp?.status === "failed" && (
             <p className="note note-danger">{runoutOp.error}</p>
           )}

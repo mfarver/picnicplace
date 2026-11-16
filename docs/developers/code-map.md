@@ -139,7 +139,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `machine/nozzle_offsets.py` | Calibrating the nozzle offsets: sniffing for the disc's top on the datum board, then turning the disc with each nozzle; each nozzle's vacuum levels measured on the way |
 | `machine/tip_heights.py` | A tip's height and vacuum levels measured on a paper square, for tips too big for the calibration disc |
 | `machine/driver.py` | The interface every motion driver implements |
-| `machine/simulator.py` | The simulated machine. Its errors are realistic (homing error, feeder steps, slot and board offsets, cameras and nozzles off the profile, tips longer than the profile's, the datum board's height), so calibration and vision have something to find. |
+| `machine/simulator.py` | The simulated machine. Its errors are realistic (homing error, feeder steps, slot and board offsets, cameras and nozzles off the profile, tips longer than the profile's, the datum board's height, a tip too near the disc's edge that seals but drops it as it lifts), so calibration and vision have something to find. |
 | `machine/marlin/` | The Marlin driver (`driver.py`: one G-code command at a time, each waiting for its `ok`), the serial port (`transport.py`), how a profile's `[marlin]` table tells it what to send (`settings.py`), and a fake LumenPnP firmware that answers the way a real one does (`fake.py`) |
 | `machine/factory.py` | Picks the driver the config asks for (simulator, Marlin, or Marlin against a fake firmware) |
 | `machine/errors.py` | Machine errors; their messages are written to be shown to users |

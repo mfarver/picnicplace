@@ -109,6 +109,36 @@ def test_each_tip_keeps_its_own_heights() -> None:
         assert n1["tip"] == "N14" and n1["z_offset"] == pytest.approx(0.6, abs=0.1)
 
 
+def test_a_tip_near_the_discs_edge_seals_but_drops_it() -> None:
+    """The left nozzle is 1.3 mm from where the profile says. Before it is calibrated it
+    comes down that far from the disc's center: an N14 tip (2.7 mm across) has only 0.35 mm
+    of paper beyond its face there, seals, and drops the disc as it lifts. The calibration
+    stops and says so, keeping nothing, and the disc lies on the board, not on the nozzle.
+    The N08 tip (1.5 mm) has room, and finds the nozzle."""
+    config = offsets_config(sim_nozzle_offset_error={"N1": (1.3, 0.0)})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        fit(s, "N1", "N14")
+        move_camera_over_disc(client, s, config)
+        op = s.wait(s.post("/api/v1/machine/nozzle-offsets", {"nozzle_ids": ["N1"]}))
+        assert op["status"] == "failed", op
+        assert "sealed on the disc" in op["error"] and "dropped it as it lifted" in op["error"]
+        parts = feeders(client).sim_parts
+        assert parts is not None and not parts.held
+        assert [p.shape.disc for p in parts.placed] == [6.0]
+        outputs = s.state()["outputs"]
+        assert not any(on for name, on in outputs.items() if name.startswith(("pump", "valve")))
+        assert lines(client)["nozzle_offsets"]["status"] != "done"
+        nozzles = {n["id"]: n for n in client.get("/api/v1/machine/description").json()["nozzles"]}
+        assert nozzles["N1"]["z_offset"] == 0.0
+        assert s.state()["z_safe"]
+
+        fit(s, "N1", "N08")
+        move_camera_over_disc(client, s, config)
+        ok(s.wait(s.post("/api/v1/machine/nozzle-offsets", {"nozzle_ids": ["N1"]})))
+        assert lines(client)["nozzle_offsets"]["status"] == "done"
+
+
 def test_a_big_tips_height_is_measured_on_paper() -> None:
     """A LumenPnP comes with one tip of each size, and the N24 is too big for its disc. The
     offsets are measured with small tips; then, with the N24 fitted, the paper stop's

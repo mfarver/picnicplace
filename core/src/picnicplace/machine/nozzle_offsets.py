@@ -268,8 +268,15 @@ async def turn_disc(
     # The first millimeter slowly, so the disc is not torn off before the seal holds it.
     await machine.lower_nozzle(nozzle, height + LIFT_SLOW_MM, APPROACH_SPEED)
     await machine.raise_nozzles()
-    held = await machine.holds_part(nozzle, True, VACUUM_TIMEOUT_S, level)
-    reading = await machine.settled_vacuum(nozzle, 0.0, HELD_SETTLE_S) if held else None
+    # Judged once the vacuum has settled: just after the lift it still reads the seal, and
+    # a disc that slipped off on the way up looked held until the reading fell.
+    reading = await machine.settled_vacuum(nozzle, 0.0, HELD_SETTLE_S)
+    if reading is not None and not machine.reads_held(nozzle, reading, level):
+        reading = None
+        held = False
+    else:
+        held = await machine.holds_part(nozzle, True, VACUUM_TIMEOUT_S, level)
+        reading = reading if held else None
     if held is False:
         await machine.suction(nozzle, False)
         raise NozzleOffsetError(

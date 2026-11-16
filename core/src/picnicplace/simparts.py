@@ -121,6 +121,14 @@ class SimulatedParts:
             for part in self.placed
         )
 
+    def rim_at(self, x: float, y: float) -> float | None:
+        """How far a point is from the edge of the disc under it, if any."""
+        for part in self.placed:
+            d = part.shape.disc
+            if d is not None and math.hypot(part.x - x, part.y - y) <= d / 2:
+                return d / 2 - math.hypot(part.x - x, part.y - y)
+        return None
+
     def _top(self, x: float, y: float) -> float | None:
         """The top of the part under a point: a disc's on what it lies on, or a feeder's."""
         for part in self.placed:

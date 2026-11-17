@@ -76,7 +76,7 @@ esp_err_t board_lcd_init(esp_lcd_panel_handle_t *panel)
         .data_width = 16,
         .in_color_format = LCD_COLOR_FMT_RGB565,
         .out_color_format = LCD_COLOR_FMT_RGB565,
-        .num_fbs = 1,
+        .num_fbs = 2, /* double-buffered: see display.c */
         .bounce_buffer_size_px = BOARD_WIDTH * LCD_BOUNCE_LINES,
         .hsync_gpio_num = LCD_HSYNC,
         .vsync_gpio_num = LCD_VSYNC,

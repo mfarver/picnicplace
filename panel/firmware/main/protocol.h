@@ -12,6 +12,9 @@
  *       the backlight's brightness, 0 to 100.
  *   {"type": "expander", "pin": 5, "high": true}
  *       for development only: drive one of the I/O expander's pins.
+ *   {"type": "screenshot"}
+ *       for development only: the panel answers with its screen, a line per row:
+ *       {"type": "screenshot", "width": 600, "height": 1024, "row": 0, "rgb565": "<hex>"}
  *
  * From the panel:
  *   {"type": "hello", "firmware": "0.1.0", "screen": {"width": 1024, "height": 600}}
@@ -61,6 +64,7 @@ typedef enum {
     EVENT_MESSAGE,
     EVENT_BACKLIGHT,
     EVENT_EXPANDER,
+    EVENT_SCREENSHOT,
 } panel_event_kind_t;
 
 typedef struct {

@@ -36,7 +36,7 @@
 /* Bring up the I2C bus, and report which devices answer on it. */
 esp_err_t board_i2c_init(i2c_master_bus_handle_t *bus);
 
-/* Start the RGB screen, with its frame buffer in PSRAM. */
+/* Start the RGB screen, with two frame buffers in PSRAM. */
 esp_err_t board_lcd_init(esp_lcd_panel_handle_t *panel);
 
 /* Read the E-stop's sensing pole: true when pressed (or its wire is broken). */

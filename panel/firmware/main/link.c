@@ -20,6 +20,7 @@
 
 #define LINE_LIMIT 1536
 #define BUFFER 2048
+#define WRITE_PIECE 512
 
 static link_line_cb_t s_on_line;
 static SemaphoreHandle_t s_send_lock;
@@ -36,7 +37,17 @@ static int link_read(uint8_t *buf, size_t len)
 static void link_write(const char *data, size_t len)
 {
 #if CONFIG_PANEL_LINK_USB
-    usb_serial_jtag_write_bytes(data, len, pdMS_TO_TICKS(100));
+    /* A long line (a screenshot's row) is more than the driver's buffer takes in one write,
+     * which it refuses whole: send it in pieces. */
+    while (len > 0) {
+        size_t piece = len < WRITE_PIECE ? len : WRITE_PIECE;
+        int sent = usb_serial_jtag_write_bytes(data, piece, pdMS_TO_TICKS(100));
+        if (sent <= 0) {
+            return; /* no host reading: drop the rest */
+        }
+        data += sent;
+        len -= (size_t)sent;
+    }
 #else
     uart_write_bytes(UART_NUM_0, data, len);
 #endif

@@ -20,8 +20,11 @@ PicnicPlace's software.
 | `firmware/main/gt911.c` | The touch controller |
 | `firmware/main/protocol.c` | The JSON messages to and from the core (listed in `protocol.h`) |
 | `firmware/main/link.c` | The serial link: native USB, or UART0 for development |
-| `firmware/main/ui.c` | The screen |
-| `tools/fake_core.py` | A stand-in for the core, to try the panel without a machine |
+| `firmware/main/display.c` | LVGL on the screen: turned to portrait, double-buffered so nothing is seen half drawn |
+| `firmware/main/seg7.c` | The seven-segment readout for X, Y and Z, drawn as segments (no font) |
+| `firmware/main/ui.c` | The screen's layout |
+| `tools/fake_core.py` | A stand-in for the core, to try the panel without a machine; `screenshot FILE.png` saves the panel's screen |
+| `tools/make_icon.py` | Makes the status bar's icon from `docs/brand/picnicplace-icon-transparent.png` |
 
 ## Build
 
@@ -60,8 +63,9 @@ are not JSON.
 
 Tried on a real 7B (2026-11-17):
 
-- **Working:** the screen, at Waveshare's timing for the 7B; touch; the status bar, the
-  position, the core's messages; Home (after the nozzles-level check), Pause or Resume,
+- **Working:** the screen, at Waveshare's timing for the 7B, in portrait (600 × 1024; the
+  orientation is a menuconfig choice) and double-buffered; touch; the status bar with the
+  PicnicPlace icon, the position in green seven-segment digits, the core's messages; Home (after the nozzles-level check), Pause or Resume,
   and Stop; "No connection to the core" after two seconds of silence; the backlight's
   brightness; the link over native USB; the E-stop input (it reads pressed with nothing
   wired, as a broken wire should).

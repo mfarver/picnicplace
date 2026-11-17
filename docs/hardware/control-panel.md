@@ -255,8 +255,9 @@ the Studio. The panel cannot do anything the API cannot.
 
 ## What is built
 
-- **The firmware** (`panel/` in the repository; see its README): the status bar, the
-  position and tips, the core's messages, Home after the nozzles-level check, Pause or
+- **The firmware** (`panel/` in the repository; see its README): the screen in portrait
+  (600 × 1024), for mounting upright on the machine's side rail; the status bar, the
+  position in seven-segment digits, the tips, the core's messages, Home after the nozzles-level check, Pause or
   Resume, and Stop, "No connection to the core", the backlight, and the E-stop input,
   over native USB. Tried on a real 7B.
 - **The core's side** (`core/src/picnicplace/panel.py`): with `[panel] port` set in the

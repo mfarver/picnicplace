@@ -12,4 +12,19 @@ menu "PicnicPlace panel"
             bool "Native USB, as a USB serial device (the I/O expander selects USB)"
     endchoice
 
+    choice PANEL_ORIENTATION
+        prompt "Orientation"
+        default PANEL_PORTRAIT_RIGHT_UP
+        help
+            How the screen is mounted. The board's long edges are its left and right in
+            portrait.
+
+        config PANEL_PORTRAIT_RIGHT_UP
+            bool "Portrait, the board's right edge (in landscape) at the top"
+        config PANEL_PORTRAIT_LEFT_UP
+            bool "Portrait, the board's left edge (in landscape) at the top"
+        config PANEL_LANDSCAPE
+            bool "Landscape"
+    endchoice
+
 endmenu

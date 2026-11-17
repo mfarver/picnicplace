@@ -12,10 +12,14 @@
 #include <string.h>
 
 #include "lvgl.h"
+#include "seg7.h"
 
 #define STATUS_H 56
+#define STATUS_H_PORTRAIT 100 /* the chips on a row of their own */
 #define ACTION_H 104
 #define POSITION_W 400
+#define READOUT_H 76 /* the seven-segment digits' height, in portrait */
+#define READOUT_H_LANDSCAPE 56
 #define PAD 16
 #define SILENCE_MS 2000
 
@@ -28,6 +32,7 @@
 #define C_AMBER 0xd29922
 #define C_RED 0xf85149
 #define C_BLUE 0x4493f8
+#define C_LED 0x39ff7a /* LED green */
 
 LV_IMAGE_DECLARE(picnicplace_icon);
 
@@ -137,41 +142,58 @@ void ui_create(ui_press_cb_t on_press)
     int w = lv_display_get_horizontal_resolution(NULL);
     int h = lv_display_get_vertical_resolution(NULL);
 
-    /* The status bar. */
-    lv_obj_t *bar = box(screen, 0, 0, w, STATUS_H, C_CARD);
+    bool portrait = h > w;
+
+    /* The status bar: in portrait, the chips go on a second row. */
+    int status_h = portrait ? STATUS_H_PORTRAIT : STATUS_H;
+    lv_obj_t *bar = box(screen, 0, 0, w, status_h, C_CARD);
     lv_obj_t *icon = lv_image_create(bar);
     lv_image_set_src(icon, &picnicplace_icon);
-    lv_obj_align(icon, LV_ALIGN_LEFT_MID, PAD, 0);
+    lv_obj_align(icon, LV_ALIGN_TOP_LEFT, PAD, (STATUS_H - 40) / 2);
     lv_obj_t *name = label(bar, &lv_font_montserrat_20, C_TEXT, "PicnicPlace");
     lv_obj_align_to(name, icon, LV_ALIGN_OUT_RIGHT_MID, 10, 0);
     s_connected = make_chip(bar);
-    lv_obj_align_to(s_connected, name, LV_ALIGN_OUT_RIGHT_MID, 28, 0);
+    if (portrait) {
+        lv_obj_align(s_connected, LV_ALIGN_BOTTOM_LEFT, PAD, -10);
+    } else {
+        lv_obj_align_to(s_connected, name, LV_ALIGN_OUT_RIGHT_MID, 28, 0);
+    }
     s_homed = make_chip(bar);
     lv_obj_align_to(s_homed, s_connected, LV_ALIGN_OUT_RIGHT_MID, 12, 0);
     s_control = make_chip(bar);
     lv_obj_align_to(s_control, s_homed, LV_ALIGN_OUT_RIGHT_MID, 12, 0);
     s_run_label = label(bar, &lv_font_montserrat_20, C_MUTED, "");
-    lv_obj_align(s_run_label, LV_ALIGN_RIGHT_MID, -PAD, 0);
+    lv_obj_align(s_run_label, LV_ALIGN_TOP_RIGHT, -PAD, (STATUS_H - 24) / 2);
 
-    /* The position. */
-    int top = STATUS_H + PAD;
+    /* The position, in seven-segment digits. */
+    int top = status_h + PAD;
+    int digits = portrait ? READOUT_H : READOUT_H_LANDSCAPE;
+    int row = digits + 24;
+    int readout_w = portrait ? w - PAD - 64 : POSITION_W - 64 - PAD;
     for (int i = 0; i < 3; i++) {
         lv_obj_t *axis = label(screen, &lv_font_montserrat_28, C_MUTED, AXES[i]);
-        lv_obj_set_pos(axis, PAD + 8, top + 14 + i * 72);
-        s_axis[i] = label(screen, &lv_font_montserrat_48, C_TEXT, "-");
-        lv_obj_set_width(s_axis[i], 280);
-        lv_obj_set_style_text_align(s_axis[i], LV_TEXT_ALIGN_RIGHT, 0);
-        lv_obj_set_pos(s_axis[i], 70, top + i * 72);
+        lv_obj_set_pos(axis, PAD + 8, top + i * row + (digits - 28) / 2);
+        s_axis[i] = seg7_create(screen, digits, lv_color_hex(C_LED));
+        lv_obj_set_width(s_axis[i], readout_w);
+        lv_obj_set_pos(s_axis[i], 56, top + i * row);
+        seg7_set_text(s_axis[i], "-");
     }
+    int below = top + 3 * row;
     for (int i = 3; i < 5; i++) {
         s_axis[i] = label(screen, &lv_font_montserrat_20, C_MUTED, "");
-        lv_obj_set_pos(s_axis[i], PAD + 8, top + 230 + (i - 3) * 32);
+        if (portrait) {
+            lv_obj_set_pos(s_axis[i], PAD + 8 + (i - 3) * (w / 2), below);
+        } else {
+            lv_obj_set_pos(s_axis[i], PAD + 8, below + (i - 3) * 32);
+        }
     }
     s_tips = label(screen, &lv_font_montserrat_20, C_MUTED, "");
-    lv_obj_set_pos(s_tips, PAD + 8, top + 310);
+    lv_obj_set_pos(s_tips, PAD + 8, portrait ? below + 36 : below + 72);
 
-    /* The core's messages. */
-    lv_obj_t *card = box(screen, POSITION_W, top, w - POSITION_W - PAD, h - top - ACTION_H - PAD,
+    /* The core's messages: beside the position in landscape, below it in portrait. */
+    int card_x = portrait ? PAD : POSITION_W;
+    int card_y = portrait ? below + 110 : top;
+    lv_obj_t *card = box(screen, card_x, card_y, w - card_x - PAD, h - card_y - ACTION_H - PAD,
                          C_CARD);
     lv_obj_set_style_radius(card, 10, 0);
     lv_obj_set_style_pad_all(card, PAD, 0);
@@ -188,13 +210,15 @@ void ui_create(ui_press_cb_t on_press)
     lv_obj_align(s_level_check, LV_ALIGN_BOTTOM_LEFT, 0, 0);
     lv_obj_add_event_cb(s_level_check, level_checked, LV_EVENT_VALUE_CHANGED, NULL);
 
-    /* The action bar. */
+    /* The action bar: three equal keys in portrait, Stop always on the right. */
     lv_obj_t *actions = box(screen, 0, h - ACTION_H, w, ACTION_H, C_CARD);
-    s_home_btn = button(actions, PAD, 300, C_BLUE, "Home", "home", NULL);
+    int key_w = portrait ? (w - 4 * PAD) / 3 : 300;
+    s_home_btn = button(actions, PAD, key_w, C_BLUE, "Home", "home", NULL);
     lv_obj_add_state(s_home_btn, LV_STATE_DISABLED);
-    s_pause_btn = button(actions, PAD + 300 + PAD, 300, C_AMBER, "Pause", "pause", &s_pause_label);
+    s_pause_btn = button(actions, 2 * PAD + key_w, key_w, C_AMBER, "Pause", "pause",
+                         &s_pause_label);
     lv_obj_add_state(s_pause_btn, LV_STATE_DISABLED);
-    s_stop_btn = button(actions, w - PAD - 300, 300, C_RED, "Stop", "stop", NULL);
+    s_stop_btn = button(actions, w - PAD - key_w, key_w, C_RED, "Stop", "stop", NULL);
 
     /* Shown while the core is silent. */
     s_offline = box(screen, 0, 0, w, h, C_BG);
@@ -248,7 +272,7 @@ static void apply_state(const panel_state_t *s)
         char text[32];
         for (int i = 0; i < 3; i++) {
             snprintf(text, sizeof text, "%.2f", v[i]);
-            lv_label_set_text(s_axis[i], text);
+            seg7_set_text(s_axis[i], text);
         }
         for (int i = 3; i < 5; i++) {
             snprintf(text, sizeof text, "%s  %.1f\xc2\xb0", AXES[i], v[i]);

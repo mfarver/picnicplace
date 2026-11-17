@@ -76,6 +76,8 @@ bool protocol_parse(const char *line, panel_event_t *out)
         out->kind = EVENT_BACKLIGHT;
         double level = number(root, "level");
         out->backlight.level = level < 0 ? 0 : (level > 100 ? 100 : (int)level);
+    } else if (cJSON_IsString(type) && strcmp(type->valuestring, "screenshot") == 0) {
+        out->kind = EVENT_SCREENSHOT;
     } else if (cJSON_IsString(type) && strcmp(type->valuestring, "expander") == 0) {
         int pin = (int)number(root, "pin");
         if (pin >= 0 && pin <= 7) {

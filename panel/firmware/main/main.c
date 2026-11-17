@@ -8,6 +8,7 @@
 #include <stdio.h>
 
 #include "board.h"
+#include "display.h"
 #include "esp_app_desc.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -24,7 +25,6 @@
 
 static const char *TAG = "panel";
 
-#define DRAW_LINES 60
 #define HELLO_EVERY_MS 5000
 #define ESTOP_EVERY_MS 50
 #define PING_EVERY_MS 1000
@@ -33,6 +33,15 @@ static QueueHandle_t s_events;
 static esp_lcd_panel_handle_t s_panel;
 static gt911_t s_touch;
 static bool s_touch_ok;
+
+/* The screen as drawn: portrait swaps the panel's axes (see display.c). */
+#if CONFIG_PANEL_LANDSCAPE
+#define SCREEN_W BOARD_WIDTH
+#define SCREEN_H BOARD_HEIGHT
+#else
+#define SCREEN_W BOARD_HEIGHT
+#define SCREEN_H BOARD_WIDTH
+#endif
 
 static uint32_t now_ms(void)
 {
@@ -59,15 +68,40 @@ static void send_hello(void)
 {
     char buf[160];
     const esp_app_desc_t *app = esp_app_get_description();
-    if (protocol_hello(buf, sizeof buf, app->version, BOARD_WIDTH, BOARD_HEIGHT) > 0) {
+    if (protocol_hello(buf, sizeof buf, app->version, SCREEN_W, SCREEN_H) > 0) {
         link_send(buf);
     }
 }
 
-static void flush(lv_display_t *display, const lv_area_t *area, uint8_t *pixels)
+/* Send the screen as it is drawn, a row per line, for a screenshot. */
+static void send_screenshot(void)
 {
-    esp_lcd_panel_draw_bitmap(s_panel, area->x1, area->y1, area->x2 + 1, area->y2 + 1, pixels);
-    lv_display_flush_ready(display);
+    lv_draw_buf_t *shot = lv_snapshot_take(lv_screen_active(), LV_COLOR_FORMAT_RGB565);
+    if (shot == NULL) {
+        ESP_LOGW(TAG, "no memory for a screenshot");
+        return;
+    }
+    int w = shot->header.w, h = shot->header.h;
+    static const char HEX[] = "0123456789abcdef";
+    size_t size = 128 + (size_t)w * 4;
+    char *line = heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
+    for (int y = 0; line != NULL && y < h; y++) {
+        const uint8_t *row = shot->data + (size_t)y * shot->header.stride;
+        int n = snprintf(line, size,
+                         "{\"type\":\"screenshot\",\"width\":%d,\"height\":%d,\"row\":%d,"
+                         "\"rgb565\":\"",
+                         w, h, y);
+        for (int i = 0; i < w * 2; i++) {
+            line[n++] = HEX[row[i] >> 4];
+            line[n++] = HEX[row[i] & 15];
+        }
+        line[n++] = '"';
+        line[n++] = '}';
+        line[n] = '\0';
+        link_send(line);
+    }
+    heap_caps_free(line);
+    lv_draw_buf_destroy(shot);
 }
 
 static void read_touch(lv_indev_t *indev, lv_indev_data_t *data)
@@ -79,21 +113,24 @@ static void read_touch(lv_indev_t *indev, lv_indev_data_t *data)
         gt911_poll(&s_touch, &down, &x, &y);
     }
     data->state = down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+    /* The touch controller reports the panel's own (landscape) coordinates. */
+#if CONFIG_PANEL_PORTRAIT_RIGHT_UP
+    data->point.x = y;
+    data->point.y = BOARD_WIDTH - 1 - x;
+#elif CONFIG_PANEL_PORTRAIT_LEFT_UP
+    data->point.x = BOARD_HEIGHT - 1 - y;
+    data->point.y = x;
+#else
     data->point.x = x;
     data->point.y = y;
+#endif
 }
 
 static void start_display(void)
 {
     lv_init();
     lv_tick_set_cb(now_ms);
-    lv_display_t *display = lv_display_create(BOARD_WIDTH, BOARD_HEIGHT);
-    lv_display_set_color_format(display, LV_COLOR_FORMAT_RGB565);
-    size_t size = BOARD_WIDTH * DRAW_LINES * 2;
-    void *a = heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
-    void *b = heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
-    lv_display_set_buffers(display, a, b, size, LV_DISPLAY_RENDER_MODE_PARTIAL);
-    lv_display_set_flush_cb(display, flush);
+    display_start(s_panel, SCREEN_W, SCREEN_H);
     lv_indev_t *touch = lv_indev_create();
     lv_indev_set_type(touch, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(touch, read_touch);
@@ -134,6 +171,10 @@ void app_main(void)
             heard = heard || event.kind == EVENT_STATE;
             if (event.kind == EVENT_BACKLIGHT) {
                 expander_backlight(event.backlight.level);
+                continue;
+            }
+            if (event.kind == EVENT_SCREENSHOT) {
+                send_screenshot();
                 continue;
             }
             if (event.kind == EVENT_EXPANDER) {

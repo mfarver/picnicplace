@@ -4,7 +4,8 @@ Sends the panel a ``state`` message twice a second, with the position moving, an
 every line the panel sends (its JSON messages, and over UART its log too). Type a line
 and press Enter to send it as a ``message`` to the panel; type ``quiet`` to stop sending
 state (the panel should say it has no connection after two seconds), ``loud`` to resume,
-``backlight 40`` to set the backlight's brightness (0-100).
+``backlight 40`` to set the backlight's brightness (0-100), ``screenshot FILE.png`` to save
+the panel's screen.
 
     python panel/tools/fake_core.py /dev/cu.usbmodem5C940614361
 
@@ -15,11 +16,35 @@ from __future__ import annotations
 
 import json
 import math
+import struct
 import sys
 import threading
 import time
+import zlib
+from pathlib import Path
 
 import serial
+
+
+def write_png(path: Path, width: int, rows: dict[int, bytes]) -> None:
+    """Save RGB565 rows (little-endian, as the panel sends them) as an RGB PNG."""
+    raw = bytearray()
+    for y in range(len(rows)):
+        raw.append(0)  # no filter
+        row = rows[y]
+        for i in range(0, width * 2, 2):
+            v = row[i] | (row[i + 1] << 8)
+            r, g, b = (v >> 11) & 31, (v >> 5) & 63, v & 31
+            raw += bytes(((r * 255 + 15) // 31, (g * 255 + 31) // 63, (b * 255 + 15) // 31))
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    header = struct.pack(">IIBBBBB", width, len(rows), 8, 2, 0, 0, 0)
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header)
+    png += chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b"")
+    path.write_bytes(png)
 
 
 def main() -> None:
@@ -34,6 +59,8 @@ def main() -> None:
         with lock:
             port.write((json.dumps(message) + "\n").encode())
 
+    shot: dict[str, object] = {}
+
     def read() -> None:
         buffer = b""
         while True:
@@ -41,6 +68,15 @@ def main() -> None:
             while b"\n" in buffer:
                 line, buffer = buffer.split(b"\n", 1)
                 text = line.decode(errors="replace").rstrip("\r")
+                if text.startswith('{"type":"screenshot"'):
+                    part = json.loads(text)
+                    rows: dict[int, bytes] = shot.setdefault("rows", {})  # type: ignore[assignment]
+                    rows[part["row"]] = bytes.fromhex(part["rgb565"])
+                    if len(rows) == part["height"]:
+                        write_png(Path(str(shot["path"])), part["width"], rows)
+                        print("saved", shot["path"], flush=True)
+                        shot.clear()
+                    continue
                 marker = "panel>" if text.startswith("{") else "  log|"
                 print(marker, text, flush=True)
 
@@ -76,6 +112,9 @@ def main() -> None:
             sending.clear()
         elif text == "loud":
             sending.set()
+        elif text.startswith("screenshot "):
+            shot["path"] = text.split(maxsplit=1)[1]
+            send({"type": "screenshot"})
         elif text.startswith("backlight "):
             send({"type": "backlight", "level": int(text.split()[1])})
         elif text:

@@ -94,6 +94,9 @@ def build_driver(config: MachineConfig) -> DriverBundle:
         )
         driver.surface_at = sim_surface(config)
         driver.datum_seal_press = config.sim_datum_seal_press
+        driver.bare_seal_tip_mm = config.sim_bare_seal_tip_mm
+        driver.paper_lift = dict(config.sim_paper_lift)
+        driver.bare_first_seal = config.sim_bare_first_seal
         driver.drops_on_lift = dict(config.sim_drops_on_lift)
         return DriverBundle(driver, photon_sim=photon)
 

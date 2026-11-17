@@ -218,6 +218,12 @@ def nozzle_key(nozzle_id: str, axis: Literal["x", "y"]) -> str:
     return f"nozzle.{nozzle_id}.{axis}"
 
 
+def z_offset_key(nozzle_id: str) -> str:
+    """The key of the Z offset a nozzle had when it measured something at a height, in
+    that measurement's values: a height found with it moves if its offset changes."""
+    return f"z.{nozzle_id}"
+
+
 def runout_key(nozzle_id: str, axis: Literal["x", "y"], tip_id: str | None = None) -> str:
     """The key of where a nozzle's tip end is from its turning axis, at 0 degrees, with a
     tip fitted (or none said), in the nozzle runout's values."""
@@ -286,13 +292,17 @@ def apply_measurements(profile: MachineProfile, record: CalibrationRecord) -> No
         if {"x", "y", "focus", "scale_x", "scale_y", "width", "height"} <= v.keys():
             # The place was found with a nozzle's tip: where the nozzle is now known to
             # be, measured since, moves it with the nozzle.
-            dx = dy = 0.0
+            dx = dy = dz = 0.0
             for nozzle in profile.nozzles:
                 kx, ky = nozzle_key(nozzle.id, "x"), nozzle_key(nozzle.id, "y")
                 if kx in v and ky in v:
                     dx, dy = nozzle.offset.x - v[kx], nozzle.offset.y - v[ky]
+                    # The focus is where the nozzle was sent, with its Z offset then (none
+                    # kept means none: measured before the offsets). Sent with its offset
+                    # now, it reaches the same place from a height moved by the change.
+                    dz = nozzle.z_offset - v.get(z_offset_key(nozzle.id), 0.0)
             camera.position = Point(x=v["x"] + dx, y=v["y"] + dy)
-            camera.focus_height = v["focus"]
+            camera.focus_height = v["focus"] - dz
             camera.image_rotation = v.get("rotation", 0.0)
             camera.field_of_view = Point(x=v["scale_x"] * v["width"], y=v["scale_y"] * v["height"])
 

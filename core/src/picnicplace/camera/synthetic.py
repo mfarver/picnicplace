@@ -19,6 +19,7 @@ import cv2
 import numpy as np
 
 from picnicplace.camera.source import CameraSource, Frame, Image
+from picnicplace.machine.datum_board import DATUM_MARKS, board_turn
 from picnicplace.machine.profile import Camera, MachineProfile, NozzleTip, Point
 from picnicplace.simparts import HeldPart, PartShape, PlacedPart
 
@@ -520,6 +521,7 @@ DATUM_MASK = (34, 33, 32)  # black mask over copper
 DATUM_COPPER = (120, 190, 225)  # exposed copper
 DATUM_FR4 = (95, 140, 150)  # bare board, where neither mask nor copper covers it
 DATUM_SILK = (225, 228, 230)
+DATUM_TIN = (246, 248, 248)  # a tinned pad: whiter than paper under the top light
 
 DATUM_OUTLINE = [
     (-40, -10),
@@ -544,7 +546,7 @@ def _datum_board(c: _Canvas, img: Image, o: Point, camera_y: float | None) -> No
     # The offsets below are in the board's own frame, with its notched edge (ruler side)
     # toward -Y. The board is mounted with that edge facing the bottom camera, so it is
     # turned (never mirrored) to face the camera.
-    s = 1 if camera_y is None or camera_y > o.y else -1
+    s = board_turn(o, camera_y)
 
     def at(dx: float, dy: float) -> tuple[float, float]:
         return o.x - s * dx, o.y - s * dy
@@ -582,9 +584,11 @@ def _datum_board(c: _Canvas, img: Image, o: Point, camera_y: float | None) -> No
         c.circle(img, *at(dx, dy), 1.5, DATUM_FR4)
         c.circle(img, *at(dx, dy), 0.5, DATUM_COPPER)
 
-    # A 5 mm exposed copper disc, mounting holes, and a 30 mm ruler along the front edge.
-    c.circle(img, *at(-22.5, -7.5), 2.5, DATUM_COPPER)
-    c.ring(img, *at(22.5, -7.5), 1.25, 0.15, DATUM_SILK)  # the one front silkscreen mark
+    # A 5 mm tinned pad and a 5 mm silkscreen disc, each as bright as paper, mounting
+    # holes, and a 30 mm ruler along the front edge.
+    pad, disc = DATUM_MARKS
+    c.circle(img, *at(pad.dx, pad.dy), pad.diameter / 2, DATUM_TIN)
+    c.circle(img, *at(disc.dx, disc.dy), disc.diameter / 2, DATUM_SILK)
     for dx, dy in DATUM_HOLES:
         c.circle(img, *at(dx, dy), 3.2, DATUM_COPPER)
         c.circle(img, *at(dx, dy), 1.6, (15, 15, 15))
@@ -594,10 +598,18 @@ def _datum_board(c: _Canvas, img: Image, o: Point, camera_y: float | None) -> No
 
 
 class BottomRenderer:
-    def __init__(self, profile: MachineProfile, camera: Camera, size: tuple[int, int]):
+    def __init__(
+        self,
+        profile: MachineProfile,
+        camera: Camera,
+        size: tuple[int, int],
+        collars: dict[str, float] | None = None,
+    ):
         self.profile = profile
         self.camera = camera
         self.size = size
+        self.collars = collars or {}
+        """A lit ring behind each kind of tip's end, its diameter in mm, by tip ID."""
         rng = np.random.default_rng(11)
         w, h = size
         self._grain = rng.integers(-5, 6, size=(h, w, 1), dtype=np.int16)
@@ -625,7 +637,9 @@ class BottomRenderer:
             x, y = head_x + nozzle.offset.x + rx, head_y + nozzle.offset.y + ry
             if not canvas.visible(x, y, 5):
                 continue
-            end = _tip_end(canvas, img, x, y, self.profile.nozzle_tip(tips.get(nozzle.id)))
+            tip = self.profile.nozzle_tip(tips.get(nozzle.id))
+            collar = self.collars.get(tip.id) if tip is not None else None
+            end = _tip_end(canvas, img, x, y, tip, collar)
             empty = not state.held.get(nozzle.id) and nozzle.id not in dict(state.held_parts)
             if empty and self.camera.focus_height is not None:
                 # An empty tip is sharp only at the camera's focus height.
@@ -655,24 +669,42 @@ TIP_BODY_RADIUS = 2.6
 """A nozzle seen from below without a known tip, and a fitted tip's body behind its end."""
 
 
-def _tip_end(canvas: _Canvas, img: Image, x: float, y: float, tip: NozzleTip | None) -> float:
+COLLAR_GAP = 0.5
+"""A lit ring behind a tip's end starts this far (mm) outside the end, with a dark gap
+between, as a real N24 showed: its lit part is wide, so its inner edge is not a circle
+the size of a larger tip's hole."""
+
+
+def _tip_end(
+    canvas: _Canvas,
+    img: Image,
+    x: float,
+    y: float,
+    tip: NozzleTip | None,
+    collar: float | None = None,
+) -> float:
     """Draw a nozzle's tip seen from below, and return its radius, in mm. A fitted tip of
-    known size shows its end, lit, with its hole, in front of its darker body; without
-    one, a generic tip."""
+    known size shows its end, lit, with its hole, in front of its darker body, and a lit
+    ring ``collar`` mm across behind it, if given; without one, a generic tip."""
     if tip is None or tip.outer_diameter is None:
         canvas.circle(img, x, y, TIP_BODY_RADIUS, NOZZLE)
         canvas.circle(img, x, y, 0.35, NOZZLE_BORE)
         return TIP_BODY_RADIUS
     end = tip.outer_diameter / 2
     canvas.circle(img, x, y, TIP_BODY_RADIUS, NOZZLE_BODY)
+    if collar is not None and collar / 2 > end + COLLAR_GAP:
+        canvas.circle(img, x, y, collar / 2, NOZZLE)
+        canvas.circle(img, x, y, end + COLLAR_GAP, NOZZLE_BODY)
     canvas.circle(img, x, y, end, NOZZLE)
     if tip.inner_diameter is not None and tip.inner_diameter < tip.outer_diameter:
         canvas.circle(img, x, y, tip.inner_diameter / 2, NOZZLE_BORE)
-    return max(end, TIP_BODY_RADIUS)
+    return max(end, TIP_BODY_RADIUS, (collar or 0.0) / 2)
 
 
 DEFOCUS_BLUR = 0.3
 """Blur (sigma, mm) per mm a nozzle tip is from the bottom camera's focus."""
+DEFOCUS_REACH_MM = 5.0
+"""How far past a nozzle's tip its blur reaches."""
 
 
 def _defocus(
@@ -684,7 +716,9 @@ def _defocus(
     if sigma < 0.3:
         return
     u, v = (c / ONE for c in canvas.px(x, y))
-    r = round((radius + 1.9) * canvas.ppm + 3 * sigma)
+    # The blur stays round the nozzle: one far out of focus (the other nozzle, raised as
+    # this one goes down to focus) must not wipe out the whole picture.
+    r = round((radius + 1.9 + DEFOCUS_REACH_MM) * canvas.ppm)
     h, w = img.shape[:2]
     x0, x1 = max(0, round(u) - r), min(w, round(u) + r)
     y0, y1 = max(0, round(v) - r), min(h, round(v) + r)
@@ -716,11 +750,15 @@ class SyntheticCamera(CameraSource):
         camera: Camera,
         scene: Callable[[], SceneState],
         fps: float = 15.0,
+        collars: dict[str, float] | None = None,
     ) -> None:
         super().__init__()
         self._size = render_size(camera)
-        renderer_cls = TopRenderer if camera.looking == "down" else BottomRenderer
-        self._renderer = renderer_cls(profile, camera, self._size)
+        self._renderer: TopRenderer | BottomRenderer = (
+            TopRenderer(profile, camera, self._size)
+            if camera.looking == "down"
+            else BottomRenderer(profile, camera, self._size, collars or {})
+        )
         self._scene = scene
         self._interval = 1.0 / fps
         self._task: asyncio.Task[None] | None = None

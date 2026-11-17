@@ -20,7 +20,7 @@ from typing import Literal
 import numpy as np
 
 from picnicplace.calibration import RUNOUT_WARN_MM, runout_key
-from picnicplace.machine.bottom_camera import bottom_camera, find_tip
+from picnicplace.machine.bottom_camera import bottom_camera, find_tip, focus_height_for
 from picnicplace.machine.errors import InvalidTargetError, VisionError
 from picnicplace.machine.nozzle_offsets import with_tip
 from picnicplace.machine.profile import Nozzle, Point
@@ -72,7 +72,7 @@ def fit(seen: list[tuple[float, float, float]]) -> tuple[Point, Point, float]:
 async def measure_runout(machine: MachineService, nozzle: Nozzle) -> Runout:
     """Turn a nozzle over the bottom camera and fit the circle its tip's end makes."""
     camera = bottom_camera(machine)
-    assert camera.focus_height is not None
+    height = focus_height_for(machine, nozzle, camera)
     tip = machine.profile.nozzle_tip(nozzle.tip)
     size = tip.outer_diameter if tip is not None and tip.outer_diameter is not None else 2.0
     seen: list[tuple[float, float, float]] = []
@@ -80,7 +80,7 @@ async def measure_runout(machine: MachineService, nozzle: Nozzle) -> Runout:
         for i, turn in enumerate(TURNS):
             await machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y, turn)
             if i == 0:
-                await machine.lower_nozzle(nozzle, camera.focus_height)
+                await machine.lower_nozzle(nozzle, height)
             frame = await machine.frame(camera.id)
             w = frame.image.shape[1]
             mm = camera.field_of_view.x / w

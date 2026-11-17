@@ -21,11 +21,15 @@ nearest the dot first."""
 
 
 def test_a_tip_change_checks_each_tip_on_the_paper_pad() -> None:
-    """The bare board seals a tip only when pressed 3 mm into it (as on a real LumenPnP),
-    so the pad, a paper square glued on the board, is touched instead. After a tip
+    """The bare board seals a big tip only when pressed 3 mm into it (as on a real
+    LumenPnP), so the pad, a paper square glued on the board, is touched instead. (Small
+    tips seal on the bare board at a touch, and take their heights there: the pad lies
+    over the nearest bare spot, so the top camera sends them to the next.) After a tip
     change, the left tip, pushed on 0.3 mm further, is found sitting lower; the right one,
     as it was."""
-    config = offsets_config(sim_datum_seal_press=3.0, sim_paper=(PAD[0], PAD[1], 10.0))
+    config = offsets_config(
+        sim_datum_seal_press=3.0, sim_bare_seal_tip_mm=1.5, sim_paper=(PAD[0], PAD[1], 10.0)
+    )
     with TestClient(create_app(config)) as client, connect(client) as s:
         assert home(s)["status"] == "succeeded"
         fit(s, "N1", "N045")

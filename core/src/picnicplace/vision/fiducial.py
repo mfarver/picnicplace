@@ -153,6 +153,39 @@ def find_circle(
     return min(strong, key=offset)
 
 
+def find_hole(
+    image: Image,
+    min_diameter_px: float,
+    max_diameter_px: float,
+    max_offset_px: float | None = None,
+) -> Circle | None:
+    """A dark round hole with a diameter in range, within ``max_offset_px`` of the image
+    center if given: of the dark round blobs found, the darkest inside, such as a nozzle
+    tip's hole seen from below against its lit end. Darkest, not nearest the center or
+    found at the most levels: a ring behind the end, or the end's own gray, can make a
+    larger dark circle about as often (seen on a real LumenPnP)."""
+    h, w = image.shape[:2]
+    circles = find_circles(image, min_diameter_px, max_diameter_px, polarity="dark")
+    if max_offset_px is not None:
+        circles = [c for c in circles if math.hypot(c.x - w / 2, c.y - h / 2) <= max_offset_px]
+    if not circles:
+        return None
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+
+    def inside(c: Circle) -> float:
+        r = max(1, round(c.diameter * HOLE_CORE))
+        x0, y0 = max(0, round(c.x) - r), max(0, round(c.y) - r)
+        patch = gray[y0 : round(c.y) + r + 1, x0 : round(c.x) + r + 1]
+        return float(patch.mean()) if patch.size else 255.0
+
+    return min(circles, key=inside)
+
+
+HOLE_CORE = 0.25
+"""A hole's darkness is its middle's: a square this fraction of its diameter each way
+from its center, clear of its blurred edge."""
+
+
 def strength(circle: Circle, expected_diameter_px: float | None = None) -> float:
     """How sure the finder is that a blob is the fiducial: the threshold levels it was
     found at, less the further its size is from the expected one."""

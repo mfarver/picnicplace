@@ -40,6 +40,11 @@ class SniffError(MachineError):
     """Sniffing found nothing to seal on."""
 
 
+class SealedAtStart(SniffError):
+    """Sniffing sealed where it started: the surface is higher still, or something light
+    (a paper or plastic disc) jumped up to the tip."""
+
+
 @dataclass
 class VacuumMeasure:
     """Asks a sniff to measure the nozzle's vacuum levels as it goes: what it read open,
@@ -109,7 +114,7 @@ async def sniff(
             if await machine.holds_part(nozzle, True, wait, level):
                 if step == 0:
                     # Sealed where it started: the surface may be higher still.
-                    raise SniffError(
+                    raise SealedAtStart(
                         f"{nozzle.label} sealed on {what} as soon as it came down to Z "
                         f"{z:g}, {above:g} mm above where it was expected: it is higher than "
                         "that. Check the height it was expected at"

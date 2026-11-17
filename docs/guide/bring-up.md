@@ -104,15 +104,27 @@ kept in `calibration.json` in the data directory, and the pages you confirm in
       around, and places the keep-outs, which are measured from the dot;
     - measures the top camera's scale (the line warns if it is more than 10% from the
       profile's);
-    - calibrates the bottom camera with the left nozzle: it finds the tip by any round
-      mark near the middle (the profile's scale for the camera is a guess, and on one real
-      LumenPnP it was 3.7 times off), steps the head to measure the camera's real scale and
+    - calibrates the bottom camera with the left nozzle: it finds the tip by its hole,
+      the darkest round mark near the middle (the nozzle's lit rings behind the tip are
+      farther from the camera and move less as the head moves, which on one real LumenPnP
+      made the scale half as large again; a tip with no hole seen is found by any round
+      mark, as the profile's scale for the camera is only a guess), steps the head to measure the camera's real scale and
       how far its picture is turned, centers the tip, and steps the nozzle up and down
-      for the sharpest picture, never more than 2 mm past the profile's focus height. It
+      for the sharpest picture, never more than 2 mm past the profile's focus height (the
+      profile's, not the last one found, so repeated calibrations cannot creep toward the
+      camera). A camera with a deep field is as sharp all through: then the profile's
+      focus height is kept, and the line says so. It
       then finds the tip at 0° and 180°: the camera's place is the axis the nozzle turns
       about, halfway between, not the tip's end. A turned picture is undone in everything
       the bottom camera sees;
-    - names the tip on each nozzle by the size of its end, seen from below;
+    - names the tip on each nozzle by the size of its end or of its dark hole, seen from
+      below, with the hole seen inside: a lit ring behind a real tip's end can look like a
+      larger tip's end, so a tip whose hole is not seen is not named, and you say which it
+      is. A wide hole (5 mm or more, an N75's or N110's) is a cup, lit inside: it is named
+      only if its end and hole are both its size and the cup is lit all through, and not
+      if a tip with a dark hole fits too. A nozzle that cannot reach the focus height (a
+      short tip on a low nozzle) goes as low as its travel allows, if that is within
+      1 mm: the picture is about as sharp over that much;
     - scans the feeders and calibrates their rails, if there are feeders at each rail's
       ends (otherwise each feeder's fiducial is found on its first pick).
 2. **Paper disc on the datum board.** Fit a small tip on each nozzle: a tip seals on the
@@ -124,16 +136,28 @@ kept in `calibration.json` in the data directory, and the pages you confirm in
    punch) flat on the datum board, clear of its center dot, and click **Start**. The top
    camera looks over the board for it, in frames that overlap enough that a disc up to
    7 mm lies whole in one of them (the brightest round mark, apart from the board's own
-   marks around the dot). Each nozzle then sniffs for the board's height on its dot:
-   with suction on, it steps down until the vacuum seals, never more than 1.5 mm below
-   the profile's height. Then it picks the disc up, turns it, and sets it down three
+   marks around the dot). The search reaches 5 mm past the board's keep-out, but leaves
+   out anything inside another keep-out, such as the bottom camera's ring light, whose
+   LEDs are round and bright, and the datum board's own tinned pad and silkscreen disc,
+   22.5 mm either side of the dot: each is 5 mm across, and as bright as paper. Each nozzle then sniffs for the board's height: with
+   suction on, it steps down until the vacuum seals, never more than 1.5 mm below the
+   profile's height. A big tip sniffs the disc, as paper seals it at a touch where bare
+   board does not. A small tip (a face up to 1.5 mm, the N045 and N08) pulls the disc up
+   from about a millimeter away, so it sniffs bare solder mask instead, in the middle of
+   a square of the board's copper grid, clear of the disc, once the top camera sees the
+   spot is bare: on a real LumenPnP it sealed there as soon as it touched. The same goes
+   when only new tips' heights are measured on a paper square: a small tip touches bare
+   board, and picks the paper up only to read its vacuum holding it. Then it picks the disc up, turns it, and sets it down three
    times, and the top camera finds it after each: suction comes on before the tip comes
    down, the nozzle waits there for the vacuum to say it holds the disc, and lifts the
    first millimeter slowly. A disc that never seals, and one that seals but drops as it
    lifts, are told apart. A nozzle more than a millimeter from
    the profile's offset is flagged. Where each nozzle touched the board corrects its
    heights from then on, and its vacuum readings (open, sealed, holding the disc) set its
-   own pick threshold. Each tip's heights and vacuum levels are kept, and come back when
+   own pick threshold. A big tip can pull a light disc up too (a real N24 lifted a
+   plastic punch from about a millimeter): if the disc seals on the first step down, the
+   nozzle's height measured before with a small tip (or with this tip) is used, and the
+   line says so; with none known, the stop asks you to check the height. Each tip's heights and vacuum levels are kept, and come back when
    that tip is fitted again; a tip not measured yet marks this stop out of date.
 
    **Bigger tips**, such as the N24, N40 and N75 you place with, are too big for the disc.

@@ -1,6 +1,8 @@
 """The calibration checklist: what it says before and after measuring, what a crash makes
 out of date, and what it stops in a run."""
 
+import math
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -17,8 +19,14 @@ from picnicplace.calibration import (
     run_issues,
 )
 from picnicplace.config import Config
-from picnicplace.machine.nozzle_offsets import DISC_FIT_MM, search_spots
+from picnicplace.machine.nozzle_offsets import (
+    DISC_FIT_MM,
+    NozzleOffsetError,
+    search_disc,
+    search_spots,
+)
 from picnicplace.machine.service import APPROACH_SPEED
+from picnicplace.machine.tip_heights import find_paper
 from tests.conftest import Session, connect, fast_config
 from tests.test_placement import feeders, ok, placed, set_up
 from tests.test_vision import home, visual_config
@@ -268,6 +276,79 @@ def test_heights_come_from_the_paper_not_the_bare_board() -> None:
         assert not feeders_parts_crashed(client)
 
 
+def test_small_tips_take_their_height_from_the_bare_board() -> None:
+    """On a real LumenPnP (2026-11-16) an N045 pulled the paper disc up from about a
+    millimeter away, so its height would come out a millimeter high; but it sealed on the
+    bare datum board as soon as it touched (as did an N08), though bigger tips must be
+    pressed 3 mm in. Its first 0.1 mm of touching seals only partly (an N08 rose 46% as far
+    as holding the disc), which is not taken for a leak pressed shut. Small tips touch a
+    bare spot of the board, clear of the disc, and the disc still gives the offsets."""
+    config = offsets_config(
+        sim_datum_seal_press=3.0,
+        sim_bare_seal_tip_mm=1.5,
+        sim_bare_first_seal=0.46,
+        sim_paper_lift={"N045": 1.0},
+        sim_datum_height_error=0.3,
+        sim_tips={"N1": "N045", "N2": "N08"},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        for nozzle_id, tip_id in (("N1", "N045"), ("N2", "N08")):
+            r = s.put(f"/api/v1/machine/nozzles/{nozzle_id}/tip", {"tip_id": tip_id})
+            assert r.status_code == 200, r.json()
+        move_camera_over_disc(client, s, config)
+        op = s.wait(s.post("/api/v1/machine/nozzle-offsets", {}))
+        assert op["status"] == "succeeded", op.get("error")
+        detail = str(lines(client)["nozzle_offsets"]["detail"])
+        assert detail.count("touching the datum board at Z -27.20") == 2, detail
+        assert not feeders_parts_crashed(client)
+
+
+def test_a_disc_that_jumps_to_a_big_tip_takes_the_nozzles_height_from_a_small_one() -> None:
+    """On a real LumenPnP (2026-11-17) an N24 pulled a plastic punch up from about 1 mm on
+    the first step down, so its height could not come from the disc; the nozzle's height
+    measured with an N045 on the bare board (all its tips are as long) is used instead,
+    and the disc still gives the offsets. The real disc jumped on the first step because
+    the nozzle sat 0.9 mm higher than the profile says; here it jumps from farther."""
+    config = offsets_config(
+        sim_datum_seal_press=3.0,
+        sim_bare_seal_tip_mm=1.5,
+        sim_paper_lift={"N24": 2.5},
+        sim_datum_height_error=0.3,
+        sim_tips={"N1": "N045", "N2": "N08"},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        for nozzle_id, tip_id in (("N1", "N045"), ("N2", "N08")):
+            r = s.put(f"/api/v1/machine/nozzles/{nozzle_id}/tip", {"tip_id": tip_id})
+            assert r.status_code == 200, r.json()
+        move_camera_over_disc(client, s, config)
+        op = s.wait(s.post("/api/v1/machine/nozzle-offsets", {"nozzle_ids": ["N1"]}))
+        assert op["status"] == "succeeded", op.get("error")
+
+        r = s.put("/api/v1/machine/nozzles/N1/tip", {"tip_id": "N24"})
+        assert r.status_code == 200, r.json()
+        move_camera_over_disc(client, s, config)
+        op = s.wait(s.post("/api/v1/machine/nozzle-offsets", {"nozzle_ids": ["N1"]}))
+        assert op["status"] == "succeeded", op.get("error")
+        detail = str(lines(client)["nozzle_offsets"]["detail"])
+        assert "N24 tip: (" in detail and "touching the datum board at Z -27.20" in detail
+        assert "the disc jumped up to the tip" in detail and "the N045 tip's" in detail
+        assert not feeders_parts_crashed(client)
+
+
+def test_a_disc_that_jumps_with_no_height_known_stops_the_measuring() -> None:
+    config = offsets_config(sim_paper_lift={"N24": 2.5}, sim_tips={"N1": "N24"})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        r = s.put("/api/v1/machine/nozzles/N1/tip", {"tip_id": "N24"})
+        assert r.status_code == 200, r.json()
+        move_camera_over_disc(client, s, config)
+        op = s.wait(s.post("/api/v1/machine/nozzle-offsets", {"nozzle_ids": ["N1"]}))
+        assert op["status"] == "failed"
+        assert "as soon as it came down" in op["error"]
+
+
 def test_the_disc_search_sees_a_disc_whole_anywhere() -> None:
     """On a real LumenPnP (2026-11-15) the search's frames, 11.6 mm tall and stepped 8.1 mm
     apart, cut a 4.9 mm disc off at the edge of every one, so it was never found. Now some
@@ -283,6 +364,51 @@ def test_the_disc_search_sees_a_disc_whole_anywhere() -> None:
                 assert any(
                     abs(x - p.x) <= half[0] + 1e-9 and abs(y - p.y) <= half[1] + 1e-9 for p in spots
                 ), (d, x, y)
+
+
+RING_LIGHT = (217.0, 136.0)
+"""In the bottom camera's keep-out, and within the paper searches' reach past the datum
+board's edge."""
+
+
+def test_the_disc_search_leaves_out_what_lies_past_the_board() -> None:
+    """On a real LumenPnP (2026-11-16) the disc search, which reaches 5 mm past the datum
+    board's keep-out, took an LED of the bottom camera's ring light for the disc, and sent
+    the nozzle down onto it. Something round and bright in another keep-out is left out."""
+    config = offsets_config(
+        sim_paper=(RING_LIGHT[0], RING_LIGHT[1], 6.0), sim_calibration_disc=(240.0, 120.0)
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        machine = client.app.state.ctx.machine  # type: ignore[attr-defined]
+        assert client.portal is not None
+        at, _ = client.portal.call(search_disc, machine, None)
+        assert math.hypot(at.x - 240.0, at.y - 120.0) < 0.1, at
+
+
+def test_the_disc_search_leaves_out_the_boards_own_pad() -> None:
+    """On a real LumenPnP (2026-11-16) the disc search took the datum board's tinned pad,
+    whiter than paper and the same size as a disc, for the disc. The board's own marks are
+    left out, wherever it is mounted."""
+    config = offsets_config(sim_calibration_disc=(210.0, 126.0))
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        machine = client.app.state.ctx.machine  # type: ignore[attr-defined]
+        assert client.portal is not None
+        at, _ = client.portal.call(search_disc, machine, None)
+        assert math.hypot(at.x - 210.0, at.y - 126.0) < 0.1, at
+
+
+def test_the_paper_search_leaves_out_what_lies_past_the_board() -> None:
+    """Looking for a paper square, white in another keep-out is left out too."""
+    config = offsets_config(sim_paper=(RING_LIGHT[0], RING_LIGHT[1], 10.0))
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        machine = client.app.state.ctx.machine  # type: ignore[attr-defined]
+        assert client.portal is not None
+        with pytest.raises(NozzleOffsetError, match="found no paper on the datum board"):
+            # More room than the 6 mm paper disc on the board has; the square has 5 mm.
+            client.portal.call(find_paper, machine, 3.5)
 
 
 def asked(s: Session, timeout: float = 60.0) -> dict[str, Any]:
@@ -417,6 +543,33 @@ def feeders_parts_crashed(client: TestClient) -> list[str]:
     return client.app.state.ctx.feeders.sim_parts.crashes  # type: ignore[attr-defined,no-any-return]
 
 
+def test_a_bottom_camera_with_a_deep_field_keeps_the_profiles_focus() -> None:
+    """A real LumenPnP's bottom camera was as sharp all through the focus search, and each
+    calibration, searching round the last, settled up to 2 mm nearer the camera: Z -4.63,
+    then -6.49, then -8.10. The search is always round the profile's focus height, and with
+    no focus to find, it keeps that height, however many times it is run."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_bottom_camera_deep_focus": True},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        design = next(
+            c
+            for c in client.get("/api/v1/machine/description").json()["cameras"]
+            if c["looking"] == "up"
+        )["focus_height"]
+        assert home(s)["status"] == "succeeded"
+        for _ in range(3):
+            op = ok(s.wait(s.post("/api/v1/machine/bottom-camera", {})))
+            assert "the profile's focus height: the picture was as sharp" in op["message"]
+            bottom = next(
+                c
+                for c in client.get("/api/v1/machine/description").json()["cameras"]
+                if c["looking"] == "up"
+            )
+            assert bottom["focus_height"] == pytest.approx(design, abs=1e-6)
+
+
 def test_the_bottom_camera_moves_with_its_nozzle(tmp_path: Path) -> None:
     """The bottom camera's place was found with N1's tip: when N1's offset is measured
     later, the camera's place moves with it."""
@@ -447,6 +600,37 @@ def test_the_bottom_camera_moves_with_its_nozzle(tmp_path: Path) -> None:
     bottom = next(c for c in profile.cameras if c.looking == "up")
     assert bottom.position.x == pytest.approx(200.5)
     assert bottom.position.y == pytest.approx(149.8)
+
+
+def test_the_bottom_camera_focus_keeps_up_with_its_nozzles_height() -> None:
+    """The bottom camera is calibrated before the nozzle offsets, as stop 1 comes before
+    stop 2. N1's tip is 0.9 mm longer than the profile's, so the offsets give it a Z offset
+    of +0.9 mm. Sent to the focus height with that offset, its tip's end still comes to the
+    camera's focus, and calibrating the bottom camera again finds it there."""
+    config = offsets_config(sim_nozzle_z_error={"N1": 0.9})
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        ok(s.wait(s.post("/api/v1/machine/bottom-camera", {})))
+        before = next(
+            c
+            for c in client.get("/api/v1/machine/description").json()["cameras"]
+            if c["looking"] == "up"
+        )["focus_height"]
+
+        move_camera_over_disc(client, s, config)
+        ok(s.wait(s.post("/api/v1/machine/nozzle-offsets", {})))
+        description = client.get("/api/v1/machine/description").json()
+        n1 = next(n for n in description["nozzles"] if n["id"] == "N1")
+        assert n1["z_offset"] == pytest.approx(0.9, abs=0.1)
+        bottom = next(c for c in description["cameras"] if c["looking"] == "up")
+        # The same place for the nozzle (raw), so a height lower by the offset.
+        assert bottom["focus_height"] == pytest.approx(before - n1["z_offset"], abs=0.01)
+
+        op = ok(s.wait(s.post("/api/v1/machine/bottom-camera", {})))
+        found = re.search(r"nozzle at Z (-?\d+\.\d+)", op["message"])
+        assert found is not None, op["message"]
+        assert float(found[1]) == pytest.approx(before - n1["z_offset"], abs=0.06)
+        assert s.state()["z_safe"]
 
 
 def test_sniffing_stops_short_of_crashing() -> None:

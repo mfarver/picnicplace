@@ -1,12 +1,16 @@
 """Nozzle tips: which is fitted on each nozzle, kept across restarts, and each nozzle's Z
 offset and vacuum levels kept for each tip it has been calibrated with."""
 
+from types import SimpleNamespace
+from typing import Any, cast
+
 import pytest
 from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
-from picnicplace.machine.bottom_camera import measure_tip, tip_size_note
-from picnicplace.machine.profile import NozzleTip
+from picnicplace.machine.bottom_camera import focus_height_for, measure_tip, tip_size_note
+from picnicplace.machine.errors import VisionError
+from picnicplace.machine.profile import NozzleTip, load_profile
 from tests.conftest import Session, connect, fast_config
 from tests.test_calibration import lines, move_camera_over_disc, offsets_config
 from tests.test_placement import feeders, ok, placed, set_up
@@ -187,6 +191,34 @@ def test_a_big_tips_height_is_measured_on_paper() -> None:
         assert "at least 12 mm across" in op["error"], op
 
 
+def test_small_new_tips_take_their_height_from_the_bare_board() -> None:
+    """With the offsets measured, new small tips have only their heights measured by the
+    paper stop. On a real LumenPnP (2026-11-16) an N045 pulled the paper up from about a
+    millimeter away, and then a plastic punch: it touches a bare spot of the board, which
+    the top camera sees is clear, and the paper is picked up only to read the vacuum."""
+    paper = (245.0, 120.0, 25.0)  # on the datum board, clear of its dot and the disc
+    config = offsets_config(
+        sim_paper=paper,
+        sim_datum_seal_press=3.0,
+        sim_bare_seal_tip_mm=1.5,
+        sim_bare_first_seal=0.46,
+        sim_paper_lift={"N045": 1.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        fit(s, "N1", "N14")
+        fit(s, "N2", "N14")
+        move_camera_over_disc(client, s, config)
+        ok(s.wait(s.post("/api/v1/machine/nozzle-offsets", {})))
+        fit(s, "N1", "N045")
+        fit(s, "N2", "N08")
+        op = ok(s.wait(s.post("/api/v1/machine/tip-heights", {})))
+        assert op["message"].count("touched at Z -27.50") == 2, op["message"]
+        nozzles = client.get("/api/v1/machine/description").json()["nozzles"]
+        assert [n["z_offset"] for n in nozzles] == pytest.approx([0.0, 0.0], abs=0.05)
+        assert lines(client)["vacuum"]["status"] == "done"
+
+
 @pytest.mark.parametrize(("tip", "diameter"), [("N045", 1.0), ("N08", 1.5), ("N75", 9.0)])
 def test_the_bottom_camera_sees_the_fitted_tip(tip: str, diameter: float) -> None:
     """The simulated bottom camera draws the end of the tip fitted, in front of its body.
@@ -249,6 +281,32 @@ def test_small_tips_are_named_or_said_to_be_too_alike(
         assert (found.id if found else None, said) == (named, alike)
 
 
+@pytest.mark.parametrize(("tip", "collars"), [("N24", {"N24": 8.4}), ("N14", {"N14": 8.4})])
+def test_a_lit_ring_behind_the_end_is_not_taken_for_a_larger_tip(
+    tip: str, collars: dict[str, float]
+) -> None:
+    """On a real LumenPnP, an N24 showed a lit ring about 8.4 mm across behind its end, much
+    like an N75's end, and was named an N75. A tip is named only if its hole is seen inside
+    its end, so it is named as it is."""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_tips": {"N1": tip},
+            "sim_tip_collars": collars,
+            "sim_bottom_camera_scale": 2.17,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        fit(s, "N1", "N24")
+        assert s.wait(s.post("/api/v1/machine/bottom-camera", {}))["status"] == "succeeded"
+        machine = client.app.state.ctx.machine  # type: ignore[attr-defined]
+        assert client.portal is not None
+        found, _, said = client.portal.call(measure_tip, machine, machine.profile.nozzles[0])
+        assert (found.id if found else None, said) == (tip, [])
+
+
 def test_a_bottom_camera_far_from_the_profiles_scale() -> None:
     """A real LumenPnP's bottom camera saw 3.7 times the profile's field of view: the
     fitted tip, looked for at the profile's scale, was too small to be found. The tip is
@@ -289,3 +347,22 @@ def test_a_tip_unlike_the_fitted_one_is_noted() -> None:
     note = tip_size_note(n08, 2.7)
     assert "but the N08 tip is 1.5 mm: check which tip is fitted" in note
     assert tip_size_note(None, 5.2) == "The tip's end looked 5.20 mm across."
+
+
+def test_a_nozzle_goes_as_low_as_it_can_for_a_focus_just_out_of_reach() -> None:
+    """A real LumenPnP's right nozzle (Z turned over, limits -28.5..28.5) with an N75 that
+    sat 1.1 mm low on the datum board, for a focus at -27.45 or -28.36: it would go to raw
+    Z -28.55 or -29.46. Within 1 mm of the focus the picture is still sharp."""
+    profile = load_profile("lumenpnp-v4.1")
+    right = profile.nozzles[1]
+    nozzle = right.model_copy(update={"z_offset": -1.1, "tip": "N75"})
+    machine = cast(Any, SimpleNamespace(profile=profile))
+    camera = cast(Any, SimpleNamespace(focus_height=-27.0, label="Bottom camera"))
+    assert focus_height_for(machine, nozzle, camera) == -27.0
+    camera.focus_height = -27.45
+    assert focus_height_for(machine, nozzle, camera) == pytest.approx(-28.49 + 1.1)
+    camera.focus_height = -28.36
+    assert focus_height_for(machine, nozzle, camera) == pytest.approx(-28.49 + 1.1)
+    camera.focus_height = -28.6
+    with pytest.raises(VisionError, match="cannot reach the bottom camera's focus"):
+        focus_height_for(machine, nozzle, camera)

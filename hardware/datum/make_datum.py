@@ -16,6 +16,7 @@ Y runs down the page, so the script flips Y, and puts the origin at KiCad's grid
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 
@@ -55,10 +56,18 @@ AIM_RING_D = 8.0
 AIM_RING_W = 0.6
 
 BARE = (4.0, -26.0, 28.0, -4.0)  # nothing printed: the nozzle-offset disc or token
+BARE_BOX_GAP = 0.3
+"""The silkscreen box around the bare area stands this far outside it, so nothing is printed
+where the disc or token lies."""
+SILK_W = 0.15
 Z_PAD = (34.0, -20.0, 46.0, -8.0)  # bare copper the nozzles touch to find their height
 SCALE_GRID = (52.0, -20.0)  # first dot of an 11 x 11 grid, 1 mm pitch
 SCALE_DOT_D = 0.5
 LABEL_AREA = (68.0, -22.0, 82.0, -8.0)  # name, revision, license
+LOGO = os.path.join(HERE, "..", "logo", "picnicplace-icon-outline.json")
+LOGO_CENTER = (92.0, -15.0)
+LOGO_H = 13.0
+"""The PicnicPlace logo, in silkscreen between the label and the X fiducial."""
 
 SCREW_D = 3.2  # M3 clearance, PCB to the 3D-printed holder (heat-set inserts)
 SCREWS = [(-26.0, -26.0), (-26.0, 41.0), (91.0, -26.0), (116.0, -26.0)]
@@ -189,16 +198,52 @@ def circle(
     parent.Add(shape)
 
 
-def rect(parent: pcbnew.BOARD | pcbnew.FOOTPRINT, layer: int, box: tuple[float, ...]) -> None:
+def rect(
+    parent: pcbnew.BOARD | pcbnew.FOOTPRINT,
+    layer: int,
+    box: tuple[float, ...],
+    width: float = 0.1,
+) -> None:
     x0, y0, x1, y1 = box
     shape = pcbnew.PCB_SHAPE(parent)
     shape.SetShape(pcbnew.SHAPE_T_RECT)
     shape.SetStart(at(x0, y1))
     shape.SetEnd(at(x1, y0))
     shape.SetLayer(layer)
-    shape.SetWidth(MM(0.1))
+    shape.SetWidth(MM(width))
     shape.SetFilled(False)
     parent.Add(shape)
+
+
+def logo(board: pcbnew.BOARD) -> None:
+    """The logo, from the outlines hardware/logo/make_logo_outline.py traced from its
+    picture: filled silkscreen polygons, each with its holes."""
+    with open(LOGO) as f:
+        art = json.load(f)
+    scale = LOGO_H
+    left = LOGO_CENTER[0] - art["aspect"] * scale / 2
+    top = LOGO_CENTER[1] + scale / 2
+
+    def chain(points: list[list[float]]) -> pcbnew.SHAPE_LINE_CHAIN:
+        line = pcbnew.SHAPE_LINE_CHAIN()
+        for u, v in points:
+            line.Append(at(left + u * scale, top - v * scale))
+        line.SetClosed(True)
+        return line
+
+    for polygon in art["polygons"]:
+        shapes = pcbnew.SHAPE_POLY_SET()
+        shapes.AddOutline(chain(polygon["outline"]))
+        for hole_points in polygon["holes"]:
+            shapes.AddHole(chain(hole_points))
+        shapes.Fracture()
+        shape = pcbnew.PCB_SHAPE(board)
+        shape.SetShape(pcbnew.SHAPE_T_POLY)
+        shape.SetPolyShape(shapes)
+        shape.SetLayer(pcbnew.F_SilkS)
+        shape.SetWidth(MM(0.0))
+        shape.SetFilled(True)
+        board.Add(shape)
 
 
 def text(
@@ -261,8 +306,11 @@ def main() -> None:
             circle(grid, pcbnew.F_Cu, (gx + i, gy + j), SCALE_DOT_D, 0.0, filled=True)
             circle(grid, pcbnew.F_Mask, (gx + i, gy + j), SCALE_DOT_D + 0.1, 0.0, filled=True)
 
-    # The bare area stays bare: only a fabrication-layer outline marks it.
+    # The bare area stays bare: a silkscreen box just outside it shows where the disc or
+    # token goes, and a fabrication-layer outline marks the area itself.
     rect(board, pcbnew.F_Fab, BARE)
+    g = BARE_BOX_GAP + SILK_W / 2
+    rect(board, pcbnew.F_SilkS, (BARE[0] - g, BARE[1] - g, BARE[2] + g, BARE[3] + g), SILK_W)
     text(
         board, "disc / token: keep bare", (BARE[0] + BARE[2]) / 2, BARE[3] - 1.5, 0.8, pcbnew.F_Fab
     )
@@ -273,6 +321,8 @@ def main() -> None:
     text(board, "datum", lx, -13.5, 1.5)
     text(board, f"rev {REVISION}", lx, -16, 1.2)
     text(board, "CERN-OHL-S-2.0", lx, -19.5, 0.8)
+    text(board, "token", (BARE[0] + BARE[2]) / 2, BARE[1] - 2.2, 1.0)
+    logo(board)
     text(board, "Z touch", (Z_PAD[0] + Z_PAD[2]) / 2, Z_PAD[1] - 1.5, 1.0)
     text(board, "scale 1 mm", gx + 5, gy - 1.5, 1.0)
     text(board, "home", HOMING[0], HOMING[1] - 4.5, 1.0)

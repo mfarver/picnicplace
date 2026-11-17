@@ -37,14 +37,22 @@ LumenPnP board holders, or later vacuum standoffs, support the other sides.
   - a homing dot in the corner square, at (−15, −15) from the board's corner: a 1 mm
     copper dot in a 6 mm mask opening;
   - an aiming ring, 8 mm across;
-  - a bare area, 24 × 22 mm, for the nozzle-offset disc or token, with nothing printed;
+  - a bare area, 24 × 22 mm, for the nozzle-offset disc or
+    [token](calibration-token.md), with nothing printed in it: a silkscreen box 0.3 mm
+    outside it, labeled "token", shows where to lay it;
   - a 12 × 12 mm copper pad the nozzles touch to find their height;
   - a scale target: 11 × 11 dots, 0.5 mm across, at 1 mm pitch;
   - fiducials 120 mm along X and 45 mm along Y from the homing dot, like it. Measured
     with the top camera, these give each axis's scale and show whether the gantry is
     square, which one dot cannot.
 
-  Order it with ENIG, so the touch pad is flat and the dots bright. Nothing on it is
+  - the label (name, revision, license) and the PicnicPlace logo, in silkscreen. The
+    logo is traced from `hardware/logo/picnicplace-icon-bw.png` by
+    `hardware/logo/make_logo_outline.py`.
+
+  Order it with ENIG, so the touch pad is flat and the dots bright, and with black (or
+  green) solder mask: the camera looks for bright copper and paper on dark mask, and a
+  white token stands out on it. Nothing on it is
   assembled: every feature is left out of the BOM and the placement files.
 - **A 3D-printed holder** under the PCB:
   - It extends 4 mm beyond the PCB, with a 10 mm ledge under the board's edges.

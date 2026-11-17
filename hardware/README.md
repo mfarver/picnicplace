@@ -9,6 +9,7 @@ next run).
 |---|---|---|
 | `datum/` | The datum: an L-shaped PCB whose corner, set by three pins, locates boards, with the targets that calibrate the machine | [docs/hardware/picnicplace-datum.md](../docs/hardware/picnicplace-datum.md) |
 | `test-board/` | The test board: targets for measuring how accurately the machine places, with nothing soldered | [docs/hardware/test-board.md](../docs/hardware/test-board.md) |
+| `token/` | The calibration token that stop 2 picks up and turns, and a 100 × 100 mm panel of 144 to order | [docs/hardware/calibration-token.md](../docs/hardware/calibration-token.md) |
 
 ## Regenerate a board
 
@@ -19,7 +20,14 @@ libraries. On macOS:
 KICAD_PYTHON=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3
 $KICAD_PYTHON hardware/datum/make_datum.py
 $KICAD_PYTHON hardware/test-board/make_test_board.py
+$KICAD_PYTHON hardware/token/make_token.py   # also needs KiKit, for the panel
 ```
+
+The datum's logo is traced from `logo/picnicplace-icon-bw.png` into
+`logo/picnicplace-icon-outline.json`, which the datum script draws. KiCad's Python has no
+image library, so the tracing runs with the core's environment; after changing the
+picture, run `cd core && uv run python -I ../hardware/logo/make_logo_outline.py`, then the
+datum script.
 
 Then check it with KiCad's design rules (`kicad-cli` is in the same app bundle, under
 `Contents/MacOS`):

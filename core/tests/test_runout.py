@@ -85,6 +85,47 @@ def test_runout_is_measured_for_each_tip() -> None:
         assert (runout["x"], runout["y"]) == pytest.approx(RUNOUT["N2"], abs=0.02)
 
 
+def test_every_runout_look_is_at_the_bottom_cameras_focus() -> None:
+    """On a real LumenPnP (2026-11-17) runout found the N045's hole in its first look, then
+    took the next from safe Z: moving over the camera to turn the tip had raised it, and it
+    was not lowered again. The simulator's camera is sharp at any height, and its position
+    exact, so moving over the camera raises here as on the machine, and each look's height
+    is checked."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_nozzle_runout": RUNOUT},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        ok(s.wait(s.post("/api/v1/machine/bottom-camera", {})))
+        machine = client.app.state.ctx.machine  # type: ignore[attr-defined]
+        nozzle = machine.nozzle("N1")
+        bottom = next(c for c in machine.profile.cameras if c.looking == "up")
+        heights: list[float] = []
+        grab = machine.frame
+
+        async def frame(camera_id: str, *args: object, **kwargs: object) -> object:
+            if camera_id == bottom.id:
+                heights.append(machine.state.position[nozzle.z_axis])
+            return await grab(camera_id, *args, **kwargs)
+
+        machine.frame = frame
+        move_over = machine.move_nozzle_over
+
+        async def raising_move_over(*args: object, **kwargs: object) -> None:
+            # A real machine reports X and Y to 0.01 mm, so moving back over the camera is
+            # a move in X and Y, and raises the nozzles first; the simulator's exact
+            # position makes it no move at all.
+            await machine.raise_nozzles()
+            await move_over(*args, **kwargs)
+
+        machine.move_nozzle_over = raising_move_over
+        ok(s.wait(s.post("/api/v1/machine/nozzle-runout", {"nozzle_ids": ["N1"]})))
+        assert len(heights) >= 4, heights
+        assert max(heights) - min(heights) < 0.01, heights
+        assert abs(heights[0]) > 5, heights  # at the focus, well below safe Z
+
+
 def test_a_tip_change_measures_the_new_tips_runout() -> None:
     """Changing tips by hand ends by turning each tip just fitted over the bottom camera,
     once it is calibrated; a tip left as it was is not measured again. Saying a tip by

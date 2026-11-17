@@ -77,10 +77,12 @@ async def measure_runout(machine: MachineService, nozzle: Nozzle) -> Runout:
     size = tip.outer_diameter if tip is not None and tip.outer_diameter is not None else 2.0
     seen: list[tuple[float, float, float]] = []
     try:
-        for i, turn in enumerate(TURNS):
+        for turn in TURNS:
+            # Moving over the camera raises the nozzle first, as every move in X and Y
+            # does: lower it to the camera's focus again for each look. (On a real
+            # LumenPnP the second look was taken from safe Z, out of focus, and failed.)
             await machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y, turn)
-            if i == 0:
-                await machine.lower_nozzle(nozzle, height)
+            await machine.lower_nozzle(nozzle, height)
             frame = await machine.frame(camera.id)
             w = frame.image.shape[1]
             mm = camera.field_of_view.x / w

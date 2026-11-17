@@ -135,8 +135,10 @@ kept in `calibration.json` in the data directory, and the pages you confirm in
    asks you to change it and say which tips are on. Lay a small paper disc (one that came with the machine, or from a hole
    punch) flat on the datum board, clear of its center dot, and click **Start**. The top
    camera looks over the board for it, in frames that overlap enough that a disc up to
-   7 mm lies whole in one of them (the brightest round mark, apart from the board's own
-   marks around the dot). The search reaches 5 mm past the board's keep-out, but leaves
+   7 mm lies whole in one of them, starting where the disc was last found (or at the dot,
+   the first time), and stops at the first frame that shows paper: a round mark as bright
+   as paper, apart from the board's own marks around the dot. The search reaches 5 mm
+   past the board's keep-out, but leaves
    out anything inside another keep-out, such as the bottom camera's ring light, whose
    LEDs are round and bright, and the datum board's own tinned pad and silkscreen disc,
    22.5 mm either side of the dot: each is 5 mm across, and as bright as paper. Each nozzle then sniffs for the board's height: with

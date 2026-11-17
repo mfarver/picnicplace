@@ -39,7 +39,7 @@ from picnicplace.machine.datum_board import BARE_SEAL_TIP_MM, bare_spots, on_dat
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
 from picnicplace.machine.profile import Location, Nozzle, NozzleTip, Point, VacuumLevels
 from picnicplace.machine.seat_check import keep_references, near_pad
-from picnicplace.machine.service import APPROACH_SPEED, MachineService, RoundMark
+from picnicplace.machine.service import APPROACH_SPEED, MachineService
 from picnicplace.machine.sniff import (
     SealedAtStart,
     SniffError,
@@ -498,6 +498,9 @@ board are darker."""
 DOT_CLEARANCE_MM = 5.0
 """Round marks this near the datum board's dot are the board's own (the dot and its
 ring), not the disc, which is laid clear of it."""
+DISC_X, DISC_Y = "disc.x", "disc.y"
+"""Where the disc was when the offsets were last measured, kept with them so the next
+search for it starts there."""
 DISC_EDGE_MM = 5.0
 """The disc is looked for this far past the datum board's keep-out, near its edge."""
 DISC_SEARCH_MARGIN_MM = 15.0
@@ -555,33 +558,47 @@ def search_spots(
     return [Point(x=x, y=y) for x in centers(x0, x1, fov[0]) for y in centers(y0, y1, fov[1])]
 
 
+def disc_hint(machine: MachineService) -> Point:
+    """Where the search for the disc starts: where it was last found (this session, or
+    when the offsets were last measured), else the datum board's dot."""
+    if machine.disc_seen is not None:
+        return machine.disc_seen
+    line = machine.calibration.get().lines.get("nozzle_offsets")
+    if line is not None and DISC_X in line.values and DISC_Y in line.values:
+        return Point(x=line.values[DISC_X], y=line.values[DISC_Y])
+    return _datum(machine).position
+
+
 async def search_disc(machine: MachineService, diameter: float | None) -> tuple[Point, float]:
-    """Look over the datum board with the top camera for the disc, nearest its dot first,
-    and center on it: where it is, and how big."""
+    """Look over the datum board with the top camera for the disc, starting where it was
+    last found, and center on it: where it is, and how big. The search stops at the first
+    frame that shows paper; the board's own round marks as bright as paper (its dot, a
+    pad, a printed disc) and the paper pad are left out, so the first paper is the disc."""
     camera = machine.top_camera()
     dot = _datum(machine).position
+    start = disc_hint(machine)
     low, high = (diameter * 0.7, diameter * 1.4) if diameter else DISC_DIAMETER_MM
     fov = (camera.field_of_view.x, camera.field_of_view.y)
     spots = search_spots(search_area(machine), fov, min(high, DISC_FIT_MM))
-    spots.sort(key=lambda p: math.hypot(p.x - dot.x, p.y - dot.y))
-    marks: list[RoundMark] = []
+    spots.sort(key=lambda p: math.hypot(p.x - start.x, p.y - start.y))
     for spot in spots:
         await machine.move_camera_to(spot.x, spot.y)
-        marks.extend(
+        paper = [
             m
             for m in await machine.locate_round_marks(low, high, through_lines=True)
-            if math.hypot(m.at.x - dot.x, m.at.y - dot.y) > DOT_CLEARANCE_MM
+            if m.brightness >= DISC_MIN_BRIGHTNESS
+            and math.hypot(m.at.x - dot.x, m.at.y - dot.y) > DOT_CLEARANCE_MM
             and not near_pad(machine, m.at)
             and not off_board(machine, m.at)
             and not on_datum_mark(machine.profile, m.at)
-        )
-    # The board has round marks of its own (fiducials, mounting holes, and a pad and a
-    # disc as bright as paper, left out above): the paper disc is the brightest.
-    paper = [m for m in marks if m.brightness >= DISC_MIN_BRIGHTNESS]
-    if paper:
-        disc = max(paper, key=lambda m: m.brightness)
-        size = diameter or disc.diameter
-        return await find_disc(machine, disc.at, size), size
+        ]
+        if paper:
+            # Of two in one frame, the brighter: paper is far brighter than copper.
+            disc = max(paper, key=lambda m: m.brightness)
+            size = diameter or disc.diameter
+            at = await find_disc(machine, disc.at, size)
+            machine.disc_seen = at
+            return at, size
     raise VisionError(
         "the top camera found no disc on the datum board: lay a small paper disc (from a "
         "hole punch) flat on it, clear of the center dot, and check the top light"
@@ -710,6 +727,8 @@ def nozzle_offsets_work(
                     else ""
                 )
             )
+        values[DISC_X], values[DISC_Y] = disc.x, disc.y
+        machine.disc_seen = disc
         spread = max(f.spread for f in fixes)
         message = f"{'; '.join(parts)}. The disc's turns agreed within {spread:.3f} mm."
         machine.calibration.record("nozzle_offsets", message, values)

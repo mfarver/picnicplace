@@ -21,11 +21,15 @@ from picnicplace.calibration import (
 from picnicplace.config import Config
 from picnicplace.machine.nozzle_offsets import (
     DISC_FIT_MM,
+    DISC_X,
+    DISC_Y,
     NozzleOffsetError,
+    search_area,
     search_disc,
     search_spots,
 )
-from picnicplace.machine.service import APPROACH_SPEED
+from picnicplace.machine.profile import Point
+from picnicplace.machine.service import APPROACH_SPEED, MachineService
 from picnicplace.machine.tip_heights import find_paper
 from tests.conftest import Session, connect, fast_config
 from tests.test_placement import feeders, ok, placed, set_up
@@ -397,6 +401,62 @@ def test_the_disc_search_leaves_out_the_boards_own_pad() -> None:
         assert client.portal is not None
         at, _ = client.portal.call(search_disc, machine, None)
         assert math.hypot(at.x - 210.0, at.y - 126.0) < 0.1, at
+
+
+def count_frames(machine: MachineService) -> list[int]:
+    """Count the frames the disc search looks at, from now on."""
+    frames: list[int] = []
+    look = machine.locate_round_marks
+
+    async def counting(*args: Any, **kwargs: Any) -> Any:
+        frames.append(1)
+        return await look(*args, **kwargs)
+
+    machine.locate_round_marks = counting  # type: ignore[method-assign]
+    return frames
+
+
+def test_the_disc_search_stops_at_the_disc() -> None:
+    """On a real LumenPnP (2026-11-17) the search found the disc in its 12th frame, 48 s in,
+    then looked over the rest of the datum board for something brighter, for 5 minutes.
+    It now stops at the first frame that shows paper."""
+    config = offsets_config(sim_calibration_disc=(240.0, 120.0))
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        machine: MachineService = client.app.state.ctx.machine  # type: ignore[attr-defined]
+        assert client.portal is not None
+        camera = machine.top_camera()
+        fov = (camera.field_of_view.x, camera.field_of_view.y)
+        spots = search_spots(search_area(machine), fov, DISC_FIT_MM)
+        frames = count_frames(machine)
+        at, _ = client.portal.call(search_disc, machine, None)
+        assert math.hypot(at.x - 240.0, at.y - 120.0) < 0.1, at
+        # 27 mm from the dot, it is in about the 40th of 70 frames, nearest the dot first.
+        assert len(frames) < len(spots) - 20, (len(frames), len(spots))
+
+
+def test_the_disc_search_starts_where_the_disc_was() -> None:
+    """A measurement that failed is tried again with the disc where it was: the search
+    looks there first, and the place is kept with the offsets for the next time."""
+    config = offsets_config(sim_calibration_disc=(240.0, 120.0))
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        assert home(s)["status"] == "succeeded"
+        machine: MachineService = client.app.state.ctx.machine  # type: ignore[attr-defined]
+        assert client.portal is not None
+        client.portal.call(search_disc, machine, None)
+        assert machine.disc_seen is not None
+        frames = count_frames(machine)
+        at, _ = client.portal.call(search_disc, machine, None)
+        assert math.hypot(at.x - 240.0, at.y - 120.0) < 0.1, at
+        assert len(frames) == 1
+        # A new session starts from the place kept with the offsets.
+        machine.disc_seen = None
+        machine.calibration.record("nozzle_offsets", "kept", {DISC_X: 240.0, DISC_Y: 120.0})
+        frames.clear()
+        at, _ = client.portal.call(search_disc, machine, None)
+        assert len(frames) == 1
+        assert machine.disc_seen == at
+        assert isinstance(at, Point)
 
 
 def test_the_paper_search_leaves_out_what_lies_past_the_board() -> None:

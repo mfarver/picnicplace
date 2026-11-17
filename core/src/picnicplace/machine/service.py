@@ -207,6 +207,10 @@ class MachineService:
         """Simulated parts held by nozzles and placed on boards, if any."""
         self.scene_boards: Callable[[], tuple[BoardScene, ...]] | None = None
         """Simulated boards loaded for a job, if any."""
+        self.disc_seen: Point | None = None
+        """Where the top camera last found the nozzle-offset disc, so the next search for
+        it starts there (a failed measurement is usually tried again with the disc where
+        it was)."""
 
         driver.on_change = self._on_driver_change
         presence.on_change.append(self._publish_state)

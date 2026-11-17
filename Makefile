@@ -1,6 +1,6 @@
 # Developer shortcuts. Requires uv (https://docs.astral.sh/uv/) and Node.js 22+.
 
-.PHONY: setup core studio dev api check test docs docs-serve
+.PHONY: setup core studio dev api check test docs docs-serve panel
 
 setup:  ## Install core and Studio dependencies
 	cd core && uv sync
@@ -22,6 +22,10 @@ check:  ## Run every linter, type checker, and test suite (what CI runs)
 	cd studio && npm run lint && npm run typecheck && npm test && npm run build
 
 test: check
+
+panel:  ## Build the control panel's firmware, in Espressif's ESP-IDF container (needs Docker)
+	docker run --rm -v "$(CURDIR)/panel/firmware":/project -w /project espressif/idf:v6.0.2 \
+		idf.py build
 
 docs:  ## Build the website (picnicplace.org) into site/
 	cd core && uv run --group docs zensical build --strict --clean -f ../zensical.toml

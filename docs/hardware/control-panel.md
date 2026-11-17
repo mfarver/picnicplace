@@ -12,7 +12,9 @@ With both, the operator watches the machine or the camera video while their hand
 on physical controls. The Studio becomes mostly camera video.
 
 PicnicPlace plans to publish the panel as open hardware, and it may also be sold
-assembled. This is a concept: nothing here is built yet.
+assembled. A first version of the panel runs on the reference display, with the core's
+side of its link: see [What is built](#what-is-built). The enclosure, the E-stop wiring
+and the game controller are still concepts.
 
 ## Why physical controls
 
@@ -114,19 +116,25 @@ mounting dimensions against Waveshare's own drawing before cutting an enclosure.
 
 - **The link to the core:** the native USB-C port, as a USB serial device. One cable
   carries both data and power. The native USB shares its pins with CAN, so the firmware
-  selects USB through the board's I/O expander and leaves CAN unused.
+  selects USB through the board's I/O expander and leaves CAN unused. The port appears as
+  Espressif's "USB JTAG/serial debug unit"; the firmware's log goes to the other port.
 - **The E-stop's sensing pole:** the GPIO header (3.3 V, GND and GPIO6). The contact is
   normally closed and pulled up, so a pressed switch or a broken wire both read as
   pressed.
-- **The backlight:** switched by the I/O expander. The panel dims it after a few minutes
+- **The backlight:** switched and dimmed by the I/O expander, a small microcontroller with
+  Waveshare's firmware at I2C address 0x24 (its PWM is inverted: duty 0 is full
+  brightness). The panel dims it after a few minutes
   idle, but never while a job runs, a prompt waits, or the machine moves. A touch on a
   dim screen only wakes it: that touch presses nothing.
 - **Unused:** Wi-Fi, Bluetooth, the battery header, the microSD slot, and RS485. RS485
   could later carry the link over a long cable.
 
-**The firmware** runs on the ESP-IDF, and probably draws with LVGL (MIT-licensed), which
-Waveshare's examples for this board already use. A full 1024 × 600 frame at 16 bits is
-1.2 MB, so frame buffers live in the PSRAM.
+**The firmware** is in [`panel/`](https://github.com/mfarver/picnicplace/tree/main/panel)
+in the repository: ESP-IDF 6 and LVGL 9 (MIT-licensed), built in Espressif's container
+with `make panel`. A full 1024 × 600 frame at 16 bits is 1.2 MB, so the frame buffer lives
+in the PSRAM. A first version runs on a real 7B: the status bar, the position, the core's
+messages, and Home, Pause or Resume, and Stop, over native USB; the core's side of the
+link is next.
 
 ## Screens
 
@@ -227,11 +235,14 @@ panel shows "No connection to the core" when nothing has come for two seconds.
 - `job`: the job's name, progress, and a window of the task list: about ten rows around
   the current placement, so the panel never holds the whole job;
 - `request`: a question for the operator, or that it was answered elsewhere;
-- `message`: an error or notice, in the Studio's words.
+- `message`: an error or notice, in the Studio's words;
+- `backlight`: the backlight's brightness, 0 to 100.
 
 **From the panel:**
 
-- `hello`: its firmware version and screen size, when it connects;
+- `hello`: its firmware version and screen size, when it starts, and every five seconds
+  until the core answers;
+- `ping`: every second. A panel silent for three seconds is no longer a client;
 - `press`: a key: `home` (sent only after the check is ticked), `start`, `pause`,
   `resume` or `stop`;
 - `answer`: the answer to a request, by its ID;
@@ -241,6 +252,23 @@ panel shows "No connection to the core" when nothing has come for two seconds.
 Studio holds it, the status bar says so, and the action bar offers Take control instead,
 under the same rules as the Studio. The core checks every press as it would a click in
 the Studio. The panel cannot do anything the API cannot.
+
+## What is built
+
+- **The firmware** (`panel/` in the repository; see its README): the status bar, the
+  position and tips, the core's messages, Home after the nozzles-level check, Pause or
+  Resume, and Stop, "No connection to the core", the backlight, and the E-stop input,
+  over native USB. Tried on a real 7B.
+- **The core's side** (`core/src/picnicplace/panel.py`): with `[panel] port` set in the
+  config, the core opens the panel's port (again whenever it is plugged in), counts the
+  panel as a connected client while it pings, sends `state` twice a second and on every
+  change, and sends a failed operation's error as a `message`. Home and Resume take the
+  control lease as the Studio's buttons do (a free lease; not one the Studio holds, which
+  is refused in the core's words). Pause and Stop work from any client; during a job they
+  pause or stop the run once the parts on the nozzles are placed. The E-stop's sensing
+  pole is logged and kept, not yet shown.
+- **Not yet:** `job`, `request` and `answer` (the task list and the operator's questions),
+  Start, Take control, dimming when idle, and the enclosure.
 
 ## Other displays
 

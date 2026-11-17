@@ -21,6 +21,7 @@ from picnicplace.machine.local import LocalProfile
 from picnicplace.machine.service import MachineService
 from picnicplace.machine_setup import SetupStore
 from picnicplace.operations import OperationManager
+from picnicplace.panel import PanelLink
 from picnicplace.placement import PlacementService
 from picnicplace.presence import PresenceTracker
 from picnicplace.schemas import ClientInfo
@@ -53,6 +54,8 @@ class AppContext:
     """Also made when the app starts: it loads the feeder setup."""
     placement: PlacementService | None = None
     runner: JobRunner | None = None
+    panel: PanelLink | None = None
+    """The control panel's link, when the config names its port."""
 
 
 def get_context(request: Request) -> AppContext:

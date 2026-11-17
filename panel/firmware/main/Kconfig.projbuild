@@ -1,0 +1,15 @@
+menu "PicnicPlace panel"
+
+    choice PANEL_LINK
+        prompt "Link to the core"
+        default PANEL_LINK_USB
+        help
+            Where the panel exchanges its JSON messages with the core.
+
+        config PANEL_LINK_UART
+            bool "UART0, through the board's USB-to-UART port (for development)"
+        config PANEL_LINK_USB
+            bool "Native USB, as a USB serial device (the I/O expander selects USB)"
+    endchoice
+
+endmenu

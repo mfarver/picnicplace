@@ -119,6 +119,13 @@ record_runs = false        # Record every job run (a run can also ask for it).
 keep = 10                  # Keep at most this many recordings,
 max_mb = 5000              # and at most this many megabytes of them; older ones go.
 
+# The control panel, if one is fitted (docs/hardware/control-panel.md): a touchscreen on
+# the machine, on its native USB port. Find its stable path with:
+# ls /dev/serial/by-id/ (it is "usb-Espressif_USB_JTAG_serial_debug_unit_...-if00").
+# The core opens it again whenever it is plugged in.
+[panel]
+# port = "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_XX:XX:XX:XX:XX:XX-if00"
+
 # Cameras, by ID from the machine profile ("top" and "bottom" on the LumenPnP). Cameras
 # left out are simulated with the simulator and fake-marlin drivers, and off otherwise.
 # Find stable device paths with: ls /dev/v4l/by-id/ (or run picnicplace-probe).

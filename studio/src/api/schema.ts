@@ -4773,9 +4773,26 @@ export interface components {
             across: number;
             /** Along */
             along: number;
+            /**
+             * Angle
+             * @description The footprint's X axis in machine degrees, with the outline.
+             */
+            angle: number | null;
             at: components["schemas"]["Point"];
             /** Holes */
             holes: number;
+            /**
+             * Loose
+             * @description Parts seen lying loose on the tape in view, out of their pockets.
+             */
+            loose: components["schemas"]["Point"][];
+            /** @description The part's outline, leads and all, along its footprint's X and Y (mm), where the library gives its body: for drawing the pocket on the camera's picture. */
+            outline: components["schemas"]["Size"] | null;
+            /**
+             * Part
+             * @description Whether the pocket holds a part, as the top camera sees it: paper tape and parts with a known body only. None if not judged.
+             */
+            part: boolean | null;
         };
         /** Point */
         Point: {

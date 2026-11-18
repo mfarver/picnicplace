@@ -7,7 +7,7 @@ next run).
 
 | Folder | Board | Described in |
 |---|---|---|
-| `datum/` | The datum: an L-shaped PCB whose corner, set by three pins, locates boards, with the targets that calibrate the machine | [docs/hardware/picnicplace-datum.md](../docs/hardware/picnicplace-datum.md) |
+| `datum/` | The datum: an L-shaped PCB whose corner, set by three pins, locates boards, with the targets that calibrate the machine; and its 3D-printed holder (CadQuery) | [docs/hardware/picnicplace-datum.md](../docs/hardware/picnicplace-datum.md) |
 | `test-board/` | The test board: targets for measuring how accurately the machine places, with nothing soldered | [docs/hardware/test-board.md](../docs/hardware/test-board.md) |
 | `token/` | The calibration token that stop 2 picks up and turns, and a 100 × 100 mm panel of 144 to order | [docs/hardware/calibration-token.md](../docs/hardware/calibration-token.md) |
 
@@ -28,6 +28,10 @@ The datum's logo is traced from `logo/picnicplace-icon-bw.png` into
 image library, so the tracing runs with the core's environment; after changing the
 picture, run `cd core && uv run python -I ../hardware/logo/make_logo_outline.py`, then the
 datum script.
+
+The datum's holder is a CadQuery script instead (CadQuery 2.4 or later, in any Python
+environment): `python hardware/datum/make_holder.py` writes STEP and STL files to
+`hardware/datum/out/`.
 
 Then check it with KiCad's design rules (`kicad-cli` is in the same app bundle, under
 `Contents/MacOS`):

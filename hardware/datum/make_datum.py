@@ -24,7 +24,7 @@ import pcbnew
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 NAME = "picnicplace-datum"
-REVISION = "A"
+REVISION = "B"
 MM = pcbnew.FromMM
 PAGE_ORIGIN = (60.0, 120.0)  # where design (0, 0) sits on KiCad's page
 
@@ -33,13 +33,22 @@ LEG = 30.0
 LONG = 150.0
 SHORT = 75.0
 
-# Locating pins: 3 mm dowels. The PCB's inside edges run through the pin centers, so each
-# pin sits in a half-hole drilled before the edge is routed (the drill sets where the pin
-# is, to drill accuracy). A pin touches the board's edge line, so its center is one
-# radius from it, and the PCB's inside edges stand that far back from the board.
+# Locating pins: 3 x 10 mm dowels (h6 or m6). The PCB's inside edges run through the pin
+# centers, so each pin sits in a half-hole drilled before the edge is routed (the drill
+# sets where the pin is, to drill accuracy). A pin touches the board's edge line, so its
+# center is one radius from it, and the PCB's inside edges stand that far back from the
+# board.
 PIN_D = 3.0
 PIN_R = PIN_D / 2
 INSIDE = -PIN_R  # the PCB's inside edges, along y = INSIDE and x = INSIDE
+PIN_HOLE_D = 3.1
+"""The half-holes, drawn larger than the pins: fabs finish unplated holes to about
++/-0.05 mm, and m6 pins are up to 3.008 mm, so a 3.0 mm hole could leave a pin riding on
+the notch's corners, some 0.3 mm out of place. Each hole's center is moved from the
+pin's toward the board by the difference of their radii, so a pin against the back of its
+notch is where it is drawn, and the notch is a little less than half a hole. Revision A
+drew them at 3.0 mm, centered on the pins."""
+HOLE_BACK = PIN_HOLE_D / 2 - PIN_R
 PINS_X = (20.0, 105.0)  # two pins along the X edge (y = INSIDE)
 PINS_Y = (32.0,)  # one along the Y edge (x = INSIDE)
 
@@ -106,21 +115,24 @@ def outline(board: pcbnew.BOARD) -> None:
     """The L, with a half-hole notch at each pin, counterclockwise from the outer corner."""
     right = LONG - LEG
     top = SHORT - LEG
-    r = PIN_R
+    r = PIN_HOLE_D / 2
+    back = HOLE_BACK
+    half = (r * r - back * back) ** 0.5  # half the notch's width on the edge line
+    # Each notch's center is ``back`` from the pin's, toward the board (less negative).
     # The outside: front edge, right end, then up the X leg's inside edge to the notches.
     edge_line(board, (-LEG, -LEG), (right, -LEG))
     edge_line(board, (right, -LEG), (right, INSIDE))
     x = right
     for px in sorted(PINS_X, reverse=True):
-        edge_line(board, (x, INSIDE), (px + r, INSIDE))
-        edge_arc(board, (px + r, INSIDE), (px, INSIDE - r), (px - r, INSIDE))
-        x = px - r
+        edge_line(board, (x, INSIDE), (px + half, INSIDE))
+        edge_arc(board, (px + half, INSIDE), (px, INSIDE + back - r), (px - half, INSIDE))
+        x = px - half
     edge_line(board, (x, INSIDE), (INSIDE, INSIDE))
     y = INSIDE
     for py in sorted(PINS_Y):
-        edge_line(board, (INSIDE, y), (INSIDE, py - r))
-        edge_arc(board, (INSIDE, py - r), (INSIDE - r, py), (INSIDE, py + r))
-        y = py + r
+        edge_line(board, (INSIDE, y), (INSIDE, py - half))
+        edge_arc(board, (INSIDE, py - half), (INSIDE + back - r, py), (INSIDE, py + half))
+        y = py + half
     edge_line(board, (INSIDE, y), (INSIDE, top))
     edge_line(board, (INSIDE, top), (-LEG, top))
     edge_line(board, (-LEG, top), (-LEG, -LEG))
@@ -272,9 +284,9 @@ def main() -> None:
     outline(board)
 
     for i, px in enumerate(PINS_X, start=1):
-        hole(board, f"P{i}", "LocatingPin_3mm", px, INSIDE, PIN_D)
+        hole(board, f"P{i}", "LocatingPin_3mm", px, INSIDE + HOLE_BACK, PIN_HOLE_D)
     for i, py in enumerate(PINS_Y, start=len(PINS_X) + 1):
-        hole(board, f"P{i}", "LocatingPin_3mm", INSIDE, py, PIN_D)
+        hole(board, f"P{i}", "LocatingPin_3mm", INSIDE + HOLE_BACK, py, PIN_HOLE_D)
     for i, (x, y) in enumerate(SCREWS, start=1):
         hole(board, f"H{i}", "Hole_M3", x, y, SCREW_D)
 

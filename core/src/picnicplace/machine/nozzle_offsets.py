@@ -35,10 +35,18 @@ from dataclasses import dataclass
 import numpy as np
 
 from picnicplace.calibration import datum_key, nozzle_key, vacuum_key
+from picnicplace.machine.datum_board import BARE_SEAL_TIP_MM, bare_spots, on_datum_mark
 from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
 from picnicplace.machine.profile import Location, Nozzle, NozzleTip, Point, VacuumLevels
-from picnicplace.machine.service import APPROACH_SPEED, MachineService, RoundMark
-from picnicplace.machine.sniff import SniffError, VacuumMeasure, floor_message, sniff
+from picnicplace.machine.seat_check import keep_references, near_pad
+from picnicplace.machine.service import APPROACH_SPEED, MachineService
+from picnicplace.machine.sniff import (
+    SealedAtStart,
+    SniffError,
+    VacuumMeasure,
+    floor_message,
+    sniff,
+)
 from picnicplace.schemas import Operation, TipChangeNozzle
 
 TURNS = (90.0, -90.0, 180.0)
@@ -127,6 +135,8 @@ async def sniff_disc(
             angle=0.0,
             measure=measure,
         )
+    except SealedAtStart as e:
+        raise DiscLifted(str(e)) from e
     except SniffError as e:
         raise NozzleOffsetError(str(e)) from e
     if z is None:
@@ -135,6 +145,109 @@ async def sniff_disc(
             "seals (a tip that leaks never does), and the datum board's height in the profile"
         )
     return z - thickness
+
+
+class DiscLifted(NozzleOffsetError):
+    """The disc sealed on the tip at the first step down: it jumped up to the tip (a real
+    N24 lifted a plastic punch from about 1 mm), or the board is higher than expected."""
+
+
+def known_height(machine: MachineService, nozzle: Nozzle) -> tuple[float, str] | None:
+    """Where this nozzle touched the datum board before (its raw height), with its tip as
+    fitted now, and what it is from: a small tip's, which seals on the bare board at a
+    touch, first, then this tip's own earlier one; each less how much longer the tip is.
+    None if none is known."""
+    line = machine.calibration.get().lines.get("nozzle_offsets")
+    values = line.values if line is not None else {}
+    tips = machine.profile.nozzle_tips
+    tip = machine.profile.nozzle_tip(nozzle.tip)
+    small = [
+        t for t in tips if t.outer_diameter is not None and t.outer_diameter <= BARE_SEAL_TIP_MM
+    ]
+    for other in [*small, *(t for t in tips if tip is not None and t.id == tip.id)]:
+        raw = values.get(datum_key(nozzle.id, other.id))
+        if raw is None:
+            continue
+        longer = (tip.length or 0.0) - (other.length or 0.0) if tip is not None else 0.0
+        source = (
+            "its own, measured earlier"
+            if tip is not None and other.id == tip.id
+            else f"the {other.id} tip's on it, measured earlier"
+        )
+        return raw + longer, source
+    return None
+
+
+def seals_on_board(machine: MachineService, nozzle: Nozzle) -> bool:
+    """Whether the nozzle's tip is small enough to seal on the bare datum board at a touch
+    (``BARE_SEAL_TIP_MM``)."""
+    tip = machine.profile.nozzle_tip(nozzle.tip)
+    face = tip.outer_diameter if tip is not None else None
+    return face is not None and face <= BARE_SEAL_TIP_MM
+
+
+BARE_LOOK_MM = 1.5
+"""Before a tip touches a bare spot, the top camera checks this far round it is dark
+mask: not paper or a plastic disc left lying there."""
+
+
+async def _bare(machine: MachineService, spot: Point) -> bool:
+    """Whether the top camera sees dark mask, not paper, at a spot on the datum board."""
+    camera = machine.top_camera()
+    await machine.move_camera_to(spot.x, spot.y)
+    frame = await machine.frame(camera.id)
+    h, w = frame.image.shape[:2]
+    r = max(2, round(BARE_LOOK_MM / (camera.field_of_view.x / w)))
+    middle = frame.image[h // 2 - r : h // 2 + r, w // 2 - r : w // 2 + r]
+    return float(np.percentile(middle.max(axis=2), 95)) < DISC_MIN_BRIGHTNESS
+
+
+async def sniff_board(
+    machine: MachineService,
+    nozzle: Nozzle,
+    paper: Point,
+    paper_size: float | None,
+    measure: VacuumMeasure,
+) -> float | None:
+    """Step a small tip down onto a bare spot of the datum board, clear of the paper (or
+    plastic) lying at ``paper``, with suction on, until it seals: the board's top, as
+    this nozzle reaches it, in heights shifted by its Z offset as it stands. None if the
+    board has no bare spot known, or the top camera sees none clear. A small tip pulls a
+    disc up from a millimeter away (a real N045 lifted paper, and a plastic punch), so
+    its height cannot come from the disc; the bare board seals it at a touch."""
+    tip = machine.profile.nozzle_tip(nozzle.tip)
+    face = tip.outer_diameter if tip is not None and tip.outer_diameter else 1.0
+    clearance = (paper_size or DISC_FIT_MM) / 2 + face / 2 + DISC_RIM_MM
+    spot: Point | None = None
+    for candidate in bare_spots(machine.profile, paper, clearance):
+        if await _bare(machine, candidate):
+            spot = candidate
+            break
+    if spot is None:
+        return None
+    fiducial = _datum(machine)
+    assert fiducial.z is not None
+    what = "the bare datum board"
+    try:
+        z = await sniff(
+            machine,
+            nozzle,
+            spot,
+            fiducial.z,
+            SNIFF_ABOVE_MM,
+            SNIFF_BELOW_MM,
+            what,
+            angle=0.0,
+            measure=measure,
+        )
+    except SniffError as e:
+        raise NozzleOffsetError(str(e)) from e
+    if z is None:
+        raise NozzleOffsetError(
+            f"{floor_message(nozzle, what, fiducial.z, SNIFF_BELOW_MM)}: check the tip "
+            "seals (a tip that leaks never does), and the datum board's height in the profile"
+        )
+    return z
 
 
 def check_seal(
@@ -385,6 +498,9 @@ board are darker."""
 DOT_CLEARANCE_MM = 5.0
 """Round marks this near the datum board's dot are the board's own (the dot and its
 ring), not the disc, which is laid clear of it."""
+DISC_X, DISC_Y = "disc.x", "disc.y"
+"""Where the disc was when the offsets were last measured, kept with them so the next
+search for it starts there."""
 DISC_EDGE_MM = 5.0
 """The disc is looked for this far past the datum board's keep-out, near its edge."""
 DISC_SEARCH_MARGIN_MM = 15.0
@@ -412,6 +528,18 @@ def search_area(machine: MachineService) -> tuple[float, float, float, float]:
     return dot.x - m, dot.y - m, dot.x + m, dot.y + m
 
 
+def off_board(machine: MachineService, at: Point) -> bool:
+    """Whether a point lies in a keep-out other than the datum board's: the search for paper
+    on the board reaches past its edge, and must not take what it sees there (a bottom
+    camera's ring light, say) for paper."""
+    return any(
+        k.id != "datum"
+        and k.area.x_min <= at.x <= k.area.x_max
+        and k.area.y_min <= at.y <= k.area.y_max
+        for k in machine.profile.keep_outs
+    )
+
+
 def search_spots(
     area: tuple[float, float, float, float], fov: tuple[float, float], fit: float
 ) -> list[Point]:
@@ -430,30 +558,47 @@ def search_spots(
     return [Point(x=x, y=y) for x in centers(x0, x1, fov[0]) for y in centers(y0, y1, fov[1])]
 
 
+def disc_hint(machine: MachineService) -> Point:
+    """Where the search for the disc starts: where it was last found (this session, or
+    when the offsets were last measured), else the datum board's dot."""
+    if machine.disc_seen is not None:
+        return machine.disc_seen
+    line = machine.calibration.get().lines.get("nozzle_offsets")
+    if line is not None and DISC_X in line.values and DISC_Y in line.values:
+        return Point(x=line.values[DISC_X], y=line.values[DISC_Y])
+    return _datum(machine).position
+
+
 async def search_disc(machine: MachineService, diameter: float | None) -> tuple[Point, float]:
-    """Look over the datum board with the top camera for the disc, nearest its dot first,
-    and center on it: where it is, and how big."""
+    """Look over the datum board with the top camera for the disc, starting where it was
+    last found, and center on it: where it is, and how big. The search stops at the first
+    frame that shows paper; the board's own round marks as bright as paper (its dot, a
+    pad, a printed disc) and the paper pad are left out, so the first paper is the disc."""
     camera = machine.top_camera()
     dot = _datum(machine).position
+    start = disc_hint(machine)
     low, high = (diameter * 0.7, diameter * 1.4) if diameter else DISC_DIAMETER_MM
     fov = (camera.field_of_view.x, camera.field_of_view.y)
     spots = search_spots(search_area(machine), fov, min(high, DISC_FIT_MM))
-    spots.sort(key=lambda p: math.hypot(p.x - dot.x, p.y - dot.y))
-    marks: list[RoundMark] = []
+    spots.sort(key=lambda p: math.hypot(p.x - start.x, p.y - start.y))
     for spot in spots:
         await machine.move_camera_to(spot.x, spot.y)
-        marks.extend(
+        paper = [
             m
             for m in await machine.locate_round_marks(low, high, through_lines=True)
-            if math.hypot(m.at.x - dot.x, m.at.y - dot.y) > DOT_CLEARANCE_MM
-        )
-    # The board has round marks of its own (fiducials, a copper disc, mounting holes):
-    # the paper disc is the brightest.
-    paper = [m for m in marks if m.brightness >= DISC_MIN_BRIGHTNESS]
-    if paper:
-        disc = max(paper, key=lambda m: m.brightness)
-        size = diameter or disc.diameter
-        return await find_disc(machine, disc.at, size), size
+            if m.brightness >= DISC_MIN_BRIGHTNESS
+            and math.hypot(m.at.x - dot.x, m.at.y - dot.y) > DOT_CLEARANCE_MM
+            and not near_pad(machine, m.at)
+            and not off_board(machine, m.at)
+            and not on_datum_mark(machine.profile, m.at)
+        ]
+        if paper:
+            # Of two in one frame, the brighter: paper is far brighter than copper.
+            disc = max(paper, key=lambda m: m.brightness)
+            size = diameter or disc.diameter
+            at = await find_disc(machine, disc.at, size)
+            machine.disc_seen = at
+            return at, size
     raise VisionError(
         "the top camera found no disc on the datum board: lay a small paper disc (from a "
         "hole punch) flat on it, clear of the center dot, and check the top light"
@@ -510,10 +655,29 @@ def nozzle_offsets_work(
                 n.z_offset = 0.0
         fixes: list[NozzleFix] = []
         heights: dict[str, float] = {}
+        lifted: dict[str, str] = {}  # the height used, where the disc jumped to the tip
         levels: dict[str, VacuumLevels] = {}
         for nozzle in nozzles:
             measure = VacuumMeasure()
-            heights[nozzle.id] = await sniff_disc(machine, nozzle, disc, disc_thickness, measure)
+            board = (
+                await sniff_board(machine, nozzle, disc, size, measure)
+                if seals_on_board(machine, nozzle)
+                else None
+            )
+            if board is not None:
+                heights[nozzle.id] = board
+            else:
+                try:
+                    heights[nozzle.id] = await sniff_disc(
+                        machine, nozzle, disc, disc_thickness, measure
+                    )
+                except DiscLifted:
+                    known = known_height(machine, nozzle)
+                    if known is None:
+                        raise
+                    raw, source = known
+                    heights[nozzle.id] = raw - nozzle.z_offset
+                    lifted[nozzle.id] = source
             # Touching it can shift the disc (paper clings to the tip as it lifts): look again.
             disc = await find_disc(machine, disc, diameter)
             # Until its levels are known, the disc is held at a reading halfway to sealed.
@@ -530,7 +694,10 @@ def nozzle_offsets_work(
                 heights[nozzle.id] + disc_thickness - DISC_PRESS_MM,
                 level,
             )
-            check_seal(nozzle, measure, held, heights[nozzle.id] + disc_thickness)
+            if board is None and nozzle.id not in lifted:
+                # On bare board a small tip's seal is weak for its first 0.1 mm (a real
+                # N08 rose 46% as far as holding the disc), not a leak pressed shut.
+                check_seal(nozzle, measure, held, heights[nozzle.id] + disc_thickness)
             fixes.append(fix)
             found = vacuum_levels(machine, nozzle, measure, held)
             if found is not None:
@@ -553,14 +720,22 @@ def nozzle_offsets_work(
             parts.append(
                 f"{with_tip(n)}: ({fix.x:.3f}, {fix.y:.3f}), {off:.2f} mm from the profile's, "
                 f"touching the datum board at Z {raw:.2f}"
+                + (
+                    f" (the disc jumped up to the tip before it touched, so its height is "
+                    f"{lifted[n.id]})"
+                    if n.id in lifted
+                    else ""
+                )
             )
+        values[DISC_X], values[DISC_Y] = disc.x, disc.y
+        machine.disc_seen = disc
         spread = max(f.spread for f in fixes)
         message = f"{'; '.join(parts)}. The disc's turns agreed within {spread:.3f} mm."
         machine.calibration.record("nozzle_offsets", message, values)
         if levels:
             record_vacuum(machine, levels)
         machine.apply_calibration()
-        return message
+        return message + await keep_references(machine, nozzles)
 
     return work
 

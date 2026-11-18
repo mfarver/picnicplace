@@ -162,7 +162,9 @@ circle(-15, 8, 4.0, fill="none", stroke=COPPER, stroke_width=f"{0.6 * S:.1f}")
 text(-15, 1.0, "Aiming ring", size=10, fill=INK)
 
 # Bare area for the nozzle-offset disc or token: nothing printed, flat solder mask.
+# A silkscreen box just outside it shows where the disc or token goes.
 rect(4, -26, 28, -4, fill="#ffffff", stroke=INK, stroke_width="1", stroke_dasharray="3 2")
+rect(3.6, -26.4, 28.4, -3.6, fill="none", stroke=INK, stroke_width="0.8")
 text(16, -13, "Disc / token", size=10, fill=INK)
 text(16, -16.5, "24 x 22 bare", size=10, fill=MUTED)
 
@@ -178,9 +180,11 @@ for i in range(11):
 text(57, -24, "Scale target", size=10, fill=INK)
 text(57, -27, "10 mm dot grid", size=10, fill=MUTED)
 
-# Spare space: label, QR code with the datum's revision.
+# Label (name, revision, license) and the PicnicPlace logo, in silkscreen.
 rect(68, -22, 82, -8, fill="none", stroke=MUTED, stroke_width="1")
-text(75, -15, "QR / rev", size=9, fill=MUTED)
+text(75, -15, "Label", size=9, fill=MUTED)
+rect(85.8, -21.5, 98.2, -8.5, fill="none", stroke=MUTED, stroke_width="1")
+text(92, -15, "Logo", size=9, fill=MUTED)
 
 # M3 screws holding the PCB to the holder (heat-set inserts in the print).
 for x, y in [(-26, -26), (-26, 41), (91, -26), (116, -26)]:

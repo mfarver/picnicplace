@@ -30,7 +30,11 @@ def sim_truth(camera: Camera, config: Config) -> Camera:
         truth.image_rotation = machine.sim_bottom_camera_turn
         k = machine.sim_bottom_camera_scale
         truth.field_of_view = Point(x=camera.field_of_view.x * k, y=camera.field_of_view.y * k)
-        truth.focus_height = (camera.focus_height or SIM_FOCUS_HEIGHT) + dz
+        truth.focus_height = (
+            None
+            if machine.sim_bottom_camera_deep_focus
+            else (camera.focus_height or SIM_FOCUS_HEIGHT) + dz
+        )
     return truth
 
 
@@ -51,7 +55,9 @@ class CameraManager:
                     if camera.looking == "up"
                     else profile
                 )
-                self._hubs[camera.id] = CameraHub(camera.id, SyntheticCamera(seen, truth, scene))
+                collars = config.machine.sim_tip_collars
+                source = SyntheticCamera(seen, truth, scene, collars=collars)
+                self._hubs[camera.id] = CameraHub(camera.id, source)
             elif settings.source == "device":
                 self._hubs[camera.id] = CameraHub(camera.id, _device(settings))
         for monitor_id, settings in self._monitors.items():

@@ -1201,15 +1201,15 @@ export interface paths {
         get?: never;
         /**
          * Set Location
-         * @description Set this machine's discard or park location, by default to where the top camera is
-         *     looking. It takes effect at once, and is kept in the local profile.
+         * @description Set this machine's discard, park or paper pad location, by default to where the top
+         *     camera is looking. It takes effect at once, and is kept in the local profile.
          */
         put: operations["set_location_api_v1_machine_locations__kind__put"];
         post?: never;
         /**
          * Reset Location
-         * @description Forget this machine's own discard or park location: the profile's or the config's,
-         *     if any, applies again.
+         * @description Forget this machine's own discard, park or paper pad location: the profile's or the
+         *     config's, if any, applies again.
          */
         delete: operations["reset_location_api_v1_machine_locations__kind__delete"];
         options?: never;
@@ -3579,7 +3579,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "homing_fiducial" | "fiducial" | "tip_holder" | "discard" | "park";
+            kind: "homing_fiducial" | "fiducial" | "tip_holder" | "discard" | "park" | "paper_pad";
             /** Label */
             label: string;
             position: components["schemas"]["Point"];
@@ -8681,7 +8681,7 @@ export interface operations {
                 "X-PicnicPlace-Client"?: string | null;
             };
             path: {
-                kind: "discard" | "park";
+                kind: "discard" | "park" | "paper_pad";
             };
             cookie?: never;
         };
@@ -8728,7 +8728,7 @@ export interface operations {
                 "X-PicnicPlace-Client"?: string | null;
             };
             path: {
-                kind: "discard" | "park";
+                kind: "discard" | "park" | "paper_pad";
             };
             cookie?: never;
         };

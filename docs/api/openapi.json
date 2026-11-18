@@ -3228,7 +3228,8 @@
               "fiducial",
               "tip_holder",
               "discard",
-              "park"
+              "park",
+              "paper_pad"
             ],
             "title": "Kind",
             "type": "string"
@@ -12606,7 +12607,7 @@
     },
     "/api/v1/machine/locations/{kind}": {
       "delete": {
-        "description": "Forget this machine's own discard or park location: the profile's or the config's,\nif any, applies again.",
+        "description": "Forget this machine's own discard, park or paper pad location: the profile's or the\nconfig's, if any, applies again.",
         "operationId": "reset_location_api_v1_machine_locations__kind__delete",
         "parameters": [
           {
@@ -12616,7 +12617,8 @@
             "schema": {
               "enum": [
                 "discard",
-                "park"
+                "park",
+                "paper_pad"
               ],
               "title": "Kind",
               "type": "string"
@@ -12674,7 +12676,7 @@
         ]
       },
       "put": {
-        "description": "Set this machine's discard or park location, by default to where the top camera is\nlooking. It takes effect at once, and is kept in the local profile.",
+        "description": "Set this machine's discard, park or paper pad location, by default to where the top\ncamera is looking. It takes effect at once, and is kept in the local profile.",
         "operationId": "set_location_api_v1_machine_locations__kind__put",
         "parameters": [
           {
@@ -12684,7 +12686,8 @@
             "schema": {
               "enum": [
                 "discard",
-                "park"
+                "park",
+                "paper_pad"
               ],
               "title": "Kind",
               "type": "string"

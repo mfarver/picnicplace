@@ -52,11 +52,16 @@ sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times fast
 # sim_calibration_limits = true     # hold the simulator to the setup wizard's limits
 # sim_tips = { N1 = "N24" }          # the tip really on N1, whatever the operator says
 # sim_bottom_camera_scale = 3.7      # the bottom camera sees 3.7 times the profile's view
+# sim_tip_collars = { N24 = 8.4 }    # a lit ring 8.4 mm across behind the N24's end
+# sim_bottom_camera_deep_focus = true   # as sharp at every height: no focus to find
 # sim_bottom_camera_turn = 90.0      # and is mounted a quarter turn round
 # sim_vacuum_levels = { N1 = [0.3, 0.5] }   # N1's vacuum open and holding a part, as fractions
 #                                          # of its sensor's range: a weak pump
 # sim_datum_height_error = 0.3
 # sim_datum_seal_press = 3.0   # a tip leaks on the bare datum board until pressed this far
+# sim_bare_seal_tip_mm = 1.5   # ...unless its face is this small: then it seals at a touch
+# sim_paper_lift = { N045 = 1.0 }   # a paper disc jumps 1 mm up to an N045 with suction on
+# sim_bare_first_seal = 0.46   # a small tip's first 0.1 mm on bare board seals 46% of the way
 # sim_drops_on_lift = { N1 = 1 }   # N1 drops its next pick as it lifts
 # sim_calibration_disc = [217.0, 94.5]
 # sim_paper = [240.0, 106.0, 25.0]   # a sheet of paper (X, Y, size), for tip heights

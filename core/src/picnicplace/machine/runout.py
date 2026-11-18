@@ -20,7 +20,7 @@ from typing import Literal
 import numpy as np
 
 from picnicplace.calibration import RUNOUT_WARN_MM, runout_key
-from picnicplace.machine.bottom_camera import bottom_camera, find_tip
+from picnicplace.machine.bottom_camera import bottom_camera, find_tip, focus_height_for
 from picnicplace.machine.errors import InvalidTargetError, VisionError
 from picnicplace.machine.nozzle_offsets import with_tip
 from picnicplace.machine.profile import Nozzle, Point
@@ -72,15 +72,17 @@ def fit(seen: list[tuple[float, float, float]]) -> tuple[Point, Point, float]:
 async def measure_runout(machine: MachineService, nozzle: Nozzle) -> Runout:
     """Turn a nozzle over the bottom camera and fit the circle its tip's end makes."""
     camera = bottom_camera(machine)
-    assert camera.focus_height is not None
+    height = focus_height_for(machine, nozzle, camera)
     tip = machine.profile.nozzle_tip(nozzle.tip)
     size = tip.outer_diameter if tip is not None and tip.outer_diameter is not None else 2.0
     seen: list[tuple[float, float, float]] = []
     try:
-        for i, turn in enumerate(TURNS):
+        for turn in TURNS:
+            # Moving over the camera raises the nozzle first, as every move in X and Y
+            # does: lower it to the camera's focus again for each look. (On a real
+            # LumenPnP the second look was taken from safe Z, out of focus, and failed.)
             await machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y, turn)
-            if i == 0:
-                await machine.lower_nozzle(nozzle, camera.focus_height)
+            await machine.lower_nozzle(nozzle, height)
             frame = await machine.frame(camera.id)
             w = frame.image.shape[1]
             mm = camera.field_of_view.x / w
@@ -161,21 +163,55 @@ def nozzle_runout_work(
         nozzles = _nozzles(machine, nozzle_ids)
         if not nozzles:
             return "Every tip fitted has its runout measured already."
-        found = [await measure_runout(machine, n) for n in nozzles]
-
-        line = machine.calibration.get().lines.get("nozzle_runout")
-        values = dict(line.values) if line else {}
-        for r in found:
-            n = r.nozzle
-            values[runout_key(n.id, "x", n.tip)] = r.end.x
-            values[runout_key(n.id, "y", n.tip)] = r.end.y
-            values[_axis_key(n.id, "x", n.tip)] = r.axis.x
-            values[_axis_key(n.id, "y", n.tip)] = r.axis.y
-        machine.calibration.record("nozzle_runout", describe(machine, values), values)
-        machine.apply_calibration()
-        return " ".join(_sentence(machine, r.nozzle.id, r.nozzle.tip, values) for r in found)
+        return _keep(machine, [await measure_runout(machine, n) for n in nozzles])
 
     return work
+
+
+def _keys(nozzle_id: str, tip_id: str | None) -> tuple[str, ...]:
+    return tuple(
+        key(nozzle_id, axis, tip_id) for key in (runout_key, _axis_key) for axis in ("x", "y")
+    )
+
+
+def _keep(machine: MachineService, found: list[Runout]) -> str:
+    """Keep the runout found, use it from now on, and say what it is."""
+    line = machine.calibration.get().lines.get("nozzle_runout")
+    values = dict(line.values) if line else {}
+    for r in found:
+        n = r.nozzle
+        values.update(zip(_keys(n.id, n.tip), (r.end.x, r.end.y, r.axis.x, r.axis.y), strict=True))
+    machine.calibration.record("nozzle_runout", describe(machine, values), values)
+    machine.apply_calibration()
+    return " ".join(_sentence(machine, r.nozzle.id, r.nozzle.tip, values) for r in found)
+
+
+def forget_runout(machine: MachineService, nozzle_id: str, tip_id: str | None) -> None:
+    """A tip just fitted sits as it was pushed on this time, not as before: forget the
+    runout kept for it on that nozzle, so it is measured again."""
+    line = machine.calibration.get().lines.get("nozzle_runout")
+    keys = _keys(nozzle_id, tip_id)
+    if line is None or not any(k in line.values for k in keys):
+        return
+    values = {k: v for k, v in line.values.items() if k not in keys}
+    machine.calibration.record("nozzle_runout", describe(machine, values), values)
+
+
+async def runout_after_tip_change(machine: MachineService, nozzle_ids: list[str]) -> str:
+    """At the end of a tip change by hand: measure the runout of the tips just fitted, if
+    the bottom camera is calibrated. Says what was found, or why it was not measured; a
+    failure leaves the tips changed and the runout to measure (line 7)."""
+    nozzles = [n for n in (machine.nozzle(i) for i in nozzle_ids) if n.tip is not None]
+    if not nozzles or "bottom_camera" not in machine.calibration.get().lines:
+        return ""
+    try:
+        found = [await measure_runout(machine, n) for n in nozzles]
+    except VisionError as e:
+        return (
+            f" Runout not measured: {e}. Measure it again from the setup wizard's paper "
+            "stop, or with Measure runout."
+        )
+    return " " + _keep(machine, found)
 
 
 def start_nozzle_runout(machine: MachineService, nozzle_ids: list[str] | None) -> Operation:

@@ -69,9 +69,9 @@ def without_location(profile: dict[str, Any], location_id: str) -> dict[str, Any
     return {**rest, "locations": locations} if locations else rest
 
 
-LocationKind = Literal["discard", "park"]
+LocationKind = Literal["discard", "park", "paper_pad"]
 
-LABELS: dict[LocationKind, str] = {"discard": "Discard", "park": "Park"}
+LABELS: dict[LocationKind, str] = {"discard": "Discard", "park": "Park", "paper_pad": "Paper pad"}
 
 
 class LocalProfileState(BaseModel):
@@ -110,7 +110,7 @@ class LocalProfile:
         )
 
     def set_location(self, kind: LocationKind, x: float, y: float, label: str | None) -> None:
-        """Put this machine's discard or park location here, from now on."""
+        """Put this machine's discard, park or paper pad location here, from now on."""
         local = self._store.get()
         mine = [
             loc
@@ -131,8 +131,8 @@ class LocalProfile:
         self._save(updated)
 
     def reset_location(self, kind: LocationKind) -> None:
-        """Forget this machine's own discard or park location: the profile's (or the
-        config's), if any, applies again."""
+        """Forget this machine's own discard, park or paper pad location: the profile's
+        (or the config's), if any, applies again."""
         local = self._store.get()
         updated = local
         for loc in cast(list[dict[str, Any]], local.get("locations", [])):

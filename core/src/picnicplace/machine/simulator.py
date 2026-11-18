@@ -86,6 +86,10 @@ def sim_profile(
     return truth
 
 
+FIRST_TOUCH_MM = 0.1
+"""How far into touching the bare datum board a small tip's seal is still partial."""
+
+
 class SimulatorDriver(MotionDriver):
     name = "simulator"
     firmware = "PicnicPlace simulator"
@@ -129,6 +133,16 @@ class SimulatorDriver(MotionDriver):
         """Nozzles holding a disc they cannot lift, by ID: the tip's height as it sealed."""
         self.surface_at: Callable[[float, float], float | None] | None = None
         self.datum_seal_press = 0.0
+        self.bare_seal_tip_mm = 0.0
+        """Tips with a face up to this size (mm) seal on the bare datum board at a touch,
+        as small tips did on a real LumenPnP, however far bigger ones must be pressed."""
+        self.bare_first_seal = 1.0
+        """How far a small tip's seal on the bare datum board rises, as a fraction of the
+        way from open to holding a part, in the first ``FIRST_TOUCH_MM`` of touching it: a
+        real N08 rose 46% there, and fully 0.1 mm further in."""
+        self.paper_lift: dict[str, float] = {}
+        """How far (mm) a paper disc jumps up to each kind of tip, by tip ID, with suction
+        on: a real N045 lifted a disc about a millimeter before it touched."""
         """How far a tip must be pressed into a bare surface before it seals."""
         """The height of a surface under a physical X/Y, if any, for a nozzle to seal on."""
         self._home_error = home_error
@@ -141,6 +155,7 @@ class SimulatorDriver(MotionDriver):
         self._vacuum = {n.vacuum_input: 0.0 for n in profile.nozzles if n.vacuum_input}
         self._held = {n.id: False for n in profile.nozzles}
         self._sealed = {n.id: False for n in profile.nozzles}
+        self._first_touch = {n.id: False for n in profile.nozzles}
         self._z_slip: dict[str, float] = {}
         self._inputs_by_id = {i.id: i for i in profile.inputs}
         self._connected = False
@@ -363,18 +378,40 @@ class SimulatorDriver(MotionDriver):
                     self._held[n.id] = True
                 else:
                     weak = self._weak_rim(n) or self.drops_on_lift.get(n.id, 0) > 0
-                    self._held[n.id] = self.pick_source(n.id, *self._nozzle_at(n), self._tip(n))
+                    self._held[n.id] = self.pick_source(
+                        n.id, *self._nozzle_at(n), self._tip(n) - self._lift(n)
+                    )
                     if self._held[n.id] and weak:
                         self._slips[n.id] = self._tip(n)
                         if self.drops_on_lift.get(n.id, 0) > 0:
                             self.drops_on_lift[n.id] -= 1
-            sealed = False
+            sealed = first = False
             if self._suction(n) and not self._held[n.id] and self.surface_at is not None:
                 x, y, _ = self._nozzle_at(n)
                 surface = self.surface_at(x, y)
-                sealed = surface is not None and self._tip(n) <= surface - self.datum_seal_press
+                if surface is not None:
+                    reach = surface - self._seal_press(n)
+                    sealed = self._tip(n) <= reach
+                    first = sealed and self._tip(n) > reach - FIRST_TOUCH_MM
             self._sealed[n.id] = sealed
+            self._first_touch[n.id] = first
         self._io_wake.set()
+
+    def _lift(self, nozzle: Nozzle) -> float:
+        """How far a paper disc under the nozzle jumps up to its tip (0 with none under)."""
+        kind = self._fitted.get(nozzle.id)
+        if kind is None or self.rim_at is None:
+            return 0.0
+        x, y, _ = self._nozzle_at(nozzle)
+        return self.paper_lift.get(kind, 0.0) if self.rim_at(x, y) is not None else 0.0
+
+    def _seal_press(self, nozzle: Nozzle) -> float:
+        """How far the nozzle's tip must be pressed into the bare datum board to seal."""
+        tip = self._profile.nozzle_tip(self._fitted.get(nozzle.id))
+        face = tip.outer_diameter if tip is not None else None
+        if face is not None and face <= self.bare_seal_tip_mm:
+            return 0.0
+        return self.datum_seal_press
 
     def _weak_rim(self, nozzle: Nozzle) -> bool:
         """Whether the nozzle's tip has too little paper round its face to lift the disc
@@ -400,11 +437,16 @@ class SimulatorDriver(MotionDriver):
             return rest
         held = self._held[nozzle.id] or self._sealed[nozzle.id]
         if nozzle.id in self._vacuum_levels:
-            fraction = self._vacuum_levels[nozzle.id][1 if held else 0]
-            return start + (end - start) * fraction
-        if held:
-            return threshold + (end - threshold) * VACUUM_HELD
-        return rest + (threshold - rest) * VACUUM_OPEN
+            lo, hi = self._vacuum_levels[nozzle.id]
+            opened, holding = start + (end - start) * lo, start + (end - start) * hi
+        else:
+            opened = rest + (threshold - rest) * VACUUM_OPEN
+            holding = threshold + (end - threshold) * VACUUM_HELD
+        if not held:
+            return opened
+        if self._first_touch[nozzle.id] and not self._held[nozzle.id]:
+            return opened + (holding - opened) * self.bare_first_seal
+        return holding
 
     def _step_vacuum(self, dt: float) -> bool:
         """Advance the vacuum readings by ``dt`` simulated seconds. True if any changed."""

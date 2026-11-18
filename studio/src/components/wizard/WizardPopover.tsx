@@ -10,12 +10,14 @@ import {
   Minus,
   Pause,
   Play,
+  RotateCw,
   SkipForward,
   Square,
   XCircle,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { api } from "../../api/client";
+import { useCore } from "../../api/core";
 import { useAction } from "../../api/useAction";
 import { useSetup } from "../../api/useSetup";
 import { OPEN_WIZARD, useWizard, wizardChanged } from "../../api/useWizard";
@@ -206,6 +208,9 @@ function StopBody({
 }) {
   const text = STOP_TEXT[stop];
   const { run, pending, error } = useAction();
+  const { operations } = useCore();
+  const [runoutOpId, setRunoutOpId] = useState<string | null>(null);
+  const runoutOp = runoutOpId ? operations[runoutOpId] : undefined;
   const [handChecks, setHandChecks] = useState(false);
   const live = state.run && state.run.stop === stop ? state.run : null;
   const running = !!state.run?.running;
@@ -238,6 +243,15 @@ function StopBody({
       onState(updated);
       wizardChanged();
     }
+  };
+  // Measure every nozzle's runout again: after reseating a tip, say.
+  const measureRunout = async () => {
+    const op = await run(() =>
+      api.POST("/api/v1/machine/nozzle-runout", {
+        body: { nozzle_ids: description.nozzles.map((n) => n.id) },
+      }),
+    );
+    if (op) setRunoutOpId(op.id);
   };
   const hasDiscard = description.locations.some((l) => l.kind === "discard");
   const tipsTodo = pages.some((p) => p.id === "nozzle_tips" && p.status === "todo");
@@ -361,6 +375,36 @@ function StopBody({
             ))}
           </ul>
         </details>
+      )}
+
+      {stop === 2 && !running && (
+        <>
+          <div className="button-row">
+            <button
+              type="button"
+              className="button"
+              disabled={!canMove || !machine?.homed || pending || runoutOp?.status === "running"}
+              title="Turn each nozzle's tip over the bottom camera again"
+              onClick={() => void measureRunout()}
+            >
+              <RotateCw size={16} aria-hidden />
+              Measure runout
+            </button>
+          </div>
+          <p className="text-faint">
+            Runout is measured by itself after each tip change. Measure it again after
+            pushing a tip back on.
+          </p>
+          <p className="text-muted">
+            Optional: glue a square of plain paper, about 10 mm across, flat on the datum
+            board, clear of its dot, and set it here. Each tip touches it after its height is
+            measured, and again after a tip change, to check it sits as it did.
+          </p>
+          <MachineLocations description={description} canSet={canSet} kinds={["paper_pad"]} />
+          {runoutOp?.status === "failed" && (
+            <p className="note note-danger">{runoutOp.error}</p>
+          )}
+        </>
       )}
 
       {stop === 1 && tipsTodo && (

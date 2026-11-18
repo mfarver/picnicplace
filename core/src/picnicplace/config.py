@@ -225,11 +225,26 @@ class MachineConfig(_Section):
             "profile's (a wider lens sees more). Calibrating the bottom camera finds it."
         ),
     )
+    sim_bottom_camera_deep_focus: bool = Field(
+        default=False,
+        description=(
+            "Simulator only: the bottom camera is as sharp at every height the focus search "
+            "tries, as a real LumenPnP's was, so it finds no focus and keeps the profile's."
+        ),
+    )
     sim_tips: dict[str, str] = Field(
         default_factory=dict[str, str],
         description=(
             "Simulator only: the nozzle tip really fitted on each nozzle, by nozzle ID, "
             "whatever the operator says: the bottom camera sees these."
+        ),
+    )
+    sim_tip_collars: dict[str, float] = Field(
+        default_factory=dict[str, float],
+        description=(
+            "Simulator only: a lit ring this many mm across behind each kind of nozzle tip's "
+            "end, by tip ID, as seen from below on a real LumenPnP (an N24 showed one about "
+            "8.4 mm across, much like an N75's end). Naming tips looks for the hole too."
         ),
     )
     sim_bottom_camera_turn: float = Field(
@@ -319,6 +334,33 @@ class MachineConfig(_Section):
             "Simulator only: how far (mm) a tip must be pressed into the bare datum board "
             "before it seals, as a real tip leaks on the board's printing until pressed "
             "into its spring. A paper disc seals at once."
+        ),
+    )
+    sim_bare_seal_tip_mm: float = Field(
+        default=0.0,
+        ge=0,
+        description=(
+            "Simulator only: tips with a face up to this size (mm) seal on the bare datum "
+            "board as soon as they touch it, however far bigger ones must be pressed (on a "
+            "real LumenPnP the N045 and N08 did, the N24 and N75 did not)."
+        ),
+    )
+    sim_bare_first_seal: float = Field(
+        default=1.0,
+        gt=0,
+        le=1,
+        description=(
+            "Simulator only: how far a small tip's seal on the bare datum board rises in its "
+            "first 0.1 mm of touching, as a fraction of the way from open to holding a part "
+            "(a real N08 rose 46%, then fully 0.1 mm further in)."
+        ),
+    )
+    sim_paper_lift: dict[str, float] = Field(
+        default_factory=dict[str, float],
+        description=(
+            "Simulator only: how far (mm) a paper disc jumps up to each kind of tip, by tip "
+            "ID, with suction on, before the tip touches it (a real N045 lifted one about a "
+            "millimeter)."
         ),
     )
     sim_board_height_error: float = Field(

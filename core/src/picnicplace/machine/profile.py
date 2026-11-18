@@ -218,7 +218,7 @@ class Camera(ProfileModel):
 class Location(ProfileModel):
     id: str
     label: str
-    kind: Literal["homing_fiducial", "fiducial", "tip_holder", "discard", "park"]
+    kind: Literal["homing_fiducial", "fiducial", "tip_holder", "discard", "park", "paper_pad"]
     position: Point
     z: float | None = Field(
         default=None, description="Height of the surface, where it matters (fiducials)."

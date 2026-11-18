@@ -32,6 +32,7 @@
 <circle cx="235.0" cy="435.0" r="20.0" fill="none" stroke="#b8741a" stroke-width="3.0"/>
 <text x="235.0" y="470.0" font-size="10" text-anchor="middle" fill="#1d2430">Aiming ring</text>
 <polygon points="330.0,605.0 450.0,605.0 450.0,495.0 330.0,495.0" fill="#ffffff" stroke="#1d2430" stroke-width="1" stroke-dasharray="3 2"/>
+<polygon points="328.0,607.0 452.0,607.0 452.0,493.0 328.0,493.0" fill="none" stroke="#1d2430" stroke-width="0.8"/>
 <text x="390.0" y="540.0" font-size="10" text-anchor="middle" fill="#1d2430">Disc / token</text>
 <text x="390.0" y="557.5" font-size="10" text-anchor="middle" fill="#6b7480">24 x 22 bare</text>
 <polygon points="480.0,575.0 540.0,575.0 540.0,515.0 480.0,515.0" fill="#b8741a" stroke="none" opacity="0.85"/>
@@ -161,7 +162,9 @@
 <text x="595.0" y="595.0" font-size="10" text-anchor="middle" fill="#1d2430">Scale target</text>
 <text x="595.0" y="610.0" font-size="10" text-anchor="middle" fill="#6b7480">10 mm dot grid</text>
 <polygon points="650.0,585.0 720.0,585.0 720.0,515.0 650.0,515.0" fill="none" stroke="#6b7480" stroke-width="1"/>
-<text x="685.0" y="550.0" font-size="9" text-anchor="middle" fill="#6b7480">QR / rev</text>
+<text x="685.0" y="550.0" font-size="9" text-anchor="middle" fill="#6b7480">Label</text>
+<polygon points="739.0,582.5 801.0,582.5 801.0,517.5 739.0,517.5" fill="none" stroke="#6b7480" stroke-width="1"/>
+<text x="770.0" y="550.0" font-size="9" text-anchor="middle" fill="#6b7480">Logo</text>
 <circle cx="180.0" cy="605.0" r="8.0" fill="#ffffff" stroke="#1d2430" stroke-width="1"/>
 <circle cx="180.0" cy="605.0" r="14.0" fill="none" stroke="#1d2430" stroke-width="0.6"/>
 <circle cx="180.0" cy="270.0" r="8.0" fill="#ffffff" stroke="#1d2430" stroke-width="1"/>

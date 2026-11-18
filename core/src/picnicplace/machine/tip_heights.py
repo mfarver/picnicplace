@@ -20,6 +20,7 @@ import cv2
 import numpy as np
 
 from picnicplace.calibration import datum_key, nozzle_key
+from picnicplace.machine.datum_board import on_datum_mark
 from picnicplace.machine.errors import InvalidTargetError
 from picnicplace.machine.nozzle_offsets import (
     DISC_MIN_BRIGHTNESS,
@@ -28,15 +29,19 @@ from picnicplace.machine.nozzle_offsets import (
     PAPER_MM,
     NozzleOffsetError,
     check_seal,
+    off_board,
     record_vacuum,
+    seals_on_board,
     search_area,
     search_spots,
+    sniff_board,
     sniff_disc,
     turn_disc,
     vacuum_levels,
     with_tip,
 )
 from picnicplace.machine.profile import Nozzle, Point, VacuumLevels
+from picnicplace.machine.seat_check import hide_pad, keep_references
 from picnicplace.machine.service import MachineService
 from picnicplace.machine.sniff import VacuumMeasure
 from picnicplace.schemas import Operation
@@ -69,6 +74,11 @@ def tips_to_measure(machine: MachineService) -> list[Nozzle]:
     ]
 
 
+PAPER_SQUARE_MM = 12.0
+"""A small tip touches bare board at least this far (across) from where it found the
+paper, and the top camera checks the spot is bare: the square's size is not known."""
+
+
 def paper_needed(machine: MachineService, nozzles: list[Nozzle]) -> float:
     """How far from the paper's edges a tip touches it (mm): the biggest tip's radius and a
     millimeter of paper all round."""
@@ -98,9 +108,11 @@ async def find_paper(machine: MachineService, radius: float) -> Point:
         frame = await machine.frame(camera.id)
         h, w = frame.image.shape[:2]
         mm = camera.field_of_view.x / w
-        x, y, depth = deepest_white(frame.image)
+        x, y, depth = deepest_white(hide_pad(machine, camera, spot, frame.image, mm))
         dx, dy = machine.image_to_machine(camera, (x - w / 2) * mm, (y - h / 2) * mm)
         at = Point(x=spot.x + dx, y=spot.y + dy)
+        if off_board(machine, at) or on_datum_mark(machine.profile, at):
+            continue
         if best is None or depth * mm > best[0]:
             best = (depth * mm, at)
         if depth * mm >= radius:
@@ -152,7 +164,17 @@ def tip_heights_work(
                 # Measured afresh: the offset it has is another tip's, or the profile's.
                 nozzle.z_offset = 0.0
                 measure = VacuumMeasure()
-                z = await sniff_disc(machine, nozzle, spot, PAPER_MM, measure, "the paper")
+                # A small tip lifts the paper before it touches it: it touches bare board.
+                board = (
+                    await sniff_board(machine, nozzle, spot, PAPER_SQUARE_MM, measure)
+                    if seals_on_board(machine, nozzle)
+                    else None
+                )
+                z = (
+                    board
+                    if board is not None
+                    else await sniff_disc(machine, nozzle, spot, PAPER_MM, measure, "the paper")
+                )
                 held = await turn_disc(
                     machine,
                     nozzle,
@@ -164,7 +186,10 @@ def tip_heights_work(
                     else None,
                     "the paper",
                 )
-                check_seal(nozzle, measure, held, z + PAPER_MM, "the paper")
+                if board is None:
+                    # On bare board a small tip's seal is weak for its first 0.1 mm, not
+                    # a leak pressed shut: only a seal on the paper is checked.
+                    check_seal(nozzle, measure, held, z + PAPER_MM, "the paper")
                 raw[nozzle.id] = z
                 found = vacuum_levels(machine, nozzle, measure, held, "the paper")
                 if found is not None:
@@ -190,7 +215,7 @@ def tip_heights_work(
         if levels:
             record_vacuum(machine, levels)
         machine.apply_calibration()
-        return f"On the paper: {said}."
+        return f"On the paper: {said}." + await keep_references(machine, nozzles)
 
     return work
 

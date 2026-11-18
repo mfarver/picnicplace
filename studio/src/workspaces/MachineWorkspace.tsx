@@ -41,19 +41,20 @@ export function MachineWorkspace() {
   const [lastOpId, setLastOpId] = useState<string | null>(null);
 
   const lastOp = lastOpId ? operations[lastOpId] : undefined;
-  // Successful jogs and moves are visible on the map; only report how homing went, and
-  // anything that failed.
+  // Successful jogs and moves are visible on the map; only report how homing went, what a
+  // feeder scan or tip change found, and anything that failed.
   const showLastOp =
     !!lastOp &&
     !machine?.estop &&
-    (["home", "feeder_scan"].includes(lastOp.kind) || lastOp.status === "failed");
+    (["home", "feeder_scan", "tip_change"].includes(lastOp.kind) ||
+      lastOp.status === "failed");
   // One fixed-height line for results, so buttons below it never shift under the cursor.
   const statusLine = error
     ? { text: error, danger: true }
     : showLastOp
       ? {
           text:
-            lastOp.kind === "feeder_scan" && lastOp.message
+            ["feeder_scan", "tip_change"].includes(lastOp.kind) && lastOp.message
               ? lastOp.message
               : `${lastOp.kind}: ${lastOp.status}${lastOp.error ? ` (${lastOp.error})` : ""}`,
           danger: lastOp.status === "failed",

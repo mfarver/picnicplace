@@ -32,7 +32,7 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/machine` | Live machine state: position, inputs, outputs, safe Z, E-stop |
 | `GET /api/v1/machine/description` | The machine profile: axes, nozzles, cameras, plates, I/O |
 | `GET`, `PUT /api/v1/machine/local-profile` | This machine's local profile; save bring-up findings to it (they take effect on restart) |
-| `PUT`, `DELETE /api/v1/machine/locations/{kind}` | Set the discard or park location (by default where the top camera looks), or reset it |
+| `PUT`, `DELETE /api/v1/machine/locations/{kind}` | Set the discard, park or paper pad location (by default where the top camera looks), or reset it |
 | `POST /api/v1/machine/connect` | Connect to the machine's controller |
 | `POST /api/v1/machine/home` | Home, then visual home if the profile enables it |
 | `POST /api/v1/machine/move` | Move to a position, traveling at safe Z |
@@ -56,7 +56,7 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/machine/resume` | Carry on after a pause |
 | `POST /api/v1/machine/nozzle-runout` | Measure how far the tip's end on some nozzles (`nozzle_ids`: those whose tip has none yet, unless given) is from the axis it turns about: each turns over the bottom camera through eight angles, and a circle is fitted to its end. Picks then put the end, not the axis, over the part. Kept for the tip fitted, and used. Needs control |
 | `POST /api/v1/machine/tip-heights` | Measure the height and vacuum levels of the tip on some nozzles (`nozzle_ids`: those whose tip has none yet, unless given) on a square of plain paper on the datum board, found by the top camera. For tips too big for the calibration disc, once the nozzle offsets are measured. Kept and used. Needs control |
-| `POST /api/v1/machine/tip-change` | Raise the nozzles, bring the head to the front and center, and ask the operator (the machine state's `request`) to change tips by hand and say which tip is on each nozzle (`nozzle_ids`: all, unless given). Needs control |
+| `POST /api/v1/machine/tip-change` | Raise the nozzles, bring the head to the front and center, and ask the operator (the machine state's `request`) to change tips by hand and say which tip is on each nozzle (`nozzle_ids`: all, unless given); then touch the paper pad with each tip, if one is set, to check it sits as when its height was measured, and, once the bottom camera is calibrated, measure the runout of each tip just fitted. Needs control |
 | `POST /api/v1/machine/answer` | Answer what the machine is asking (the machine state's `request`, by its `id`): for a tip change, the tip now on each nozzle listed (`tips`, by nozzle ID; null for none). The running operation carries on; Stop ends it instead. Needs control |
 | `POST /api/v1/machine/stop` | End the running operation before its next move (resuming if paused); the machine stays homed; any client may call it |
 | `POST /api/v1/machine/estop` | The firmware's halt (`M112`); Marlin then needs a power cycle, so the Studio pauses instead; any client may call it |

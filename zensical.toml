@@ -26,6 +26,7 @@ nav = [
     { "LumenPnP v4" = "hardware/lumenpnp-v4.md" },
     { "PicnicPlace datum" = "hardware/picnicplace-datum.md" },
     { "Test board" = "hardware/test-board.md" },
+    { "Calibration token" = "hardware/calibration-token.md" },
     { "Control panel (concept)" = "hardware/control-panel.md" },
   ] },
   { "Project" = [

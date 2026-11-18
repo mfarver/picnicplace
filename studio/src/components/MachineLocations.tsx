@@ -6,9 +6,9 @@ import { useAction } from "../api/useAction";
 import { publishDescription } from "../api/useDescription";
 import type { LocalProfileState, MachineProfile } from "../api/types";
 
-type Kind = "discard" | "park";
+export type LocationKind = "discard" | "park" | "paper_pad";
 
-const PLACES: { kind: Kind; name: string; what: string }[] = [
+const PLACES: { kind: LocationKind; name: string; what: string }[] = [
   {
     kind: "discard",
     name: "Discard",
@@ -19,19 +19,30 @@ const PLACES: { kind: Kind; name: string; what: string }[] = [
     name: "Park",
     what: "The head waits here, out of the way, while a run waits for you.",
   },
+  {
+    kind: "paper_pad",
+    name: "Paper pad",
+    what:
+      "A small square of plain paper glued flat on the datum board: each tip touches it " +
+      "after a tip change, to check it sits as when its height was measured.",
+  },
 ];
 
 /**
- * This machine's discard and park locations, set by centering the top camera on them.
- * They are kept in the core's local profile and take effect at once.
+ * This machine's own locations (discard and park, unless `kinds` says), set by centering
+ * the top camera on them. They are kept in the core's local profile and take effect at
+ * once.
  */
 export function MachineLocations({
   description,
   canSet,
+  kinds = ["discard", "park"],
 }: {
   description: MachineProfile;
   /** Homed, and this client may change the machine. */
   canSet: boolean;
+  /** The locations shown. */
+  kinds?: LocationKind[];
 }) {
   const { status } = useCore();
   const { run, pending, error } = useAction();
@@ -49,10 +60,10 @@ export function MachineLocations({
     };
   }, [status, changed]);
 
-  const mine = (kind: Kind) =>
+  const mine = (kind: LocationKind) =>
     ((local?.profile.locations ?? []) as { kind?: string }[]).some((loc) => loc.kind === kind);
 
-  const act = async (kind: Kind, reset: boolean) => {
+  const act = async (kind: LocationKind, reset: boolean) => {
     const params = { params: { path: { kind } } };
     const profile = await run(() =>
       reset
@@ -69,7 +80,7 @@ export function MachineLocations({
         Center the top camera over the place, then set it. It is kept for this machine, over
         the machine profile.
       </p>
-      {PLACES.map(({ kind, name, what }) => {
+      {PLACES.filter((p) => kinds.includes(p.kind)).map(({ kind, name, what }) => {
         const at = description.locations.find((loc) => loc.kind === kind);
         const source = !at ? "" : mine(kind) ? "on this machine" : "from the profile or config";
         return (

@@ -288,6 +288,9 @@ class FeederService:
         """Simulated rails: how far each bank really is from the profile, by bank ID: a
         shift (x, y) in mm and a turn in degrees about its first slot."""
         self.sim_part_height_error = 0.0
+        self.sim_parts_turned: dict[str, float] = {}
+        """Simulated feeders: degrees each slot's parts really sit turned in their tape from
+        what the library says (a reel of SOT-23s turned 180, say), by slot ID."""
         self.sim_empty_pockets: dict[str, int] = {}
         """Simulated feeders: how many empty pockets (a reel's leader) still come to each
         slot's pick location, by slot ID, the one there now first."""
@@ -1563,7 +1566,8 @@ class FeederService:
                     pick_full=self._sim_full.get(
                         address, self.sim_empty_pockets.get(slot.id, 0) == 0
                     ),
-                    part_rotation=(tape.rotation or 0.0) if tape is not None else 0.0,
+                    part_rotation=((tape.rotation or 0.0) if tape is not None else 0.0)
+                    + self.sim_parts_turned.get(slot.id, 0.0),
                     body=(footprint.body.x, footprint.body.y)
                     if footprint is not None and footprint.body is not None
                     else None,

@@ -136,7 +136,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `machine/local.py` | The local profile: what is true of one machine (discard and park locations, measured keep-outs), laid over the built-in profile. Written by the Studio. |
 | `machine/service.py` | The machine service: the one owner of the machine, and where the safety rules live. Also camera frames and vision calls for tasks, and asking the operator mid-task (`ask`, `change_tips`). |
 | `machine/datum_board.py` | The LumenPnP datum board's own round marks (a tinned pad and a silkscreen disc), where they are however the board faces, so searches for paper leave them out |
-| `machine/bottom_camera.py` | Calibrating the bottom camera with a nozzle tip: its place, focus height, scale, and turn, and how big the fitted tip looked; finding the tip by its hole; naming the tip on each nozzle by the size of its end or hole, with the hole seen inside (dark, or a wide cup lit all through) |
+| `machine/bottom_camera.py` | Calibrating the bottom camera with a nozzle tip: its place, focus height, scale, turn, and whether its picture is mirrored, and how big the fitted tip looked; finding the tip by its hole; naming the tip on each nozzle by the size of its end or hole, with the hole seen inside (dark, or a wide cup lit all through), or by its dark hole alone when its end does not stand out |
 | `machine/sniff.py` | Finding a height by touch: a nozzle steps down with suction on until the vacuum jumps from its open reading (the calibration disc, a board's fiducial, a part in its pocket) |
 | `machine/tips.py` | Which nozzle tip is fitted on each nozzle, kept in the data directory |
 | `machine/nozzle_offsets.py` | Calibrating the nozzle offsets: searching the datum board for the disc (from where it was last found, stopping at the first paper), sniffing for the disc's top on the datum board (a small tip on the bare board; a disc that jumps to the tip takes the nozzle's height measured before), then turning the disc with each nozzle; the calibration token told by its opening, found by it, and turned only by tips that fit inside it; each nozzle's vacuum levels measured on the way |
@@ -157,8 +157,8 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `camera/` | Camera sources (`device.py` for real cameras, `synthetic.py` for the simulator's rendered views), a hub per camera that shares frames among viewers, and `v4l2.py`, which asks a Linux camera what formats, sizes, and frame rates it can send (for the probe) |
 | `vision/fiducial.py` | Finds round marks: homing and board fiducials, feeder fiducials, sprocket holes |
 | `vision/tape.py` | Paper tape: whether a pocket holds a part, and parts lying loose on the tape |
-| `vision/part.py` | The metal mask (bright, not yellowish plastic, no specks), and one box around a part's metal, for parts without a footprint |
-| `vision/pads.py` | Fits a footprint's pads to the metal in a bottom camera frame, for parts whose pads are off their body's center or whose body is as bright as their leads (bottom vision's finder whenever a footprint has two pads or more) |
+| `vision/part.py` | The metal mask (bright, not yellowish plastic, no specks), and one box around everything bright about the nozzle: the part's outline, which bottom vision finds first |
+| `vision/pads.py` | Fits a footprint's pads to the metal in a bottom camera frame, for parts whose pads are off their body's center or whose body is as bright as their leads (started from the outline's angle whenever a footprint has two pads or more, and fitted both ways round when its pads are not symmetric) |
 | `vision/token.py` | Finds the calibration token's opening, by its gold copper in the blue channel, and tells a token from a paper disc |
 | `vision/focus.py` | How sharp part of a frame is, for finding a camera's focus |
 | `capture.py` | Saves single frames on request, for tuning vision on real images |
@@ -179,7 +179,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `feeders/service.py` | The feeder service: scanning, feeding, where to pick, fiducial calibration, pocket finding, strips and trays, pick learning |
 | `feeders/pocket.py` | Where the pocket is, from the sprocket holes seen; of two about as near, which to take |
 | `feeders/rails.py` | Fitting a feeder rail to the feeder fiducials found on it |
-| `placement.py` | Pick, align, and place one part; pick correction (top or bottom camera) |
+| `placement.py` | Pick, align (outline, then pads, or the outline alone when no metal shows: a white chip's body), and place one part; pick correction (top or bottom camera) |
 | `simparts.py` | The simulator's parts: which nozzle holds what, where placed parts landed (and how far they fell), the calibration disc, and crashes: a tip pressed into a part, or a part into the board. Part tops come from the feeders' tapes, strips, and trays, and board tops from the staging plates, each off by the config's simulator errors |
 | `board/` | Boards and panels, and reading them from KiCad (`kicad.py`, with a small S-expression reader) and KiKit panels |
 | `job/models.py`, `job/store.py` | Jobs (a board or panel on the machine) and their files, with their published revisions and this machine's setup for each |

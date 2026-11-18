@@ -38,7 +38,7 @@ from typing import Any
 
 from picnicplace.feeders.service import FeederService, PocketCheck, rotate
 from picnicplace.feeders.setup import PickCorrection, PickMethod
-from picnicplace.library import Footprint, Library, Part
+from picnicplace.library import Footprint, Library, Part, Size
 from picnicplace.machine.errors import (
     FeederError,
     InvalidTargetError,
@@ -78,6 +78,13 @@ FIT_RESIDUAL_MM = 0.15
 """Pads fitted with more than this left over (root mean square) are reported."""
 SIZE_TOLERANCE = 0.35
 """A part seen more than this fraction larger or smaller than its pads is reported."""
+ELONGATED = 1.2
+"""An outline longer than this times its width has two ways round, not four: its longer
+side is told from its shorter."""
+HALF_TURN_BETTER = 0.5
+"""With as many pads found either way round, the pads fitted 180 degrees from the tape's
+angle are taken only if they lie this much closer to their metal (a fraction of the
+other way's residual)."""
 
 
 class PlacementError(MachineError):
@@ -157,6 +164,46 @@ def _image_pads(
             width, height = width * c + height * s, width * s + height * c
         pads.append(PadRect(u / px, v / px, width / px, height / px))
     return pads
+
+
+def symmetric_half_turn(footprint: Footprint) -> bool:
+    """Whether a footprint's pads look the same turned 180 degrees (a resistor's do; a
+    SOT-23's or a diode's marked pin 1 do not)."""
+    tol = 0.02
+    pads = [(p.x, p.y, p.width, p.height) for p in footprint.pads]
+    return all(
+        any(
+            abs(x + q[0]) < tol
+            and abs(y + q[1]) < tol
+            and abs(w - q[2]) < tol
+            and abs(h - q[3]) < tol
+            for q in pads
+        )
+        for x, y, w, h in pads
+    )
+
+
+def _elongated(size: Point) -> bool:
+    """Whether an outline is long enough for its longer side to be told from its shorter."""
+    return max(size.x, size.y) > ELONGATED * min(size.x, size.y)
+
+
+def outline_matched(
+    measured: tuple[float, float], body: Size | None, pads: Point | None
+) -> tuple[Point | None, bool]:
+    """Which outline the part's measures ``measured`` (mm, either way round) match: its
+    footprint's body (and True), or its pads' extent (and False); None if neither."""
+    seen = sorted(measured)
+    for size, about_body in (
+        (Point(x=body.x, y=body.y) if body is not None else None, True),
+        (pads, False),
+    ):
+        if size is None:
+            continue
+        want = sorted((size.x, size.y))
+        if all(abs(m - e) <= SIZE_TOLERANCE * e for m, e in zip(seen, want, strict=True)):
+            return size, about_body
+    return None, False
 
 
 def _footprint_center(part: Part | None, library: Library | None) -> tuple[Point, Point] | None:
@@ -582,36 +629,51 @@ class PlacementService:
             "part": load.part_id,
             "source": load.slot_id,
         }
-        # Machine X/Y to image right/down: the inverse of image_to_machine, which flips
-        # and mirrors but does not turn.
-        ux, uy = self._machine.image_to_machine(camera, 1.0, 0.0)
-        vx, vy = self._machine.image_to_machine(camera, 0.0, 1.0)
+        # Machine X/Y to image right/down as the picture would be without its measured
+        # turn: the inverse of image_to_machine, not turned, which flips and mirrors. The
+        # pads are drawn so, and the turn is added to the angle they are looked for at.
+        ux, uy = self._machine.image_to_machine(camera, 1.0, 0.0, turned=False)
+        vx, vy = self._machine.image_to_machine(camera, 0.0, 1.0, turned=False)
         det = ux * vy - uy * vx
 
         def to_image(x: float, y: float) -> tuple[float, float]:
             return (vy * x - vx * y) / det, (-uy * x + ux * y) / det
 
         # A mirror turns the other way: a part turned by a in the machine is turned by
-        # -a in a mirrored image.
+        # -a in a mirrored image; the camera's turn adds to it.
         mirror = -1.0 if det < 0 else 1.0
+        turn = camera.image_rotation
         footprint = _footprint(part, library)
+        pad_area = _smallest_pad(part, library)
+        speck = SPECK_FRACTION * pad_area / mm_per_px**2 if pad_area else 0.0
+        # The part's outline first: whatever is bright, its body and its metal.
+        box: PartBox | None = await self._machine.recorder.vision(
+            "find_part", frame.image, search, BRIGHT, speck, **context
+        )
         fitted: PadFit | None = None
-        box: PartBox | None = None
-        if footprint is not None and len(footprint.pads) >= 2:
+        flipped = False
+        if footprint is not None and len(footprint.pads) >= 2 and box is not None:
+            image_pads = _image_pads(footprint, to_image, mm_per_px)
+            # Then the pads, looked for from the outline's angle nearest the tape's, which
+            # may be some degrees off it.
+            start = nearest_angle(box.angle, mirror * expected + turn)
             fitted = await self._machine.recorder.vision(
-                "fit_pads",
-                frame.image,
-                _image_pads(footprint, to_image, mm_per_px),
-                mirror * expected,
-                search,
-                **context,
+                "fit_pads", frame.image, image_pads, start, search, **context
             )
-        else:
-            pad_area = _smallest_pad(part, library)
-            speck = SPECK_FRACTION * pad_area / mm_per_px**2 if pad_area else 0.0
-            box = await self._machine.recorder.vision(
-                "find_part", frame.image, search, BRIGHT, speck, **context
-            )
+            if fitted is not None and not symmetric_half_turn(footprint):
+                # The outline is the same turned 180 degrees; pads that are not (a
+                # SOT-23's, a diode's) tell which way round the part is.
+                other = await self._machine.recorder.vision(
+                    "fit_pads", frame.image, image_pads, start + 180, search, **context
+                )
+                if other is not None and (
+                    other.found > fitted.found
+                    or (
+                        other.found == fitted.found
+                        and other.residual < HALF_TURN_BETTER * fitted.residual
+                    )
+                ):
+                    fitted, flipped = other, True
         await self._machine.raise_nozzles()
         if fitted is None and box is None:
             # Likely a bad pick (nothing there, or a part on its side), even when the
@@ -626,7 +688,7 @@ class PlacementService:
             dx, dy = self._machine.image_to_machine(
                 camera, (fitted.u - w / 2) * mm_per_px, (fitted.v - h / 2) * mm_per_px
             )
-            angle = mirror * fitted.angle
+            angle = mirror * (fitted.angle - turn)
             center = Point(x=nozzle_at.x + dx, y=nozzle_at.y + dy)
             # What the feeder learns from is where the pads' middle was seen.
             middle = rotate(pads[0], angle) if pads else Point(x=0, y=0)
@@ -639,29 +701,50 @@ class PlacementService:
                     f" Its metal lies up to {fitted.residual * mm_per_px:.2f} mm from its "
                     "pads: check the part and its footprint."
                 )
+            if flipped:
+                note += (
+                    " Its pads show it turned about 180 degrees from the tape's angle: check "
+                    "its orientation in the tape."
+                )
         else:
             assert box is not None
             dx, dy = self._machine.image_to_machine(
                 camera, (box.u - w / 2) * mm_per_px, (box.v - h / 2) * mm_per_px
             )
             seen = Point(x=dx, y=dy)
-            # The box's first side, from image directions to machine ones.
-            a = math.radians(box.angle)
-            sx, sy = self._machine.image_to_machine(camera, math.cos(a), math.sin(a))
-            angle = nearest_angle(math.degrees(math.atan2(sy, sx)), expected)
-            # The box is around the pads; the part's origin may not be their center.
+            measured = (box.width * mm_per_px, box.height * mm_per_px)
+            # What the outline is round: the part's body (a white chip's, lit), or its
+            # pads' metal (a black body unseen against the nozzle).
+            body = footprint.body if footprint is not None else None
+            outline, about_body = outline_matched(measured, body, size if pads else None)
+            # The outline's longer side, from image directions to machine ones, against the
+            # footprint's: a long part has two ways round, a square one four.
+            long_side = box.angle if box.width >= box.height else box.angle + 90
+            r = math.radians(long_side)
+            sx, sy = self._machine.image_to_machine(camera, math.cos(r), math.sin(r))
+            along = 0.0 if outline is None or outline.x >= outline.y else 90.0
+            period = 180.0 if outline is not None and _elongated(outline) else 90.0
+            angle = nearest_angle(math.degrees(math.atan2(sy, sx)) - along, expected, period)
             center = Point(x=nozzle_at.x + dx, y=nozzle_at.y + dy)
-            if pads is not None:
+            if pads is not None and not about_body:
+                # Round the pads: the part's origin may not be their center.
                 shift = rotate(pads[0], angle)
                 center = Point(x=center.x - shift.x, y=center.y - shift.y)
-            measured = sorted((box.width * mm_per_px, box.height * mm_per_px))
-            want = sorted((size.x, size.y))
-            if pads is not None and any(
-                abs(m - e) > SIZE_TOLERANCE * e for m, e in zip(measured, want, strict=True)
-            ):
+            if outline is None and pads is not None:
+                found, want = sorted(measured), sorted((size.x, size.y))
                 note = (
-                    f" Its metal measures {measured[0]:.2f} x {measured[1]:.2f} mm; its pads "
+                    f" Its outline measures {found[0]:.2f} x {found[1]:.2f} mm; its pads "
                     f"are {want[0]:.2f} x {want[1]:.2f}: check the part."
+                )
+            elif footprint is not None and len(footprint.pads) >= 2:
+                # A white chip's ends are as bright as its body (a real 0603 resistor's,
+                # under any light): its body's outline is the measure, not a fallback.
+                what = "its body's" if about_body else "its pads'"
+                note = f" Found by {what} outline"
+                note += (
+                    "."
+                    if symmetric_half_turn(footprint)
+                    else ", so which way round it is was taken from the tape."
                 )
         offset = rotate(Point(x=center.x - nozzle_at.x, y=center.y - nozzle_at.y), -nozzle_angle)
         alignment = Alignment(

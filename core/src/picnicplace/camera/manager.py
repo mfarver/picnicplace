@@ -28,6 +28,7 @@ def sim_truth(camera: Camera, config: Config) -> Camera:
         dx, dy, dz = machine.sim_bottom_camera_error
         truth.position = Point(x=camera.position.x + dx, y=camera.position.y + dy)
         truth.image_rotation = machine.sim_bottom_camera_turn
+        truth.image_mirrored = not machine.sim_bottom_camera_flipped
         k = machine.sim_bottom_camera_scale
         truth.field_of_view = Point(x=camera.field_of_view.x * k, y=camera.field_of_view.y * k)
         truth.focus_height = (
@@ -56,7 +57,13 @@ class CameraManager:
                     else profile
                 )
                 collars = config.machine.sim_tip_collars
-                source = SyntheticCamera(seen, truth, scene, collars=collars)
+                source = SyntheticCamera(
+                    seen,
+                    truth,
+                    scene,
+                    collars=collars,
+                    washed_out=config.machine.sim_bottom_washed_out,
+                )
                 self._hubs[camera.id] = CameraHub(camera.id, source)
             elif settings.source == "device":
                 self._hubs[camera.id] = CameraHub(camera.id, _device(settings))

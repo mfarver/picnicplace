@@ -11,6 +11,7 @@ import pytest
 
 from picnicplace.camera.source import Image
 from picnicplace.config import Config
+from picnicplace.library import Footprint, Pad, Size
 from picnicplace.machine.bottom_camera import (
     SHARPNESS_RADIUS_MM,
     focus_radius,
@@ -19,7 +20,7 @@ from picnicplace.machine.bottom_camera import (
 )
 from picnicplace.machine.datum_board import DATUM_MARKS, board_turn
 from picnicplace.machine.profile import Point
-from picnicplace.placement import SPECK_FRACTION
+from picnicplace.placement import SPECK_FRACTION, outline_matched, symmetric_half_turn
 from picnicplace.recorder import VISION_FUNCTIONS
 from picnicplace.vision.fiducial import find_circles, find_hole
 from picnicplace.vision.focus import sharpness
@@ -68,6 +69,45 @@ def test_the_inductors_pads_fit_its_terminals() -> None:
     assert (fit.u - 964.7) * mm == pytest.approx(0, abs=0.03)
     assert (fit.v - 519.5) * mm == pytest.approx(0, abs=0.03)
     assert fit.angle == pytest.approx(0, abs=0.5)
+
+
+def test_an_overexposed_0603_is_found_by_its_outline() -> None:
+    """The bottom light at full white saturates an 0603's tin ends and white underside
+    alike: no metal shows for its pads, but its outline is its body's, lying along the
+    picture's width as it lay in the tape, across the feed."""
+    image = _frame("lumenpnp-bottom-0603-overexposed.png")
+    mm = 0.034713683451869475
+    pads = [PadRect(x, 0.0, 0.6 / mm, 0.9 / mm) for x in (-0.75 / mm, 0.75 / mm)]
+    search = 4.1 / mm
+    assert fit_pads(image, pads, 0.0, search) is None
+    box = find_part(image, search, BRIGHT, 0)
+    assert box is not None
+    assert (box.u, box.v) == pytest.approx((205, 200), abs=4)
+    length, width = sorted((box.width * mm, box.height * mm), reverse=True)
+    assert (length, width) == pytest.approx((1.55, 0.85), abs=0.08)
+    long_side = box.angle if box.width >= box.height else box.angle + 90
+    assert math.remainder(long_side, 180) == pytest.approx(0, abs=2)
+    outline, about_body = outline_matched((length, width), Size(x=1.55, y=0.85), None)
+    assert outline is not None and about_body
+
+
+def test_a_sot23s_pads_are_not_the_same_turned_half_way() -> None:
+    chip = Footprint(
+        id="R",
+        pads=[
+            Pad(name=n, x=x, y=0.0, width=0.6, height=0.9) for n, x in (("1", -0.75), ("2", 0.75))
+        ],
+    )
+    sot23 = Footprint(
+        id="SOT-23",
+        pads=[
+            Pad(name="1", x=-0.95, y=1.0, width=0.6, height=0.7),
+            Pad(name="2", x=0.95, y=1.0, width=0.6, height=0.7),
+            Pad(name="3", x=0.0, y=-1.0, width=0.6, height=0.7),
+        ],
+    )
+    assert symmetric_half_turn(chip)
+    assert not symmetric_half_turn(sot23)
 
 
 def test_a_connectors_pads_are_found_off_its_body() -> None:
@@ -135,14 +175,14 @@ def test_an_n24_with_a_lit_ring_round_it_is_named_an_n24(name: str) -> None:
     # has its own hole inside: only the N24 does.
     machine = _Machine(_frame(name), 0.06502)
     nozzle = machine.profile.nozzles[0]
-    tip, seen, alike = asyncio.run(measure_tip(machine, nozzle))  # type: ignore[arg-type]
+    tip, seen, alike, _ = asyncio.run(measure_tip(machine, nozzle))  # type: ignore[arg-type]
     assert (tip.id if tip else None, alike) == ("N24", [])
     assert seen == pytest.approx(4.0, abs=0.15)
 
 
 def test_an_n24_on_the_left_nozzle_is_named_an_n24() -> None:
     machine = _Machine(_frame("lumenpnp-n24-left.png"), 0.06218)
-    tip, _, alike = asyncio.run(measure_tip(machine, machine.profile.nozzles[0]))  # type: ignore[arg-type]
+    tip, _, alike, _ = asyncio.run(measure_tip(machine, machine.profile.nozzles[0]))  # type: ignore[arg-type]
     assert (tip.id if tip else None, alike) == ("N24", [])
 
 
@@ -152,7 +192,7 @@ def test_an_n08_in_a_lit_ring_is_not_named_an_n24() -> None:
     # end barely stands out from the ring, so the camera cannot name it, and says so
     # rather than name it wrong.
     machine = _Machine(_frame("lumenpnp-n08-right.png"), 0.06218)
-    tip, _, alike = asyncio.run(measure_tip(machine, machine.profile.nozzles[1]))  # type: ignore[arg-type]
+    tip, _, alike, _ = asyncio.run(measure_tip(machine, machine.profile.nozzles[1]))  # type: ignore[arg-type]
     assert (tip.id if tip else None, alike) == (None, [])
 
 
@@ -233,16 +273,39 @@ def test_a_tips_hole_is_found_where_its_end_is_not() -> None:
 
 
 @pytest.mark.parametrize(
-    ("name", "nozzle", "expected"),
-    [("lumenpnp-n24-focus-left.webp", 0, "N24"), ("lumenpnp-n75-focus-right.webp", 1, "N75")],
+    ("name", "nozzle", "expected", "hole"),
+    [
+        ("lumenpnp-n24-focus-left.webp", 0, "N24", True),
+        ("lumenpnp-n75-focus-right.webp", 1, "N75", False),
+    ],
 )
 def test_tips_are_named_at_the_bottom_cameras_real_focus(
-    name: str, nozzle: int, expected: str
+    name: str, nozzle: int, expected: str, hole: bool
 ) -> None:
     """In focus, at the scale the bottom camera measured by the tip's hole (0.03469 mm per
     pixel). The N24's end looks 4.9 mm across, past its 4.0 mm and the tolerance, and is
     named by its hole, 2.4 mm and dark; the N75's 7.5 mm hole is a cup, lit inside, with
     the nozzle's own dark bore at the bottom, and it is named by its 9 mm end."""
     machine = _Machine(_frame(name), 0.03469)
-    tip, _, alike = asyncio.run(measure_tip(machine, machine.profile.nozzles[nozzle]))  # type: ignore[arg-type]
-    assert (tip.id if tip else None, alike) == (expected, [])
+    tip, seen, alike, by_hole = asyncio.run(measure_tip(machine, machine.profile.nozzles[nozzle]))  # type: ignore[arg-type]
+    assert (tip.id if tip else None, alike, by_hole) == (expected, [], hole)
+    if hole:
+        assert seen == pytest.approx(2.4, rel=0.2)  # its hole's size, not the 4.9 mm circle
+
+
+@pytest.mark.parametrize(
+    ("name", "nozzle", "expected", "hole"),
+    [
+        ("lumenpnp-n045-left-dim.webp", 0, "N045", 0.45),
+        ("lumenpnp-n08-right-dim.webp", 1, "N08", 0.8),
+    ],
+)
+def test_a_tip_whose_end_does_not_stand_out_is_named_by_its_hole(
+    name: str, nozzle: int, expected: str, hole: float
+) -> None:
+    """The end runs on into the cone behind it: the first search found a 2.3 mm circle on
+    the N045 and the N08's hole's edge, and named neither."""
+    machine = _Machine(_frame(name), 0.0371)
+    tip, seen, alike, by_hole = asyncio.run(measure_tip(machine, machine.profile.nozzles[nozzle]))  # type: ignore[arg-type]
+    assert (tip.id if tip else None, alike, by_hole) == (expected, [], True)
+    assert seen == pytest.approx(hole, rel=0.15)

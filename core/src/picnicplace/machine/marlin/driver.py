@@ -34,7 +34,7 @@ from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.errors import MachineError, MotionInterruptedError, NotConnectedError
 from picnicplace.machine.marlin.settings import MarlinInput, MarlinSettings
 from picnicplace.machine.marlin.transport import LineTransport, TransportClosedError
-from picnicplace.machine.profile import MachineProfile
+from picnicplace.machine.profile import LightColor, MachineProfile
 
 log = logging.getLogger(__name__)
 
@@ -364,6 +364,20 @@ class MarlinDriver(MotionDriver):
         for line in spec.on if on else spec.off:
             await self._command(line)
         self._outputs[output_id] = on
+        self._light_colors.pop(output_id, None)
+        self._notify()
+
+    async def set_light(self, output_id: str, color: LightColor) -> None:
+        spec = self._settings.outputs.get(output_id)
+        if output_id not in self._outputs:
+            raise KeyError(output_id)
+        if spec is None or spec.color is None or color.brightness == 0:
+            await super().set_light(output_id, color)
+            return
+        for line in spec.color:
+            await self._command(line.format(**color.model_dump()))
+        self._outputs[output_id] = True
+        self._light_colors[output_id] = color
         self._notify()
 
     async def _poll_inputs(self) -> None:

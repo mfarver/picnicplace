@@ -609,12 +609,16 @@ class BottomRenderer:
         camera: Camera,
         size: tuple[int, int],
         collars: dict[str, float] | None = None,
+        washed_out: bool = False,
     ):
         self.profile = profile
         self.camera = camera
         self.size = size
         self.collars = collars or {}
         """A lit ring behind each kind of tip's end, its diameter in mm, by tip ID."""
+        self.washed_out = washed_out
+        """Held parts are overexposed: one even white, their metal not told from their
+        bodies."""
         rng = np.random.default_rng(11)
         w, h = size
         self._grain = rng.integers(-5, 6, size=(h, w, 1), dtype=np.int16)
@@ -625,7 +629,7 @@ class BottomRenderer:
             self.size,
             self.camera.position,
             self.camera.field_of_view.x,
-            True,
+            self.camera.image_mirrored,
             self.profile.x_sign,
             self.profile.y_sign,
         )
@@ -657,7 +661,11 @@ class BottomRenderer:
                 a = math.radians(angle)
                 ox = known.dx * math.cos(a) - known.dy * math.sin(a)
                 oy = known.dx * math.sin(a) + known.dy * math.cos(a)
-                _shape(canvas, img, x + ox, y + oy, angle + known.angle, known.shape)
+                if self.washed_out and known.shape.body is not None:
+                    bx, by = known.shape.body
+                    canvas.rect(img, x + ox, y + oy, bx, by, angle + known.angle, WASHED_OUT)
+                else:
+                    _shape(canvas, img, x + ox, y + oy, angle + known.angle, known.shape)
             elif state.held.get(nozzle.id):
                 # Parts never sit exactly centered: a small, fixed pick error.
                 _chip(canvas, img, x + 0.12, y - 0.07, angle + 3.0)
@@ -669,6 +677,9 @@ class BottomRenderer:
             )
         return _finish(img, self._grain, self.camera, state)
 
+
+WASHED_OUT = (244, 246, 249)
+"""A part's underside, overexposed: its tin and its white ceramic alike."""
 
 TIP_BODY_RADIUS = 2.6
 """A nozzle seen from below without a known tip, and a fitted tip's body behind its end."""
@@ -756,13 +767,14 @@ class SyntheticCamera(CameraSource):
         scene: Callable[[], SceneState],
         fps: float = 15.0,
         collars: dict[str, float] | None = None,
+        washed_out: bool = False,
     ) -> None:
         super().__init__()
         self._size = render_size(camera)
         self._renderer: TopRenderer | BottomRenderer = (
             TopRenderer(profile, camera, self._size)
             if camera.looking == "down"
-            else BottomRenderer(profile, camera, self._size, collars or {})
+            else BottomRenderer(profile, camera, self._size, collars or {}, washed_out)
         )
         self._scene = scene
         self._interval = 1.0 / fps

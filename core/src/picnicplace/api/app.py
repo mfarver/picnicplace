@@ -116,6 +116,9 @@ def create_app(
 
     machine.use_calibration(CalibrationStore(config.data.calibration_path))
     machine.sim_tips = dict(config.machine.sim_tips)
+    machine.camera_lights = {
+        camera_id: c.light for camera_id, c in config.cameras.items() if c.light is not None
+    }
     machine.use_tips(TipStore(config.data.tips_path))
     machine.on_tip_changed.append(lambda n, tip: forget_runout(machine, n, tip))
 
@@ -175,6 +178,7 @@ def create_app(
         ctx.feeders.sim_rail_errors = dict(config.machine.sim_rail_error)
         ctx.feeders.sim_part_height_error = config.machine.sim_part_height_error
         ctx.feeders.sim_empty_pockets = dict(config.machine.sim_empty_pockets)
+        ctx.feeders.sim_parts_turned = dict(config.machine.sim_parts_turned)
         disc = config.machine.sim_calibration_disc
         if disc is not None and ctx.feeders.sim_parts is not None:
             ctx.feeders.sim_parts.placed.append(

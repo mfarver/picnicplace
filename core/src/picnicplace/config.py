@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from picnicplace.feeders.setup import PickCorrection
 from picnicplace.machine.profile import (
+    LightColor,
     Location,
     MachineProfile,
     is_profile_path,
@@ -255,6 +256,22 @@ class MachineConfig(_Section):
             "measures it, and bottom vision undoes it."
         ),
     )
+    sim_bottom_washed_out: bool = Field(
+        default=False,
+        description=(
+            "Simulator only: parts held over the bottom camera look overexposed, one even "
+            "white, so no metal shows to fit their pads to (as an 0603 did on a real "
+            "LumenPnP at full white)."
+        ),
+    )
+    sim_bottom_camera_flipped: bool = Field(
+        default=False,
+        description=(
+            "Simulator only: the bottom camera's picture is flipped to show the machine as "
+            "from above, not mirrored as from below (as flip_y does on a LumenPnP). "
+            "Calibrating the bottom camera measures it."
+        ),
+    )
     sim_bottom_camera_error: tuple[float, float, float] = Field(
         default=(0.0, 0.0, 0.0),
         description=(
@@ -379,6 +396,13 @@ class MachineConfig(_Section):
             "on the first pick from each finds it."
         ),
     )
+    sim_parts_turned: dict[str, float] = Field(
+        default_factory=dict[str, float],
+        description=(
+            "Simulator only: degrees each slot's parts really sit turned in their tape from "
+            "what the parts library says, by slot ID (a reel of SOT-23s turned 180, say)."
+        ),
+    )
     sim_empty_pockets: dict[str, int] = Field(
         default_factory=dict[str, int],
         description=(
@@ -490,6 +514,14 @@ class CameraConfig(_Section):
         ge=-45,
         le=45,
         description="Rotate the image this many degrees counterclockwise (after flips).",
+    )
+    light: LightColor | None = Field(
+        default=None,
+        description=(
+            "The color and brightness (each 0 to 255) the camera's light is set to for "
+            "vision, if the light can take a color: say a dimmer or blue light, if parts "
+            "look washed out at full white. Unset: full white."
+        ),
     )
 
     @model_validator(mode="after")

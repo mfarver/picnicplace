@@ -57,6 +57,7 @@ from picnicplace.schemas import ClientMessage, ErrorResponse, ServerEvent
 from picnicplace.simparts import (
     SIM_DISC_DIAMETER_MM,
     SIM_DISC_THICKNESS_MM,
+    SIM_TOKEN,
     PartShape,
     PlacedPart,
 )
@@ -182,6 +183,11 @@ def create_app(
                     0.0,
                 )
             )
+        token = config.machine.sim_calibration_token
+        if token is not None and ctx.feeders.sim_parts is not None:
+            d, opening, thick = SIM_TOKEN
+            shape = PartShape(disc=d, opening=opening, height=thick)
+            ctx.feeders.sim_parts.placed.append(PlacedPart(shape, token[0], token[1], 0.0))
         paper = config.machine.sim_paper
         if paper is not None and ctx.feeders.sim_parts is not None:
             ctx.feeders.sim_parts.placed.append(

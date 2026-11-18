@@ -48,6 +48,7 @@ from picnicplace.vision.fiducial import find_circle, find_circles, find_hole
 from picnicplace.vision.focus import sharpness
 from picnicplace.vision.pads import fit_pads
 from picnicplace.vision.part import find_part
+from picnicplace.vision.token import find_opening
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ VISION_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "find_circle": find_circle,
     "find_circles": find_circles,
     "find_hole": find_hole,
+    "find_opening": find_opening,
     "find_part": find_part,
     "fit_pads": fit_pads,
     "sharpness": sharpness,

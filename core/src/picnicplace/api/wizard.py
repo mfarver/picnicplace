@@ -32,8 +32,9 @@ class RunRequest(BaseModel):
 
     stop: Literal[1, 2] = Field(
         description="1: everything the machine can do with a hand on the power switch "
-        "(homing, visual homing, the cameras, naming the tips, the feeders). 2: with a paper "
-        "disc on the datum board, each nozzle's offset, height and vacuum levels."
+        "(homing, visual homing, the cameras, naming the tips, the feeders). 2: with the "
+        "calibration token (or a paper disc) on the datum board, each nozzle's offset, height "
+        "and vacuum levels."
     )
     redo: bool = Field(
         default=False,

@@ -577,6 +577,11 @@ class MachineProfile(ProfileModel):
         the operator, front at the bottom) as a machine X/Y displacement."""
         return self.x_sign * right, -self.y_sign * down
 
+    def machine_to_image(self, dx: float, dy: float) -> tuple[float, float]:
+        """A machine X/Y displacement as seen in a top camera image: mm right and mm down
+        (the inverse of ``image_to_machine``)."""
+        return self.x_sign * dx, -self.y_sign * dy
+
     @computed_field
     @property
     def nozzle_reach(self) -> dict[str, Rect]:

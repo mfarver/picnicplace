@@ -199,7 +199,8 @@ class WizardPage(WireModel):
     confirm: bool = Field(description="The owner finishes it by confirming it (or skipping).")
     stop: Literal[0, 1, 2, 3] = Field(
         description="Which of the wizard's stops does it: 0 choosing the machine; 1 with a "
-        "hand on the power switch; 2 with a paper disc on the datum board; 3 checking the "
+        "hand on the power switch; 2 with the calibration token (or a paper disc) on the datum "
+        "board; 3 checking the "
         "discard and park spots."
     )
 
@@ -447,9 +448,9 @@ def build_pages(
         add(
             "nozzle_offsets",
             "todo",
-            "Lay a small paper disc on the datum board, clear of its dot: the top camera "
-            "finds it, and each nozzle finds its height, picks the disc up, turns it and "
-            "sets it down.",
+            "Lay the calibration token on the datum board, opening up, clear of its dot (or "
+            "a small paper disc): the top camera finds it, and each nozzle finds its height, "
+            "picks it up, turns it and sets it down.",
             action="nozzle_offsets",
         )
 

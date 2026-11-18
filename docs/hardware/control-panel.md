@@ -257,9 +257,9 @@ the Studio. The panel cannot do anything the API cannot.
 
 - **The firmware** (`panel/` in the repository; see its README): the screen in portrait
   (600 × 1024), for mounting upright on the machine's side rail; the status bar, the
-  position in seven-segment digits, the tips, the core's messages, Home after the nozzles-level check, Pause or
-  Resume, and Stop, "No connection to the core", the backlight, and the E-stop input,
-  over native USB. Tried on a real 7B.
+  position in seven-segment digits, the tips, the core's messages, Home after the
+  nozzles-level check, Pause or Resume, and Stop, "No connection to the core", the
+  backlight, and the E-stop input, over native USB. Tried on a real 7B.
 - **The core's side** (`core/src/picnicplace/panel.py`): with `[panel] port` set in the
   config, the core opens the panel's port (again whenever it is plugged in), counts the
   panel as a connected client while it pings, sends `state` twice a second and on every
@@ -269,7 +269,56 @@ the Studio. The panel cannot do anything the API cannot.
   pause or stop the run once the parts on the nozzles are placed. The E-stop's sensing
   pole is logged and kept, not yet shown.
 - **Not yet:** `job`, `request` and `answer` (the task list and the operator's questions),
-  Start, Take control, dimming when idle, and the enclosure.
+  Start, Take control, and dimming when idle.
+- **The enclosure:** designed (below), not yet printed.
+
+## The enclosure
+
+`hardware/panel-enclosure/make_enclosure.py` generates it with CadQuery: STEP and STL
+files for each part, in `out/` next to it. Every dimension is in the script; change it and
+run it again rather than editing the models.
+
+- **How it stands:** just left of a LumenPnP near its front, facing the operator, its
+  bottom edge on the table, leaning back 45° so the screen faces up between a standing and
+  a sitting operator's eyes. The top is 186 mm above the table, the screen's center 115 mm.
+  A flat bracket bolts its right side to the machine's lower left 2020 rail, with two M5
+  screws into T-nuts in the rail's outer slot.
+- **The screen:** the 7B in portrait, its USB-C ports at the bottom. A 2 mm lip holds the
+  glass from the front, its window 166.9 × 102.9 mm: 1 mm beyond the opening in the glass's
+  black print, which is not centered on the glass, but never closer than 2 mm to the
+  glass's edge. Behind the glass there is 31 mm for the connectors with their plugs in
+  (about 22 mm) and their wires' bends.
+- **Holding the board:** the board's own 8 mm standoffs go in the four M3 holes of its
+  frame. Posts on the back cover meet their ends, and four M3 × 20 screws through the
+  cover hold the board, pressing the glass against the lip. Four more M3 screws, into
+  heat-set inserts in the shell's corners, close the cover.
+- **The E-stop:** a TE ALCOSWITCH 2416049-1 (PBES22, 22 mm, illuminated), in a pod below
+  the screen, its face flush with the screen's. The hole is 22.5 mm with the
+  anti-rotation ring's notch, in a 3 mm face (the ring takes 1.2 to 4.5 mm); behind it
+  are 45.7 mm of switch and room for the wires, which leave the contact blocks sideways.
+  The switch sits 25 mm right of center so the USB cable drops past it.
+- **Cables:** an opening between the shell and the pod carries the USB-C cable, plugged
+  straight down into the board, and the sensing pole's wires to the board's header. Both
+  cables, USB and the power pole's to the machine's 24 V, leave through the pod's back
+  cover; the USB slot passes a USB-A plug.
+- **Parts:** shell, back cover, pod, pod back and bracket, each within a 220 mm cube (a
+  Flashforge Adventurer 5M Pro). The shell and pod screw together with two M3 screws into
+  inserts; the bracket takes two more.
+- **Test fit:** give the script the makers' STEP models (not kept in the repository) and
+  it reports any part that overlaps them, writes the whole fit as glTF
+  (`out/panel-fit.glb`), and writes the enclosure and switch in Waveshare's coordinates
+  (`out/panel-in-board-coordinates.step`) to open over their model in CAD:
+
+  ```sh
+  python hardware/panel-enclosure/make_enclosure.py --board ESP32-S3-Touch-LCD-7B.stp \
+      --estop c-2416049-1-a1-3d.stp
+  ```
+
+  Against Waveshare's model of 2025-10-25 and TE's, nothing overlaps but the switch's
+  mounting ring, which TE's model draws 2.4 mm behind the face; the real ring threads
+  back to the 3 mm face.
+- **Still to measure:** the rail's height above the table (`RAIL_HEIGHT`), which places
+  the bracket's M5 holes. Until then the bracket is drawn for 30 mm; do not print it.
 
 ## Other displays
 
@@ -379,8 +428,6 @@ the power supply and the mainboard. It must be rated for the supply's full curre
 
 ## Open questions
 
-- Where on the LumenPnP's frame the panel mounts, and how. Its E-stop must be in reach
-  from the front.
 - Reading the controller with `evdev` (Linux only, light) or SDL (cross-platform,
   heavier)? The core usually runs on Linux next to the machine.
 - Whether the panel itself should also offer coarse jogging, for operators with no
@@ -390,4 +437,4 @@ the power supply and the mainboard. It must be rated for the supply's full curre
 - Whether a run paused on a problem should offer Skip on the panel, for a placement the
   operator decides to leave off, or keep that in the Studio.
 - Whether the panel needs a light theme, for brightly lit benches.
-- The enclosure's angle: tilted back toward the operator, or flat on the frame.
+- Whether 45° suits operators, once the enclosure is printed and used.

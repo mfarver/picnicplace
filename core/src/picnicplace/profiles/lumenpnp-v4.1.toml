@@ -384,11 +384,13 @@ role = "valve"
 id = "light_top"
 label = "Top light"
 role = "light"
+colored = true
 
 [[outputs]]
 id = "light_bottom"
 label = "Bottom light"
 role = "light"
+colored = true
 
 # --- Marlin driver ---------------------------------------------------------------------
 # G-code as observed on a LumenPnP v4 (docs/hardware/lumenpnp-v4.md).
@@ -422,8 +424,13 @@ pump_n1 = { on = ["M106 P1 S180"], off = ["M107 P1"] }
 valve_n1 = { on = ["M106 P0 S255"], off = ["M107 P0"] }
 pump_n2 = { on = ["M106 P3 S180"], off = ["M107 P3"] }
 valve_n2 = { on = ["M106 P2 S255"], off = ["M107 P2"] }
-light_top = { on = ["M150 P255 R255 U255 B255 S1"], off = ["M150 P0 S1"] }
-light_bottom = { on = ["M150 P255 R255 U255 B255 S0"], off = ["M150 P0 S0"] }
+# The ring lights are RGB (Marlin's M150: R red, U green, B blue, P brightness, S which).
+light_top = { on = ["M150 P255 R255 U255 B255 S1"], off = ["M150 P0 S1"], color = [
+  "M150 P{brightness} R{red} U{green} B{blue} S1",
+] }
+light_bottom = { on = ["M150 P255 R255 U255 B255 S0"], off = ["M150 P0 S0"], color = [
+  "M150 P{brightness} R{red} U{green} B{blue} S0",
+] }
 
 # Stock firmware reads one byte: the top byte of the sensor's 24-bit value, scaled here
 # to the same counts. Inferred; to be confirmed against stock firmware.

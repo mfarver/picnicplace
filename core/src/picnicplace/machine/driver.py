@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 
 from picnicplace.machine.errors import NotSupportedError
+from picnicplace.machine.profile import LightColor
 
 
 class MotionDriver(ABC):
@@ -16,6 +17,7 @@ class MotionDriver(ABC):
     def __init__(self) -> None:
         self.on_change: Callable[[], None] | None = None
         """Called whenever position, connection, or I/O state changes."""
+        self._light_colors: dict[str, LightColor] = {}
 
     firmware: str | None = None
     """Firmware name and version, once connected, if the driver knows it."""
@@ -89,6 +91,16 @@ class MotionDriver(ABC):
 
     @abstractmethod
     async def set_output(self, output_id: str, on: bool) -> None: ...
+
+    @property
+    def light_colors(self) -> Mapping[str, LightColor]:
+        """The color last set on each light that is on (none: switched on plain, white)."""
+        return self._light_colors
+
+    async def set_light(self, output_id: str, color: LightColor) -> None:
+        """Set a light's color and brightness; a brightness of 0 switches it off. This
+        driver cannot set a color: it switches the light on or off."""
+        await self.set_output(output_id, color.brightness > 0)
 
     @abstractmethod
     async def connect(self) -> None: ...

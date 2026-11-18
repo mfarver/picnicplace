@@ -38,6 +38,7 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/machine/move` | Move to a position, traveling at safe Z |
 | `POST /api/v1/machine/jog` | Jog one axis by a distance |
 | `PUT /api/v1/machine/outputs/{id}` | Switch a pump, valve, or light |
+| `PUT /api/v1/machine/lights/{id}` | Set a light's color and brightness (each 0 to 255; brightness 0 is off), if the profile marks it colored |
 | `POST /api/v1/machine/visual-home` | Center the top camera on the homing fiducial and correct the position |
 | `POST /api/v1/machine/camera-scale` | Measure the top camera's scale, kept and used by vision |
 | `POST /api/v1/machine/bottom-camera` | Calibrate the bottom camera with an empty nozzle tip: its place, focus height, and scale, kept and used |

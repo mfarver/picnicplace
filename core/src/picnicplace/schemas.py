@@ -9,6 +9,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from picnicplace.machine.profile import LightColor
+
 PROTOCOL_VERSION = 1
 """Version of the WebSocket event protocol. Bumped on breaking changes."""
 
@@ -83,6 +85,13 @@ class MachineState(WireModel):
         description="Reading per profile input: bool for digital, number for analog."
     )
     outputs: dict[str, bool] = Field(description="State per profile output.")
+    lights: dict[str, LightColor] = Field(
+        default_factory=dict[str, LightColor],
+        description=(
+            "The color and brightness set on each light that is on; a light switched on "
+            "without one is at full white."
+        ),
+    )
     speed_scale: float = Field(
         description="Moves run at no more than this fraction of full speed (bring-up mode)."
     )

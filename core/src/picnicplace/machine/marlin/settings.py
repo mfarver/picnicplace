@@ -20,6 +20,13 @@ class _Model(BaseModel):
 class MarlinOutput(_Model):
     on: list[str] = Field(min_length=1)
     off: list[str] = Field(min_length=1)
+    color: list[str] | None = Field(
+        default=None,
+        description=(
+            "Colored lights: commands that set the light's color and brightness, with "
+            "{red}, {green}, {blue} and {brightness} (each 0 to 255) filled in."
+        ),
+    )
 
 
 class MarlinInput(_Model):

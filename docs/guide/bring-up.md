@@ -122,9 +122,11 @@ kept in `calibration.json` in the data directory, and the pages you confirm in
       larger tip's end, so a tip whose hole is not seen is not named, and you say which it
       is. A wide hole (5 mm or more, an N75's or N110's) is a cup, lit inside: it is named
       only if its end and hole are both its size and the cup is lit all through, and not
-      if a tip with a dark hole fits too. A nozzle that cannot reach the focus height (a
-      short tip on a low nozzle) goes as low as its travel allows, if that is within
-      1 mm: the picture is about as sharp over that much;
+      if a tip with a dark hole fits too. A small tip whose end is lit no brighter than
+      the cone behind it (an N045 or N08, under the stock ring light) is named by its
+      dark hole alone, if only one tip's hole is that size. A nozzle that cannot reach
+      the focus height (a short tip on a low nozzle) goes as low as its travel allows, if
+      that is within 1 mm: the picture is about as sharp over that much;
     - scans the feeders and calibrates their rails, if there are feeders at each rail's
       ends (otherwise each feeder's fiducial is found on its first pick).
 2. **Paper disc on the datum board.** Fit a small tip on each nozzle: a tip seals on the

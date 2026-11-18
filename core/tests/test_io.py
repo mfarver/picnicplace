@@ -43,6 +43,29 @@ def test_outputs(client: TestClient) -> None:
         assert s.put("/api/v1/machine/outputs/nope", {"on": True}).status_code == 404
 
 
+def test_lights_take_a_color_only_if_the_profile_says_they_can(client: TestClient) -> None:
+    with connect(client) as s:
+        # The test machine's lights only switch on and off.
+        r = s.put("/api/v1/machine/lights/light_top", {"blue": 0})
+        assert r.status_code == 409 and r.json()["code"] == "not_supported", r.json()
+        assert s.put("/api/v1/machine/lights/light_top", {}).status_code == 200
+        assert s.state()["outputs"]["light_top"] is True
+        r = s.put("/api/v1/machine/lights/pump_n1", {})
+        assert r.status_code == 422, r.json()
+
+    config = fast_config(machine={"profile": "lumenpnp-v4.1"})
+    with TestClient(create_app(config)) as lumen, connect(lumen) as s:
+        blue = {"red": 0, "green": 0, "blue": 255, "brightness": 80}
+        assert s.put("/api/v1/machine/lights/light_bottom", blue).status_code == 200
+        state = s.state()
+        assert state["outputs"]["light_bottom"] is True
+        assert state["lights"]["light_bottom"] == blue
+        off = {"brightness": 0}
+        assert s.put("/api/v1/machine/lights/light_bottom", off).status_code == 200
+        assert s.state()["outputs"]["light_bottom"] is False
+        assert s.state()["lights"] == {}
+
+
 def test_simulated_vacuum_and_pick(client: TestClient) -> None:
     with connect(client) as s:
         s.home()

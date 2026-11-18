@@ -243,7 +243,13 @@ effect at once. The reset button next to one forgets it.
       feeder's fiducial on its first pick anyway. A correction belongs to the feeder it
       was found from; put another feeder in the slot and it is found again.
 - [ ] Feed a few times, then **Find pocket**. It finds the sprocket holes and centers the
-      camera on the next part's pocket.
+      camera on the next part's pocket. In paper tape, with the part's footprint body in
+      the library, it also says whether the pocket holds a part, and sees parts lying
+      loose on the tape; the camera's picture outlines the pocket (green with a part,
+      amber empty) and rings loose ones in red. A reel's first pockets (its leader) are
+      empty: feed until parts arrive. A pick that finds its pocket empty feeds once and
+      looks again; a second empty pocket stops it with a feeder error. Take loose parts off, or feed them on past the pick
+      window: a run pauses for one rather than pick near it.
 - [ ] For parts held on the bed (a cut strip of 24 mm tape in a holder, or a tray), use
       **Add strip or tray** under **Strips and trays**. Give it its part, the number of
       parts (and rows, for a tray), and a pick height: the nozzle height at the top of a

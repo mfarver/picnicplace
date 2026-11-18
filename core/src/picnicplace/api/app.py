@@ -174,6 +174,7 @@ def create_app(
         wizard.feeders = ctx.feeders
         ctx.feeders.sim_rail_errors = dict(config.machine.sim_rail_error)
         ctx.feeders.sim_part_height_error = config.machine.sim_part_height_error
+        ctx.feeders.sim_empty_pockets = dict(config.machine.sim_empty_pockets)
         disc = config.machine.sim_calibration_disc
         if disc is not None and ctx.feeders.sim_parts is not None:
             ctx.feeders.sim_parts.placed.append(

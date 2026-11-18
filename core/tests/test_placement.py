@@ -203,13 +203,53 @@ def test_a_part_whose_leads_are_off_its_center_lands_on_them(lumen: TestClient) 
         assert angle_error(landed.angle, 30.0, 360.0) < 0.5
 
 
+def test_an_empty_pocket_is_fed_past_once(lumen: TestClient) -> None:
+    """Paper tape, and a part whose body the library knows: the top camera sees the pick
+    pocket empty before a nozzle goes down to it, and the pick feeds once, looks again,
+    and takes the part in the next pocket."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        pick = {"slot_id": "1", "nozzle_id": "N1", "feed": False, "pick_correction": "top"}
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        # The same pocket again without feeding: it is empty, so the pick feeds on.
+        again = {"slot_id": "1", "nozzle_id": "N2", "feed": False, "pick_correction": "top"}
+        op = ok(s.wait(s.post("/api/v1/placement/pick", again)))
+        assert op["message"].startswith(
+            "N2 picked RC0805-1K from Slot 1 (fed once past an empty pocket) (pocket "
+        ), op
+        parts = feeders(lumen).sim_parts
+        assert parts is not None
+        assert sorted(parts.held) == ["N1", "N2"]
+
+
+def test_a_second_empty_pocket_stops_the_pick(lumen: TestClient) -> None:
+    """The pocket fed to after an empty one is empty too: the feeder is out of parts or
+    not advancing, and the pick stops with a feeder error, no nozzle having gone down."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        pick = {"slot_id": "1", "nozzle_id": "N1", "feed": False, "pick_correction": "top"}
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        top = feeders(lumen).part_top("1")
+        # The pocket just emptied, then one more empty one after it.
+        feeders(lumen).sim_empty_pockets["1"] = 2
+        again = {"slot_id": "1", "nozzle_id": "N2", "feed": False, "pick_correction": "top"}
+        op = s.wait(s.post("/api/v1/placement/pick", again))
+        assert op["status"] == "failed"
+        assert "fed once, and saw the next one empty too" in op["error"], op
+        # It never touched the tape, so the part's top is still known.
+        assert feeders(lumen).part_top("1") == top
+        state = lumen.get("/api/v1/feeders").json()
+        pocket = next(x for x in state["slots"] if x["slot"]["id"] == "1")["pocket"]
+        assert pocket["part"] is False and pocket["loose"] == []
+
+
 def test_picking_from_an_empty_pocket_fails(lumen: TestClient) -> None:
     with connect(lumen) as s:
         set_up(lumen, s)
-        pick = {"slot_id": "1", "nozzle_id": "N1", "feed": False}
+        pick = {"slot_id": "1", "nozzle_id": "N1", "feed": False, "pick_correction": "off"}
         ok(s.wait(s.post("/api/v1/placement/pick", pick)))
-        # The same pocket again, without feeding: nothing there.
-        again = {"slot_id": "1", "nozzle_id": "N2", "feed": False}
+        # The same pocket again, without feeding or looking: nothing there.
+        again = {"slot_id": "1", "nozzle_id": "N2", "feed": False, "pick_correction": "off"}
         op = s.wait(s.post("/api/v1/placement/pick", again))
         assert op["status"] == "failed"
         assert "N2 picked nothing from Slot 1" in op["error"]

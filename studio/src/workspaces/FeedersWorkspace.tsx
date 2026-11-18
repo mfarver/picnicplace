@@ -19,6 +19,7 @@ import { useMachineControl } from "../api/useMachineControl";
 import { WidthSelect, WidthWarning } from "../components/TapeWidth";
 import type { FeedersState, MachineProfile, Part, RailState, SlotState, Tape } from "../api/types";
 import { CameraView } from "../components/CameraView";
+import { pocketMarks } from "../cameraMarks";
 import { FixedFeederDetail, type TeachWhich } from "../components/FixedFeederDetail";
 import { FixedFeederPanel } from "../components/FixedFeederPanel";
 import { Field, NumberInput } from "../components/Form";
@@ -78,6 +79,11 @@ export function FeedersWorkspace() {
   const slot = state?.slots.find((s) => s.slot.id === selected) ?? null;
   const fixed = state?.fixed.find((f) => f.id === selectedFixed) ?? null;
   const camera = description?.cameras.find((c) => c.mount === "head" && c.looking === "down");
+  // Where the top camera is now, to draw what vision found on its picture.
+  const cameraAt =
+    camera && machine?.position.X !== undefined && machine.position.Y !== undefined
+      ? { x: machine.position.X + camera.position.x, y: machine.position.Y + camera.position.y }
+      : undefined;
 
   const cameraTo = (x: number, y: number) => {
     if (!camera) return;
@@ -221,6 +227,9 @@ export function FeedersWorkspace() {
             title={camera.label}
             info={cameras?.find((c) => c.id === camera.id)}
             fieldOfView={camera.field_of_view.x}
+            marks={slot ? pocketMarks(slot) : undefined}
+            at={cameraAt}
+            orientation={description}
           />
         )}
 

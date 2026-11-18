@@ -36,10 +36,15 @@ import math
 from collections.abc import Callable
 from typing import Any
 
-from picnicplace.feeders.service import FeederService, rotate
+from picnicplace.feeders.service import FeederService, PocketCheck, rotate
 from picnicplace.feeders.setup import PickCorrection, PickMethod
 from picnicplace.library import Footprint, Library, Part
-from picnicplace.machine.errors import InvalidTargetError, MachineError, VisionError
+from picnicplace.machine.errors import (
+    FeederError,
+    InvalidTargetError,
+    MachineError,
+    VisionError,
+)
 from picnicplace.machine.profile import Camera, Location, Nozzle, Point
 from picnicplace.machine.service import MachineService
 from picnicplace.machine.sniff import SniffError, floor_message, sniff
@@ -327,9 +332,24 @@ class PlacementService:
             await self._feeders.feed(slot)
         base = self._feeders.pick(slot)
         how, why = self._method(slot.id, correction, first)
-        at, found = base, ""
+        at, found, fed = base, "", ""
         if how == "top":
             check = await self._feeders.locate_pocket(slot)
+            self._check_loose(slot.label, check)
+            if check.part is False:
+                # An empty pocket: feed once and look again. A second one is the feeder's
+                # trouble (an empty reel or leader, or a feeder not advancing), not a pick's.
+                await self._feeders.feed(slot)
+                check = await self._feeders.locate_pocket(slot)
+                self._check_loose(slot.label, check)
+                if check.part is False:
+                    raise FeederError(
+                        f"{slot.label}: the top camera saw the pick pocket empty, fed once, and "
+                        "saw the next one empty too: the reel may be out of parts or still on "
+                        "its empty leader, or the feeder may not be advancing. Check it, feed "
+                        "it until a part is in the pick pocket, then try again"
+                    )
+                fed = " (fed once past an empty pocket)"
             at = check.at
             found = f" (pocket {check.along:+.2f} mm along, {check.across:+.2f} mm across)"
         elif how == "bottom":
@@ -339,7 +359,7 @@ class PlacementService:
         top = await self._take_counted(slot.id, how, nozzle, at, bank.pick_height, slot.label)
         self._loads[nozzle.id] = self._picked(nozzle, part, slot.id, tape_angle, at, base, how)
         what = part.id if part else "a part"
-        return f"{nozzle.id} picked {what} from {slot.label}{found}{top}{why}."
+        return f"{nozzle.id} picked {what} from {slot.label}{fed}{found}{top}{why}."
 
     async def _pick_fixed(
         self, fixed_id: str, nozzle: Nozzle, correction: PickCorrection, first: bool
@@ -364,6 +384,7 @@ class PlacementService:
         else:
             how, why = self._method(fixed_id, correction, first)
         at, found = base, ""
+        check = None
         if how == "top":
             check = await feeders.locate_strip_pocket(fixed_id)
             at = check.at
@@ -371,10 +392,33 @@ class PlacementService:
         elif how == "bottom":
             at, found = self._learned(fixed_id, base)
         feeders.took_fixed(fixed_id)  # tried or taken, that pocket is done with
+        if check is not None:
+            self._check_tape(fixed_id, label, check)
         top = await self._take_counted(fixed_id, how, nozzle, at, height, label)
         self._loads[nozzle.id] = self._picked(nozzle, part, fixed_id, angle, at, base, how)
         what = part.id if part else "a part"
         return f"{nozzle.id} picked {what} number {index + 1} from {label}{found}{top}{why}."
+
+    def _check_tape(self, source_id: str, label: str, check: PocketCheck) -> None:
+        """Before going down on a strip on the bed: stop for a part lying loose on the tape,
+        and take a pocket the top camera sees empty for an empty pick, without touching it
+        (a run tries the strip's next pocket)."""
+        self._check_loose(label, check)
+        if check.part is False:
+            self._look[source_id] = (1, "after an empty pocket")
+            raise MispickError(f"{label}: the top camera sees the pick pocket empty")
+
+    def _check_loose(self, label: str, check: PocketCheck) -> None:
+        """Before going down: stop for a part lying loose on the tape."""
+        if check.loose:
+            where = ", ".join(f"({p.x:.1f}, {p.y:.1f})" for p in check.loose)
+            what = "a part" if len(check.loose) == 1 else f"{len(check.loose)} parts"
+            raise FeederError(
+                f"{label}: the top camera sees {what} lying loose on the tape near the pick "
+                f"pocket, out of the pockets, at {where}: a loose part could be picked upside "
+                "down or knocked about. Take it off the tape, or feed the tape on until it is "
+                "carried past, then try again"
+            )
 
     def _method(
         self, source_id: str, correction: PickCorrection, first: bool

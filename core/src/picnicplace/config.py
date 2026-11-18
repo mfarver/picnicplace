@@ -379,6 +379,14 @@ class MachineConfig(_Section):
             "on the first pick from each finds it."
         ),
     )
+    sim_empty_pockets: dict[str, int] = Field(
+        default_factory=dict[str, int],
+        description=(
+            "Simulator only: how many empty pockets (a reel's leader) come to each slot's "
+            "pick location before its first part, by slot ID, the one there at the start "
+            "first. The top camera sees them empty."
+        ),
+    )
     sim_calibration_disc: tuple[float, float] | None = Field(
         default=None,
         description=(

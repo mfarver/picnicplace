@@ -156,6 +156,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 |---|---|
 | `camera/` | Camera sources (`device.py` for real cameras, `synthetic.py` for the simulator's rendered views), a hub per camera that shares frames among viewers, and `v4l2.py`, which asks a Linux camera what formats, sizes, and frame rates it can send (for the probe) |
 | `vision/fiducial.py` | Finds round marks: homing and board fiducials, feeder fiducials, sprocket holes |
+| `vision/tape.py` | Paper tape: whether a pocket holds a part, and parts lying loose on the tape |
 | `vision/part.py` | The metal mask (bright, not yellowish plastic, no specks), and one box around a part's metal, for parts without a footprint |
 | `vision/pads.py` | Fits a footprint's pads to the metal in a bottom camera frame, for parts whose pads are off their body's center or whose body is as bright as their leads (bottom vision's finder whenever a footprint has two pads or more) |
 | `vision/token.py` | Finds the calibration token's opening, by its gold copper in the blue channel, and tells a token from a paper disc |
@@ -176,7 +177,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `feeders/photon.py`, `feeders/sim.py` | The Photon feeder protocol (RS-485), and simulated Photon feeders |
 | `feeders/setup.py` | The owner's feeder setup (`feeders.json`): parts in feeders, rail and slot calibrations, strips and trays, what the bottom camera learned |
 | `feeders/service.py` | The feeder service: scanning, feeding, where to pick, fiducial calibration, pocket finding, strips and trays, pick learning |
-| `feeders/pocket.py` | Where the pocket is, from the sprocket holes seen |
+| `feeders/pocket.py` | Where the pocket is, from the sprocket holes seen; of two about as near, which to take |
 | `feeders/rails.py` | Fitting a feeder rail to the feeder fiducials found on it |
 | `placement.py` | Pick, align, and place one part; pick correction (top or bottom camera) |
 | `simparts.py` | The simulator's parts: which nozzle holds what, where placed parts landed (and how far they fell), the calibration disc, and crashes: a tip pressed into a part, or a part into the board. Part tops come from the feeders' tapes, strips, and trays, and board tops from the staging plates, each off by the config's simulator errors |
@@ -225,7 +226,7 @@ client. Useful pieces:
 |---|---|
 | API, events, presence, config, I/O | `test_api.py`, `test_events.py`, `test_presence.py`, `test_config.py`, `test_io.py` |
 | Machine profiles, the Marlin driver, the probe | `test_profile.py`, `test_marlin.py`, `test_probe.py` |
-| Cameras and vision | `test_cameras.py`, `test_vision.py` |
+| Cameras and vision | `test_cameras.py`, `test_vision.py`, and on real frames `test_bottom_vision_frames.py` and `test_tape_frames.py` (paper tape: pockets, parts in them, loose parts) |
 | Library, boards, jobs | `test_library.py`, `test_tapes.py`, `test_board.py`, `test_job.py` |
 | Feeders, placement, runs | `test_feeders.py`, `test_fixed_feeders.py`, `test_placement.py`, `test_pick_correction.py`, `test_run.py` |
 | Flight recorder | `test_recorder.py` |
@@ -240,6 +241,7 @@ client. Useful pieces:
 | `api/schema.ts` | **Generated** TypeScript types for the whole API (`make api`); never edit by hand |
 | `api/types.ts` | Short names for the generated types |
 | `tape.ts`, `runSteps.ts` | Pure logic with unit tests: tape geometry, fit check, pin-1 quadrant, and table-cell parsing; a run's step list |
+| `cameraMarks.ts` | Marks drawn on a top camera's picture where vision found something (the pick pocket, loose parts), placed from machine coordinates as the head moves |
 | `mjpeg.ts` | Reads a camera's MJPEG stream with `fetch`, so leaving a view closes its connection (an `<img>` can hold it open and use up the browser's six connections to the core) |
 | `api/client.ts` | The typed REST client (`api.GET("/api/v1/...")`) |
 | `api/core.ts`, `api/CoreProvider.tsx` | The event socket and the live state it feeds: machine state, operations, presence, the lease |

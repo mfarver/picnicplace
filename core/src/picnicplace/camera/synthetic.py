@@ -291,14 +291,16 @@ class TopRenderer:
         else:
             self._board(canvas, img)
         self._locations(canvas, img)
-        for part in state.placed:  # on top of the datum board, as a calibration disc is
-            if canvas.visible(part.x, part.y, 10):
-                _shape(canvas, img, part.x, part.y, part.angle, part.shape)
         if state.tapes is None:
             self._feeders(canvas, img)
         else:
             for tape in state.tapes:
                 _tape(canvas, img, tape)
+        # On top of the datum board, as a calibration disc is, or of a tape, as a part
+        # that jumped out of its pocket is.
+        for part in state.placed:
+            if canvas.visible(part.x, part.y, 10):
+                _shape(canvas, img, part.x, part.y, part.angle, part.shape)
         return _finish(img, self._grain, self.camera, state)
 
     def _plates(self, c: _Canvas, img: Image) -> None:

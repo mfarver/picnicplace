@@ -13,8 +13,9 @@ described in docs/hardware/calibration-token.md.
 The token is a small round board that a nozzle picks up, turns and puts down in stop 2
 of the setup wizard (nozzle offsets). Its top is copper under solder mask with a round
 opening in the middle: the opening's bare (ENIG) copper is flat for a small tip to seal
-on, and bright for the top camera to find. Silkscreen dots on its back hold it a little
-off the board, so air gets under it and it lets go when it is lifted.
+on, and bright for the top camera to find. Dots on its back, copper with silkscreen printed on
+each, hold it a little off the board, so air gets under it and it lets go when it is
+lifted.
 
 Design coordinates, in millimeters: the token's center is (0, 0); +Y is up. KiCad's Y
 runs down the page, so the script flips Y.
@@ -30,7 +31,7 @@ import pcbnew
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 NAME = "picnicplace-token"
-REVISION = "A"
+REVISION = "B"
 MM = pcbnew.FromMM
 PAGE_ORIGIN = (100.0, 100.0)  # where design (0, 0) sits on KiCad's page
 
@@ -40,12 +41,14 @@ OPENING_D = 2.5
 """The mask opening in the middle. Stop 2 fits the N045 and N08 (faces 1.0 and 1.5 mm
 across), whose faces sit inside it on flat copper, clear of the step at the mask's edge."""
 COPPER_D = 3.6
-"""The copper, top and back alike so the token stays flat. It stops 0.7 mm in from the
-edge, clear of the mouse bites (their holes reach 0.4 mm in) and of the routed edge."""
+"""The top's copper. It stops 0.7 mm in from the edge, clear of the mouse bites (their
+holes reach 0.4 mm in) and of the routed edge; so does the back's."""
+VENT_COPPER_D = 0.7
 VENT_DOT_D = 0.4
+"""The back's dots: copper under the mask, and silkscreen printed on each, so each dot
+stands the copper's height (35 um) above the mask around it, plus the ink's."""
 VENT_PITCH = 1.0
-VENT_REACH = 1.9
-"""Silkscreen dots on the back, on a square grid, as far as this from the center."""
+"""The dots' square grid, within COPPER_D of the center like the top's copper."""
 
 # The panel: 12 x 12 tokens on a 100 x 100 mm panel, with rails all round.
 ROWS = COLS = 12
@@ -117,13 +120,16 @@ def token() -> pcbnew.BOARD:
     fp.Add(pad)
     pad.SetPosition(at(0, 0))
 
-    # The back: the same copper under unbroken mask, and the vent dots printed over it.
-    dot(fp, pcbnew.B_Cu, 0, 0, COPPER_D)
-    n = int(VENT_REACH / VENT_PITCH)
+    # The back: unbroken mask over copper dots, each with a silkscreen dot printed on it.
+    # (Revision A printed the dots on a plain copper disc, so they stood only the ink's
+    # height.)
+    reach = COPPER_D / 2
+    n = int(reach / VENT_PITCH)
     for i in range(-n, n + 1):
         for j in range(-n, n + 1):
             x, y = i * VENT_PITCH, j * VENT_PITCH
-            if (x * x + y * y) ** 0.5 + VENT_DOT_D / 2 <= VENT_REACH:
+            if (x * x + y * y) ** 0.5 + VENT_COPPER_D / 2 <= reach:
+                dot(fp, pcbnew.B_Cu, x, y, VENT_COPPER_D)
                 dot(fp, pcbnew.B_SilkS, x, y, VENT_DOT_D)
     return board
 

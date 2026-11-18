@@ -26,9 +26,11 @@ strongly reciprocal (CERN-OHL-S-2.0); see `hardware/README.md`.
     15–25 µm) and could leak, which is why the larger tips are not used for this stop.
   - **For the camera:** the bare copper is bright against the mask, and its edge is set
     by the mask, not by the router, so the tabs' stubs do not move it.
-- **Back:** the same copper, for balance, so the token stays flat, under unbroken mask,
-  with a 3 × 3 grid of silkscreen dots 0.4 mm across at 1 mm pitch. The dots hold the
-  token a little off the board, so air gets under it and it lets go when it is lifted.
+- **Back:** a 3 × 3 grid of dots at 1 mm pitch, each copper 0.7 mm across under the
+  unbroken mask with a silkscreen dot 0.4 mm across printed on it. The copper raises each
+  dot some 35 µm above the mask around it, and the ink a little more, so the token stands
+  off the board and air gets under it; it lets go when it is lifted. (Revision A printed
+  the dots on a plain copper disc, so they stood only the ink's height.)
 - **Edge:** the copper stops 0.7 mm in from it, clear of the routed edge and the mouse
   bites.
 

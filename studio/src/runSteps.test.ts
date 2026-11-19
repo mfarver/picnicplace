@@ -93,13 +93,31 @@ describe("runSteps", () => {
   it("says where a checked part landed", () => {
     const good = { dx: 0.03, dy: -0.04, turn: 1.2, score: 0.9, ok: true, picture: true };
     const bad = { dx: -0.12, dy: 0.41, turn: 9, score: 0.8, ok: false, picture: true };
+    const square = { ...good, turn: -0.04 };
     const items = [
       item(0, "R1", "placed", { nozzle: "N1", check: bad }),
       item(1, "R2", "placed", { nozzle: "N2", check: good }),
+      item(2, "R3", "placed", { nozzle: "N2", check: square }),
     ];
     const rows = runSteps(items, run(items, {}), 0, false);
-    expect(rows[1]).toMatchObject({ detail: "placed by N1, landed 0.43 mm off, +9°: look at it" });
-    expect(rows[2]).toMatchObject({ detail: "placed by N2, 0.05 mm off, +1°" });
+    expect(rows[1]).toMatchObject({
+      detail: "placed by N1, landed 0.43 mm off, +9.0°: look at it",
+    });
+    expect(rows[2]).toMatchObject({ detail: "placed by N2, 0.05 mm off, +1.2°" });
+    expect(rows[3]).toMatchObject({ detail: "placed by N2, 0.05 mm off, +0.0°" });
+  });
+
+  it("says where a part landed while the run is paused on it", () => {
+    const bad = { dx: 0.32, dy: 0.12, turn: -0.5, score: 0.8, ok: false, picture: true };
+    const items = [item(0, "R2", "placed", { nozzle: "N2", check: bad })];
+    const paused = run(items, {
+      status: "paused",
+      current: { stage: "item", action: "checking", index: 0, nozzle: "N2" },
+    });
+    expect(runSteps(items, paused, 0, false)[1]).toMatchObject({
+      current: true,
+      detail: "placed by N2, landed 0.34 mm off, -0.5°: look at it",
+    });
   });
 
   it("shows the board's top once it is found by touch", () => {

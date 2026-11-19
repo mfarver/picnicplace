@@ -94,7 +94,8 @@ export function runSteps(
     const current = at?.stage === "item" && at.index === item.index;
     const nozzle = nozzleOf.get(item.index);
     let detail: string;
-    if (current) {
+    // A part checked once placed says where it landed, even while the run is paused on it.
+    if (current && !(item.status === "placed" && item.check)) {
       const on = at.action === "placing" ? " with" : " on";
       detail = ACTION[at.action] + (at.nozzle ? `${on} ${at.nozzle}` : "");
     } else if (nozzle) detail = `on ${nozzle}`;
@@ -103,7 +104,8 @@ export function runSteps(
       const c = item.check;
       if (c) {
         const off = Math.hypot(c.dx, c.dy).toFixed(2);
-        const turn = `${c.turn >= 0 ? "+" : ""}${c.turn.toFixed(0)}°`;
+        const t = Math.round(c.turn * 10) / 10 || 0; // never "-0.0"
+        const turn = `${t >= 0 ? "+" : ""}${t.toFixed(1)}°`;
         detail += c.ok ? `, ${off} mm off, ${turn}` : `, landed ${off} mm off, ${turn}: look at it`;
       }
     }

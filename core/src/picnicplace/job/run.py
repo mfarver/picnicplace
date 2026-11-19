@@ -1335,12 +1335,13 @@ class JobRunner:
         f = math.radians(found.angle)
         fx, fy = machine.image_to_machine(camera, math.cos(f), -math.sin(f))
         turn = (math.degrees(math.atan2(fy, fx)) - along + 90.0) % 180.0 - 90.0
+        turn = round(turn, 1) + 0.0  # never "-0.0"
         off = math.hypot(dx, dy)
         ok = off <= CHECK_OFF_MM and abs(turn) <= CHECK_TURN
         item.check = PlacementCheck(
             dx=round(dx, 3),
             dy=round(dy, 3),
-            turn=round(turn, 1),
+            turn=turn,
             score=round(found.score, 2),
             ok=ok,
             picture=picture,
@@ -1350,7 +1351,7 @@ class JobRunner:
             run.stats.bad_placements += 1
             raise RunError(
                 f"{item.ref} landed {off:.2f} mm from where it was sent (X {dx:+.2f}, Y "
-                f"{dy:+.2f}), turned {turn:+.0f} degrees: look at it (off its pads, it may "
+                f"{dy:+.2f}), turned {turn:+.1f} degrees: look at it (off its pads, it may "
                 "stand up when soldered), fix or remove it, and resume"
             )
 

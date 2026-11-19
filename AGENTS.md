@@ -13,6 +13,7 @@ make api       # after changing any API model or route: regenerate the OpenAPI d
                # and the Studio's types, and commit them
 make check     # everything CI runs: ruff, ruff format --check, pyright (strict), pytest,
                # eslint, tsc, vitest, and the Studio build
+make panel     # build the control panel's firmware in Espressif's ESP-IDF container
 ```
 
 Run a few core tests: `cd core && uv run pytest -q tests/test_placement.py`. No hardware is

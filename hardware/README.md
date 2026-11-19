@@ -8,6 +8,7 @@ next run).
 | Folder | Board | Described in |
 |---|---|---|
 | `datum/` | The datum: an L-shaped PCB whose corner, set by three pins, locates boards, with the targets that calibrate the machine; and its 3D-printed holder (CadQuery) | [docs/hardware/picnicplace-datum.md](../docs/hardware/picnicplace-datum.md) |
+| `panel-enclosure/` | The control panel's enclosure: a 3D-printed case for the Waveshare 7B and a 22 mm E-stop, with a bracket to the machine's rail (CadQuery, not KiCad) | [docs/hardware/control-panel.md](../docs/hardware/control-panel.md#the-enclosure) |
 | `test-board/` | The test board: targets for measuring how accurately the machine places, with nothing soldered | [docs/hardware/test-board.md](../docs/hardware/test-board.md) |
 | `token/` | The calibration token that stop 2 picks up and turns, and a 100 × 100 mm panel of 144 to order | [docs/hardware/calibration-token.md](../docs/hardware/calibration-token.md) |
 
@@ -42,6 +43,9 @@ kicad-cli pcb drc --severity-all hardware/test-board/picnicplace-test-board.kica
 
 KiCad's Python is 3.9, so the scripts avoid newer syntax. They are not part of
 `make check`.
+
+The panel's enclosure is a CadQuery script instead (CadQuery 2.4 or later, in any Python
+environment): `python hardware/panel-enclosure/make_enclosure.py`.
 
 Design coordinates are in millimeters, from the corner a board is pushed into: +X right,
 +Y toward the back of the machine. KiCad's grid and drill origins are set to that corner,

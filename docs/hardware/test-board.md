@@ -34,15 +34,24 @@ strongly reciprocal (CERN-OHL-S-2.0); see `hardware/README.md`.
 
 ## The board
 
-- **Size:** 92 × 72 mm, two layers, 1.6 mm thick, so it sits in the datum's corner.
-- **Fiducials:** three 1 mm copper dots with 3 mm mask openings, at (4, 4), (88, 4) and
+- **Size:** 120 × 72 mm, two layers, 1.6 mm thick. It is wide enough to reach the
+  datum's far X pin, at 105 mm, so it rests on X pins 95 mm apart. (Revision A was 92 mm
+  wide, and on a revision B datum it reached only one X pin and could turn in the
+  corner.)
+- **Fiducials:** three 1 mm copper dots with 3 mm mask openings, at (4, 4), (116, 4) and
   (4, 68). Placed asymmetrically, so a board loaded turned round shows a dot where none
   should be and is caught instead of placed wrong.
-- **Targets**, 48 in all:
+- **Targets**, 60 in all:
     - 0402, 0603, 0805 and 1206 chips, 0805 LEDs, SOD-123 diodes, SOT-23 and SOT-23-6,
       each at 0°, 90°, 180° and −90°, and the 0402, 0603, 0805 and SOT-23 at 45° too;
     - SOIC-8 at 0°, 90°, 180° and 45°;
-    - a 3 × 3 mm QFN-16 at every quarter turn and 45°, and a 5 × 5 mm QFN-32.
+    - a 3 × 3 mm QFN-16 at every quarter turn and 45°, and a 5 × 5 mm QFN-32;
+    - a **circle of twelve 0603s**, R15–R26, one every 30°, each turned to point along
+      its radius. All are the same part, from the same feeder, at the same distance from
+      the circle's center, so the only thing that changes round the circle is the turn.
+      An offset that depends on the turn (nozzle runout, the wrong center of rotation, a
+      part kicked as it is released) traces a sine wave round it. Run it once with each
+      nozzle to compare them.
 - **Each target** is the footprint's pads, with no paste, inside a **bare copper ring**
   0.3 mm outside the part's body and pads. The ring is the reference the measurement is
   made against: it stays visible around any part (a placed chip hides most of its pads,
@@ -50,10 +59,19 @@ strongly reciprocal (CERN-OHL-S-2.0); see `hardware/README.md`.
   belongs. Silkscreen would not do: it can be printed 0.1–0.2 mm off the copper.
 - **Silkscreen** outside each ring: an outline, and pin 1 marked as a dot at the corner
   nearest it, or a bar at the cathode end of an LED or diode.
+- **References** printed above each target (outside it, round the circle), the same ones
+  the position file and the run report use, so a part the report says is off can be
+  found at a glance. Each is at least 0.4 mm beyond the outline, out of the area the top
+  camera checks a placement in, so it is not taken for part of the part.
+- **The PicnicPlace logo**, in silkscreen above the circle.
 - **Generic parts.** Each footprint's part number is generic, such as `TEST-R0402`: any
   part of that kind and size will do, so parts left over from other jobs can be used.
 
-Order it with ENIG, so the rings and pads are flat and bright.
+Order it with green or black solder mask: the camera looks for bright copper and parts'
+end caps against dark mask, so avoid white or yellow. ENIG is preferred, since its rings,
+pads and fiducials are flat and evenly bright. HASL works too: nothing is soldered, and
+under the tape its slightly domed pads make no difference, though it can glare under the
+top camera's light.
 
 ## A test, step by step
 

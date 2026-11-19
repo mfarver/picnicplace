@@ -19,6 +19,8 @@ KiCad's Y runs down the page, so the script flips Y.
 
 from __future__ import annotations
 
+import json
+import math
 import os
 import sys
 
@@ -29,16 +31,17 @@ LIBS = os.environ.get(
 )
 HERE = os.path.dirname(os.path.abspath(__file__))
 NAME = "picnicplace-test-board"
-REVISION = "A"
+REVISION = "B"
 MM = pcbnew.FromMM
 PAGE_ORIGIN = (60.0, 140.0)  # where design (0, 0) sits on KiCad's page
 
-SIZE = (92.0, 72.0)
+SIZE = (120.0, 72.0)
+"""Wide enough to rest on both of the datum's X pins, at 20 and 105 mm."""
 CORNER_R = 1.0
 
 # Three fiducials, asymmetric: a board loaded turned round shows a dot where none should
 # be, and is caught instead of placed wrong.
-FIDUCIALS = [(4.0, 4.0), (88.0, 4.0), (4.0, 68.0)]
+FIDUCIALS = [(4.0, 4.0), (116.0, 4.0), (4.0, 68.0)]
 FIDUCIAL_FP = ("Fiducial", "Fiducial_1mm_Mask3mm")
 
 RING_GAP = 0.3
@@ -50,6 +53,12 @@ SILK_W = 0.12
 SILK_GAP = 0.15
 """Between the ring's mask opening and the silkscreen outline, which cannot print on bare
 copper."""
+REF_SIZE = 0.8
+REF_W = 0.15
+REF_GAP = 0.4
+"""Each target's reference (R1, U3), printed this far beyond its silkscreen outline: above
+it, or for the circle, outside it. Far enough from the part that the top camera's check
+of a placement, which looks some 1 mm about the part, does not take it for an end cap."""
 POLARIZED = {"TEST-LED0805", "TEST-SOD123"}
 """Two-pad parts with a pin 1 (the cathode): marked with a bar at that end. Parts with
 more pads get a dot at the corner nearest pin 1; resistors and capacitors get neither."""
@@ -82,6 +91,21 @@ LARGE = [
     ("Package_DFN_QFN", "QFN-16-1EP_3x3mm_P0.5mm_EP1.7x1.7mm", "TEST-QFN16", 70.0, 54.0, -90.0),
     ("Package_DFN_QFN", "QFN-32-1EP_5x5mm_P0.5mm_EP3.45x3.45mm", "TEST-QFN32", 51.0, 39.0, 0.0),
 ]
+# A circle of 0603s, one every 30 degrees, each turned to point along its radius: an
+# offset that changes with the part's turn (nozzle runout, the wrong center of rotation)
+# traces a sine wave round it.
+CIRCLE = ("Resistor_SMD", "R_0603_1608Metric", "TEST-R0603")
+CIRCLE_CENTER = (104.0, 30.0)
+CIRCLE_R = 8.5
+"""The parts' centers, from the circle's center."""
+CIRCLE_REF_R = 12.0
+CIRCLE_ANGLES = tuple(30.0 * k for k in range(12))
+
+LOGO = os.path.join(HERE, "..", "logo", "picnicplace-icon-outline.json")
+LOGO_CENTER = (104.0, 58.5)
+LOGO_H = 17.0
+"""The PicnicPlace logo, in silkscreen above the circle."""
+
 PREFIX = {"TEST-C0805": "C", "TEST-LED0805": "D", "TEST-SOD123": "D", "TEST-SOT23": "Q"}
 """Reference prefixes, by part ID; any other is R if a resistor, else U."""
 
@@ -165,10 +189,12 @@ def target(
     x: float,
     y: float,
     angle: float,
+    ref_at: tuple[float, float] | None = None,
 ) -> None:
     """A part's footprint, with no paste, a bare copper ring around it, and outside the
-    ring a silkscreen outline with the pin 1 mark. The library's own silkscreen would
-    cross the ring and is replaced; the 3D model is dropped, as nothing is soldered."""
+    ring a silkscreen outline with the pin 1 mark and its reference, above it or at
+    ``ref_at``. The library's own silkscreen would cross the ring and is replaced; the 3D
+    model is dropped, as nothing is soldered."""
     fp = load(library, name)
     fp.SetReference(ref)
     fp.SetValue(part)
@@ -194,7 +220,18 @@ def target(
         segment(fp, pcbnew.F_Mask, a, b, RING_MASK)
     silk_outline(fp, (x0, y0, x1, y1), g + MM(RING_MASK / 2 + SILK_GAP + SILK_W / 2), part)
     fp.SetOrientationDegrees(angle)
-    fp.Reference().SetVisible(False)
+    ref = fp.Reference()
+    ref.SetLayer(pcbnew.F_SilkS)
+    ref.SetTextSize(pcbnew.VECTOR2I(MM(REF_SIZE), MM(REF_SIZE)))
+    ref.SetTextThickness(MM(REF_W))
+    ref.SetTextAngleDegrees(0.0)
+    if ref_at is None:
+        silk = [i.GetBoundingBox() for i in fp.GraphicalItems() if i.GetLayer() == pcbnew.F_SilkS]
+        top = min(b.GetTop() for b in silk)
+        ref.SetPosition(pcbnew.VECTOR2I(fp.GetPosition().x, top - MM(REF_GAP + REF_SIZE / 2)))
+    else:
+        ref.SetPosition(at(*ref_at))
+    ref.SetVisible(True)
     fp.Value().SetVisible(False)
     fp.GetField("MP").SetVisible(False)
 
@@ -239,6 +276,37 @@ def silk_outline(fp: pcbnew.FOOTPRINT, box: tuple[int, int, int, int], off: int,
     fp.Add(dot)
 
 
+def logo(board: pcbnew.BOARD) -> None:
+    """The logo, from the outlines hardware/logo/make_logo_outline.py traced from its
+    picture: filled silkscreen polygons, each with its holes."""
+    with open(LOGO) as f:
+        art = json.load(f)
+    scale = LOGO_H
+    left = LOGO_CENTER[0] - art["aspect"] * scale / 2
+    top = LOGO_CENTER[1] + scale / 2
+
+    def chain(points: list[list[float]]) -> pcbnew.SHAPE_LINE_CHAIN:
+        line = pcbnew.SHAPE_LINE_CHAIN()
+        for u, v in points:
+            line.Append(at(left + u * scale, top - v * scale))
+        line.SetClosed(True)
+        return line
+
+    for polygon in art["polygons"]:
+        shapes = pcbnew.SHAPE_POLY_SET()
+        shapes.AddOutline(chain(polygon["outline"]))
+        for hole_points in polygon["holes"]:
+            shapes.AddHole(chain(hole_points))
+        shapes.Fracture()
+        shape = pcbnew.PCB_SHAPE(board)
+        shape.SetShape(pcbnew.SHAPE_T_POLY)
+        shape.SetPolyShape(shapes)
+        shape.SetLayer(pcbnew.F_SilkS)
+        shape.SetWidth(MM(0.0))
+        shape.SetFilled(True)
+        board.Add(shape)
+
+
 def text(board: pcbnew.BOARD, s: str, x: float, y: float, size: float = 1.0) -> None:
     t = pcbnew.PCB_TEXT(board)
     t.SetText(s)
@@ -275,6 +343,14 @@ def main() -> None:
             target(board, next_ref(part), library, name, part, x, y, angle)
     for library, name, part, x, y, angle in LARGE:
         target(board, next_ref(part), library, name, part, x, y, angle)
+    cx, cy = CIRCLE_CENTER
+    for angle in CIRCLE_ANGLES:
+        c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+        x, y = cx + CIRCLE_R * c, cy + CIRCLE_R * s
+        ref_at = (cx + CIRCLE_REF_R * c, cy + CIRCLE_REF_R * s)
+        target(board, next_ref(CIRCLE[2]), *CIRCLE, x, y, angle, ref_at)
+    text(board, "0603 circle", cx, cy, 0.9)
+    logo(board)
 
     text(board, "PicnicPlace test board", 72.0, 66.0, 1.4)
     text(board, f"rev {REVISION}   CERN-OHL-S-2.0", 72.0, 63.0, 0.9)

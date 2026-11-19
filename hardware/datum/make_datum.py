@@ -24,7 +24,7 @@ import pcbnew
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 NAME = "picnicplace-datum"
-REVISION = "B"
+REVISION = "C"
 MM = pcbnew.FromMM
 PAGE_ORIGIN = (60.0, 120.0)  # where design (0, 0) sits on KiCad's page
 
@@ -49,8 +49,15 @@ pin's toward the board by the difference of their radii, so a pin against the ba
 notch is where it is drawn, and the notch is a little less than half a hole. Revision A
 drew them at 3.0 mm, centered on the pins."""
 HOLE_BACK = PIN_HOLE_D / 2 - PIN_R
-PINS_X = (20.0, 105.0)  # two pins along the X edge (y = INSIDE)
-PINS_Y = (32.0,)  # one along the Y edge (x = INSIDE)
+PINS_X = (10.0, 40.0, 105.0)
+"""Pins along the X edge (y = INSIDE). A board 43 mm or more along X rests on the first two,
+30 mm apart; one 108 mm or more also reaches the third, and rests on the two of the three
+that stand farthest out (they are drilled in line to some 0.05 mm, so it turns at most a
+few hundredths of a degree from one to another). Revision B had two, at 20 and 105 mm, and
+a board shorter than 105 mm along X could turn on the first."""
+PINS_Y = (12.0,)
+"""One pin along the Y edge (x = INSIDE): any board 15 mm or more along Y reaches it.
+Revision B had it at 32 mm."""
 
 # Fiducials: 1 mm copper dots with 6 mm mask openings. The homing dot is in the corner
 # square; the X and Y fiducials are 120 mm and 45 mm from it, for axis scale and square.
@@ -342,7 +349,7 @@ def main() -> None:
     text(board, "Y 45", FID_Y[0], FID_Y[1] - 4.5, 1.0)
     text(board, "aim", AIM_RING[0], AIM_RING[1] + 6.5, 1.0)
     text(board, "+X  board edge", 60, INSIDE - 3.0, 1.0)
-    text(board, "+Y  board edge", INSIDE - 3.0, 12, 1.0, angle=90)
+    text(board, "+Y  board edge", INSIDE - 3.0, 30, 1.0, angle=90)
 
     path = os.path.join(HERE, f"{NAME}.kicad_pcb")
     if not pcbnew.SaveBoard(path, board):

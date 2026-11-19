@@ -110,7 +110,7 @@ text(X0 + 4, Y0 - 11, "Origin at the inside corner of the L: a board's front-lef
 # The board it holds (part of one, dashed): up to A4 / Letter.
 rect(0, 0, 130, 70, fill="none", stroke=BOARD, stroke_width="1.5", stroke_dasharray="8 5")
 text(85, 40, "Board or panel (up to A4 / Letter)", size=13, fill=BOARD)
-text(85, 34, "pushed into the corner, against the three pins", size=11, fill=BOARD)
+text(85, 34, "pushed into the corner, against the pins", size=11, fill=BOARD)
 line(130, 70, 140, 70, stroke=BOARD, stroke_width="1.5", stroke_dasharray="3 4")
 line(130, 0, 140, 0, stroke=BOARD, stroke_width="1.5", stroke_dasharray="3 4")
 
@@ -131,13 +131,14 @@ poly(holder, fill=PRINT_FILL, stroke=MUTED, stroke_width="1.2", stroke_dasharray
 # The datum PCB.
 poly(L_outline, fill=PCB_FILL, stroke=PCB, stroke_width="2")
 
-# Locating pins: 3 mm dowels, tangent to the board's edge lines (two on X, one on Y), each
+# Locating pins: 3 mm dowels, tangent to the board's edge lines (three on X, one on Y), each
 # in a half-hole the PCB's edge runs through, drilled before the edge is routed.
-for x, y in [(20, -1.5), (105, -1.5), (-1.5, 32)]:
+for x, y in [(10, -1.5), (40, -1.5), (105, -1.5), (-1.5, 12)]:
     circle(x, y, 1.5, fill=PIN, stroke="none")
-text(20, -5.5, "pin", size=10, fill=PIN)
+text(10.5, 3.2, "pin", size=10, fill=PIN)
+text(40, -5.5, "pin", size=10, fill=PIN)
 text(105, -5.5, "pin", size=10, fill=PIN)
-text(-5.5, 32, "pin", size=10, fill=PIN, anchor="end")
+text(-5.5, 12, "pin", size=10, fill=PIN, anchor="end")
 
 
 def fiducial(x: float, y: float, label: str, below: str = "") -> None:
@@ -207,9 +208,9 @@ dim_h(-15, 105, -LEG - 16, "120 (dot to X fiducial)")
 # Origin marker.
 line(0, 0, 8, 0, stroke=INK, stroke_width="1.5")
 line(0, 0, 0, 8, stroke=INK, stroke_width="1.5")
-text(9.5, -0.8, "+X", size=10, fill=INK, anchor="start")
-text(0, 9.5, "+Y", size=10, fill=INK)
-text(3, 2.2, "0,0", size=10, fill=INK, anchor="start")
+text(4.0, 1.6, "+X", size=10, fill=INK)
+text(1.4, 5.0, "+Y", size=10, fill=INK, anchor="start")
+text(-2.8, 0.6, "0,0", size=10, fill=INK, anchor="end")
 
 # Legend and notes.
 lx, ly = -58, -62

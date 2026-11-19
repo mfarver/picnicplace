@@ -7,7 +7,7 @@ next run).
 
 | Folder | Board | Described in |
 |---|---|---|
-| `datum/` | The datum: an L-shaped PCB whose corner, set by three pins, locates boards, with the targets that calibrate the machine; and its 3D-printed holder (CadQuery) | [docs/hardware/picnicplace-datum.md](../docs/hardware/picnicplace-datum.md) |
+| `datum/` | The datum: an L-shaped PCB whose corner, set by four pins, locates boards, with the targets that calibrate the machine; and its 3D-printed holder (CadQuery) | [docs/hardware/picnicplace-datum.md](../docs/hardware/picnicplace-datum.md) |
 | `test-board/` | The test board: targets for measuring how accurately the machine places, with nothing soldered | [docs/hardware/test-board.md](../docs/hardware/test-board.md) |
 | `token/` | The calibration token that stop 2 picks up and turns, and a 100 × 100 mm panel of 144 to order | [docs/hardware/calibration-token.md](../docs/hardware/calibration-token.md) |
 

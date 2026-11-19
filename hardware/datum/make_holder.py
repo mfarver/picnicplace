@@ -10,7 +10,7 @@ checked on a real machine. The design is described in docs/hardware/picnicplace-
 
 The holder sits on the staging plate under the datum PCB. Its top carries the PCB and,
 on a 10 mm ledge inside the L, the edges of the board being placed, level with the
-LumenPnP's board holders. It grips the three locating pins, holds the PCB with four M3
+LumenPnP's board holders. It grips the four locating pins, holds the PCB with four M3
 screws into heat-set inserts, and screws to the staging plate with three M3 screws,
 counterbored in the ledge.
 
@@ -38,7 +38,7 @@ SHORT = 75.0
 PCB_T = 1.6
 PIN_R = 1.5
 INSIDE = -PIN_R
-PINS = [(20.0, INSIDE), (105.0, INSIDE), (INSIDE, 32.0)]
+PINS = [(10.0, INSIDE), (40.0, INSIDE), (105.0, INSIDE), (INSIDE, 12.0)]
 PCB_SCREWS = [(-26.0, -26.0), (-26.0, 41.0), (91.0, -26.0), (116.0, -26.0)]
 
 # The holder.

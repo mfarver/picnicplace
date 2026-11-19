@@ -61,3 +61,22 @@ def pocket_from_holes(
     )
     along = _wrap(angle / (2 * math.pi) * SPROCKET_PITCH, period)
     return PocketFix(along=along, across=across, holes=len(line))
+
+
+AMBIGUOUS_MM = 0.5
+"""A pocket found within this of half a pitch from the pick location is about as near as
+the next one the other way: on a real LumenPnP, feeders stopped 1.9 and 2.0 mm off."""
+
+
+def pocket_choices(along: float, pitch: float) -> list[float]:
+    """The pockets that may be the pick pocket, nearest first, from the nearest one's
+    place along the feed: it, and the next one the other way if that is about as near."""
+    if abs(along) > pitch / 2 - AMBIGUOUS_MM:
+        return [along, along - math.copysign(pitch, along)]
+    return [along]
+
+
+def choose_pocket(holds: list[bool | None]) -> int:
+    """Which of ``pocket_choices`` to take, from whether each holds a part: the nearest,
+    unless only the other is seen holding one."""
+    return 1 if len(holds) == 2 and holds[0] is not True and holds[1] is True else 0

@@ -213,6 +213,15 @@ class Camera(ProfileModel):
             "sees is turned back by this much."
         ),
     )
+    image_mirrored: bool = Field(
+        default=True,
+        description=(
+            "Up-looking cameras: whether the picture shows the machine mirrored left to "
+            "right, as seen from below (true), or as from above (false: the camera's "
+            "picture is flipped, as a config's flip_x or flip_y does). Measured by "
+            "calibrating the camera."
+        ),
+    )
 
 
 class Location(ProfileModel):
@@ -411,10 +420,30 @@ class Input(ProfileModel):
         return self.range.fraction(value) >= self.range.fraction(self.threshold)
 
 
+class LightColor(ProfileModel):
+    """A light's color and brightness, each 0 to 255."""
+
+    red: int = Field(default=255, ge=0, le=255)
+    green: int = Field(default=255, ge=0, le=255)
+    blue: int = Field(default=255, ge=0, le=255)
+    brightness: int = Field(default=255, ge=0, le=255)
+
+
+WHITE = LightColor()
+"""Full white, full brightness: how a light comes on unless told otherwise."""
+
+
 class Output(ProfileModel):
     id: str
     label: str
     role: Literal["pump", "valve", "light", "other"]
+    colored: bool = Field(
+        default=False,
+        description=(
+            "Lights: the light can be set to a color and brightness (an RGB ring light), "
+            "not only switched on and off."
+        ),
+    )
 
 
 class MachineProfile(ProfileModel):

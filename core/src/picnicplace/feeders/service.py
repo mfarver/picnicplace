@@ -13,11 +13,14 @@ its fiducial with the camera.
 import logging
 import math
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Literal
+
+from pydantic import Field
 
 from picnicplace.camera.synthetic import TapeScene
 from picnicplace.feeders.photon import PhotonBus
-from picnicplace.feeders.pocket import pocket_from_holes
+from picnicplace.feeders.pocket import choose_pocket, pocket_choices, pocket_from_holes
 from picnicplace.feeders.rails import fit_rail, residual
 from picnicplace.feeders.setup import (
     FeederAssignment,
@@ -34,7 +37,13 @@ from picnicplace.feeders.setup import (
 from picnicplace.feeders.sim import SimulatedPhotonBus
 from picnicplace.feeders.slots import Slot, machine_slots
 from picnicplace.library import Library, Part, Tape
-from picnicplace.library.tape import SPROCKET_DIAMETER, geometry
+from picnicplace.library.models import Size
+from picnicplace.library.tape import (
+    POCKET_TO_SPROCKET,
+    SPROCKET_DIAMETER,
+    SPROCKET_PITCH,
+    geometry,
+)
 from picnicplace.machine.errors import (
     FeederEmptyError,
     FeederError,
@@ -48,6 +57,7 @@ from picnicplace.operations import OperationManager
 from picnicplace.schemas import Operation, WireModel
 from picnicplace.simparts import PartShape, SimulatedParts
 from picnicplace.vision.fiducial import Polarity
+from picnicplace.vision.tape import holds_part
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +65,12 @@ DEFAULT_PITCH = 4.0
 """Feed distance when neither the feeder nor its part says: the most common pitch."""
 
 FIDUCIAL_SEARCH_MM = 3.0
+
+POCKET_KEEP_OUT_MM = 0.4
+"""Loose parts are not looked for this far past a part's larger half-side round each
+pocket: the pocket's own walls are darker than the paper."""
+HOLE_KEEP_OUT_MM = 0.25
+"""...nor this far round each sprocket hole."""
 
 RAIL_SEARCH_ACROSS_MM = (7.0, 14.0, 21.0)
 """Searching for a rail's end fiducial, the camera also looks this far to either side of
@@ -130,6 +146,38 @@ class PocketCheck(WireModel):
     """From the slot's pick location along the feed, in mm."""
     across: float
     holes: int
+    part: bool | None = Field(
+        default=None,
+        description=(
+            "Whether the pocket holds a part, as the top camera sees it: paper tape and "
+            "parts with a known body only. None if not judged."
+        ),
+    )
+    loose: list[Point] = Field(
+        default_factory=list[Point],
+        description="Parts seen lying loose on the tape in view, out of their pockets.",
+    )
+    outline: Size | None = Field(
+        default=None,
+        description=(
+            "The part's outline, leads and all, along its footprint's X and Y (mm), where "
+            "the library gives its body: for drawing the pocket on the camera's picture."
+        ),
+    )
+    angle: float | None = Field(
+        default=None,
+        description="The footprint's X axis in machine degrees, with the outline.",
+    )
+
+
+@dataclass(frozen=True)
+class PartSize:
+    """A part's body and its whole outline, leads and all, in mm (length, width), and its
+    rotation in the tape, if known."""
+
+    body: tuple[float, float]
+    outline: tuple[float, float]
+    in_tape: float | None = None
 
 
 class SlotState(WireModel):
@@ -240,6 +288,12 @@ class FeederService:
         """Simulated rails: how far each bank really is from the profile, by bank ID: a
         shift (x, y) in mm and a turn in degrees about its first slot."""
         self.sim_part_height_error = 0.0
+        self.sim_parts_turned: dict[str, float] = {}
+        """Simulated feeders: degrees each slot's parts really sit turned in their tape from
+        what the library says (a reel of SOT-23s turned 180, say), by slot ID."""
+        self.sim_empty_pockets: dict[str, int] = {}
+        """Simulated feeders: how many empty pockets (a reel's leader) still come to each
+        slot's pick location, by slot ID, the one there now first."""
         """Simulated parts: how far (mm, up positive) their tops in feeders, strips, and
         trays really are from the profile's or the setup's pick height."""
         self._bus = (
@@ -455,7 +509,10 @@ class FeederService:
             raise
         self._errors.pop(slot.id, None)
         if mm > 0:
-            self._sim_full[address] = True
+            left = self.sim_empty_pockets.get(slot.id, 0)
+            if left > 0:
+                self.sim_empty_pockets[slot.id] = left - 1
+            self._sim_full[address] = left <= 1
         self._invalidate()
         return mm
 
@@ -1114,8 +1171,15 @@ class FeederService:
         line = _pocket_line_for(width)
         # Look at the holes: on wide tape they are out of view from the pocket.
         check = await self._find_pocket(
-            self.fixed_label(fixed_id), at, _strip_direction(f), line, pitch, look_across=line
+            self.fixed_label(fixed_id),
+            at,
+            _strip_direction(f),
+            line,
+            pitch,
+            look_across=line,
+            body=self._paper_body(self.fixed_part(f)),
         )
+        check = self._with_outline(check, self.fixed_part(f), _strip_direction(f))
         self._pockets[fixed_id] = check
         return check
 
@@ -1146,12 +1210,57 @@ class FeederService:
         width = tape.width if tape is not None and tape.width else 8.0
         return _pocket_line_for(width), self.feed_distance(slot)
 
+    def _paper_body(self, part: Part | None) -> PartSize | None:
+        """The part's body and outline (mm), if it comes in paper tape and its footprint
+        gives a body: then the top camera can tell whether a pocket holds it."""
+        tape = self.tape_of(part)
+        if tape is None or tape.kind != "paper":
+            return None
+        return self._outline(part)
+
+    def _outline(self, part: Part | None) -> PartSize | None:
+        """The part's body and its outline, leads and all (mm), if its footprint gives a
+        body."""
+        library = self._library()
+        if part is None or library is None:
+            return None
+        footprint = library.find_footprint(part.footprint_id)
+        if footprint is None or footprint.body is None:
+            return None
+        body = (footprint.body.x, footprint.body.y)
+        x, y = body[0] / 2, body[1] / 2
+        for pad in footprint.pads:
+            w, h = pad.width / 2, pad.height / 2
+            if round(pad.rotation / 90) % 2 == 1 and abs(pad.rotation % 90) < 1:
+                w, h = h, w
+            elif abs(pad.rotation % 90) >= 1:
+                w = h = math.hypot(w, h)
+            x, y = max(x, abs(pad.x) + w), max(y, abs(pad.y) + h)
+        tape = self.tape_of(part)
+        return PartSize(body=body, outline=(2 * x, 2 * y), in_tape=tape.rotation if tape else None)
+
+    def _with_outline(self, check: PocketCheck, part: Part | None, direction: float) -> PocketCheck:
+        """The check, with the part's outline and angle for drawing it, where known."""
+        size = self._outline(part)
+        tape = self.tape_of(part)
+        if size is None or tape is None or tape.rotation is None:
+            return check
+        angle = (direction + tape.rotation) % 360
+        outline = Size(x=round(size.outline[0], 3), y=round(size.outline[1], 3))
+        return check.model_copy(update={"outline": outline, "angle": round(angle, 3)})
+
     async def locate_pocket(self, slot: Slot) -> PocketCheck:
         """Look at a slot's pick location and find the pick pocket from the sprocket
         holes. For use inside a machine task."""
         line, pitch = self._pocket_line(slot)
+        uuid = self._found.get(slot.id)
+        part = self._part(self._store.setup.feeders.get(uuid) if uuid else None)
+        body = self._paper_body(part)
         try:
-            check = await self._find_pocket(slot.label, self.pick(slot), slot.rotation, line, pitch)
+            check = await self._find_pocket(
+                slot.label, self.pick(slot), slot.rotation, line, pitch, body=body
+            )
+            check = self._with_outline(check, part, slot.rotation)
         except FeederError:
             self._pockets.pop(slot.id, None)
             raise
@@ -1166,9 +1275,12 @@ class FeederService:
         line: float,
         pitch: float,
         look_across: float = 0.0,
+        body: PartSize | None = None,
     ) -> PocketCheck:
         """``look_across``: center the camera this far across the tape from the pick
-        location, toward the holes."""
+        location, toward the holes. ``body``: the part's, in paper tape: then whether the
+        pocket holds it, and parts lying loose on the tape, are looked at too, and of two
+        pockets about as near, the one holding a part is taken."""
         look = rotate(Point(x=0, y=look_across), rotation)
         await self._machine.move_camera_to(pick.x + look.x, pick.y + look.y)
         low, high = SPROCKET_DIAMETER * 0.7, SPROCKET_DIAMETER * 1.3
@@ -1180,13 +1292,107 @@ class FeederService:
         fix = pocket_from_holes(holes, line, pitch)
         if fix is None:
             raise FeederError(f"{label}: no sprocket holes found near the pick location")
-        shift = rotate(Point(x=fix.along, y=fix.across), rotation)
+        along, part, loose = fix.along, None, []
+        if body is not None:
+            along, part, loose = await self._look_at_tape(
+                pick, rotation, fix.along, fix.across, line, pitch, body, seen
+            )
+        shift = rotate(Point(x=along, y=fix.across), rotation)
         return PocketCheck(
             at=Point(x=round(pick.x + shift.x, 3), y=round(pick.y + shift.y, 3)),
-            along=round(fix.along, 3),
+            along=round(along, 3),
             across=round(fix.across, 3),
             holes=fix.holes,
+            part=part,
+            loose=loose,
         )
+
+    async def _look_at_tape(
+        self,
+        pick: Point,
+        rotation: float,
+        along: float,
+        across: float,
+        line: float,
+        pitch: float,
+        size: PartSize,
+        holes: list[Point],
+    ) -> tuple[float, bool | None, list[Point]]:
+        """With the top camera over paper tape: which pocket to take (``along``, or of two
+        about as near, the one holding a part), whether it holds one, and parts lying
+        loose on the tape in view."""
+        machine = self._machine
+        camera = machine.top_camera()
+        frame = await machine.frame(camera.id, settle=False)
+        image = frame.image
+        h, w = image.shape[:2]
+        mm = camera.field_of_view.x / w
+        here = machine.camera_position()
+        position = dict(machine.driver.position)
+
+        def pixel(s: float, d: float) -> tuple[float, float]:
+            """A point in the tape frame, from the pick location, in the image."""
+            q = rotate(Point(x=s, y=d), rotation)
+            right, down = machine.profile.machine_to_image(
+                pick.x + q.x - here.x, pick.y + q.y - here.y
+            )
+            return w / 2 + right / mm, h / 2 + down / mm
+
+        candidates = pocket_choices(along, pitch)
+        verdicts: list[bool | None] = []
+        for s in candidates:
+            u, v = pixel(s, across)
+            darkness = await machine.recorder.vision(
+                "pocket_darkness",
+                image,
+                u,
+                v,
+                size.body,
+                mm,
+                size.outline,
+                camera=camera.id,
+                position=position,
+                mm_per_px=mm,
+            )
+            verdicts.append(holds_part(darkness))
+        chosen = choose_pocket(verdicts)
+        # Round each pocket, a rectangle turned with the part (or, turn unknown, a square
+        # as wide as its longer side), and a square round each sprocket hole.
+        m = POCKET_KEEP_OUT_MM
+        if size.in_tape is not None:
+            a = math.radians(size.in_tape)
+            hx, hy = size.outline[0] / 2 + m, size.outline[1] / 2 + m
+            corners = [
+                (
+                    sx * hx * math.cos(a) - sy * hy * math.sin(a),
+                    sx * hx * math.sin(a) + sy * hy * math.cos(a),
+                )
+                for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))
+            ]
+        else:
+            r = max(size.outline) / 2 + m
+            corners = [(-r, -r), (r, -r), (r, r), (-r, r)]
+        r = SPROCKET_DIAMETER / 2 + HOLE_KEEP_OUT_MM
+        square = [(-r, -r), (r, -r), (r, r), (-r, r)]
+        view = max(camera.field_of_view.x, camera.field_of_view.y)
+        reach = math.ceil(view / min(pitch, SPROCKET_PITCH)) + 1
+        keep_out: list[list[tuple[float, float]]] = []
+        for k in range(-reach, reach + 1):
+            s = along + k * pitch
+            keep_out.append([pixel(s + cx, across + cy) for cx, cy in corners])
+            s = along + POCKET_TO_SPROCKET + k * SPROCKET_PITCH
+            keep_out.append([pixel(s + cx, across + line + cy) for cx, cy in square])
+        for p in holes:
+            q = rotate(Point(x=p.x - pick.x, y=p.y - pick.y), -rotation)
+            keep_out.append([pixel(q.x + cx, q.y + cy) for cx, cy in square])
+        spots = await machine.recorder.vision(
+            "loose_parts", image, keep_out, mm, camera=camera.id, position=position, mm_per_px=mm
+        )
+        loose: list[Point] = []
+        for u, v, _ in spots:
+            dx, dy = machine.profile.image_to_machine((u - w / 2) * mm, (v - h / 2) * mm)
+            loose.append(Point(x=round(here.x + dx, 3), y=round(here.y + dy, 3)))
+        return candidates[chosen], verdicts[chosen], loose
 
     def start_locate_pocket(self, slot_id: str) -> Operation:
         slot = self.slot(slot_id)
@@ -1357,8 +1563,11 @@ class FeederService:
                     pitch=pitch,
                     pocket_line=_pocket_line_for(width),
                     advance=feeder.fed_mm,
-                    pick_full=self._sim_full.get(address, True),
-                    part_rotation=(tape.rotation or 0.0) if tape is not None else 0.0,
+                    pick_full=self._sim_full.get(
+                        address, self.sim_empty_pockets.get(slot.id, 0) == 0
+                    ),
+                    part_rotation=((tape.rotation or 0.0) if tape is not None else 0.0)
+                    + self.sim_parts_turned.get(slot.id, 0.0),
                     body=(footprint.body.x, footprint.body.y)
                     if footprint is not None and footprint.body is not None
                     else None,

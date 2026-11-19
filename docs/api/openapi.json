@@ -594,6 +594,12 @@
             "title": "Id",
             "type": "string"
           },
+          "image_mirrored": {
+            "default": true,
+            "description": "Up-looking cameras: whether the picture shows the machine mirrored left to right, as seen from below (true), or as from above (false: the camera's picture is flipped, as a config's flip_x or flip_y does). Measured by calibrating the camera.",
+            "title": "Image Mirrored",
+            "type": "boolean"
+          },
           "image_rotation": {
             "default": 0.0,
             "description": "Up-looking cameras: degrees the picture is turned from what the machine's axes say (clockwise as shown), measured by calibrating the camera. What the camera sees is turned back by this much.",
@@ -653,7 +659,8 @@
           "light_output",
           "settle_s",
           "focus_height",
-          "image_rotation"
+          "image_rotation",
+          "image_mirrored"
         ],
         "title": "Camera",
         "type": "object"
@@ -3115,6 +3122,126 @@
         "title": "LibrarySnapshot",
         "type": "object"
       },
+      "LightColor": {
+        "additionalProperties": false,
+        "description": "A light's color and brightness, each 0 to 255.",
+        "properties": {
+          "blue": {
+            "default": 255,
+            "maximum": 255,
+            "minimum": 0,
+            "title": "Blue",
+            "type": "integer"
+          },
+          "brightness": {
+            "default": 255,
+            "maximum": 255,
+            "minimum": 0,
+            "title": "Brightness",
+            "type": "integer"
+          },
+          "green": {
+            "default": 255,
+            "maximum": 255,
+            "minimum": 0,
+            "title": "Green",
+            "type": "integer"
+          },
+          "red": {
+            "default": 255,
+            "maximum": 255,
+            "minimum": 0,
+            "title": "Red",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "red",
+          "green",
+          "blue",
+          "brightness"
+        ],
+        "title": "LightColor",
+        "type": "object"
+      },
+      "LightColor-Input": {
+        "additionalProperties": false,
+        "description": "A light's color and brightness, each 0 to 255.",
+        "properties": {
+          "blue": {
+            "default": 255,
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Blue",
+            "type": "integer"
+          },
+          "brightness": {
+            "default": 255,
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Brightness",
+            "type": "integer"
+          },
+          "green": {
+            "default": 255,
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Green",
+            "type": "integer"
+          },
+          "red": {
+            "default": 255,
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Red",
+            "type": "integer"
+          }
+        },
+        "title": "LightColor",
+        "type": "object"
+      },
+      "LightColor-Output": {
+        "additionalProperties": false,
+        "description": "A light's color and brightness, each 0 to 255.",
+        "properties": {
+          "blue": {
+            "default": 255,
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Blue",
+            "type": "integer"
+          },
+          "brightness": {
+            "default": 255,
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Brightness",
+            "type": "integer"
+          },
+          "green": {
+            "default": 255,
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Green",
+            "type": "integer"
+          },
+          "red": {
+            "default": 255,
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Red",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "red",
+          "green",
+          "blue",
+          "brightness"
+        ],
+        "title": "LightColor",
+        "type": "object"
+      },
       "LocalProfileState": {
         "properties": {
           "path": {
@@ -3869,6 +3996,14 @@
             "title": "Inputs",
             "type": "object"
           },
+          "lights": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LightColor"
+            },
+            "description": "The color and brightness set on each light that is on; a light switched on without one is at full white.",
+            "title": "Lights",
+            "type": "object"
+          },
           "motion_enabled": {
             "description": "Motion commands are currently allowed (connected, client present, no E-stop).",
             "title": "Motion Enabled",
@@ -3940,6 +4075,7 @@
           "position",
           "inputs",
           "outputs",
+          "lights",
           "speed_scale",
           "warnings",
           "z_safe",
@@ -4077,6 +4213,21 @@
       "MarlinOutput": {
         "additionalProperties": false,
         "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Colored lights: commands that set the light's color and brightness, with {red}, {green}, {blue} and {brightness} (each 0 to 255) filled in.",
+            "title": "Color"
+          },
           "off": {
             "items": {
               "type": "string"
@@ -4835,6 +4986,12 @@
       "Output": {
         "additionalProperties": false,
         "properties": {
+          "colored": {
+            "default": false,
+            "description": "Lights: the light can be set to a color and brightness (an RGB ring light), not only switched on and off.",
+            "title": "Colored",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -4857,7 +5014,8 @@
         "required": [
           "id",
           "label",
-          "role"
+          "role",
+          "colored"
         ],
         "title": "Output",
         "type": "object"
@@ -5722,19 +5880,66 @@
             "title": "Along",
             "type": "number"
           },
+          "angle": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The footprint's X axis in machine degrees, with the outline.",
+            "title": "Angle"
+          },
           "at": {
             "$ref": "#/components/schemas/Point"
           },
           "holes": {
             "title": "Holes",
             "type": "integer"
+          },
+          "loose": {
+            "description": "Parts seen lying loose on the tape in view, out of their pockets.",
+            "items": {
+              "$ref": "#/components/schemas/Point"
+            },
+            "title": "Loose",
+            "type": "array"
+          },
+          "outline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Size"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The part's outline, leads and all, along its footprint's X and Y (mm), where the library gives its body: for drawing the pocket on the camera's picture."
+          },
+          "part": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether the pocket holds a part, as the top camera sees it: paper tape and parts with a known body only. None if not judged.",
+            "title": "Part"
           }
         },
         "required": [
           "at",
           "along",
           "across",
-          "holes"
+          "holes",
+          "part",
+          "loose",
+          "outline",
+          "angle"
         ],
         "title": "PocketCheck",
         "type": "object"
@@ -12508,6 +12713,102 @@
           }
         ],
         "summary": "Jog",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/lights/{output_id}": {
+      "put": {
+        "description": "Set a light's color and brightness (each 0 to 255); a brightness of 0 switches it\noff. Only lights the profile marks as colored take a color; others take full white or\noff. Setting a light on requires motion to be enabled.",
+        "operationId": "set_light_api_v1_machine_lights__output_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "output_id",
+            "required": true,
+            "schema": {
+              "title": "Output Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LightColor-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No output with this ID."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Light",
         "tags": [
           "machine"
         ]

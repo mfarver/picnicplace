@@ -5,6 +5,7 @@ import { useCore } from "../api/core";
 import { readMjpeg } from "../mjpeg";
 import { scaleLength } from "../scaleBar";
 import type { CameraInfo } from "../api/types";
+import { placeMark, type CameraMark, type Orientation } from "../cameraMarks";
 import { Panel } from "./Panel";
 
 /** Stream width: twice the sidebar width, so it stays sharp on high-density screens. */
@@ -26,16 +27,38 @@ interface Props {
   fieldOfView?: number;
   /** Draw the crosshair: off for a monitor camera, whose center means nothing. */
   crosshair?: boolean;
+  /** What vision found, drawn on the picture where it is (with ``at`` and ``orientation``). */
+  marks?: CameraMark[];
+  /** Where the camera is: machine X and Y, mm. */
+  at?: { x: number; y: number };
+  orientation?: Orientation;
 }
 
 /**
  * A live camera feed (MJPEG) with a crosshair overlay. The overlay is drawn here, not in
  * the video, so it stays sharp at any stream quality (spec section 6.5).
  */
-export function CameraView({ id, title, info, fieldOfView, crosshair = true }: Props) {
+export function CameraView({
+  id,
+  title,
+  info,
+  fieldOfView,
+  crosshair = true,
+  marks,
+  at,
+  orientation,
+}: Props) {
   return (
     <Panel title={title} collapseId={`camera-${id}`}>
-      <CameraFeed id={id} info={info} fieldOfView={fieldOfView} crosshair={crosshair} />
+      <CameraFeed
+        id={id}
+        info={info}
+        fieldOfView={fieldOfView}
+        crosshair={crosshair}
+        marks={marks}
+        at={at}
+        orientation={orientation}
+      />
     </Panel>
   );
 }
@@ -46,11 +69,17 @@ export function CameraFeed({
   fieldOfView,
   crosshair = true,
   inWindow = false,
+  marks,
+  at,
+  orientation,
 }: {
   id: string;
   info?: CameraInfo;
   fieldOfView?: number;
   crosshair?: boolean;
+  marks?: CameraMark[];
+  at?: { x: number; y: number };
+  orientation?: Orientation;
   /** Shown in its own window: streamed at full width, with no pop-out button. */
   inWindow?: boolean;
 }) {
@@ -173,6 +202,15 @@ export function CameraFeed({
       {!failed && (
         <div className="camera-zoom" style={{ transform: `scale(${zoom})` }}>
           <StreamImage src={src} alt={`${id} camera`} onError={() => setFailed(true)} />
+          {marks && marks.length > 0 && at && orientation && fieldOfView ? (
+            <Marks
+              marks={marks}
+              at={at}
+              orientation={orientation}
+              width={fieldOfView}
+              height={(fieldOfView * (info?.height ?? 9)) / (info?.width ?? 16)}
+            />
+          ) : null}
         </div>
       )}
       {failed && (
@@ -216,6 +254,51 @@ export function CameraFeed({
       )}
       {fieldOfView ? <ScaleBar fieldOfView={fieldOfView / zoom} /> : null}
     </div>
+  );
+}
+
+/** Marks over the picture, in mm from its center; they zoom with it. */
+function Marks({
+  marks,
+  at,
+  orientation,
+  width,
+  height,
+}: {
+  marks: CameraMark[];
+  at: { x: number; y: number };
+  orientation: Orientation;
+  width: number;
+  height: number;
+}) {
+  return (
+    <svg
+      className="camera-marks"
+      viewBox={`${-width / 2} ${-height / 2} ${width} ${height}`}
+      preserveAspectRatio="none"
+    >
+      {marks.map((m, i) => {
+        const p = placeMark(m, at, orientation);
+        return (
+          <g
+            key={i}
+            className={`camera-mark mark-${m.kind}`}
+            transform={`translate(${p.right} ${p.down}) rotate(${p.rotate})`}
+          >
+            <title>{m.title}</title>
+            {m.kind === "loose" ? (
+              <>
+                <circle r={m.width / 2} />
+                <line x1={-m.width / 3} y1={-m.width / 3} x2={m.width / 3} y2={m.width / 3} />
+                <line x1={-m.width / 3} y1={m.width / 3} x2={m.width / 3} y2={-m.width / 3} />
+              </>
+            ) : (
+              <rect x={-m.width / 2} y={-m.height / 2} width={m.width} height={m.height} />
+            )}
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 

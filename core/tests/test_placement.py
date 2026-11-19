@@ -161,6 +161,131 @@ def test_alignment_with_a_turned_bottom_camera() -> None:
         assert angle_error(part.angle, 30.0) < 1.0
 
 
+def test_alignment_with_a_flipped_bottom_camera() -> None:
+    """A real LumenPnP's bottom camera picture is flipped (flip_y) to show the machine as
+    from above, not mirrored as from below. Taken for a mirrored one, its X seemed turned
+    180 degrees and its Y not at all, and calibrating it found a turn of +89.7 degrees:
+    the pads were looked for a quarter turn off. Calibrating now finds it flipped and not
+    turned, and the part is found and placed."""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_home_error": (0.3, -0.2),
+            "sim_bottom_camera_flipped": True,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s, slots=("3",), calibrate=False)
+        op = ok(s.wait(s.post("/api/v1/machine/bottom-camera", {})))
+        assert "flipped to show the machine as from above" in op["message"], op
+        assert "Measured with Left nozzle," in op["message"], op
+        bottom = next(
+            c
+            for c in client.get("/api/v1/machine/description").json()["cameras"]
+            if c["looking"] == "up"
+        )
+        assert bottom["image_rotation"] == pytest.approx(0.0, abs=0.5)
+        assert bottom["image_mirrored"] is False
+
+        pick = {"slot_id": "3", "nozzle_id": "N1", "feed": False, "pick_correction": "off"}
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"})))
+        alignment = client.get("/api/v1/placement").json()["loads"][0]["alignment"]
+        assert math.hypot(alignment["dx"], alignment["dy"]) == pytest.approx(0.447, abs=0.08)
+        target = {"nozzle_id": "N1", "x": 150.0, "y": 280.0, "rotation": 30.0}
+        ok(s.wait(s.post("/api/v1/placement/place", target)))
+        part = placed(client)[-1]
+        assert (part.x, part.y) == pytest.approx((150.0, 280.0), abs=0.08)
+        assert angle_error(part.angle, 30.0) < 1.0
+
+
+def test_a_washed_out_part_is_found_by_its_outline() -> None:
+    """As on a real LumenPnP at full white: the bottom camera's picture is flipped, and
+    the part's tin and white underside are one overexposed rectangle, with no metal to
+    fit its pads to. Its outline is its body's: it is found, turned and placed by that."""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_bottom_camera_flipped": True,
+            "sim_bottom_washed_out": True,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s, slots=("3",), calibrate=False)
+        ok(s.wait(s.post("/api/v1/machine/bottom-camera", {})))
+        pick = {"slot_id": "3", "nozzle_id": "N1", "feed": False, "pick_correction": "off"}
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        op = ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"})))
+        assert "Found by its body's outline." in op["message"], op["message"]
+        target = {"nozzle_id": "N1", "x": 150.0, "y": 280.0, "rotation": 30.0}
+        ok(s.wait(s.post("/api/v1/placement/place", target)))
+        part = placed(client)[-1]
+        assert (part.x, part.y) == pytest.approx((150.0, 280.0), abs=0.08)
+        assert angle_error(part.angle, 30.0) < 1.0
+
+
+@pytest.mark.parametrize("turned", [0.0, 180.0])
+def test_a_sot23_is_placed_the_right_way_round(turned: float) -> None:
+    """A SOT-23's body looks the same turned 180 degrees; its pads, one on one side and
+    two on the other, do not. With its reel's parts turned half way from what the library
+    says, the pads show it, the message says so, and it is still placed the right way."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_parts_turned": {"3": turned}},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        library = client.app.state.ctx.library  # type: ignore[attr-defined]
+        library.put_footprint(
+            Footprint(
+                id="SOT-23-T",
+                body=Size(x=2.9, y=1.3),
+                pads=[
+                    Pad(name="1", x=-0.95, y=-1.1, width=0.6, height=0.8),
+                    Pad(name="2", x=0.95, y=-1.1, width=0.6, height=0.8),
+                    Pad(name="3", x=0.0, y=1.1, width=0.6, height=0.8),
+                ],
+            )
+        )
+        part = Part(id="SOT23-PART", footprint_id="SOT-23-T", height=1.0)
+        put_taped(library, part, "embossed", 8, 4, 90)
+        set_up(client, s, slots=("3",))
+        uuid = next(
+            slot["feeder"]["uuid"]
+            for slot in s.client.get("/api/v1/feeders").json()["slots"]
+            if slot["slot"]["id"] == "3"
+        )
+        r = s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": "SOT23-PART"})
+        assert r.status_code == 200, r.json()
+        pick = {"slot_id": "3", "nozzle_id": "N1", "pick_correction": "off"}
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        op = ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"})))
+        assert ("turned about 180 degrees" in op["message"]) == (turned == 180), op["message"]
+        target = {"nozzle_id": "N1", "x": 200.0, "y": 260.0, "rotation": 30.0}
+        ok(s.wait(s.post("/api/v1/placement/place", target)))
+        landed = placed(client)[-1]
+        assert (landed.x, landed.y) == pytest.approx((200.0, 260.0), abs=0.05)
+        assert angle_error(landed.angle, 30.0, 360.0) < 0.5
+
+
+def test_bottom_vision_sets_the_configured_light() -> None:
+    """The config gives the bottom camera's ring light a dim blue, as for parts washed out
+    at full white: aligning sets it so, and the part is still found."""
+    blue = {"red": 0, "green": 0, "blue": 255, "brightness": 60}
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1"},
+        cameras={"top": {"source": "synthetic"}, "bottom": {"source": "synthetic", "light": blue}},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s, slots=("3",))
+        pick = {"slot_id": "3", "nozzle_id": "N1", "feed": False, "pick_correction": "off"}
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"})))
+        assert s.state()["lights"]["light_bottom"] == blue
+
+
 def test_a_part_whose_leads_are_off_its_center_lands_on_them(lumen: TestClient) -> None:
     """Three leads 0.8 mm to one side of the body's center, as on a connector, in a tape
     on a rail turned 2 degrees: bottom vision fits the footprint's pads, finds the turn,
@@ -203,13 +328,53 @@ def test_a_part_whose_leads_are_off_its_center_lands_on_them(lumen: TestClient) 
         assert angle_error(landed.angle, 30.0, 360.0) < 0.5
 
 
+def test_an_empty_pocket_is_fed_past_once(lumen: TestClient) -> None:
+    """Paper tape, and a part whose body the library knows: the top camera sees the pick
+    pocket empty before a nozzle goes down to it, and the pick feeds once, looks again,
+    and takes the part in the next pocket."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        pick = {"slot_id": "1", "nozzle_id": "N1", "feed": False, "pick_correction": "top"}
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        # The same pocket again without feeding: it is empty, so the pick feeds on.
+        again = {"slot_id": "1", "nozzle_id": "N2", "feed": False, "pick_correction": "top"}
+        op = ok(s.wait(s.post("/api/v1/placement/pick", again)))
+        assert op["message"].startswith(
+            "N2 picked RC0805-1K from Slot 1 (fed once past an empty pocket) (pocket "
+        ), op
+        parts = feeders(lumen).sim_parts
+        assert parts is not None
+        assert sorted(parts.held) == ["N1", "N2"]
+
+
+def test_a_second_empty_pocket_stops_the_pick(lumen: TestClient) -> None:
+    """The pocket fed to after an empty one is empty too: the feeder is out of parts or
+    not advancing, and the pick stops with a feeder error, no nozzle having gone down."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        pick = {"slot_id": "1", "nozzle_id": "N1", "feed": False, "pick_correction": "top"}
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        top = feeders(lumen).part_top("1")
+        # The pocket just emptied, then one more empty one after it.
+        feeders(lumen).sim_empty_pockets["1"] = 2
+        again = {"slot_id": "1", "nozzle_id": "N2", "feed": False, "pick_correction": "top"}
+        op = s.wait(s.post("/api/v1/placement/pick", again))
+        assert op["status"] == "failed"
+        assert "fed once, and saw the next one empty too" in op["error"], op
+        # It never touched the tape, so the part's top is still known.
+        assert feeders(lumen).part_top("1") == top
+        state = lumen.get("/api/v1/feeders").json()
+        pocket = next(x for x in state["slots"] if x["slot"]["id"] == "1")["pocket"]
+        assert pocket["part"] is False and pocket["loose"] == []
+
+
 def test_picking_from_an_empty_pocket_fails(lumen: TestClient) -> None:
     with connect(lumen) as s:
         set_up(lumen, s)
-        pick = {"slot_id": "1", "nozzle_id": "N1", "feed": False}
+        pick = {"slot_id": "1", "nozzle_id": "N1", "feed": False, "pick_correction": "off"}
         ok(s.wait(s.post("/api/v1/placement/pick", pick)))
-        # The same pocket again, without feeding: nothing there.
-        again = {"slot_id": "1", "nozzle_id": "N2", "feed": False}
+        # The same pocket again, without feeding or looking: nothing there.
+        again = {"slot_id": "1", "nozzle_id": "N2", "feed": False, "pick_correction": "off"}
         op = s.wait(s.post("/api/v1/placement/pick", again))
         assert op["status"] == "failed"
         assert "N2 picked nothing from Slot 1" in op["error"]

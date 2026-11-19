@@ -286,6 +286,45 @@ code,
   vector-effect: non-scaling-stroke;
 }
 
+.camera-marks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.camera-mark rect,
+.camera-mark circle,
+.camera-mark line {
+  fill: none;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.camera-mark title {
+  pointer-events: auto;
+}
+
+.mark-part rect {
+  stroke: rgb(47 191 134);
+}
+
+.mark-empty rect {
+  stroke: rgb(240 170 40);
+  stroke-dasharray: 4 3;
+}
+
+.mark-unknown rect {
+  stroke: rgb(255 255 255 / 80%);
+  stroke-dasharray: 2 3;
+}
+
+.mark-loose circle,
+.mark-loose line {
+  stroke: rgb(235 80 70);
+}
+
 .camera-badge {
   position: absolute;
   top: 6px;

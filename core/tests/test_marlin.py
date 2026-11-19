@@ -17,7 +17,7 @@ from picnicplace.machine.marlin.fake import (
     FakeSettings,
 )
 from picnicplace.machine.marlin.transport import SerialTransport
-from picnicplace.machine.profile import load_profile
+from picnicplace.machine.profile import LightColor, load_profile
 
 FAST = 50.0
 """Simulated time runs this much faster than real time."""
@@ -144,6 +144,25 @@ def test_outputs_send_profile_gcode() -> None:
             assert driver.outputs["light_top"] is True
             await driver.set_output("pump_n2", True)
             assert fake.fans[3] == 180
+
+    run(scenario)
+
+
+def test_a_ring_light_is_set_to_a_color() -> None:
+    async def scenario() -> None:
+        async with lumenpnp() as (driver, fake):
+            blue = LightColor(red=0, green=0, blue=255, brightness=80)
+            await driver.set_light("light_bottom", blue)
+            assert fake.received[-1] == "M150 P80 R0 U0 B255 S0"
+            assert driver.outputs["light_bottom"] is True
+            assert driver.light_colors["light_bottom"] == blue
+            # Switched plainly, it is white again, and its color forgotten.
+            await driver.set_output("light_bottom", True)
+            assert fake.received[-1] == "M150 P255 R255 U255 B255 S0"
+            assert "light_bottom" not in driver.light_colors
+            await driver.set_light("light_bottom", LightColor(brightness=0))
+            assert fake.received[-1] == "M150 P0 S0"
+            assert driver.outputs["light_bottom"] is False
 
     run(scenario)
 

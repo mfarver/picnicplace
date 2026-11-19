@@ -82,10 +82,12 @@ the demo board from PicnicPlace's tests: a KiKit panel of four.
 
 === "Run"
 
-    ![The Run workspace partway through the demo panel](images/studio-run.jpg){ .pp-screenshot }
+    ![The Run workspace, paused on a part that landed off its target](images/studio-run.jpg){ .pp-screenshot }
     /// caption
-    A run, paused halfway: the board found by its fiducials, each placement checked off
-    with the nozzle that placed it, and the parts left out and why.
+    A run in the simulator, with one nozzle made to drop its parts 0.3 mm off: each part
+    is checked with the top camera once placed, the run pauses on one off its target, and
+    its picture is on its line. Above, the run's statistics; below, the parts left out and
+    why.
     ///
 
 ## Why PicnicPlace

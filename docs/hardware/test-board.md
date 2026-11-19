@@ -75,21 +75,35 @@ top camera's light.
 
 ## A test, step by step
 
-All planned:
+Steps 1, 2 and 5 work today, and step 3 in part; the rest is planned.
 
 1. Lay strips of clear double-sided tape over the targets, and load the board into the
    datum's corner. The tape must be clear, so the camera sees the rings through it, and
    it adds its thickness (about 0.1 mm) to the board's.
-2. Run the test board's job like any other, with its parts on feeders, strips or trays.
-3. **Inspect placements:** the top camera visits each target. In one frame it finds the
-   part's body and the ring around it, and measures the part's offset and turn from the
-   ring. Part and ring are a few millimeters apart in the same image, so neither the
-   gantry's position nor the camera's scale enters the measurement.
-4. The report gives each part's offset and turn, the spread for each nozzle, and how the
-   error depends on the part's angle and its place on the board. It is kept with the run
-   and sent with a flight recording.
+2. Run the test board's job like any other, with its parts on feeders, strips or trays,
+   and **Check each part with the top camera once placed** ticked.
+3. **Inspect placements.** Today, the top camera looks at each two-terminal chip as soon
+   as it is placed and measures how far it landed from where it was sent, and the run
+   pauses on one more than 0.25 mm off or turned more than 10°. That measures from where
+   the machine thinks the target is, so it includes the gantry's and the camera's errors,
+   and across a chip's width it can be some 0.1 mm off, as the part can slide over the
+   pads in the picture. Planned: measuring each part from the copper ring around it. In
+   one frame the camera finds the part's body and the ring, a few millimeters apart, so
+   neither the gantry's position nor the camera's scale enters the measurement, and
+   ICs and QFNs, whose pads the part hides, are measured too.
+4. **The report**, planned: each part's offset and turn, the spread for each nozzle, and
+   how the error depends on the part's angle (the circle of 0603s) and its place on the
+   board, kept with the run and sent with a flight recording. Today the finish message
+   and the Run workspace give the run's statistics: picks, empty picks, parts the bottom
+   camera could not find, placements, and checked placements off target.
 5. Pick the parts up again (or peel off the tape), and the board is ready for the next
    test.
+
+![A real placement check: an 0603 landed 0.35 mm off its target](../images/placement-check-real.jpg){ .pp-screenshot width="300" }
+
+A real check, on a LumenPnP: an 0603 resistor on double-sided tape, where it was sent
+(orange) and where the top camera found it (magenta), 0.35 mm off. The run paused on it,
+and its picture was on its line in the step list.
 
 The simulator will offer the same board, with its parts in the library and on simulated
 feeders, so a test can be tried with no machine.

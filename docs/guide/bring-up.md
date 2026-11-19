@@ -284,6 +284,8 @@ effect at once. The reset button next to one forgets it.
       over the part lines up with it, and that pin 1 (red) is where the part's marking
       says, beside it; then **Approve**. From then on, aligning that part uses the light
       and the way of seeing it that held steadiest.
+
+      ![The Trained parts panel: a part waiting for approval, its footprint drawn over it and beside it](../images/studio-trained.jpg){ .pp-screenshot width="300" }
 - [ ] Center the top camera on a spot on the board, click the crosshair button to use
       its position, and **Place**. The part is let go there; the nozzle waits for its
       vacuum to drain before lifting (a small tip that still holds would carry one end
@@ -295,7 +297,7 @@ effect at once. The reset button next to one forgets it.
 
 ## 7. A whole job
 
-![A run of the demo panel, paused halfway](../images/studio-run.jpg){ .pp-screenshot }
+![A run of the demo panel, paused on a part that landed off its target, with its picture on its line](../images/studio-run.jpg){ .pp-screenshot }
 
 - [ ] In the Prepare workspace, import the board (and its panel), use **Find a place**,
       fasten the board where the map shows it, and save the job. Its parts may run to
@@ -322,7 +324,11 @@ effect at once. The reset button next to one forgets it.
       where it was sent in orange and where it landed in magenta. It catches a part off
       its pads, standing up, or gone; across a part's
       width it can be some 0.1 mm off, so it is not a measure of accuracy to a few
-      hundredths.
+      hundredths. At the end, the finish message and the Run workspace give the run's
+      statistics: picks and empty picks, parts the bottom camera could not find,
+      placements, and checked placements off target.
+
+      ![A real check: an 0603 on a LumenPnP, 0.35 mm off its target](../images/placement-check-real.jpg){ .pp-screenshot width="300" }
 - [ ] Tick **Start in step mode** and **Start**: the run scans the feeders (a feeder
       moved since the checks is picked from where it is now), finds the board again,
       and pauses before the first part. After finding the board, a nozzle sniffs its top on

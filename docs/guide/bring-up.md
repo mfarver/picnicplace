@@ -274,7 +274,9 @@ effect at once. The reset button next to one forgets it.
       Later picks from that feeder go straight there, until one comes up empty or the
       part is changed.
 - [ ] **Align**: the part is shown to the bottom camera with its underside in focus, and
-      the panel reports how far off center and how turned it sits on the nozzle.
+      the panel reports how far off center and how turned it sits on the nozzle. In a run,
+      and with **All three**, the part is first turned to the angle it will be placed at,
+      so it is measured as it will be placed.
 - [ ] **Train** (optional, once per part): with the feeder chosen, the machine picks a
       part, holds it over the bottom camera and turns it to four angles under every light
       it can give, measuring it every way it can, which takes a minute or two. The part

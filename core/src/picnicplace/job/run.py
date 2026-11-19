@@ -1224,7 +1224,8 @@ class JobRunner:
             run.current = RunStep(stage="item", action="aligning", index=index, nozzle=nozzle_id)
             run.stats.alignments += 1
             try:
-                await self._placement.align(nozzle)
+                # Turned to its place angle first, as it will be placed.
+                await self._placement.align(nozzle, item.rotation + run.fix.angle)
             except VisionError as e:
                 run.stats.failed_alignments += 1
                 if not self._placement.can_discard():

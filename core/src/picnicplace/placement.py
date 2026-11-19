@@ -449,7 +449,7 @@ class PlacementService:
         async def work() -> str:
             how = correction or self.pick_correction
             steps = [await self.pick(slot_id, nozzle, feed, how)]
-            steps.append(await self.align(nozzle))
+            steps.append(await self.align(nozzle, rotation))
             steps.append(await self.place(nozzle, Point(x=x, y=y), rotation))
             return " ".join(steps)
 
@@ -909,7 +909,13 @@ class PlacementService:
             )
         return Look(center, seen, angle, note, "outline", False, error, outline is not None)
 
-    async def align(self, nozzle: Nozzle) -> str:
+    async def align(self, nozzle: Nozzle, place_angle: float | None = None) -> str:
+        """Find the part on ``nozzle`` with the bottom camera. Given ``place_angle``, the
+        machine angle it is to be placed at, the nozzle first turns the part to it, so the
+        part is measured as it will be placed and only the few degrees alignment finds are
+        turned afterward: any error in where the nozzle's tip turns about then barely
+        moves it. (On a real LumenPnP, two of eight 0603s turned 88 and 180 degrees after
+        alignment landed 0.3 to 0.45 mm off.)"""
         load = self._load(nozzle)
         camera = self._bottom_camera()
         assert camera.focus_height is not None
@@ -918,7 +924,12 @@ class PlacementService:
         height = part.height if part is not None and part.height is not None else 0.0
         trained = self.trained.vision(load.part_id)
 
-        await self._machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y)
+        turn = None
+        if place_angle is not None:
+            # The nozzle angle that puts the part at its place angle, nearest where it is.
+            now = self._machine.nozzle_angle(nozzle)
+            turn = now + wrap(place_angle - load.angle - now)
+        await self._machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y, turn)
         await self._machine.lower_nozzle(nozzle, camera.focus_height + height)
         frame = await self._machine.frame(camera.id, light=trained.light if trained else None)
         view = self._view(camera, part, library, frame.image.shape[1])

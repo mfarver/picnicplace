@@ -122,8 +122,9 @@ def angle_error(a: float, b: float, period: float) -> float:
     return min(abs(d), period - abs(d))
 
 
-def check_landed(client: TestClient, run: dict[str, Any]) -> int:
-    """Every placed item's part is where the simulated board wants it."""
+def check_landed(client: TestClient, run: dict[str, Any], turn: float = 0.5) -> int:
+    """Every placed item's part is where the simulated board wants it, turned within
+    ``turn`` degrees."""
     parts = placed(client)
     n = 0
     for data in run["plan"]["items"]:
@@ -137,7 +138,7 @@ def check_landed(client: TestClient, run: dict[str, Any]) -> int:
         assert (part.x, part.y) == pytest.approx((target.x, target.y), abs=0.06), item.ref
         # Two-pad parts look the same turned half way round.
         period = 180.0 if item.ref[0] in "RC" else 360.0
-        assert angle_error(part.angle, angle, period) < 0.5, (item.ref, part.angle, angle)
+        assert angle_error(part.angle, angle, period) < turn, (item.ref, part.angle, angle)
         n += 1
     assert n == len(parts)
     return n
@@ -594,7 +595,11 @@ def test_run_a_job_on_a_lumenpnp_v4_2() -> None:
         assert not any("discard" in i["message"] for i in plan["issues"]), plan["issues"]
         op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
-        assert check_landed(client, client.get("/api/v1/run").json()) == 4
+        # The v4.2's bottom camera sees 70.5 mm across, 0.055 mm per simulated pixel: an
+        # 0805 is 36 x 23 pixels. Parts are measured turned to their place angle, not
+        # square to the picture, and its pads fit to within about 1 degree there (0.02 mm
+        # at their ends).
+        assert check_landed(client, client.get("/api/v1/run").json(), turn=1.5) == 4
 
 
 def test_placements_are_checked_with_the_top_camera(lumen: TestClient) -> None:
@@ -642,3 +647,39 @@ def test_a_part_that_lands_off_its_target_pauses_the_run() -> None:
         assert checked[-1]["check"]["dy"] == pytest.approx(0.45, abs=0.1)
         assert checked[-1]["check"]["picture"]
         assert run["stats"]["bad_placements"] == 1
+
+
+def test_parts_are_turned_to_their_place_angle_before_the_bottom_camera_looks(
+    lumen: TestClient, tmp_path: Path
+) -> None:
+    """Each part is measured as it will be placed: the nozzle turns it to its place angle
+    before the bottom camera looks, and turns it only the few degrees alignment finds
+    afterward. (On a real LumenPnP, two of eight 0603s turned 88 and 180 degrees after
+    alignment landed 0.3 to 0.45 mm off.)"""
+    import io
+    import json
+    import zipfile
+
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        body = {"job_id": "demo", "skip_blocked": True, "record": True}
+        ok(s.wait(s.post("/api/v1/run/start", body)))
+        rid = lumen.get("/api/v1/run").json()["recording"]
+        r = lumen.get(f"/api/v1/recordings/{rid}/download")
+        with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+            lines = z.read(f"{rid}/events.jsonl").decode().splitlines()
+    axis = {"N1": "A", "N2": "B"}
+    seen: dict[str, float] = {}
+    aligned: dict[str, float] = {}
+    turns: list[float] = []
+    for line in lines:
+        e = json.loads(line)
+        if e["kind"] == "vision" and e.get("fn") == "find_part":
+            seen[e["nozzle"]] = e["position"][axis[e["nozzle"]]]
+        elif e["kind"] == "align":
+            aligned[e["nozzle"]] = e["alignment"]["angle"]
+        elif e["kind"] == "place":
+            n = e["nozzle"]
+            at_place = e["rotation"] - aligned[n]
+            turns.append(abs((at_place - seen[n] + 180.0) % 360.0 - 180.0))
+    assert len(turns) == 4 and max(turns) < 5.0, turns

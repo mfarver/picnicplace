@@ -83,7 +83,16 @@ log = logging.getLogger(__name__)
 PICK_DWELL_S = 0.2
 """Wait this long with the nozzle on the part and suction on, before lifting."""
 PLACE_DWELL_S = 0.1
-"""Wait this long after letting go, before lifting."""
+"""Wait at least this long after letting go, before lifting..."""
+RELEASE_MAX_S = 1.0
+"""...and until the vacuum has drained (its reading settled), up to this long: a tip still
+holding as it lifts carries one end of the part up with it. On a real LumenPnP an 0603
+from an N045 landed 0.45 mm along its length from its target, one end lifted."""
+PUMP_START_S = 0.2
+"""The part-off check reads the vacuum no sooner than this after suction on..."""
+PART_OFF_MAX_S = 2.0
+"""...and once it has settled, up to this long (an N045's took 0.6 s to rise in open air):
+the first readings, before the pump has pulled anything, say no part whatever is there."""
 VACUUM_TIMEOUT_S = 1.0
 PART_SNIFF_ABOVE_MM = 1.5
 """Sniffing for a part's top starts this far above the setup's height for it..."""
@@ -359,6 +368,9 @@ class PlacementService:
         self.pick_correction: PickCorrection = pick_correction
         self.sniff_heights = False
         """Find each feeder's part top by touch on its first pick (from the config)."""
+        self.place_press: float | None = None
+        """How far to press a part into the board when placing it (mm), from the config;
+        None: the profile's."""
         self._loads: dict[str, NozzleLoad] = {}
         self._look: dict[str, tuple[int, str]] = {}
         """Auto correction: by slot or strip ID, how many more picks to look at with the
@@ -1223,12 +1235,20 @@ class PlacementService:
         await self._machine.move_nozzle_over(nozzle, over.x, over.y, turn)
         await self._machine.lower_nozzle(nozzle, height)
         await self._machine.suction(nozzle, False)
-        await asyncio.sleep(PLACE_DWELL_S)
+        scale = self._machine.driver.time_scale
+        await self._machine.settled_vacuum(nozzle, PLACE_DWELL_S / scale, RELEASE_MAX_S / scale)
         await self._machine.raise_nozzles()
         self._loads.pop(nozzle.id, None)
-        # Part-off check: with suction on again in the air, the nozzle must be open.
+        # Part-off check: with suction on again in the air, the nozzle must be open, judged
+        # once the vacuum has settled.
         await self._machine.suction(nozzle, True)
-        still = await self._machine.holds_part(nozzle, False, VACUUM_TIMEOUT_S)
+        reading = await self._machine.settled_vacuum(
+            nozzle, PUMP_START_S / scale, PART_OFF_MAX_S / scale
+        )
+        still = self._machine.reads_held(nozzle, reading)
+        self._machine.recorder.event(
+            "vacuum", nozzle=nozzle.id, expect=False, held=still, reading=reading
+        )
         await self._machine.suction(nozzle, False)
         if still:
             self._loads[nozzle.id] = load
@@ -1286,4 +1306,7 @@ class PlacementService:
             raise PlacementError("the machine profile gives no board height")
         library = self._library()
         part = library.find_part(load.part_id) if library and load.part_id else None
-        return board + self._part_height(part, f"slot {load.slot_id}")
+        press = self.place_press
+        if press is None:
+            press = self._machine.profile.place_press
+        return board + self._part_height(part, f"slot {load.slot_id}") - press

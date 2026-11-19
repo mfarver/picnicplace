@@ -283,8 +283,10 @@ effect at once. The reset button next to one forgets it.
       says, beside it; then **Approve**. From then on, aligning that part uses the light
       and the way of seeing it that held steadiest.
 - [ ] Center the top camera on a spot on the board, click the crosshair button to use
-      its position, and **Place**. The part is let go there, and the nozzle is checked
-      to be empty after lifting.
+      its position, and **Place**. The part is let go there; the nozzle waits for its
+      vacuum to drain before lifting (a small tip that still holds would carry one end
+      of the part up), and is checked to be empty after lifting, once the vacuum has
+      settled with suction on again.
 - [ ] Use the **Capture** panel on the way: the pocket from above, the part on the
       nozzle from below, and the placed part. Captured frames are saved losslessly in the
       data directory's `captures/` folder, for tuning vision on real images.

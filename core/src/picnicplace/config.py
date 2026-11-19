@@ -183,6 +183,24 @@ class MachineConfig(_Section):
             "learned unless this is 'off'."
         ),
     )
+    place_press: float | None = Field(
+        default=None,
+        ge=0,
+        le=1.0,
+        description=(
+            "How far (mm) to press a part into the board's paste or tape when placing it: "
+            "the nozzle goes this far below the part's top, resting on the board. Empty: "
+            "the profile's (a LumenPnP's spring-loaded nozzles: 0.3)."
+        ),
+    )
+    check_placements: bool = Field(
+        default=False,
+        description=(
+            "Look at each two-terminal chip with the top camera once a run has placed it, "
+            "and pause the run if it landed off its target, turned, or is not there. A run "
+            "can ask either way."
+        ),
+    )
     sniff_heights: bool = Field(
         default=True,
         description=(
@@ -343,6 +361,21 @@ class MachineConfig(_Section):
             "Simulator only: how many of its next picks each nozzle drops as it lifts, by "
             "nozzle ID: it seals on the part, then loses it on the way up, as a worn tip "
             "might. A pick checks the part is still held once the vacuum has settled."
+        ),
+    )
+    sim_place_shift: dict[str, tuple[float, float]] = Field(
+        default_factory=dict[str, tuple[float, float]],
+        description=(
+            "Simulator only: how far (X, Y mm) each part a nozzle places lands from where it "
+            "was let go, by nozzle ID, as a part dragged as the nozzle lifts would."
+        ),
+    )
+    sim_sticks_on_release: dict[str, int] = Field(
+        default_factory=dict[str, int],
+        description=(
+            "Simulator only: how many of its next parts each nozzle keeps when its suction "
+            "goes off, by nozzle ID, as a part stuck to a tip would: the part-off check after "
+            "placing finds it still there."
         ),
     )
     sim_datum_height_error: float = Field(

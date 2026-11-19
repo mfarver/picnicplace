@@ -98,6 +98,7 @@ def build_driver(config: MachineConfig) -> DriverBundle:
         driver.paper_lift = dict(config.sim_paper_lift)
         driver.bare_first_seal = config.sim_bare_first_seal
         driver.drops_on_lift = dict(config.sim_drops_on_lift)
+        driver.sticks_on_release = dict(config.sim_sticks_on_release)
         return DriverBundle(driver, photon_sim=photon)
 
     assert profile.marlin is not None  # checked when the config was loaded

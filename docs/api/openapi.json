@@ -3844,6 +3844,14 @@
             "title": "Outputs",
             "type": "array"
           },
+          "place_press": {
+            "default": 0.0,
+            "description": "How far below a part's top, resting on the board, the nozzle goes to place it (mm): a spring-loaded nozzle presses the part into paste or tape. 0 for a nozzle without the travel to spare.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Place Press",
+            "type": "number"
+          },
           "placement_area": {
             "anyOf": [
               {
@@ -3940,6 +3948,7 @@
           "safe_z_input",
           "homes_z_first",
           "board_height",
+          "place_press",
           "feeder_bus",
           "nozzles",
           "nozzle_tips",

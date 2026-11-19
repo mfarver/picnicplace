@@ -4024,6 +4024,12 @@ export interface components {
             /** Outputs */
             outputs: components["schemas"]["Output"][];
             /**
+             * Place Press
+             * @description How far below a part's top, resting on the board, the nozzle goes to place it (mm): a spring-loaded nozzle presses the part into paste or tape. 0 for a nozzle without the travel to spare.
+             * @default 0
+             */
+            place_press: number;
+            /**
              * @description Where boards can go so that every nozzle can place anywhere on them: the
              *     nozzles' reach, all of them, within the staging plates (or the work area). Boards
              *     must also stay clear of the keep-outs inside it.

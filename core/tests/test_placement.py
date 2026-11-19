@@ -481,3 +481,24 @@ def test_captures_are_saved_with_the_machine_state(lumen: TestClient) -> None:
         assert image.status_code == 200
         assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
         assert lumen.get("/api/v1/cameras/captures/../../etc/passwd.png").status_code == 404
+
+
+def test_a_part_still_on_the_nozzle_after_placing_is_caught() -> None:
+    """The part stuck to the tip when its suction went off. The part-off check turns
+    suction on again in the air and judges the vacuum once it has settled: its first
+    readings, before the pump has pulled anything, say no part whatever is there."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_sticks_on_release": {"N1": 1}},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s, slots=("3",))
+        pick = {"slot_id": "3", "nozzle_id": "N1", "feed": False, "pick_correction": "off"}
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"})))
+        target = {"nozzle_id": "N1", "x": 150.0, "y": 280.0, "rotation": 0.0}
+        op = s.wait(s.post("/api/v1/placement/place", target))
+        assert op["status"] == "failed" and "still on N1" in op["error"], op
+        # Still known to be held: it can be discarded, and lets go this time.
+        loads = s.client.get("/api/v1/placement").json()["loads"]
+        assert [load["nozzle"] for load in loads] == ["N1"]

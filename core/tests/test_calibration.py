@@ -730,7 +730,8 @@ def test_a_longer_tip_is_found_on_the_datum_board() -> None:
         target = {"nozzle_id": "N2", "x": 300.0, "y": 250.0, "rotation": 0.0}
         ok(s.wait(s.post("/api/v1/placement/place", target)))
         assert len(parts.crashes) == 1, parts.crashes
-        assert "N2 pressed its part 0.80 mm into the board" in parts.crashes[0]
+        # The 0.8 mm, and the 0.3 mm a LumenPnP presses every part in by.
+        assert "N2 pressed its part 1.10 mm into the board" in parts.crashes[0]
 
         disc = config.machine.sim_calibration_disc
         assert disc is not None

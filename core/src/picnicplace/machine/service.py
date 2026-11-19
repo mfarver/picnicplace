@@ -119,8 +119,12 @@ APPROACH_SPEED = 10.0
 
 VACUUM_POLL_S = 0.05
 VACUUM_STEADY = 0.002
-"""A vacuum reading that changes less than this (as a fraction of its sensor's range)
-from one poll to the next has settled."""
+"""A vacuum reading that changes less than this (as a fraction of its sensor's range)..."""
+VACUUM_STEADY_S = 0.3
+"""...for this long has settled. Not from one poll to the next: a LumenPnP's sensor
+updates about every 0.1 s in steps of 65,536 counts, so two polls can agree while the
+vacuum is still rising. With an N045's small hole it rose for 0.6 s in open air, and an
+open reading taken at 0.3 s made the first step of a touch read as a seal."""
 
 
 def _open_px(min_diameter_px: float) -> int:
@@ -864,16 +868,20 @@ class MachineService:
         span = abs(sensor.range.max - sensor.range.min)
         loop = asyncio.get_running_loop()
         start = loop.time()
+        steady_s = max(2 * VACUUM_POLL_S, VACUUM_STEADY_S / self._driver.time_scale)
         await asyncio.sleep(least_s)
+        since: float | None = None  # when the reading last changed
         last: float | None = None
         while True:
             await self._driver.refresh_input(sensor.id)
             value = self.vacuum_reading(nozzle)
-            if value is not None and last is not None and abs(value - last) <= VACUUM_STEADY * span:
+            now = loop.time()
+            if value is None or last is None or abs(value - last) > VACUUM_STEADY * span:
+                since, last = now, value
+            elif since is not None and now - since >= steady_s:
                 return value
-            if loop.time() - start >= most_s:
+            if now - start >= most_s:
                 return value
-            last = value
             await asyncio.sleep(VACUUM_POLL_S)
 
     def vacuum_reading(self, nozzle: Nozzle) -> float | None:

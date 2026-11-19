@@ -119,8 +119,13 @@ mounting dimensions against Waveshare's own drawing before cutting an enclosure.
   selects USB through the board's I/O expander and leaves CAN unused. The port appears as
   Espressif's "USB JTAG/serial debug unit"; the firmware's log goes to the other port.
 - **The E-stop's sensing pole:** the GPIO header (3.3 V, GND and GPIO6). The contact is
-  normally closed and pulled up, so a pressed switch or a broken wire both read as
-  pressed.
+  normally closed, from GPIO6 to GND, and GPIO6 is pulled up, so a pressed switch or a
+  broken or unplugged wire both read as pressed. The firmware turns on the ESP32's own
+  pull-up, but it is weak (about 45 kΩ) and the firmware reads the pin every 50 ms with no
+  debounce: next to the machine's stepper wiring, add a 4.7 kΩ resistor from GPIO6 to
+  3.3 V, fitted at the header, so stray pulses cannot read as a press.
+
+  ![E-stop wiring: pole 1 in the machine's 24 V; pole 2 from GPIO6 to GND, with a 4.7 kΩ pull-up to 3.3 V](panel-estop-wiring.svg)
 - **The backlight:** switched and dimmed by the I/O expander, a small microcontroller with
   Waveshare's firmware at I2C address 0x24 (its PWM is inverted: duty 0 is full
   brightness). The panel dims it after a few minutes

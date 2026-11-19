@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 340" width="720" height="340" role="img" aria-label="E-stop wiring: pole 1, normally closed, in the machine's 24 V supply; pole 2, normally closed, from GPIO6 to GND on the panel's GPIO header, with a 4.7 kilohm pull-up from GPIO6 to 3.3 V">
+<title>E-stop wiring: pole 1 in the machine's 24 V supply; pole 2 from GPIO6 to GND, with a 4.7 kΩ pull-up to 3.3 V</title>
+<style>
+  text { font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 14px; fill: #1d2025; }
+  .small { font-size: 12.5px; fill: #4a505a; }
+  .bold { font-weight: 600; }
+  .wire { stroke: #1d2025; stroke-width: 2; fill: none; }
+  .link { stroke: #1d2025; stroke-width: 1.5; stroke-dasharray: 5 4; fill: none; }
+  .pin { fill: #ffffff; stroke: #1d2025; stroke-width: 2; }
+  .dot { fill: #1d2025; }
+</style>
+<rect width="720" height="340" rx="8" fill="#ffffff"/>
+
+<!-- The panel's GPIO header -->
+<rect x="30" y="80" width="150" height="190" rx="6" fill="#f2f4f7" stroke="#1d2025" stroke-width="2"/>
+<text x="105" y="108" text-anchor="middle" class="bold">Waveshare 7B</text>
+<text x="105" y="126" text-anchor="middle" class="small">GPIO header</text>
+<text x="168" y="155" text-anchor="end">3.3 V</text>
+<text x="168" y="205" text-anchor="end">GPIO6</text>
+<text x="168" y="255" text-anchor="end">GND</text>
+<circle cx="180" cy="150" r="4" class="pin"/>
+<circle cx="180" cy="200" r="4" class="pin"/>
+<circle cx="180" cy="250" r="4" class="pin"/>
+
+<!-- R1: pull-up from GPIO6 to 3.3 V -->
+<polyline class="wire" points="184,150 250,150 250,158"/>
+<rect x="241" y="158" width="18" height="34" fill="#ffffff" stroke="#1d2025" stroke-width="2"/>
+<line class="wire" x1="250" y1="192" x2="250" y2="200"/>
+<text x="266" y="172" class="bold">R1</text>
+<text x="266" y="189">4.7 kΩ</text>
+<circle cx="250" cy="200" r="3.5" class="dot"/>
+
+<!-- GPIO6 to pole 2, pole 2 to GND -->
+<line class="wire" x1="184" y1="200" x2="424" y2="200"/>
+<circle cx="430" cy="200" r="5" class="pin"/>
+<circle cx="490" cy="200" r="5" class="pin"/>
+<!-- normally closed: the bar rests across both contacts -->
+<line class="wire" x1="430" y1="195" x2="430" y2="188"/>
+<line class="wire" x1="490" y1="195" x2="490" y2="188"/>
+<line class="wire" x1="420" y1="188" x2="500" y2="188"/>
+<polyline class="wire" points="495,200 560,200 560,250 184,250"/>
+<text x="460" y="226" text-anchor="middle" class="bold">Pole 2: sensing</text>
+<text x="460" y="242" text-anchor="middle" class="small">normally closed</text>
+
+<!-- Pole 1 in the machine's 24 V -->
+<text x="370" y="66" text-anchor="end">24 V from</text>
+<text x="370" y="82" text-anchor="end">the supply</text>
+<line class="wire" x1="380" y1="70" x2="424" y2="70"/>
+<circle cx="430" cy="70" r="5" class="pin"/>
+<circle cx="490" cy="70" r="5" class="pin"/>
+<line class="wire" x1="430" y1="75" x2="430" y2="82"/>
+<line class="wire" x1="490" y1="75" x2="490" y2="82"/>
+<line class="wire" x1="420" y1="82" x2="500" y2="82"/>
+<line class="wire" x1="495" y1="70" x2="560" y2="70"/>
+<text x="570" y="66">to the LumenPnP</text>
+<text x="570" y="82">mainboard</text>
+<text x="460" y="44" text-anchor="middle" class="bold">Pole 1: cuts the machine's power</text>
+<text x="460" y="60" text-anchor="middle" class="small">normally closed</text>
+
+<!-- The mushroom head works both poles together -->
+<line class="link" x1="460" y1="82" x2="460" y2="188"/>
+<line class="link" x1="460" y1="135" x2="555" y2="135"/>
+<path d="M 555 113 A 22 22 0 0 1 555 157 Z" fill="#d92d20" stroke="#1d2025" stroke-width="2"/>
+<text x="588" y="131" class="bold">E-stop</text>
+<text x="588" y="148" class="small">pressed: both open</text>
+
+<!-- What the panel reads -->
+<text x="30" y="300" class="small">Released: pole 2 is closed and holds GPIO6 low. Pressed, or a wire broken or unplugged:</text>
+<text x="30" y="318" class="small">R1 pulls GPIO6 high, and the panel reports the E-stop pressed. Fit R1 at the header.</text>
+</svg>

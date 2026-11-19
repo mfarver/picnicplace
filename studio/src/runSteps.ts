@@ -25,6 +25,7 @@ const ACTION: Record<NonNullable<RunState["current"]>["action"], string> = {
   picking: "picking",
   aligning: "aligning",
   placing: "placing",
+  checking: "checking where it landed",
 };
 
 /** "slot 3" for a feeder slot, the ID for a strip or tray. */
@@ -99,6 +100,12 @@ export function runSteps(
     } else if (nozzle) detail = `on ${nozzle}`;
     else if (item.status === "placed") {
       detail = `placed${item.nozzle ? ` by ${item.nozzle}` : ""}`;
+      const c = item.check;
+      if (c) {
+        const off = Math.hypot(c.dx, c.dy).toFixed(2);
+        const turn = `${c.turn >= 0 ? "+" : ""}${c.turn.toFixed(0)}°`;
+        detail += c.ok ? `, ${off} mm off, ${turn}` : `, landed ${off} mm off, ${turn}: look at it`;
+      }
     }
     else if (item.status === "pending") {
       detail = `${item.part_id ?? "no part number"}, ${sourceName(item.slot_id)}`;

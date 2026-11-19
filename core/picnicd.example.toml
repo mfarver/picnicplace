@@ -85,6 +85,9 @@ speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 
 # "auto": "bottom", with the top camera on each feeder's first pick in a run, until it
 #         has learned something, and after an empty pick or a part well off center.
 pick_correction = "top"
+# Look at each two-terminal chip with the top camera once a run places it, and pause if
+# it landed off its target (0.25 mm), turned (10 degrees), or is not there.
+# check_placements = false
 # Find heights by touch: with suction on, a nozzle steps down until the vacuum seals. The
 # board's top on a fiducial at the start of each run, and the top of the parts in each
 # feeder, strip, and tray on the first pick from it (kept with that feeder and part, and

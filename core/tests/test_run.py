@@ -572,7 +572,13 @@ def test_without_a_discard_location_the_operator_takes_the_part_off(lumen: TestC
         assert [x["nozzle"] for x in loads] == ["N2"]
 
         op = ok(s.wait(s.post("/api/v1/run/resume")))
-        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        # The run says how it went: one part the bottom camera could not find.
+        assert op["message"] == (
+            "finished: 4 placed, 1 blocked, 3 skipped (the bottom camera could not find 1 "
+            "of 5 parts)"
+        )
+        stats = lumen.get("/api/v1/run").json()["stats"]
+        assert (stats["alignments"], stats["failed_alignments"]) == (5, 1)
         assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
 
 
@@ -589,3 +595,50 @@ def test_run_a_job_on_a_lumenpnp_v4_2() -> None:
         op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
         assert check_landed(client, client.get("/api/v1/run").json()) == 4
+
+
+def test_placements_are_checked_with_the_top_camera(lumen: TestClient) -> None:
+    """With the check on, the top camera looks at each two-terminal chip once placed:
+    where it found it is kept with the placement."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        body = {"job_id": "demo", "skip_blocked": True, "check_placements": True}
+        op = ok(s.wait(s.post("/api/v1/run/start", body)))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        items = [i for i in lumen.get("/api/v1/run").json()["plan"]["items"] if i["check"]]
+        assert items, "no chip was checked"
+        for item in items:
+            check = item["check"]
+            assert check["ok"], item
+            assert math.hypot(check["dx"], check["dy"]) < 0.1 and abs(check["turn"]) < 4
+            assert check["picture"]
+            r = lumen.get(f"/api/v1/run/checks/{item['index']}")
+            assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
+        stats = lumen.get("/api/v1/run").json()["stats"]
+        assert stats["placed"] == 4 and stats["checked"] == len(items)
+        assert stats["picks"] >= 4 and stats["alignments"] >= 4
+        assert stats["empty_picks"] == stats["failed_alignments"] == stats["bad_placements"] == 0
+
+
+def test_a_part_that_lands_off_its_target_pauses_the_run() -> None:
+    """As a real 0603 did, dragged as the nozzle lifted: it landed 0.45 mm along its
+    length from its target. The check finds it there and pauses the run."""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_place_shift": {"N1": (0.0, 0.45), "N2": (0.0, 0.45)},
+            "check_placements": True,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        run = client.get("/api/v1/run").json()
+        assert run["status"] == "paused", (op, run["message"])
+        assert "landed 0.4" in run["error"] and "from where it was sent" in run["error"]
+        checked = [i for i in run["plan"]["items"] if i["check"]]
+        assert checked and not checked[-1]["check"]["ok"]
+        assert checked[-1]["check"]["dy"] == pytest.approx(0.45, abs=0.1)
+        assert checked[-1]["check"]["picture"]
+        assert run["stats"]["bad_placements"] == 1

@@ -3,8 +3,10 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from pydantic import Field
 
+from picnicplace.api.cameras import media_principal
 from picnicplace.api.context import Context, require, require_control
 from picnicplace.api.routes import MACHINE_ERRORS
 from picnicplace.auth import Permission
@@ -54,6 +56,13 @@ class StartRequest(PlanRequest):
             "one batch (a part on each nozzle that can take one)."
         ),
     )
+    check_placements: bool | None = Field(
+        default=None,
+        description=(
+            "Look at each two-terminal chip with the top camera once placed, pausing on one "
+            "off its target, turned, or not there. Empty: the config's choice."
+        ),
+    )
     record: bool = Field(
         default=False,
         description=(
@@ -93,7 +102,13 @@ async def start(runner: Runner, body: StartRequest) -> Operation:
     """Run a job's published revision (its newest unless one is given), set up as this
     machine keeps it: find the board's fiducials, then pick, align, and place every part."""
     return runner.start(
-        body.job_id, body.skip_blocked, body.pick_correction, body.record, body.step, body.revision
+        body.job_id,
+        body.skip_blocked,
+        body.pick_correction,
+        body.record,
+        body.step,
+        body.revision,
+        body.check_placements,
     )
 
 
@@ -153,3 +168,17 @@ async def stop(runner: Runner) -> RunState:
 async def skip(runner: Runner, index: int, body: SkipRequest) -> RunState:
     """Skip a placement, or take back a skip (or retry a failed placement)."""
     return runner.skip(index, body.skip)
+
+
+media = APIRouter(prefix="/api/v1/run", tags=["run"], dependencies=[Depends(media_principal)])
+"""Pictures, for <img> tags, which cannot send the token in a header."""
+
+
+@media.get("/checks/{index}", response_class=FileResponse)
+async def check_picture(runner: Runner, index: int) -> FileResponse:
+    """The current run's checked placement ``index`` (its plan item), as the top camera saw
+    it: where it was sent (orange) and where it was found (magenta)."""
+    path = runner.check_picture_path(index)
+    if path is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"no picture of placement {index}")
+    return FileResponse(path, media_type="image/jpeg")

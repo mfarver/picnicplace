@@ -23,6 +23,7 @@ import type {
   JobSummary,
   PickCorrection,
   RunItem,
+  RunState,
 } from "../api/types";
 import { CameraView } from "../components/CameraView";
 import { FixedFeederPanel } from "../components/FixedFeederPanel";
@@ -53,6 +54,7 @@ export function RunWorkspace() {
   const [skipBlocked, setSkipBlocked] = useState(false);
   const [record, setRecord] = useState(false);
   const [stepMode, setStepMode] = useState(false);
+  const [checkPlaced, setCheckPlaced] = useState<boolean | null>(null);
   const [boardCheck, setBoardCheck] = useState<BoardCheck | null>(null);
   const [checking, setChecking] = useState(0);
 
@@ -127,6 +129,7 @@ export function RunWorkspace() {
           pick_correction: correction,
           record,
           step: stepMode,
+          check_placements: checkPlaced,
         },
       }),
     );
@@ -239,6 +242,20 @@ export function RunWorkspace() {
                   onChange={(e) => setStepMode(e.target.checked)}
                 />
                 Start in step mode: pause once the board is found, before the first part
+              </label>
+              <label
+                className="check"
+                title={
+                  "Look at each two-terminal chip with the top camera once placed, and pause " +
+                  "if it landed off its target, turned, or is not there"
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={checkPlaced ?? false}
+                  onChange={(e) => setCheckPlaced(e.target.checked)}
+                />
+                Check each part with the top camera once placed
               </label>
               {blocked > 0 && (
                 <label className="check">
@@ -432,6 +449,7 @@ export function RunWorkspace() {
                 {current.error ?? current.message}
               </p>
             )}
+            {current && current.stats.picks > 0 && <RunStatsLine stats={current.stats} />}
             {paused &&
               Object.entries(current.held).map(([nozzle, index]) => (
                 <div key={nozzle} className="button-row run-held">
@@ -521,4 +539,23 @@ function sources(ids: string[]): string {
     ...fixed,
   ];
   return parts.join(", ");
+}
+
+/** How the run went: picks, finding parts on the bottom camera, and placements checked. */
+function RunStatsLine({ stats }: { stats: RunState["stats"] }) {
+  const parts = [
+    `${stats.picks} picks` + (stats.empty_picks ? `, ${stats.empty_picks} came up empty` : ""),
+    `${stats.alignments} found by the bottom camera` +
+      (stats.failed_alignments ? `, ${stats.failed_alignments} not found (discarded)` : ""),
+  ];
+  if (stats.checked) {
+    parts.push(
+      `${stats.checked} placements checked` +
+        (stats.bad_placements ? `, ${stats.bad_placements} off target` : ", all on target"),
+    );
+  }
+  const trouble = stats.empty_picks + stats.failed_alignments + stats.bad_placements > 0;
+  return (
+    <p className={`run-stats${trouble ? " text-warn" : " text-muted"}`}>{parts.join(" · ")}</p>
+  );
 }

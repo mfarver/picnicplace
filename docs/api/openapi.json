@@ -5990,6 +5990,50 @@
         "title": "Placement",
         "type": "object"
       },
+      "PlacementCheck": {
+        "description": "Where the top camera found a part just placed, against where it was sent.",
+        "properties": {
+          "dx": {
+            "description": "Machine X from where it was sent, mm.",
+            "title": "Dx",
+            "type": "number"
+          },
+          "dy": {
+            "title": "Dy",
+            "type": "number"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "picture": {
+            "default": false,
+            "description": "A picture of it is kept (GET /api/v1/run/checks/{index}).",
+            "title": "Picture",
+            "type": "boolean"
+          },
+          "score": {
+            "description": "How well the chip's pattern matched, -1 to 1.",
+            "title": "Score",
+            "type": "number"
+          },
+          "turn": {
+            "description": "Degrees from the angle asked for.",
+            "title": "Turn",
+            "type": "number"
+          }
+        },
+        "required": [
+          "dx",
+          "dy",
+          "turn",
+          "score",
+          "ok",
+          "picture"
+        ],
+        "title": "PlacementCheck",
+        "type": "object"
+      },
       "PlacementState": {
         "properties": {
           "loads": {
@@ -6730,6 +6774,17 @@
       },
       "RunItem": {
         "properties": {
+          "check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlacementCheck"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the top camera found the part after placing it."
+          },
           "copy_id": {
             "anyOf": [
               {
@@ -6848,7 +6903,8 @@
           "status",
           "note",
           "nozzle",
-          "discards"
+          "discards",
+          "check"
         ],
         "title": "RunItem",
         "type": "object"
@@ -6891,6 +6947,12 @@
             ],
             "description": "Nozzle height at the board's top, found by touch on a fiducial at the start of the run. Empty if not measured: the job's or the profile's is used.",
             "title": "Board Z"
+          },
+          "check_placements": {
+            "default": false,
+            "description": "Look at each part with the top camera once placed, pausing on a bad one.",
+            "title": "Check Placements",
+            "type": "boolean"
           },
           "current": {
             "anyOf": [
@@ -7018,6 +7080,9 @@
             "title": "Started At",
             "type": "string"
           },
+          "stats": {
+            "$ref": "#/components/schemas/RunStats"
+          },
           "status": {
             "enum": [
               "running",
@@ -7046,6 +7111,8 @@
           "pause_requested",
           "stop_requested",
           "pick_correction",
+          "check_placements",
+          "stats",
           "located",
           "recording",
           "held",
@@ -7056,6 +7123,64 @@
           "remaining"
         ],
         "title": "RunState",
+        "type": "object"
+      },
+      "RunStats": {
+        "description": "What went wrong how often in a run, to tell how well it went.",
+        "properties": {
+          "alignments": {
+            "default": 0,
+            "description": "Parts the bottom camera looked for.",
+            "title": "Alignments",
+            "type": "integer"
+          },
+          "bad_placements": {
+            "default": 0,
+            "description": "Checked placements off their target, turned, or not found.",
+            "title": "Bad Placements",
+            "type": "integer"
+          },
+          "checked": {
+            "default": 0,
+            "description": "Placements checked with the top camera.",
+            "title": "Checked",
+            "type": "integer"
+          },
+          "empty_picks": {
+            "default": 0,
+            "description": "Picks that came up without a part.",
+            "title": "Empty Picks",
+            "type": "integer"
+          },
+          "failed_alignments": {
+            "default": 0,
+            "description": "Parts the bottom camera could not find (discarded).",
+            "title": "Failed Alignments",
+            "type": "integer"
+          },
+          "picks": {
+            "default": 0,
+            "description": "Picks tried.",
+            "title": "Picks",
+            "type": "integer"
+          },
+          "placed": {
+            "default": 0,
+            "description": "Parts placed.",
+            "title": "Placed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "picks",
+          "empty_picks",
+          "alignments",
+          "failed_alignments",
+          "placed",
+          "checked",
+          "bad_placements"
+        ],
+        "title": "RunStats",
         "type": "object"
       },
       "SerialPort": {
@@ -7559,6 +7684,18 @@
       },
       "StartRequest": {
         "properties": {
+          "check_placements": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Look at each two-terminal chip with the top camera once placed, pausing on one off its target, turned, or not there. Empty: the config's choice.",
+            "title": "Check Placements"
+          },
           "job_id": {
             "title": "Job Id",
             "type": "string"
@@ -8599,7 +8736,8 @@
               "finding_feeder",
               "picking",
               "aligning",
-              "placing"
+              "placing",
+              "checking"
             ],
             "title": "Action",
             "type": "string"
@@ -15522,6 +15660,65 @@
           }
         ],
         "summary": "Check Board",
+        "tags": [
+          "run"
+        ]
+      }
+    },
+    "/api/v1/run/checks/{index}": {
+      "get": {
+        "description": "The current run's checked placement ``index`` (its plan item), as the top camera saw\nit: where it was sent (orange) and where it was found (magenta).",
+        "operationId": "check_picture_api_v1_run_checks__index__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "title": "Index",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Check Picture",
         "tags": [
           "run"
         ]

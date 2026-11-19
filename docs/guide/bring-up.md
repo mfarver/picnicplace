@@ -311,6 +311,16 @@ effect at once. The reset button next to one forgets it.
       placing nothing (it works even with every part turned off). Check the offset and
       turn look right, and use the button beside each fiducial to look at it under the
       camera's crosshair.
+- [ ] To have each part looked at once placed, tick **Check each part with the top
+      camera once placed** (or set `check_placements` in the config). After placing a
+      two-terminal chip (a resistor, a capacitor, an LED), the top camera finds it, and
+      the step list says how far off and how turned it landed. One more than 0.25 mm off,
+      turned more than 10°, or not found pauses the run: look at it, fix or remove it,
+      and resume: its line in the step list has a picture of it (click to enlarge), with
+      where it was sent in orange and where it landed in magenta. It catches a part off
+      its pads, standing up, or gone; across a part's
+      width it can be some 0.1 mm off, so it is not a measure of accuracy to a few
+      hundredths.
 - [ ] Tick **Start in step mode** and **Start**: the run scans the feeders (a feeder
       moved since the checks is picked from where it is now), finds the board again,
       and pauses before the first part. After finding the board, a nozzle sniffs its top on

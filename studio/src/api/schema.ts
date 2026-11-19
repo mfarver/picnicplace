@@ -1905,6 +1905,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/run/checks/{index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check Picture
+         * @description The current run's checked placement ``index`` (its plan item), as the top camera saw
+         *     it: where it was sent (orange) and where it was found (magenta).
+         */
+        get: operations["check_picture_api_v1_run_checks__index__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/run/items/{index}": {
         parameters: {
             query?: never;
@@ -5055,6 +5076,37 @@ export interface components {
             /** Y */
             y: number;
         };
+        /**
+         * PlacementCheck
+         * @description Where the top camera found a part just placed, against where it was sent.
+         */
+        PlacementCheck: {
+            /**
+             * Dx
+             * @description Machine X from where it was sent, mm.
+             */
+            dx: number;
+            /** Dy */
+            dy: number;
+            /** Ok */
+            ok: boolean;
+            /**
+             * Picture
+             * @description A picture of it is kept (GET /api/v1/run/checks/{index}).
+             * @default false
+             */
+            picture: boolean;
+            /**
+             * Score
+             * @description How well the chip's pattern matched, -1 to 1.
+             */
+            score: number;
+            /**
+             * Turn
+             * @description Degrees from the angle asked for.
+             */
+            turn: number;
+        };
         /** PlacementState */
         PlacementState: {
             /** Loads */
@@ -5424,6 +5476,8 @@ export interface components {
         };
         /** RunItem */
         RunItem: {
+            /** @description Where the top camera found the part after placing it. */
+            check: components["schemas"]["PlacementCheck"] | null;
             /** Copy Id */
             copy_id: string | null;
             /**
@@ -5501,6 +5555,12 @@ export interface components {
              * @description Nozzle height at the board's top, found by touch on a fiducial at the start of the run. Empty if not measured: the job's or the profile's is used.
              */
             board_z: number | null;
+            /**
+             * Check Placements
+             * @description Look at each part with the top camera once placed, pausing on a bad one.
+             * @default false
+             */
+            check_placements: boolean;
             /** @description The step under way. Kept when the run pauses on a problem, to show where it stopped; empty between batches and when the run ends. */
             current: components["schemas"]["picnicplace__job__run__RunStep"] | null;
             /**
@@ -5555,6 +5615,7 @@ export interface components {
              * Format: date-time
              */
             started_at: string;
+            stats: components["schemas"]["RunStats"];
             /**
              * Status
              * @enum {string}
@@ -5565,6 +5626,54 @@ export interface components {
              * @default false
              */
             stop_requested: boolean;
+        };
+        /**
+         * RunStats
+         * @description What went wrong how often in a run, to tell how well it went.
+         */
+        RunStats: {
+            /**
+             * Alignments
+             * @description Parts the bottom camera looked for.
+             * @default 0
+             */
+            alignments: number;
+            /**
+             * Bad Placements
+             * @description Checked placements off their target, turned, or not found.
+             * @default 0
+             */
+            bad_placements: number;
+            /**
+             * Checked
+             * @description Placements checked with the top camera.
+             * @default 0
+             */
+            checked: number;
+            /**
+             * Empty Picks
+             * @description Picks that came up without a part.
+             * @default 0
+             */
+            empty_picks: number;
+            /**
+             * Failed Alignments
+             * @description Parts the bottom camera could not find (discarded).
+             * @default 0
+             */
+            failed_alignments: number;
+            /**
+             * Picks
+             * @description Picks tried.
+             * @default 0
+             */
+            picks: number;
+            /**
+             * Placed
+             * @description Parts placed.
+             * @default 0
+             */
+            placed: number;
         };
         /** SerialPort */
         SerialPort: {
@@ -5753,6 +5862,11 @@ export interface components {
         };
         /** StartRequest */
         StartRequest: {
+            /**
+             * Check Placements
+             * @description Look at each two-terminal chip with the top camera once placed, pausing on one off its target, turned, or not there. Empty: the config's choice.
+             */
+            check_placements?: boolean | null;
             /** Job Id */
             job_id: string;
             /**
@@ -6216,7 +6330,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "scanning" | "finding_fiducials" | "measuring_board" | "finding_feeder" | "picking" | "aligning" | "placing";
+            action: "scanning" | "finding_fiducials" | "measuring_board" | "finding_feeder" | "picking" | "aligning" | "placing" | "checking";
             /**
              * Index
              * @description The placement, for stage 'item'.
@@ -10482,6 +10596,38 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_picture_api_v1_run_checks__index__get: {
+        parameters: {
+            query?: {
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

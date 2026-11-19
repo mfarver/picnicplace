@@ -3043,3 +3043,59 @@ code,
 .trained-table {
   margin-top: var(--space-2);
 }
+
+/* --- Checked placements -------------------------------------------------------------- */
+
+.run-step-thumb {
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: #000;
+  cursor: zoom-in;
+  line-height: 0;
+}
+
+.run-step-thumb img {
+  display: block;
+  width: calc(var(--run-step-h, 30px) - 4px);
+  height: calc(var(--run-step-h, 30px) - 4px);
+  min-width: 26px;
+  min-height: 26px;
+  object-fit: cover;
+}
+
+.run-check-view {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(0, 0, 0, 0.72);
+  list-style: none;
+  cursor: zoom-out;
+}
+
+.run-check-view figure {
+  margin: 0;
+  max-width: min(720px, 100%);
+}
+
+.run-check-view img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+
+.run-check-view figcaption {
+  margin-top: var(--space-2);
+  color: #fff;
+}
+
+.run-stats {
+  margin: 0 0 var(--space-2);
+  font-size: 0.9rem;
+}

@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { mediaUrl } from "../api/client";
 import type { RunItem, RunState } from "../api/types";
 import { focusIndex, runSteps, type RunStepRow } from "../runSteps";
 
@@ -48,6 +49,9 @@ export function RunSteps({
 
   useFollow(list, focusKey, around === undefined);
   const fit = useFit(list, rows.length, large);
+  const [enlarged, setEnlarged] = useState<RunItem | null>(null);
+  const picture = (item: RunItem) =>
+    mediaUrl(`/api/v1/run/checks/${item.index}`, { at: run?.started_at ?? "" });
 
   return (
     <ol className={`run-steps${large ? " run-steps-large" : ""}`} ref={list} style={fit}>
@@ -68,11 +72,32 @@ export function RunSteps({
           <StepIcon row={r} running={run?.status === "running"} size={large ? 20 : 14} />
           <span className="run-step-label">{r.label}</span>
           <span className="run-step-detail">{r.detail}</span>
+          {r.item?.check && !r.item.check.ok && r.item.check.picture && (
+            <button
+              type="button"
+              className="run-step-thumb"
+              title={`${r.item.ref} as the top camera saw it: click to enlarge`}
+              onClick={() => setEnlarged(r.item ?? null)}
+            >
+              <img src={picture(r.item)} alt={`${r.item.ref} where it landed`} />
+            </button>
+          )}
           {run && r.item && onSkip && (
             <SkipButton item={r.item} run={run} canSignal={canSignal} onSkip={onSkip} />
           )}
         </li>
       ))}
+      {enlarged && (
+        <li className="run-check-view" onClick={() => setEnlarged(null)}>
+          <figure>
+            <img src={picture(enlarged)} alt={`${enlarged.ref} where it landed`} />
+            <figcaption>
+              <strong>{enlarged.ref}</strong>: where it was sent (orange) and where it landed
+              (magenta). Nudge it onto its pads, then resume. Click to close.
+            </figcaption>
+          </figure>
+        </li>
+      )}
     </ol>
   );
 }

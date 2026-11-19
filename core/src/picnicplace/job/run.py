@@ -54,11 +54,14 @@ import logging
 import math
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
+import cv2
 from pydantic import Field, computed_field
 
 from picnicplace.calibration import current, run_issues
+from picnicplace.camera.source import Image
 from picnicplace.camera.synthetic import BoardScene
 from picnicplace.feeders.service import FeederService, FeedersState, rotate
 from picnicplace.feeders.setup import PickCorrection
@@ -79,6 +82,7 @@ from picnicplace.machine.service import MachineService
 from picnicplace.machine.sniff import floor_message, sniff
 from picnicplace.placement import MispickError, PlacementService
 from picnicplace.schemas import Operation, WireModel
+from picnicplace.vision.placed import PlacedChip, check_picture, chip_offset, image_turn
 
 log = logging.getLogger(__name__)
 
@@ -97,6 +101,14 @@ FIDUCIAL_DIAMETER_MM = 1.0
 SIM_DECOY_SIZE = 0.7
 """A simulated decoy's size, as a fraction of its fiducial's (see ``sim_decoys``)."""
 FIDUCIAL_RESIDUAL_MM = 0.25
+CHECK_OFF_MM = 0.25
+"""Checking placements: a part found further than this from where it was sent..."""
+CHECK_TURN = 10.0
+"""...or turned more than this many degrees from the angle asked for..."""
+CHECK_SCORE = 0.5
+"""...or not found (the pattern matched worse than this) pauses the run, to be looked at:
+a real 0603 that landed 0.43 mm along its length, one end lifted, would have stood up when
+soldered."""
 """Fiducials found further than this from the fit mean the board, or one of them, is
 not where the job says: the run stops before placing anything."""
 
@@ -125,6 +137,39 @@ class RunItem(WireModel):
     note: str = Field(default="", description="Why it is blocked, skipped, or failed.")
     nozzle: str | None = Field(default=None, description="The nozzle that placed it.")
     discards: int = Field(default=0, description="Parts discarded after bottom vision failed.")
+    check: "PlacementCheck | None" = Field(
+        default=None, description="Where the top camera found the part after placing it."
+    )
+
+
+class PlacementCheck(WireModel):
+    """Where the top camera found a part just placed, against where it was sent."""
+
+    dx: float = Field(description="Machine X from where it was sent, mm.")
+    dy: float
+    turn: float = Field(description="Degrees from the angle asked for.")
+    score: float = Field(description="How well the chip's pattern matched, -1 to 1.")
+    ok: bool
+    picture: bool = Field(
+        default=False,
+        description="A picture of it is kept (GET /api/v1/run/checks/{index}).",
+    )
+
+
+class RunStats(WireModel):
+    """What went wrong how often in a run, to tell how well it went."""
+
+    picks: int = Field(default=0, description="Picks tried.")
+    empty_picks: int = Field(default=0, description="Picks that came up without a part.")
+    alignments: int = Field(default=0, description="Parts the bottom camera looked for.")
+    failed_alignments: int = Field(
+        default=0, description="Parts the bottom camera could not find (discarded)."
+    )
+    placed: int = Field(default=0, description="Parts placed.")
+    checked: int = Field(default=0, description="Placements checked with the top camera.")
+    bad_placements: int = Field(
+        default=0, description="Checked placements off their target, turned, or not found."
+    )
 
 
 class PartNeed(WireModel):
@@ -207,6 +252,7 @@ StepAction = Literal[
     "picking",
     "aligning",
     "placing",
+    "checking",
 ]
 
 
@@ -239,6 +285,11 @@ class RunState(WireModel):
     pause_requested: bool = False
     stop_requested: bool = False
     pick_correction: PickCorrection = "top"
+    check_placements: bool = Field(
+        default=False,
+        description="Look at each part with the top camera once placed, pausing on a bad one.",
+    )
+    stats: RunStats = Field(default_factory=RunStats)
     """How picks are kept centered (see the config's machine.pick_correction)."""
     located: list[str] = Field(
         default_factory=list[str],
@@ -607,6 +658,10 @@ class JobRunner:
         self.record_runs = False
         """Record every run (from the config)."""
         self.sniff_board = False
+        self.check_placements = False
+        """Look at each part with the top camera once placed (from the config)."""
+        self.checks_dir: Path | None = None
+        """Where pictures of the current run's checked placements are kept."""
         """Find the board's top by touch on a fiducial at the start of each run (from the
         config)."""
         self._sim_error = sim_board_error if feeders.sim_parts is not None else None
@@ -676,9 +731,11 @@ class JobRunner:
         record: bool = False,
         step: bool = False,
         revision: int | None = None,
+        check_placements: bool | None = None,
     ) -> Operation:
         """Start a run. With ``step``, it pauses once the board is found, before the first
-        part, and each step then places one batch."""
+        part, and each step then places one batch. ``check_placements``: look at each part
+        once placed (default: the config's)."""
         if self._active:
             raise MachineBusyError("a job is running: pause or stop it first")
         job, parts, plan = self._plan(job_id, revision)
@@ -711,10 +768,16 @@ class JobRunner:
             plan=plan,
             fix=None,
             pick_correction=pick_correction or self._placement.pick_correction,
+            check_placements=self.check_placements
+            if check_placements is None
+            else check_placements,
             started_at=datetime.now(UTC),
         )
         self._run.pause_requested = step
         self._step = step
+        if self.checks_dir is not None and self.checks_dir.is_dir():
+            for old in self.checks_dir.glob("*.jpg"):
+                old.unlink(missing_ok=True)
         self._picked = set()
         if self._sim_error is not None:
             self._load_sim_board(job, parts)
@@ -913,7 +976,18 @@ class JobRunner:
             counts[item.status] = counts.get(item.status, 0) + 1
         order = ("placed", "pending", "failed", "blocked", "skipped")
         names = {"pending": "to go"}
-        return ", ".join(f"{counts[k]} {names.get(k, k)}" for k in order if counts.get(k))
+        text = ", ".join(f"{counts[k]} {names.get(k, k)}" for k in order if counts.get(k))
+        st = run.stats
+        trouble: list[str] = []
+        if st.empty_picks:
+            trouble.append(f"{st.empty_picks} of {st.picks} picks came up empty")
+        if st.failed_alignments:
+            trouble.append(
+                f"the bottom camera could not find {st.failed_alignments} of {st.alignments} parts"
+            )
+        if st.bad_placements:
+            trouble.append(f"{st.bad_placements} of {st.checked} checked placements were off")
+        return text + (f" ({'; '.join(trouble)})" if trouble else "")
 
     async def _rescan(self, run: RunState) -> None:
         """Scan the feeders, and take each placement still to do from wherever its part is
@@ -1116,6 +1190,7 @@ class JobRunner:
             run.message = f"{nozzle_id} picking {item.ref} from {_source(item.slot_id)}"
             run.current = RunStep(stage="item", action="picking", index=index, nozzle=nozzle_id)
             for attempt in range(1, PICK_ATTEMPTS + 1):
+                run.stats.picks += 1
                 try:
                     await self._placement.pick(
                         item.slot_id,
@@ -1127,6 +1202,7 @@ class JobRunner:
                     self._picked.add(item.slot_id)
                     break
                 except MispickError as e:
+                    run.stats.empty_picks += 1
                     if attempt == PICK_ATTEMPTS:
                         where = _source(item.slot_id)
                         item.note = f"picked nothing {PICK_ATTEMPTS} times from {where}"
@@ -1146,9 +1222,11 @@ class JobRunner:
             nozzle = self._machine.nozzle(nozzle_id)
             run.message = f"{nozzle_id} aligning {item.ref}"
             run.current = RunStep(stage="item", action="aligning", index=index, nozzle=nozzle_id)
+            run.stats.alignments += 1
             try:
                 await self._placement.align(nozzle)
             except VisionError as e:
+                run.stats.failed_alignments += 1
                 if not self._placement.can_discard():
                     item.discards += 1
                     item.note = f"bottom vision failed ({e}): take the part off {nozzle_id}"
@@ -1180,7 +1258,128 @@ class JobRunner:
             await self._placement.place(nozzle, target, item.rotation + run.fix.angle, board)
             del run.held[nozzle_id]
             item.status, item.note, item.nozzle = "placed", "", nozzle_id
+            run.stats.placed += 1
             self._machine.recorder.event("run.placed", ref=item.ref, index=index, at=target)
+            if run.check_placements:
+                run.message = f"checking {item.ref}"
+                run.current = RunStep(
+                    stage="item", action="checking", index=index, nozzle=nozzle_id
+                )
+                await self._check_placed(run, item, target, item.rotation + run.fix.angle)
+
+    async def _check_placed(
+        self, run: RunState, item: RunItem, target: Point, rotation: float
+    ) -> None:
+        """Look at a part just placed with the top camera, keep where it was found with the
+        item, and pause the run if it is off, turned, or not there (``CHECK_OFF_MM``,
+        ``CHECK_TURN``, ``CHECK_SCORE``). Only two-terminal chips with a body are looked
+        for (``vision.placed``); others are left unchecked."""
+        footprint = self._parts.find_footprint(item.footprint_id) if self._parts else None
+        if footprint is None or len(footprint.pads) != 2 or footprint.body is None:
+            return
+        machine = self._machine
+        camera = machine.top_camera()
+        await machine.move_camera_to(target.x, target.y)
+        frame = await machine.frame(camera.id)
+        h, w = frame.image.shape[:2]
+        mm_x, mm_y = camera.field_of_view.x / w, camera.field_of_view.y / h
+        body = footprint.body
+        length, width = max(body.x, body.y), min(body.x, body.y)
+        # The chip's long axis in the machine, then as the picture shows it.
+        along = rotation + (90.0 if body.y > body.x else 0.0)
+        ax, ay = machine.image_to_machine(camera, 1.0, 0.0)
+        bx, by = machine.image_to_machine(camera, 0.0, 1.0)
+        det = ax * by - bx * ay
+        a = math.radians(along)
+        mx, my = math.cos(a), math.sin(a)
+        right, down = (by * mx - bx * my) / det, (-ay * mx + ax * my) / det
+        expected = image_turn(right, down)
+        found: PlacedChip | None = await machine.recorder.vision(
+            "find_placed_chip",
+            frame.image,
+            mm_x,
+            mm_y,
+            length,
+            width,
+            expected,
+            camera=camera.id,
+            position=dict(machine.driver.position),
+            ref=item.ref,
+        )
+        run.stats.checked += 1
+        good = found is not None and found.score >= CHECK_SCORE
+        picture = self._save_check(
+            item.index,
+            check_picture(
+                frame.image, mm_x, mm_y, length, width, expected, found if good else None
+            ),
+        )
+        if found is None or not good:
+            run.stats.bad_placements += 1
+            item.check = PlacementCheck(
+                dx=0.0,
+                dy=0.0,
+                turn=0.0,
+                score=found.score if found else -1.0,
+                ok=False,
+                picture=picture,
+            )
+            raise RunError(
+                f"{item.ref}: the top camera did not find it where it was placed: look at "
+                "it (it may have moved, stood up, or come away with the nozzle), fix or "
+                "remove it, and resume"
+            )
+        r, d = chip_offset(found, w, h, mm_x, mm_y)
+        dx, dy = machine.image_to_machine(camera, r, d)
+        f = math.radians(found.angle)
+        fx, fy = machine.image_to_machine(camera, math.cos(f), -math.sin(f))
+        turn = (math.degrees(math.atan2(fy, fx)) - along + 90.0) % 180.0 - 90.0
+        off = math.hypot(dx, dy)
+        ok = off <= CHECK_OFF_MM and abs(turn) <= CHECK_TURN
+        item.check = PlacementCheck(
+            dx=round(dx, 3),
+            dy=round(dy, 3),
+            turn=round(turn, 1),
+            score=round(found.score, 2),
+            ok=ok,
+            picture=picture,
+        )
+        machine.recorder.event("run.checked", ref=item.ref, check=item.check)
+        if not ok:
+            run.stats.bad_placements += 1
+            raise RunError(
+                f"{item.ref} landed {off:.2f} mm from where it was sent (X {dx:+.2f}, Y "
+                f"{dy:+.2f}), turned {turn:+.0f} degrees: look at it (off its pads, it may "
+                "stand up when soldered), fix or remove it, and resume"
+            )
+
+    def _save_check(self, index: int, picture: Image) -> bool:
+        """Keep a checked placement's picture, for the operator; False if there is
+        nowhere to keep it, or it could not be saved."""
+        if self.checks_dir is None:
+            return False
+        try:
+            self.checks_dir.mkdir(parents=True, exist_ok=True)
+            ok, data = cv2.imencode(".jpg", picture, [cv2.IMWRITE_JPEG_QUALITY, 90])
+            if not ok:
+                return False
+            (self.checks_dir / f"{index}.jpg").write_bytes(data.tobytes())
+        except OSError as e:
+            log.warning("could not keep the picture of a checked placement: %s", e)
+            return False
+        return True
+
+    def check_picture_path(self, index: int) -> Path | None:
+        """Where the picture of the current run's checked placement ``index`` is, if
+        kept."""
+        run = self._run
+        if self.checks_dir is None or run is None:
+            return None
+        items = run.plan.items
+        if not 0 <= index < len(items) or items[index].check is None:
+            return None
+        path = self.checks_dir / f"{index}.jpg"
+        return path if path.is_file() else None
 
     async def _park(self) -> str:
         """Move the head out of the way of an operator refilling a strip or tray: to the

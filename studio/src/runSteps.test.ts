@@ -90,6 +90,18 @@ describe("runSteps", () => {
     expect(focusIndex(rows)).toBe(3);
   });
 
+  it("says where a checked part landed", () => {
+    const good = { dx: 0.03, dy: -0.04, turn: 1.2, score: 0.9, ok: true, picture: true };
+    const bad = { dx: -0.12, dy: 0.41, turn: 9, score: 0.8, ok: false, picture: true };
+    const items = [
+      item(0, "R1", "placed", { nozzle: "N1", check: bad }),
+      item(1, "R2", "placed", { nozzle: "N2", check: good }),
+    ];
+    const rows = runSteps(items, run(items, {}), 0, false);
+    expect(rows[1]).toMatchObject({ detail: "placed by N1, landed 0.43 mm off, +9°: look at it" });
+    expect(rows[2]).toMatchObject({ detail: "placed by N2, 0.05 mm off, +1°" });
+  });
+
   it("shows the board's top once it is found by touch", () => {
     const items = [item(0, "R1", "pending")];
     const measuring = run(items, {

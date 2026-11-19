@@ -40,6 +40,7 @@ NOZZLE_BODY = (62, 62, 66)
 NOZZLE_BORE = (20, 20, 20)
 HEAD_UNDERSIDE = (25, 25, 28)
 PAPER = (235, 238, 240)
+GOLD = (70, 170, 215)  # ENIG copper: little blue (BGR)
 
 SHIFT = 4
 """Fixed-point bits for subpixel drawing."""
@@ -497,6 +498,8 @@ def _shape(c: _Canvas, img: Image, x: float, y: float, angle: float, s: PartShap
     a footprint, a 0603 chip."""
     if s.disc is not None:
         c.circle(img, x, y, s.disc / 2, PAPER)
+        if s.opening is not None:
+            c.circle(img, x, y, s.opening / 2, GOLD)
         return
     if s.body is None and not s.pads:
         _chip(c, img, x, y, angle)

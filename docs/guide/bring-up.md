@@ -127,7 +127,13 @@ kept in `calibration.json` in the data directory, and the pages you confirm in
       1 mm: the picture is about as sharp over that much;
     - scans the feeders and calibrates their rails, if there are feeders at each rail's
       ends (otherwise each feeder's fiducial is found on its first pick).
-2. **Paper disc on the datum board.** Fit a small tip on each nozzle: a tip seals on the
+2. **Token on the datum board.** Lay a [calibration token](../hardware/calibration-token.md)
+   flat on the datum board, opening up, with the N045 on one nozzle and the N08 on the
+   other. The top camera tells the token from paper by its opening, the gold copper in its
+   middle, and finds it by the opening's center from then on. A tip must sit inside the
+   2.5 mm opening with 0.5 mm of bare copper all round, so only those two fit: any other
+   is asked to be changed, as below. Without a token, a paper disc does, as follows. Fit
+   a small tip on each nozzle: a tip seals on the
    disc only with a millimeter of paper all round its face. A LumenPnP comes with one tip
    of each size, so fit a different one on each, such as the N045 on the left and the
    N08 on the right. If a tip is too big for the disc (an N24 on a LumenPnP's 4.9 mm

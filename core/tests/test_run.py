@@ -10,6 +10,7 @@ the parts really landed against where the simulated board really wants them.
 
 import math
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -616,6 +617,9 @@ def test_placements_are_checked_with_the_top_camera(lumen: TestClient) -> None:
             check = item["check"]
             assert check["ok"], item
             assert math.hypot(check["dx"], check["dy"]) < 0.1 and abs(check["turn"]) < 4
+            # Its pads were seen where the board's fit puts them, and it lies on them.
+            assert check["on_pads"] >= 0.9, item
+            assert math.hypot(check["pads_dx"], check["pads_dy"]) < 0.05, item
             assert check["picture"]
             r = lumen.get(f"/api/v1/run/checks/{item['index']}")
             assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
@@ -626,8 +630,9 @@ def test_placements_are_checked_with_the_top_camera(lumen: TestClient) -> None:
 
 
 def test_a_part_that_lands_off_its_target_pauses_the_run() -> None:
-    """As a real 0603 did, dragged as the nozzle lifted: it landed 0.45 mm along its
-    length from its target. The check finds it there and pauses the run."""
+    """As a real 0603 did, dragged as the nozzle lifted: it landed 0.45 mm from its
+    target. The check finds it off its pads, which are where they should be, and pauses
+    the run."""
     config = fast_config(
         machine={
             "profile": "lumenpnp-v4.1",
@@ -641,12 +646,63 @@ def test_a_part_that_lands_off_its_target_pauses_the_run() -> None:
         op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
         run = client.get("/api/v1/run").json()
         assert run["status"] == "paused", (op, run["message"])
-        assert "landed 0.4" in run["error"] and "from where it was sent" in run["error"]
+        assert "% of an end on its pad" in run["error"], run["error"]
+        assert "turned" not in run["error"] and "moved" not in run["error"]
         checked = [i for i in run["plan"]["items"] if i["check"]]
-        assert checked and not checked[-1]["check"]["ok"]
-        assert checked[-1]["check"]["dy"] == pytest.approx(0.45, abs=0.1)
-        assert checked[-1]["check"]["picture"]
+        check = checked[-1]["check"]
+        assert checked and not check["ok"] and check["on_pads"] < 0.75
+        assert check["dy"] == pytest.approx(0.45, abs=0.1)
+        assert math.hypot(check["pads_dx"], check["pads_dy"]) < 0.05
+        assert check["picture"]
         assert run["stats"]["bad_placements"] == 1
+
+
+def test_a_board_that_moves_mid_run_is_found_again() -> None:
+    """As a real board did, knocked by the parts pressed onto its tape: after two parts it
+    slides 0.3 mm. The next part lands where the board was; its check finds the pads moved
+    and pauses. Once that part is set right by hand, resuming finds the board again, and
+    the rest land on their pads."""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_board_bump": (2, 0.0, 0.3),
+            "check_placements": True,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        run = client.get("/api/v1/run").json()
+        assert run["status"] == "paused", (op, run["message"])
+        assert "the board seems to have moved" in run["error"], run["error"]
+        assert "finds the fiducials again" in run["error"]
+        checked = [i for i in run["plan"]["items"] if i["check"]]
+        assert len(checked) == 3
+        last = checked[-1]["check"]
+        assert last["pads_dx"] == pytest.approx(0.0, abs=0.05)
+        assert last["pads_dy"] == pytest.approx(0.3, abs=0.05)
+        before = run["fix"]
+        # Set the part that landed where the board was right, as the operator would.
+        item = RunItem.model_validate(checked[-1])
+        truth = runner(client).sim_target(item)
+        sim = client.app.state.ctx.feeders.sim_parts  # type: ignore[attr-defined]
+        assert truth is not None and sim is not None
+        target, _ = truth
+        i = min(
+            range(len(sim.placed)),
+            key=lambda k: math.hypot(sim.placed[k].x - target.x, sim.placed[k].y - target.y),
+        )
+        sim.placed[i] = replace(sim.placed[i], x=target.x, y=target.y)
+        op = ok(s.wait(s.post("/api/v1/run/resume", {})))
+        run = client.get("/api/v1/run").json()
+        assert run["status"] == "finished", run["message"]
+        assert run["fix"]["dy"] - before["dy"] == pytest.approx(0.3, abs=0.05)
+        # All four sit where the board, as it now lies, wants them; the last (not a
+        # two-terminal chip, so not checked) was placed after the board was found again.
+        assert check_landed(client, run) == 4
+        others = [i["check"] for i in run["plan"]["items"] if i["check"] and i["ref"] != item.ref]
+        assert len(others) == 2 and all(c["ok"] and c["on_pads"] >= 0.9 for c in others)
 
 
 def test_parts_are_turned_to_their_place_angle_before_the_bottom_camera_looks(

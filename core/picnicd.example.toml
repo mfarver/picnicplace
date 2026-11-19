@@ -32,6 +32,9 @@ sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times fast
 # board fiducials to find. Set them to zero for a perfect machine.
 # sim_home_error = [0.3, -0.2]
 # sim_board_error = [0.6, -0.4, 0.5]
+# Simulator: once this many parts are placed in a run, the board slides by X and Y mm,
+# with the parts on it, as a board knocked by the parts pressed onto its tape would.
+# sim_board_bump = [2, 0.0, 0.3]
 # Simulator and fake firmware: the feeder slots (by number) that hold a Photon feeder.
 # sim_feeders = [1, 2, 3, 4, 5, 26]
 # Simulator: feeder rails off the profile's place, to try rail calibration (by feeder bank
@@ -85,8 +88,11 @@ speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 
 # "auto": "bottom", with the top camera on each feeder's first pick in a run, until it
 #         has learned something, and after an empty pick or a part well off center.
 pick_correction = "top"
-# Look at each two-terminal chip with the top camera once a run places it, and pause if
-# it landed off its target (0.25 mm), turned (10 degrees), or is not there.
+# Look at each two-terminal chip with the top camera once a run places it, with the
+# board's pads under it, and pause if less than 75% of an end is on its pad (or, with the
+# pads not seen, it landed 0.25 mm off its target), it is turned 10 degrees, or it is not
+# there; and if its pads are 0.15 mm from where the board's fiducials put them (the board
+# moved: the run finds the fiducials again on resume).
 # check_placements = false
 # Find heights by touch: with suction on, a nozzle steps down until the vacuum seals. The
 # board's top on a fiducial at the start of each run, and the top of the parts in each

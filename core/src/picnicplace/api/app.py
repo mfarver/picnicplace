@@ -221,6 +221,7 @@ def create_app(
         ctx.placement.place_press = config.machine.place_press
         ctx.runner.sniff_board = config.machine.sniff_heights
         ctx.runner.check_placements = config.machine.check_placements
+        ctx.runner.sim_board_bump = config.machine.sim_board_bump
         ctx.runner.checks_dir = config.data.dir.expanduser() / "run-checks"
         recorder.snapshot = recording_routes.snapshot_builder(ctx, jobs.get)
         await machine.start()

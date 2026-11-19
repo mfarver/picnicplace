@@ -48,7 +48,7 @@ from picnicplace.vision.fiducial import find_circle, find_circles, find_hole
 from picnicplace.vision.focus import sharpness
 from picnicplace.vision.pads import fit_pads
 from picnicplace.vision.part import find_part
-from picnicplace.vision.placed import find_placed_chip
+from picnicplace.vision.placed import find_board_pads, find_placed_chip
 from picnicplace.vision.tape import loose_parts, pocket_darkness
 
 log = logging.getLogger(__name__)
@@ -65,6 +65,7 @@ VISION_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "find_part": find_part,
     "fit_pads": fit_pads,
     "find_placed_chip": find_placed_chip,
+    "find_board_pads": find_board_pads,
     "sharpness": sharpness,
 }
 """The vision functions a recording can hold calls of, by name, for replaying them."""

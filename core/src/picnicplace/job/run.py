@@ -53,6 +53,7 @@ import asyncio
 import logging
 import math
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -82,7 +83,16 @@ from picnicplace.machine.service import MachineService
 from picnicplace.machine.sniff import floor_message, sniff
 from picnicplace.placement import MispickError, PlacementService
 from picnicplace.schemas import Operation, WireModel
-from picnicplace.vision.placed import PlacedChip, check_picture, chip_offset, image_turn
+from picnicplace.vision.placed import (
+    FoundPads,
+    PlacedChip,
+    Polygon,
+    check_picture,
+    chip_ends,
+    chip_offset,
+    image_turn,
+    on_pads,
+)
 
 log = logging.getLogger(__name__)
 
@@ -101,16 +111,29 @@ FIDUCIAL_DIAMETER_MM = 1.0
 SIM_DECOY_SIZE = 0.7
 """A simulated decoy's size, as a fraction of its fiducial's (see ``sim_decoys``)."""
 FIDUCIAL_RESIDUAL_MM = 0.25
+"""Fiducials found further than this from the fit mean the board, or one of them, is
+not where the job says: the run stops before placing anything."""
 CHECK_OFF_MM = 0.25
-"""Checking placements: a part found further than this from where it was sent..."""
+"""Checking placements: a part found further than this from where it was sent (when its
+pads cannot be seen; else ``CHECK_ON_PADS``)..."""
 CHECK_TURN = 10.0
 """...or turned more than this many degrees from the angle asked for..."""
 CHECK_SCORE = 0.5
 """...or not found (the pattern matched worse than this) pauses the run, to be looked at:
 a real 0603 that landed 0.43 mm along its length, one end lifted, would have stood up when
 soldered."""
-"""Fiducials found further than this from the fit mean the board, or one of them, is
-not where the job says: the run stops before placing anything."""
+CHECK_ON_PADS = 0.75
+"""A part with less than this of either metal end over its pad pauses the run. On a real
+0603 (2026-11-19), one 0.3 mm along its length from its pads had 23% of an end on its pad,
+and one 0.3 mm across, 72%; those well placed had 97% or more."""
+CHECK_PADS_SCORE = 0.6
+"""The pads' shape must match the bright copper this well (0 to 1) to be judged by; real
+0603 pads matched 0.8 to 0.9."""
+CHECK_PADS_MOVED_MM = 0.15
+"""Pads found further than this from where the board's fit puts them mean the board has
+moved since its fiducials were found: the run pauses, and finds them again on resume. On a
+real board knocked by the parts pressed into its tape, the pads were 0.2 to 0.33 mm off;
+on one held firmly, within 0.08 mm."""
 
 
 class RunError(MachineError):
@@ -149,6 +172,21 @@ class PlacementCheck(WireModel):
     dy: float
     turn: float = Field(description="Degrees from the angle asked for.")
     score: float = Field(description="How well the chip's pattern matched, -1 to 1.")
+    on_pads: float | None = Field(
+        default=None,
+        description=(
+            "How much of the part's metal ends lies over its pads: of each end, the share "
+            "over its pad, and of the two the less, 0 to 1. None if the pads were not seen."
+        ),
+    )
+    pads_dx: float | None = Field(
+        default=None,
+        description=(
+            "Machine X of the pads from where the board's fit puts them, mm: far off, the "
+            "board has moved. None if the pads were not seen."
+        ),
+    )
+    pads_dy: float | None = None
     ok: bool
     picture: bool = Field(
         default=False,
@@ -649,6 +687,8 @@ class JobRunner:
         """The run's parts, footprints, and tapes: its revision's copy of them."""
         self._active = False
         self._step = False
+        self._refit = False
+        """A check found the board moved: find its fiducials again before going on."""
         self._picked: set[str] = set()
         """Slots, strips, and trays picked from in this run, since the feeders were
         scanned."""
@@ -658,18 +698,22 @@ class JobRunner:
         self.record_runs = False
         """Record every run (from the config)."""
         self.sniff_board = False
+        """Find the board's top by touch on a fiducial at the start of each run (from the
+        config)."""
         self.check_placements = False
         """Look at each part with the top camera once placed (from the config)."""
         self.checks_dir: Path | None = None
         """Where pictures of the current run's checked placements are kept."""
-        """Find the board's top by touch on a fiducial at the start of each run (from the
-        config)."""
         self._sim_error = sim_board_error if feeders.sim_parts is not None else None
         self.sim_decoys = False
         """In the simulator, print a round silkscreen mark smaller than each fiducial
         where the job expects the fiducial, nearer the camera's center than the fiducial
         itself (which is off by the board's error): a fiducial finder that takes the
         nearest round blob is fooled by it, as one was by a label's "D" on a real board."""
+        self.sim_board_bump: tuple[int, float, float] | None = None
+        """In the simulator, once this many parts are placed in a run, the board slides by
+        (X, Y) mm with the parts on it, as one knocked by the parts pressed onto it did."""
+        self._sim_bumped = False
         self._sim_board: BoardScene | None = None
         self._sim_fix: BoardFix | None = None
         if self._sim_error is not None:
@@ -775,6 +819,8 @@ class JobRunner:
         )
         self._run.pause_requested = step
         self._step = step
+        self._refit = False
+        self._sim_bumped = False
         if self.checks_dir is not None and self.checks_dir.is_dir():
             for old in self.checks_dir.glob("*.jpg"):
                 old.unlink(missing_ok=True)
@@ -926,6 +972,14 @@ class JobRunner:
                 run.board_z = await self._measure_board(run, run.fix)
                 if run.board_z is not None:
                     found = f"{found}; {run.message}"
+                run.current = None
+            elif self._refit:
+                # The board moved since its fiducials were found. Its top is where it was,
+                # and a nozzle may hold a part, so its height is not touched again.
+                run.message = "finding the board's fiducials again: it moved"
+                run.current = RunStep(stage="board", action="finding_fiducials")
+                run.fix = await self._find_board(run)
+                self._refit = False
                 run.current = None
             while True:
                 if run.stop_requested:
@@ -1267,14 +1321,18 @@ class JobRunner:
                     stage="item", action="checking", index=index, nozzle=nozzle_id
                 )
                 await self._check_placed(run, item, target, item.rotation + run.fix.angle)
+            self._bump_sim_board(run)
 
     async def _check_placed(
         self, run: RunState, item: RunItem, target: Point, rotation: float
     ) -> None:
         """Look at a part just placed with the top camera, keep where it was found with the
-        item, and pause the run if it is off, turned, or not there (``CHECK_OFF_MM``,
-        ``CHECK_TURN``, ``CHECK_SCORE``). Only two-terminal chips with a body are looked
-        for (``vision.placed``); others are left unchecked."""
+        item, and pause the run if it is off its pads, turned, or not there
+        (``CHECK_ON_PADS``, ``CHECK_TURN``, ``CHECK_SCORE``; ``CHECK_OFF_MM`` from where it
+        was sent when the pads cannot be seen), or if its pads are not where the board's
+        fit puts them (``CHECK_PADS_MOVED_MM``): the board has moved, and the run finds it
+        again on resume. Only two-terminal chips with a body are looked for
+        (``vision.placed``); others are left unchecked."""
         footprint = self._parts.find_footprint(item.footprint_id) if self._parts else None
         if footprint is None or len(footprint.pads) != 2 or footprint.body is None:
             return
@@ -1309,10 +1367,47 @@ class JobRunner:
         )
         run.stats.checked += 1
         good = found is not None and found.score >= CHECK_SCORE
+
+        def to_image(x: float, y: float) -> tuple[float, float]:
+            """Machine mm as mm right and down in the picture."""
+            return (by * x - bx * y) / det, (-ay * x + ax * y) / det
+
+        # The footprint's pads where the board's fit puts them, about the picture's middle.
+        expected_pads: list[Polygon] = []
+        for pad in footprint.pads:
+            corners: list[tuple[float, float]] = []
+            for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+                corner = rotate(Point(x=sx * pad.width / 2, y=sy * pad.height / 2), pad.rotation)
+                p = rotate(Point(x=pad.x + corner.x, y=pad.y + corner.y), rotation)
+                corners.append(to_image(p.x, p.y))
+            expected_pads.append(corners)
+        pads: FoundPads | None = await machine.recorder.vision(
+            "find_board_pads",
+            frame.image,
+            mm_x,
+            mm_y,
+            expected_pads,
+            camera=camera.id,
+            position=dict(machine.driver.position),
+            ref=item.ref,
+        )
+        seen = pads is not None and pads.score >= CHECK_PADS_SCORE
+        found_pads = (
+            [[(x + pads.dx, y + pads.dy) for x, y in pad] for pad in expected_pads]
+            if pads is not None and seen
+            else None
+        )
         picture = self._save_check(
             item.index,
             check_picture(
-                frame.image, mm_x, mm_y, length, width, expected, found if good else None
+                frame.image,
+                mm_x,
+                mm_y,
+                length,
+                width,
+                expected,
+                found if good else None,
+                found_pads,
             ),
         )
         if found is None or not good:
@@ -1337,18 +1432,53 @@ class JobRunner:
         turn = (math.degrees(math.atan2(fy, fx)) - along + 90.0) % 180.0 - 90.0
         turn = round(turn, 1) + 0.0  # never "-0.0"
         off = math.hypot(dx, dy)
-        ok = off <= CHECK_OFF_MM and abs(turn) <= CHECK_TURN
+        share: float | None = None
+        moved: tuple[float, float] | None = None
+        if pads is not None and found_pads is not None:
+            share = on_pads(chip_ends(found, w, h, mm_x, mm_y, length, width), found_pads)
+            moved = machine.image_to_machine(camera, pads.dx, pads.dy)
+            ok = share >= CHECK_ON_PADS and abs(turn) <= CHECK_TURN
+        else:
+            ok = off <= CHECK_OFF_MM and abs(turn) <= CHECK_TURN
         item.check = PlacementCheck(
             dx=round(dx, 3),
             dy=round(dy, 3),
             turn=turn,
             score=round(found.score, 2),
+            on_pads=round(share, 2) if share is not None else None,
+            pads_dx=round(moved[0], 3) if moved is not None else None,
+            pads_dy=round(moved[1], 3) if moved is not None else None,
             ok=ok,
             picture=picture,
         )
         machine.recorder.event("run.checked", ref=item.ref, check=item.check)
         if not ok:
             run.stats.bad_placements += 1
+        wrong: list[str] = []
+        if share is not None and share < CHECK_ON_PADS:
+            wrong.append(f"with only {share:.0%} of an end on its pad")
+        if abs(turn) > CHECK_TURN:
+            wrong.append(f"turned {turn:+.1f} degrees")
+        if moved is not None and math.hypot(*moved) > CHECK_PADS_MOVED_MM:
+            # The next parts would land off their pads too: find the board again first.
+            self._refit = True
+            part = (
+                f"{item.ref} itself is on its pads"
+                if ok
+                else f"{item.ref} landed {' and '.join(wrong)}: fix or remove it"
+            )
+            raise RunError(
+                f"the board seems to have moved: {item.ref}'s pads are "
+                f"{math.hypot(*moved):.2f} mm from where its fiducials put them (X "
+                f"{moved[0]:+.2f}, Y {moved[1]:+.2f}). {part}. Make sure the board is held "
+                "firmly, then resume: the run finds the fiducials again before going on"
+            )
+        if not ok and share is not None:
+            raise RunError(
+                f"{item.ref} landed {' and '.join(wrong)}: look at it (it may stand up when "
+                "soldered), fix or remove it, and resume"
+            )
+        if not ok:
             raise RunError(
                 f"{item.ref} landed {off:.2f} mm from where it was sent (X {dx:+.2f}, Y "
                 f"{dy:+.2f}), turned {turn:+.1f} degrees: look at it (off its pads, it may "
@@ -1446,6 +1576,25 @@ class JobRunner:
         self._sim_board = BoardScene(
             outline=outline, fiducials=tuple(fiducials), pads=tuple(pads), marks=tuple(marks)
         )
+
+    def _bump_sim_board(self, run: RunState) -> None:
+        """Slide the simulated board by ``sim_board_bump``, once its count of parts is
+        placed: the parts on it go with it."""
+        bump = self.sim_board_bump
+        sim = self._feeders.sim_parts
+        if bump is None or self._sim_bumped or self._sim_error is None or self._job is None:
+            return
+        count, bx, by = bump
+        if run.stats.placed < count or sim is None:
+            return
+        self._sim_bumped = True
+        dx, dy, angle = self._sim_error
+        self._sim_error = (dx + bx, dy + by, angle)
+        self._load_sim_board(self._job, self._parts)
+        sim.placed[:] = [
+            p if p.shape.disc is not None else replace(p, x=p.x + bx, y=p.y + by)
+            for p in sim.placed
+        ]
 
     def sim_target(self, item: RunItem) -> tuple[Point, float] | None:
         """Where the simulated board really wants an item's part, and at what angle."""

@@ -83,19 +83,19 @@ Steps 1, 2 and 5 work today, and step 3 in part; the rest is planned.
 2. Run the test board's job like any other, with its parts on feeders, strips or trays,
    and **Check each part with the top camera once placed** ticked.
 3. **Inspect placements.** Today, the top camera looks at each two-terminal chip as soon
-   as it is placed and measures how far it landed from where it was sent, and the run
-   pauses on one more than 0.25 mm off or turned more than 10°. That measures from where
-   the machine thinks the target is, so it includes the gantry's and the camera's errors,
-   and across a chip's width it can be some 0.1 mm off, as the part can slide over the
-   pads in the picture. Planned: measuring each part from the copper ring around it. In
-   one frame the camera finds the part's body and the ring, a few millimeters apart, so
-   neither the gantry's position nor the camera's scale enters the measurement, and
-   ICs and QFNs, whose pads the part hides, are measured too.
+   as it is placed, finds the part and its pads in the same picture, and measures how
+   much of each of the part's ends lies on its pad; the run pauses on one with less than
+   75% of an end on its pad, or turned more than 10°. Since the part is measured from its
+   own pads, the gantry's position and the board's fit hardly enter the measurement. If
+   the pads are more than 0.15 mm from where the board's fit puts them, the board has
+   moved: the run pauses, and finds the fiducials again on resume. Planned: measuring
+   each part from the copper ring around it as well, so ICs and QFNs, whose pads the
+   part hides, are measured too.
 4. **The report**, planned: each part's offset and turn, the spread for each nozzle, and
    how the error depends on the part's angle (the circle of 0603s) and its place on the
    board, kept with the run and sent with a flight recording. Today the finish message
    and the Run workspace give the run's statistics: picks, empty picks, parts the bottom
-   camera could not find, placements, and checked placements off target.
+   camera could not find, placements, and checked placements off their pads.
 5. Pick the parts up again (or peel off the tape), and the board is ready for the next
    test.
 

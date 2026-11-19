@@ -317,16 +317,21 @@ effect at once. The reset button next to one forgets it.
       camera's crosshair.
 - [ ] To have each part looked at once placed, tick **Check each part with the top
       camera once placed** (or set `check_placements` in the config). After placing a
-      two-terminal chip (a resistor, a capacitor, an LED), the top camera finds it, and
-      the step list says how far off and how turned it landed. One more than 0.25 mm off,
-      turned more than 10°, or not found pauses the run: look at it, fix or remove it,
-      and resume: its line in the step list has a picture of it (click to enlarge), with
-      where it was sent in orange and where it landed in magenta. It catches a part off
-      its pads, standing up, or gone; across a part's
-      width it can be some 0.1 mm off, so it is not a measure of accuracy to a few
-      hundredths. At the end, the finish message and the Run workspace give the run's
-      statistics: picks and empty picks, parts the bottom camera could not find,
-      placements, and checked placements off target.
+      two-terminal chip (a resistor, a capacitor, an LED), the top camera finds it and the
+      board's pads under it, and the step list says how much of it lies on its pads and
+      how it is turned. One with less than 75% of either end on its pad, turned more than
+      10°, or not found pauses the run: look at it, fix or remove it, and resume: its line
+      in the step list has a picture of it (click to enlarge), with where it was sent in
+      orange, where it landed in magenta, and its pads in green. It catches a part off its
+      pads, standing up, or gone. (Where the pads cannot be seen, it judges the part from
+      where it was sent instead: 0.25 mm.)
+      If the pads themselves are more than 0.15 mm from where the board's fiducials put
+      them, the board has moved since the run found it (a board not held firmly can be
+      knocked by the parts pressed onto it): the run pauses and says so. Hold the board
+      down, set right any part that landed off, and resume: the run finds the fiducials
+      again before placing the rest. At the end, the finish message and the Run workspace
+      give the run's statistics: picks and empty picks, parts the bottom camera could not
+      find, placements, and checked placements off their pads.
 
       ![A real check: an 0603 on a LumenPnP, 0.35 mm off its target](../images/placement-check-real.jpg){ .pp-screenshot width="300" }
 - [ ] Tick **Start in step mode** and **Start**: the run scans the feeders (a feeder

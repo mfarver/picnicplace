@@ -11,7 +11,7 @@ import {
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { mediaUrl } from "../api/client";
 import type { RunItem, RunState } from "../api/types";
-import { focusIndex, runSteps, type RunStepRow } from "../runSteps";
+import { focusIndex, padsMoved, runSteps, type RunStepRow } from "../runSteps";
 
 /**
  * A run's steps as a checklist, from the moment it is planned: each one checked off as
@@ -72,16 +72,18 @@ export function RunSteps({
           <StepIcon row={r} running={run?.status === "running"} size={large ? 20 : 14} />
           <span className="run-step-label">{r.label}</span>
           <span className="run-step-detail">{r.detail}</span>
-          {r.item?.check && !r.item.check.ok && r.item.check.picture && (
-            <button
-              type="button"
-              className="run-step-thumb"
-              title={`${r.item.ref} as the top camera saw it: click to enlarge`}
-              onClick={() => setEnlarged(r.item ?? null)}
-            >
-              <img src={picture(r.item)} alt={`${r.item.ref} where it landed`} />
-            </button>
-          )}
+          {r.item?.check &&
+            (!r.item.check.ok || padsMoved(r.item.check) != null) &&
+            r.item.check.picture && (
+              <button
+                type="button"
+                className="run-step-thumb"
+                title={`${r.item.ref} as the top camera saw it: click to enlarge`}
+                onClick={() => setEnlarged(r.item ?? null)}
+              >
+                <img src={picture(r.item)} alt={`${r.item.ref} where it landed`} />
+              </button>
+            )}
           {run && r.item && onSkip && (
             <SkipButton item={r.item} run={run} canSignal={canSignal} onSkip={onSkip} />
           )}
@@ -92,8 +94,9 @@ export function RunSteps({
           <figure>
             <img src={picture(enlarged)} alt={`${enlarged.ref} where it landed`} />
             <figcaption>
-              <strong>{enlarged.ref}</strong>: where it was sent (orange) and where it landed
-              (magenta). Nudge it onto its pads, then resume. Click to close.
+              <strong>{enlarged.ref}</strong>: where it was sent (orange), where it landed
+              (magenta), and its pads as found (green). Nudge it onto its pads, then resume.
+              Click to close.
             </figcaption>
           </figure>
         </li>

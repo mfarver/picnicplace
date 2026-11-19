@@ -236,6 +236,14 @@ class MachineConfig(_Section):
             "alignment finds and corrects it."
         ),
     )
+    sim_board_bump: tuple[int, float, float] | None = Field(
+        default=None,
+        description=(
+            "Simulator only: once this many parts are placed in a run, the job's board slides "
+            "by X and Y mm, with the parts on it, as a real board knocked by the parts pressed "
+            "onto its tape did. Checking placements finds its pads moved."
+        ),
+    )
     sim_top_camera_scale: float = Field(
         default=1.0,
         gt=0,

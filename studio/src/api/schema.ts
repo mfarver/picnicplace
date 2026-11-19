@@ -5091,6 +5091,18 @@ export interface components {
             /** Ok */
             ok: boolean;
             /**
+             * On Pads
+             * @description How much of the part's metal ends lies over its pads: of each end, the share over its pad, and of the two the less, 0 to 1. None if the pads were not seen.
+             */
+            on_pads: number | null;
+            /**
+             * Pads Dx
+             * @description Machine X of the pads from where the board's fit puts them, mm: far off, the board has moved. None if the pads were not seen.
+             */
+            pads_dx: number | null;
+            /** Pads Dy */
+            pads_dy: number | null;
+            /**
              * Picture
              * @description A picture of it is kept (GET /api/v1/run/checks/{index}).
              * @default false

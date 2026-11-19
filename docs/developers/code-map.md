@@ -156,7 +156,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `vision/fiducial.py` | Finds round marks: homing and board fiducials, feeder fiducials, sprocket holes |
 | `vision/tape.py` | Paper tape: whether a pocket holds a part, and parts lying loose on the tape |
 | `vision/part.py` | The metal mask (bright, not yellowish plastic, no specks), and one box around everything bright about the nozzle: the part's outline, which bottom vision finds first |
-| `vision/placed.py` | Finds a two-terminal chip where it was just placed, from above (a dark body between two bright caps, matched by normalized correlation over positions and turns): the run's placement check |
+| `vision/placed.py` | Finds a two-terminal chip where it was just placed, from above (a dark body between two bright caps, matched by normalized correlation over positions and turns), and the board's pads under it (the footprint's pads slid over the bright copper), and how much of the chip's ends lie on them: the run's placement check |
 | `vision/pads.py` | Fits a footprint's pads to the metal in a bottom camera frame, for parts whose pads are off their body's center or whose body is as bright as their leads (started from the outline's angle whenever a footprint has two pads or more, and fitted both ways round when its pads are not symmetric) |
 | `vision/focus.py` | How sharp part of a frame is, for finding a camera's focus |
 | `capture.py` | Saves single frames on request, for tuning vision on real images |

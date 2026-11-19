@@ -76,7 +76,7 @@ _ID = re.compile(r"^\d{8}-\d{6}(-[a-z0-9-]+)?$")
 class RecordingInfo(WireModel):
     id: str
     label: str
-    reason: Literal["manual", "run"]
+    reason: Literal["manual", "run", "train"]
     job_id: str | None = None
     started_at: datetime
     ended_at: datetime | None = None
@@ -145,7 +145,10 @@ class FlightRecorder:
         return self._root is not None
 
     def start(
-        self, label: str, reason: Literal["manual", "run"] = "manual", job_id: str | None = None
+        self,
+        label: str,
+        reason: Literal["manual", "run", "train"] = "manual",
+        job_id: str | None = None,
     ) -> RecordingInfo:
         if self._root is None:
             raise RecorderError("recordings need a data directory")
@@ -263,6 +266,21 @@ class FlightRecorder:
                 **context,
             )
         return result
+
+    async def frame(self, image: np.ndarray, camera: str, name: str, **context: Any) -> None:
+        """Keep a frame in the active recording, if any, with what it shows."""
+        rec = self._current
+        if rec is None:
+            return
+        self._frame_count += 1
+        path: str | None = f"frames/{self._frame_count:05d}-{camera}-{name}.png"
+        try:
+            await asyncio.to_thread(_write_png, rec.folder / str(path), image)
+            rec.info.frames += 1
+        except (OSError, cv2.error) as e:
+            log.warning("could not save a frame with the recording: %s", e)
+            path = None
+        self.event("frame", camera=camera, frame=path, **context)
 
     async def _follow_bus(self, bus: EventBus, sub: Subscription) -> None:
         try:

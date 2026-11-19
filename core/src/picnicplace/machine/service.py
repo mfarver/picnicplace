@@ -272,6 +272,10 @@ class MachineService:
             runout=tuple(
                 (n, round(x, 4), round(y, 4)) for n, (x, y) in self._driver.scene_runout.items()
             ),
+            lights=tuple(
+                (k, (c.red, c.green, c.blue, c.brightness))
+                for k, c in sorted(self._driver.light_colors.items())
+            ),
         )
 
     @property
@@ -701,15 +705,19 @@ class MachineService:
             work = warned
         return self._start_operation(kind, work)
 
-    async def frame(self, camera_id: str, settle: bool = True) -> Frame:
-        """A frame taken now (after the camera's settle time, if asked)."""
+    async def frame(
+        self, camera_id: str, settle: bool = True, light: LightColor | None = None
+    ) -> Frame:
+        """A frame taken now (after the camera's settle time, if asked), with the camera's
+        light set to ``light`` if given (a part trained to be seen so), else to its usual
+        color."""
         camera = next((c for c in self._profile.cameras if c.id == camera_id), None)
         if camera is None:
             raise VisionError(f"no camera {camera_id!r}")
         if self._grab is None:
             raise VisionError("the cameras are not available")
         if settle:
-            await self._light_for(camera)
+            await self._light_for(camera, light)
             await asyncio.sleep(camera.settle_s)
         frame = await self._grab(camera_id, time.time(), FRAME_WAIT_S)
         if frame is None:
@@ -874,19 +882,25 @@ class MachineService:
             return None
         return float(value)
 
-    async def _light_for(self, camera: Camera) -> None:
-        """Vision needs the camera's light: switch it on if it is off, and leave it on
-        (switching it for every look would flicker through a run). The caller then waits
-        the camera's settle time, which lets the picture brighten."""
+    async def light_for(self, camera: Camera, want: LightColor | None = None) -> None:
+        """Set a camera's light for vision (``_light_for``)."""
+        await self._light_for(camera, want)
+
+    async def _light_for(self, camera: Camera, want: LightColor | None = None) -> None:
+        """Vision needs the camera's light: set it to ``want`` (a part's own light), else
+        to the config's color for the camera, else white; and leave it on (switching it
+        for every look would flicker through a run). The caller then waits the camera's
+        settle time, which lets the picture brighten."""
         light = camera.light_output
         if light is None:
             return
-        want = self.camera_lights.get(camera.id)
-        if want is not None:
-            # The config's color for this camera, unless it is already so.
-            if not self._driver.outputs.get(light) or self._driver.light_colors.get(light) != want:
-                await self._driver.set_light(light, want)
-        elif not self._driver.outputs.get(light):
+        want = want or self.camera_lights.get(camera.id)
+        now = self._driver.light_colors.get(light)
+        if want is not None and want != WHITE:
+            if not self._driver.outputs.get(light) or now != want:
+                await self.set_light(light, want)
+        elif not self._driver.outputs.get(light) or (now is not None and now != WHITE):
+            # Back to plain white after a part's own light.
             await self._driver.set_output(light, True)
 
     def image_to_machine(

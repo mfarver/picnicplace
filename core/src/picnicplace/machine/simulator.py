@@ -316,6 +316,7 @@ class SimulatorDriver(MotionDriver):
         await self.set_output(output_id, color.brightness > 0)
         if color.brightness > 0:
             self._light_colors[output_id] = color
+            self._notify()
 
     def _height(self, nozzle: Nozzle) -> float:
         real_z = self._position[nozzle.z_axis] + self._z_slip.get(nozzle.z_axis, 0.0)

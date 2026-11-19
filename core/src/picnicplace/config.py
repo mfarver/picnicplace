@@ -116,6 +116,14 @@ class DataConfig(_Section):
         return self.dir.expanduser() / "wizard.json"
 
     @property
+    def trained_parts_path(self) -> Path:
+        return self.dir.expanduser() / "trained-parts.json"
+
+    @property
+    def trained_frames_dir(self) -> Path:
+        return self.dir.expanduser() / "trained-parts"
+
+    @property
     def tips_path(self) -> Path:
         return self.dir.expanduser() / "nozzle-tips.json"
 
@@ -259,9 +267,9 @@ class MachineConfig(_Section):
     sim_bottom_washed_out: bool = Field(
         default=False,
         description=(
-            "Simulator only: parts held over the bottom camera look overexposed, one even "
-            "white, so no metal shows to fit their pads to (as an 0603 did on a real "
-            "LumenPnP at full white)."
+            "Simulator only: parts held over the bottom camera are white chips, overexposed "
+            "under a full light, so no metal shows to fit their pads to until the light is "
+            "turned down (as an 0603's outline was all that showed on a real LumenPnP)."
         ),
     )
     sim_bottom_camera_flipped: bool = Field(

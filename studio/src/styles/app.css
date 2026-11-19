@@ -605,6 +605,14 @@ code,
   font-weight: 600;
 }
 
+.badge-ok {
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--ok);
+  font-weight: 600;
+}
+
 .badge-danger {
   padding: 1px var(--space-2);
   border-radius: var(--radius-sm);
@@ -2987,4 +2995,51 @@ code,
 
 .machine-asks .button-row {
   justify-content: flex-end;
+}
+
+/* --- Trained parts ------------------------------------------------------------------- */
+
+.trained-part + .trained-part {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.trained-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: 1rem;
+}
+
+.trained-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: var(--space-2) 0;
+}
+
+.trained-images figure {
+  margin: 0;
+  flex: 1 1 240px;
+  max-width: 100%;
+}
+
+.trained-images img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  background: #000;
+}
+
+.trained-images figcaption {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.trained-table {
+  margin-top: var(--space-2);
 }

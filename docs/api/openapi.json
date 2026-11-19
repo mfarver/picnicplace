@@ -866,6 +866,102 @@
         "title": "CameraInfo",
         "type": "object"
       },
+      "Candidate": {
+        "description": "One way of seeing a part, as training judged it.",
+        "properties": {
+          "angle_spread": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How far the part's angle on the nozzle wandered (degrees).",
+            "title": "Angle Spread"
+          },
+          "fit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pad fit residual, or outline size error, the worst frame's (mm).",
+            "title": "Fit"
+          },
+          "flipped": {
+            "default": false,
+            "description": "Its pads showed the part turned 180 degrees from the tape.",
+            "title": "Flipped",
+            "type": "boolean"
+          },
+          "frames": {
+            "title": "Frames",
+            "type": "integer"
+          },
+          "light_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which light's thumbnail shows it (light-NN.jpg).",
+            "title": "Light Index"
+          },
+          "offset_spread": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How far its place on the nozzle wandered (mm).",
+            "title": "Offset Spread"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Lower is better; none: it did not find the part every time.",
+            "title": "Score"
+          },
+          "seen": {
+            "description": "Frames it found the part in.",
+            "title": "Seen",
+            "type": "integer"
+          },
+          "vision": {
+            "$ref": "#/components/schemas/PartVision"
+          }
+        },
+        "required": [
+          "vision",
+          "seen",
+          "frames",
+          "light_index",
+          "angle_spread",
+          "offset_spread",
+          "fit",
+          "flipped",
+          "score"
+        ],
+        "title": "Candidate",
+        "type": "object"
+      },
       "CaptureInfo": {
         "properties": {
           "camera": {
@@ -5473,6 +5569,53 @@
         "title": "PartNeed",
         "type": "object"
       },
+      "PartVision": {
+        "description": "How the bottom camera is to see a part.",
+        "properties": {
+          "light": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LightColor-Output"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The ring light's color and brightness; none: the usual."
+          },
+          "method": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "pads",
+              "outline"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 1.0,
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Metal is what is brighter than this fraction of how bright the part looks; none: a fixed level.",
+            "title": "Threshold"
+          }
+        },
+        "required": [
+          "light",
+          "threshold",
+          "method"
+        ],
+        "title": "PartVision",
+        "type": "object"
+      },
       "PickAndPlaceRequest": {
         "properties": {
           "feed": {
@@ -6401,7 +6544,8 @@
           "reason": {
             "enum": [
               "manual",
-              "run"
+              "run",
+              "train"
             ],
             "title": "Reason",
             "type": "string"
@@ -7857,6 +8001,123 @@
           }
         },
         "title": "TipHeightsRequest",
+        "type": "object"
+      },
+      "TrainRequest": {
+        "properties": {
+          "nozzle_id": {
+            "title": "Nozzle Id",
+            "type": "string"
+          },
+          "pick_correction": {
+            "anyOf": [
+              {
+                "enum": [
+                  "top",
+                  "bottom",
+                  "off",
+                  "auto"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pick Correction"
+          },
+          "slot_id": {
+            "description": "A feeder slot, or a strip or tray on the bed (T1, ...).",
+            "title": "Slot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slot_id",
+          "nozzle_id"
+        ],
+        "title": "TrainRequest",
+        "type": "object"
+      },
+      "TrainedPart": {
+        "properties": {
+          "approved": {
+            "default": false,
+            "description": "The operator saw the footprint line up with the part, the right way round; alignment uses a trained part's settings only once approved.",
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "candidates": {
+            "description": "The best ways tried, best first.",
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "nozzle": {
+            "title": "Nozzle",
+            "type": "string"
+          },
+          "part_id": {
+            "title": "Part Id",
+            "type": "string"
+          },
+          "recording": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The recording of the training.",
+            "title": "Recording"
+          },
+          "tip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tip"
+          },
+          "trained_at": {
+            "format": "date-time",
+            "title": "Trained At",
+            "type": "string"
+          },
+          "tried": {
+            "default": 0,
+            "description": "How many ways of seeing it were tried.",
+            "title": "Tried",
+            "type": "integer"
+          },
+          "vision": {
+            "$ref": "#/components/schemas/PartVision"
+          }
+        },
+        "required": [
+          "part_id",
+          "vision",
+          "trained_at",
+          "nozzle",
+          "tip",
+          "message",
+          "candidates",
+          "tried",
+          "recording",
+          "approved"
+        ],
+        "title": "TrainedPart",
         "type": "object"
       },
       "VacuumLevels": {
@@ -14403,6 +14664,307 @@
           }
         ],
         "summary": "A held part was taken off the nozzle by hand",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/v1/placement/train": {
+      "post": {
+        "description": "Pick a part, try every light and way of seeing it over the bottom camera, keep the\nbest for the part (to be approved), and drop the part in the discard.",
+        "operationId": "train_api_v1_placement_train_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Train how the bottom camera sees a part",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/v1/placement/trained": {
+      "get": {
+        "description": "Parts trained on this machine, and how the bottom camera sees each.",
+        "operationId": "trained_parts_api_v1_placement_trained_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TrainedPart"
+                  },
+                  "title": "Response Trained Parts Api V1 Placement Trained Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Trained Parts",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/v1/placement/trained/{part_id}": {
+      "delete": {
+        "description": "Forget what training found for a part: it is seen the usual way again.",
+        "operationId": "forget_trained_api_v1_placement_trained__part_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "title": "Part Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Forget Trained",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/v1/placement/trained/{part_id}/approve": {
+      "post": {
+        "description": "The footprint lines up with the part, the right way round: use what training\nfound from now on.",
+        "operationId": "approve_trained_api_v1_placement_trained__part_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "title": "Part Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainedPart"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Approve Trained",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/v1/placement/trained/{part_id}/images/{name}": {
+      "get": {
+        "description": "A picture kept with a trained part: 'overlay' (its footprint drawn over it),\n'beside' (its footprint beside it), or 'light-NN' (under the NNth light tried).",
+        "operationId": "trained_image_api_v1_placement_trained__part_id__images__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "title": "Part Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Trained Image",
         "tags": [
           "placement"
         ]

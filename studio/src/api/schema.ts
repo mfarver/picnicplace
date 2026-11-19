@@ -1640,6 +1640,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/placement/train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Train how the bottom camera sees a part
+         * @description Pick a part, try every light and way of seeing it over the bottom camera, keep the
+         *     best for the part (to be approved), and drop the part in the discard.
+         */
+        post: operations["train_api_v1_placement_train_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/trained": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trained Parts
+         * @description Parts trained on this machine, and how the bottom camera sees each.
+         */
+        get: operations["trained_parts_api_v1_placement_trained_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/trained/{part_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget Trained
+         * @description Forget what training found for a part: it is seen the usual way again.
+         */
+        delete: operations["forget_trained_api_v1_placement_trained__part_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/trained/{part_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Trained
+         * @description The footprint lines up with the part, the right way round: use what training
+         *     found from now on.
+         */
+        post: operations["approve_trained_api_v1_placement_trained__part_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/trained/{part_id}/images/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trained Image
+         * @description A picture kept with a trained part: 'overlay' (its footprint drawn over it),
+         *     'beside' (its footprint beside it), or 'light-NN' (under the NNth light tried).
+         */
+        get: operations["trained_image_api_v1_placement_trained__part_id__images__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/presence": {
         parameters: {
             query?: never;
@@ -2543,6 +2646,51 @@ export interface components {
              * @description Native frame width, when the camera is on.
              */
             width: number | null;
+        };
+        /**
+         * Candidate
+         * @description One way of seeing a part, as training judged it.
+         */
+        Candidate: {
+            /**
+             * Angle Spread
+             * @description How far the part's angle on the nozzle wandered (degrees).
+             */
+            angle_spread: number | null;
+            /**
+             * Fit
+             * @description Pad fit residual, or outline size error, the worst frame's (mm).
+             */
+            fit: number | null;
+            /**
+             * Flipped
+             * @description Its pads showed the part turned 180 degrees from the tape.
+             * @default false
+             */
+            flipped: boolean;
+            /** Frames */
+            frames: number;
+            /**
+             * Light Index
+             * @description Which light's thumbnail shows it (light-NN.jpg).
+             */
+            light_index: number | null;
+            /**
+             * Offset Spread
+             * @description How far its place on the nozzle wandered (mm).
+             */
+            offset_spread: number | null;
+            /**
+             * Score
+             * @description Lower is better; none: it did not find the part every time.
+             */
+            score: number | null;
+            /**
+             * Seen
+             * @description Frames it found the part in.
+             */
+            seen: number;
+            vision: components["schemas"]["PartVision"];
         };
         /** CaptureInfo */
         CaptureInfo: {
@@ -4666,6 +4814,25 @@ export interface components {
             /** Slot Ids */
             slot_ids: string[];
         };
+        /**
+         * PartVision
+         * @description How the bottom camera is to see a part.
+         */
+        PartVision: {
+            /** @description The ring light's color and brightness; none: the usual. */
+            light: components["schemas"]["LightColor-Output"] | null;
+            /**
+             * Method
+             * @default auto
+             * @enum {string}
+             */
+            method: "auto" | "pads" | "outline";
+            /**
+             * Threshold
+             * @description Metal is what is brighter than this fraction of how bright the part looks; none: a fixed level.
+             */
+            threshold: number | null;
+        };
         /** PickAndPlaceRequest */
         PickAndPlaceRequest: {
             /**
@@ -5157,7 +5324,7 @@ export interface components {
              * Reason
              * @enum {string}
              */
-            reason: "manual" | "run";
+            reason: "manual" | "run" | "train";
             /**
              * Recording
              * @description True while it is still recording.
@@ -5788,6 +5955,57 @@ export interface components {
              * @description The nozzles to measure. Empty: those whose tip has no height yet.
              */
             nozzle_ids?: string[] | null;
+        };
+        /** TrainRequest */
+        TrainRequest: {
+            /** Nozzle Id */
+            nozzle_id: string;
+            /** Pick Correction */
+            pick_correction?: ("top" | "bottom" | "off" | "auto") | null;
+            /**
+             * Slot Id
+             * @description A feeder slot, or a strip or tray on the bed (T1, ...).
+             */
+            slot_id: string;
+        };
+        /** TrainedPart */
+        TrainedPart: {
+            /**
+             * Approved
+             * @description The operator saw the footprint line up with the part, the right way round; alignment uses a trained part's settings only once approved.
+             * @default false
+             */
+            approved: boolean;
+            /**
+             * Candidates
+             * @description The best ways tried, best first.
+             */
+            candidates: components["schemas"]["Candidate"][];
+            /** Message */
+            message: string;
+            /** Nozzle */
+            nozzle: string;
+            /** Part Id */
+            part_id: string;
+            /**
+             * Recording
+             * @description The recording of the training.
+             */
+            recording: string | null;
+            /** Tip */
+            tip: string | null;
+            /**
+             * Trained At
+             * Format: date-time
+             */
+            trained_at: string;
+            /**
+             * Tried
+             * @description How many ways of seeing it were tried.
+             * @default 0
+             */
+            tried: number;
+            vision: components["schemas"]["PartVision"];
         };
         /**
          * VacuumLevels
@@ -9742,6 +9960,170 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    train_api_v1_placement_train_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trained_parts_api_v1_placement_trained_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrainedPart"][];
+                };
+            };
+        };
+    };
+    forget_trained_api_v1_placement_trained__part_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_trained_api_v1_placement_trained__part_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrainedPart"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trained_image_api_v1_placement_trained__part_id__images__name__get: {
+        parameters: {
+            query?: {
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                part_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

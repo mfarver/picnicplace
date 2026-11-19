@@ -21,6 +21,7 @@ import { HomeCheck } from "../components/HomeCheck";
 import { HeadInset } from "../components/machine/HeadInset";
 import { MachineView } from "../components/machine/MachineView";
 import { PlacementPanel } from "../components/PlacementPanel";
+import { TrainedPartsPanel } from "../components/TrainedPartsPanel";
 import { Placeholder } from "../components/Placeholder";
 import { RunOverlay, RunSteps } from "../components/RunSteps";
 import { WizardPopover } from "../components/wizard/WizardPopover";
@@ -193,6 +194,8 @@ export function MachineWorkspace() {
             canMove={canMove && !!machine?.homed}
           />
         )}
+
+        <TrainedPartsPanel canControl={canActuate} />
 
         {feeders && feeders.fixed.length > 0 && (
           <FixedFeederPanel fixed={feeders.fixed} onChanged={setFeeders} />

@@ -176,7 +176,8 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `feeders/service.py` | The feeder service: scanning, feeding, where to pick, fiducial calibration, pocket finding, strips and trays, pick learning |
 | `feeders/pocket.py` | Where the pocket is, from the sprocket holes seen; of two about as near, which to take |
 | `feeders/rails.py` | Fitting a feeder rail to the feeder fiducials found on it |
-| `placement.py` | Pick, align (outline, then pads, or the outline alone when no metal shows: a white chip's body), and place one part; pick correction (top or bottom camera) |
+| `placement.py` | Pick, align (outline, then pads, or the outline alone when no metal shows: a white chip's body; a trained part as trained), train, and place one part; pick correction (top or bottom camera) |
+| `training.py` | Training how the bottom camera sees a part: the lights, thresholds and turns tried, how a way of seeing it is scored, the trained parts kept (to be approved), and the approval pictures with the footprint drawn over and beside the part |
 | `simparts.py` | The simulator's parts: which nozzle holds what, where placed parts landed (and how far they fell), the calibration disc, and crashes: a tip pressed into a part, or a part into the board. Part tops come from the feeders' tapes, strips, and trays, and board tops from the staging plates, each off by the config's simulator errors |
 | `board/` | Boards and panels, and reading them from KiCad (`kicad.py`, with a small S-expression reader) and KiKit panels |
 | `job/models.py`, `job/store.py` | Jobs (a board or panel on the machine) and their files, with their published revisions and this machine's setup for each |
@@ -197,6 +198,7 @@ The core keeps the owner's data in one folder (`data.dir` in the config; by defa
 | `setups/` | One JSON file per job: where this machine has its panel on the bed, and the board's height | `job/store.py` |
 | `captures/` | Frames saved with the Capture panel | `capture.py` |
 | `recordings/` | Flight recordings | `recorder.py` |
+| `trained-parts.json`, `trained-parts/` | Trained parts, and their pictures | `training.py` |
 | `bring-up.json` | Progress through the bring-up checklist | `bringup.py` |
 | `wizard.json` | The setup wizard's pages the owner confirmed or skipped | `wizard.py` |
 | `machine-setup.json` | The setup wizard's choices: the machine, its serial port and cameras, and the last probe | `machine_setup.py` |

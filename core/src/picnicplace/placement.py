@@ -33,9 +33,13 @@ held part keeps its angle relative to the nozzle, so turning the nozzle turns th
 import asyncio
 import logging
 import math
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any, Literal
 
+import numpy as np
+
+from picnicplace.camera.source import Image
 from picnicplace.feeders.service import FeederService, PocketCheck, rotate
 from picnicplace.feeders.setup import PickCorrection, PickMethod
 from picnicplace.library import Footprint, Library, Part, Size
@@ -45,12 +49,34 @@ from picnicplace.machine.errors import (
     MachineError,
     VisionError,
 )
-from picnicplace.machine.profile import Camera, Location, Nozzle, Point
+from picnicplace.machine.profile import Camera, LightColor, Location, Nozzle, Point
 from picnicplace.machine.service import MachineService
 from picnicplace.machine.sniff import SniffError, floor_message, sniff
+from picnicplace.recorder import VISION_FUNCTIONS
 from picnicplace.schemas import Operation, WireModel
+from picnicplace.training import (
+    ANGLE_STEADY,
+    FIT_UNIT,
+    FRAMES_PER_LIGHT,
+    KEPT_CANDIDATES,
+    OFFSET_STEADY,
+    THRESHOLDS,
+    TURNS,
+    Candidate,
+    Method,
+    PartVision,
+    TrainedPart,
+    TrainedPartStore,
+    approval_images,
+    describe_light,
+    describe_threshold,
+    lights_to_try,
+    now,
+    spread_degrees,
+    spread_points,
+)
 from picnicplace.vision.pads import PadFit, PadRect
-from picnicplace.vision.part import BRIGHT, PartBox, nearest_angle, wrap
+from picnicplace.vision.part import BRIGHT, PartBox, bright_level, nearest_angle, wrap
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +115,60 @@ other way's residual)."""
 
 class PlacementError(MachineError):
     code = "placement_failed"
+
+
+_Vision = Callable[..., Awaitable[Any]]
+"""Runs a vision function by name on a frame: through the recorder, or directly."""
+
+
+@dataclass(frozen=True)
+class _View:
+    """What measuring a held part in a bottom camera frame needs (``_view``)."""
+
+    camera: Camera
+    footprint: Footprint | None
+    pads: tuple[Point, Point] | None
+    """The center and size of the footprint's pads, in its frame."""
+    size: Point
+    mm_per_px: float
+    search: float
+    """How far from the picture's middle the part is looked for, in pixels."""
+    speck: float
+    """Bright specks smaller than this (square pixels) are not metal."""
+    mirror: float
+    turn: float
+    to_image: Callable[[float, float], tuple[float, float]]
+
+
+@dataclass(frozen=True)
+class Look:
+    """A held part as measured in one frame."""
+
+    center: Point
+    """The part's origin, in machine coordinates."""
+    seen: Point
+    """Its pads' middle from the nozzle's axis, in machine directions: what the feeder
+    learns from."""
+    angle: float
+    """The part's machine angle."""
+    note: str
+    method: Literal["pads", "outline"]
+    flipped: bool
+    fit: float | None
+    """Pad fit residual, or outline size error (mm)."""
+    complete: bool
+    """Every pad found, or the outline matched the footprint."""
+
+
+@dataclass(frozen=True)
+class _Shot:
+    """A frame taken in training: the middle of the picture, under one of the lights."""
+
+    light: int
+    image: Image
+    nozzle_at: Point
+    nozzle_angle: float
+    expected: float
 
 
 class MispickError(PlacementError):
@@ -221,6 +301,47 @@ def _footprint_center(part: Part | None, library: Library | None) -> tuple[Point
     )
 
 
+def _middle(image: Image, half: float) -> Image:
+    """The middle of a frame, ``half`` pixels each way: what bottom vision looks at."""
+    h, w = image.shape[:2]
+    r = math.ceil(half)
+    y0, x0 = max(0, h // 2 - r), max(0, w // 2 - r)
+    return np.ascontiguousarray(image[y0 : h - y0, x0 : w - x0])
+
+
+def _candidate(
+    vision: PartVision, shots: list[_Shot], looks: list[Look | None], light_index: int
+) -> Candidate:
+    """A way of seeing a part, judged on the frames it was tried on: it must find the
+    part in every one, the same way round, and is scored by how steady the part's angle
+    and place on the nozzle came out, and how well it fit."""
+    good = [(s, k) for s, k in zip(shots, looks, strict=True) if k is not None and k.complete]
+    n = len(shots)
+    flipped = any(k.flipped for _, k in good)
+    base = Candidate(
+        vision=vision, seen=len(good), frames=n, light_index=light_index, flipped=flipped
+    )
+    if not good or len(good) < n or len({k.flipped for _, k in good}) > 1:
+        return base
+    angles = [wrap(k.angle - s.nozzle_angle) for s, k in good]
+    offsets = [
+        rotate(Point(x=k.center.x - s.nozzle_at.x, y=k.center.y - s.nozzle_at.y), -s.nozzle_angle)
+        for s, k in good
+    ]
+    angle_spread = spread_degrees(angles)
+    offset_spread = spread_points([(o.x, o.y) for o in offsets])
+    fit = max(k.fit or 0.0 for _, k in good)
+    score = angle_spread / ANGLE_STEADY + offset_spread / OFFSET_STEADY + fit / FIT_UNIT
+    return base.model_copy(
+        update={
+            "angle_spread": round(angle_spread, 3),
+            "offset_spread": round(offset_spread, 4),
+            "fit": round(fit, 4),
+            "score": round(score, 3),
+        }
+    )
+
+
 class PlacementService:
     def __init__(
         self,
@@ -228,8 +349,11 @@ class PlacementService:
         feeders: FeederService,
         library: Callable[[], Library | None],
         pick_correction: PickCorrection = "top",
+        trained: TrainedPartStore | None = None,
     ) -> None:
         self._machine = machine
+        self.trained = trained or TrainedPartStore(None)
+        """How the bottom camera sees each trained part best, on this machine."""
         self._feeders = feeders
         self._library = library
         self.pick_correction: PickCorrection = pick_correction
@@ -318,6 +442,21 @@ class PlacementService:
             return " ".join(steps)
 
         return self._machine.start_task("pick_and_place", work)
+
+    def start_train(
+        self, slot_id: str, nozzle_id: str, correction: PickCorrection | None = None
+    ) -> Operation:
+        """Pick a part, find how the bottom camera sees it best, keep that for the part,
+        and drop the part in the discard."""
+        nozzle = self._machine.nozzle(nozzle_id)
+        self._check_empty(nozzle)
+        self._bottom_camera()
+        self._discard_location()
+        part, label = self._source_part(slot_id)
+        self._part_height(part, label)
+        self._check_source(slot_id, True)
+        how = correction or self.pick_correction
+        return self._machine.start_task("train", lambda: self.train(slot_id, nozzle, how))
 
     def start_discard(self, nozzle_id: str) -> Operation:
         nozzle = self._machine.nozzle(nozzle_id)
@@ -602,33 +741,15 @@ class PlacementService:
             )
         return found
 
-    async def align(self, nozzle: Nozzle) -> str:
-        load = self._load(nozzle)
-        camera = self._bottom_camera()
-        assert camera.focus_height is not None
-        library = self._library()
-        part = library.find_part(load.part_id) if library and load.part_id else None
-        height = part.height if part is not None and part.height is not None else 0.0
+    def _view(
+        self, camera: Camera, part: Part | None, library: Library | None, width: int
+    ) -> "_View":
+        """What measuring a held part in the bottom camera's frames needs: the part's
+        footprint, sizes in pixels, and how the picture is flipped and turned."""
+        mm_per_px = camera.field_of_view.x / width
         pads = _footprint_center(part, library)
-
-        await self._machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y)
-        await self._machine.lower_nozzle(nozzle, camera.focus_height + height)
-        frame = await self._machine.frame(camera.id)
-        h, w = frame.image.shape[:2]
-        mm_per_px = camera.field_of_view.x / w
         size = pads[1] if pads else Point(x=1.6, y=0.8)
-        search = (math.hypot(size.x, size.y) / 2 + SEARCH_MARGIN_MM) / mm_per_px
-        nozzle_at = self._machine.nozzle_position(nozzle)
-        nozzle_angle = self._machine.nozzle_angle(nozzle)
-        expected = nozzle_angle + load.angle
-        context: dict[str, Any] = {
-            "camera": camera.id,
-            "position": dict(self._machine.driver.position),
-            "mm_per_px": mm_per_px,
-            "nozzle": nozzle.id,
-            "part": load.part_id,
-            "source": load.slot_id,
-        }
+        pad_area = _smallest_pad(part, library)
         # Machine X/Y to image right/down as the picture would be without its measured
         # turn: the inverse of image_to_machine, not turned, which flips and mirrors. The
         # pads are drawn so, and the turn is added to the angle they are looked for at.
@@ -639,32 +760,54 @@ class PlacementService:
         def to_image(x: float, y: float) -> tuple[float, float]:
             return (vy * x - vx * y) / det, (-uy * x + ux * y) / det
 
-        # A mirror turns the other way: a part turned by a in the machine is turned by
-        # -a in a mirrored image; the camera's turn adds to it.
-        mirror = -1.0 if det < 0 else 1.0
-        turn = camera.image_rotation
-        footprint = _footprint(part, library)
-        pad_area = _smallest_pad(part, library)
-        speck = SPECK_FRACTION * pad_area / mm_per_px**2 if pad_area else 0.0
-        # The part's outline first: whatever is bright, its body and its metal.
-        box: PartBox | None = await self._machine.recorder.vision(
-            "find_part", frame.image, search, BRIGHT, speck, **context
+        return _View(
+            camera=camera,
+            footprint=_footprint(part, library),
+            pads=pads,
+            size=size,
+            mm_per_px=mm_per_px,
+            search=(math.hypot(size.x, size.y) / 2 + SEARCH_MARGIN_MM) / mm_per_px,
+            speck=SPECK_FRACTION * pad_area / mm_per_px**2 if pad_area else 0.0,
+            # A mirror turns the other way: a part turned by a in the machine is turned by
+            # -a in a mirrored image; the camera's turn adds to it.
+            mirror=-1.0 if det < 0 else 1.0,
+            turn=camera.image_rotation,
+            to_image=to_image,
         )
+
+    async def _measure(
+        self,
+        view: "_View",
+        image: Image,
+        nozzle_at: Point,
+        expected: float,
+        vision: "_Vision",
+        threshold: int = BRIGHT,
+        method: Method = "auto",
+    ) -> "Look | None":
+        """Where a held part sits and how it is turned, in one frame (``image``, centered
+        on the nozzle at ``nozzle_at``, the part expected at ``expected`` degrees), with
+        metal taken as brighter than ``threshold``; None if not found."""
+        h, w = image.shape[:2]
+        camera, footprint, mm_per_px = view.camera, view.footprint, view.mm_per_px
+        # The part's outline first: whatever is bright, its body and its metal.
+        box: PartBox | None = await vision("find_part", image, view.search, threshold, view.speck)
         fitted: PadFit | None = None
         flipped = False
-        if footprint is not None and len(footprint.pads) >= 2 and box is not None:
-            image_pads = _image_pads(footprint, to_image, mm_per_px)
+        can_fit = footprint is not None and len(footprint.pads) >= 2
+        if method != "outline" and footprint is not None and can_fit:
+            image_pads = _image_pads(footprint, view.to_image, mm_per_px)
             # Then the pads, looked for from the outline's angle nearest the tape's, which
             # may be some degrees off it.
-            start = nearest_angle(box.angle, mirror * expected + turn)
-            fitted = await self._machine.recorder.vision(
-                "fit_pads", frame.image, image_pads, start, search, **context
-            )
+            guess = view.mirror * expected + view.turn
+            start = nearest_angle(box.angle, guess) if box is not None else guess
+            if box is not None or method == "pads":
+                fitted = await vision("fit_pads", image, image_pads, start, view.search, threshold)
             if fitted is not None and not symmetric_half_turn(footprint):
                 # The outline is the same turned 180 degrees; pads that are not (a
                 # SOT-23's, a diode's) tell which way round the part is.
-                other = await self._machine.recorder.vision(
-                    "fit_pads", frame.image, image_pads, start + 180, search, **context
+                other = await vision(
+                    "fit_pads", image, image_pads, start + 180, view.search, threshold
                 )
                 if other is not None and (
                     other.found > fitted.found
@@ -674,12 +817,10 @@ class PlacementService:
                     )
                 ):
                     fitted, flipped = other, True
-        await self._machine.raise_nozzles()
+        if method == "pads" and fitted is None:
+            return None
         if fitted is None and box is None:
-            # Likely a bad pick (nothing there, or a part on its side), even when the
-            # vacuum could not tell: auto correction looks first next time.
-            self._look[load.slot_id] = (1, "after the bottom camera saw no part")
-            raise VisionError(f"the {camera.label.lower()} saw no part on {nozzle.id}")
+            return None
 
         note = ""
         if fitted is not None:
@@ -688,76 +829,344 @@ class PlacementService:
             dx, dy = self._machine.image_to_machine(
                 camera, (fitted.u - w / 2) * mm_per_px, (fitted.v - h / 2) * mm_per_px
             )
-            angle = mirror * (fitted.angle - turn)
+            angle = view.mirror * (fitted.angle - view.turn)
             center = Point(x=nozzle_at.x + dx, y=nozzle_at.y + dy)
             # What the feeder learns from is where the pads' middle was seen.
-            middle = rotate(pads[0], angle) if pads else Point(x=0, y=0)
+            middle = rotate(view.pads[0], angle) if view.pads else Point(x=0, y=0)
             seen = Point(x=dx + middle.x, y=dy + middle.y)
             missing = len(footprint.pads) - fitted.found
+            residual = fitted.residual * mm_per_px
             if missing:
                 note = f" The camera saw {fitted.found} of its {len(footprint.pads)} pads."
-            elif fitted.residual * mm_per_px > FIT_RESIDUAL_MM:
+            elif residual > FIT_RESIDUAL_MM:
                 note = (
-                    f" Its metal lies up to {fitted.residual * mm_per_px:.2f} mm from its "
-                    "pads: check the part and its footprint."
+                    f" Its metal lies up to {residual:.2f} mm from its pads: check the part "
+                    "and its footprint."
                 )
             if flipped:
                 note += (
                     " Its pads show it turned about 180 degrees from the tape's angle: check "
                     "its orientation in the tape."
                 )
-        else:
-            assert box is not None
-            dx, dy = self._machine.image_to_machine(
-                camera, (box.u - w / 2) * mm_per_px, (box.v - h / 2) * mm_per_px
+            return Look(center, seen, angle, note, "pads", flipped, residual, not missing)
+        assert box is not None
+        dx, dy = self._machine.image_to_machine(
+            camera, (box.u - w / 2) * mm_per_px, (box.v - h / 2) * mm_per_px
+        )
+        seen = Point(x=dx, y=dy)
+        measured = (box.width * mm_per_px, box.height * mm_per_px)
+        # What the outline is round: the part's body (a white chip's, lit), or its
+        # pads' metal (a black body unseen against the nozzle).
+        body = footprint.body if footprint is not None else None
+        size = view.size
+        outline, about_body = outline_matched(measured, body, size if view.pads else None)
+        # The outline's longer side, from image directions to machine ones, against the
+        # footprint's: a long part has two ways round, a square one four.
+        long_side = box.angle if box.width >= box.height else box.angle + 90
+        r = math.radians(long_side)
+        sx, sy = self._machine.image_to_machine(camera, math.cos(r), math.sin(r))
+        along = 0.0 if outline is None or outline.x >= outline.y else 90.0
+        period = 180.0 if outline is not None and _elongated(outline) else 90.0
+        angle = nearest_angle(math.degrees(math.atan2(sy, sx)) - along, expected, period)
+        center = Point(x=nozzle_at.x + dx, y=nozzle_at.y + dy)
+        if view.pads is not None and not about_body:
+            # Round the pads: the part's origin may not be their center.
+            shift = rotate(view.pads[0], angle)
+            center = Point(x=center.x - shift.x, y=center.y - shift.y)
+        error: float | None = None
+        if outline is not None:
+            error = max(
+                abs(m - e)
+                for m, e in zip(sorted(measured), sorted((outline.x, outline.y)), strict=True)
             )
-            seen = Point(x=dx, y=dy)
-            measured = (box.width * mm_per_px, box.height * mm_per_px)
-            # What the outline is round: the part's body (a white chip's, lit), or its
-            # pads' metal (a black body unseen against the nozzle).
-            body = footprint.body if footprint is not None else None
-            outline, about_body = outline_matched(measured, body, size if pads else None)
-            # The outline's longer side, from image directions to machine ones, against the
-            # footprint's: a long part has two ways round, a square one four.
-            long_side = box.angle if box.width >= box.height else box.angle + 90
-            r = math.radians(long_side)
-            sx, sy = self._machine.image_to_machine(camera, math.cos(r), math.sin(r))
-            along = 0.0 if outline is None or outline.x >= outline.y else 90.0
-            period = 180.0 if outline is not None and _elongated(outline) else 90.0
-            angle = nearest_angle(math.degrees(math.atan2(sy, sx)) - along, expected, period)
-            center = Point(x=nozzle_at.x + dx, y=nozzle_at.y + dy)
-            if pads is not None and not about_body:
-                # Round the pads: the part's origin may not be their center.
-                shift = rotate(pads[0], angle)
-                center = Point(x=center.x - shift.x, y=center.y - shift.y)
-            if outline is None and pads is not None:
-                found, want = sorted(measured), sorted((size.x, size.y))
-                note = (
-                    f" Its outline measures {found[0]:.2f} x {found[1]:.2f} mm; its pads "
-                    f"are {want[0]:.2f} x {want[1]:.2f}: check the part."
-                )
-            elif footprint is not None and len(footprint.pads) >= 2:
-                # A white chip's ends are as bright as its body (a real 0603 resistor's,
-                # under any light): its body's outline is the measure, not a fallback.
-                what = "its body's" if about_body else "its pads'"
-                note = f" Found by {what} outline"
-                note += (
-                    "."
-                    if symmetric_half_turn(footprint)
-                    else ", so which way round it is was taken from the tape."
-                )
+        if outline is None and view.pads is not None:
+            found, want = sorted(measured), sorted((size.x, size.y))
+            note = (
+                f" Its outline measures {found[0]:.2f} x {found[1]:.2f} mm; its pads "
+                f"are {want[0]:.2f} x {want[1]:.2f}: check the part."
+            )
+        elif footprint is not None and can_fit:
+            # A white chip's ends are as bright as its body (a real 0603 resistor's,
+            # under any light): its body's outline is the measure, not a fallback.
+            what = "its body's" if about_body else "its pads'"
+            note = f" Found by {what} outline"
+            note += (
+                "."
+                if symmetric_half_turn(footprint)
+                else ", so which way round it is was taken from the tape."
+            )
+        return Look(center, seen, angle, note, "outline", False, error, outline is not None)
+
+    async def align(self, nozzle: Nozzle) -> str:
+        load = self._load(nozzle)
+        camera = self._bottom_camera()
+        assert camera.focus_height is not None
+        library = self._library()
+        part = library.find_part(load.part_id) if library and load.part_id else None
+        height = part.height if part is not None and part.height is not None else 0.0
+        trained = self.trained.vision(load.part_id)
+
+        await self._machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y)
+        await self._machine.lower_nozzle(nozzle, camera.focus_height + height)
+        frame = await self._machine.frame(camera.id, light=trained.light if trained else None)
+        view = self._view(camera, part, library, frame.image.shape[1])
+        nozzle_at = self._machine.nozzle_position(nozzle)
+        nozzle_angle = self._machine.nozzle_angle(nozzle)
+        expected = nozzle_angle + load.angle
+        context: dict[str, Any] = {
+            "camera": camera.id,
+            "position": dict(self._machine.driver.position),
+            "mm_per_px": view.mm_per_px,
+            "nozzle": nozzle.id,
+            "part": load.part_id,
+            "source": load.slot_id,
+        }
+
+        async def vision(name: str, image: Image, *args: Any) -> Any:
+            return await self._machine.recorder.vision(name, image, *args, **context)
+
+        threshold = BRIGHT
+        if trained is not None and trained.threshold is not None:
+            threshold = bright_level(frame.image, view.search, trained.threshold)
+        method: Method = trained.method if trained is not None else "auto"
+        look = await self._measure(
+            view, frame.image, nozzle_at, expected, vision, threshold, method
+        )
+        await self._machine.raise_nozzles()
+        if look is None:
+            # Likely a bad pick (nothing there, or a part on its side), even when the
+            # vacuum could not tell: auto correction looks first next time.
+            self._look[load.slot_id] = (1, "after the bottom camera saw no part")
+            how = " the way it was trained to (train the part again if this repeats)"
+            raise VisionError(
+                f"the {camera.label.lower()} saw no part on {nozzle.id}"
+                + (how if trained is not None else "")
+            )
+        center, angle = look.center, look.angle
         offset = rotate(Point(x=center.x - nozzle_at.x, y=center.y - nozzle_at.y), -nozzle_angle)
         alignment = Alignment(
             dx=round(offset.x, 4), dy=round(offset.y, 4), angle=wrap(angle - nozzle_angle)
         )
         self._loads[nozzle.id] = load.model_copy(update={"alignment": alignment})
         self._machine.recorder.event("align", nozzle=nozzle.id, alignment=alignment)
-        learned = self._learn(load, seen, nozzle_angle)
+        learned = self._learn(load, look.seen, nozzle_angle)
         return (
             f"{nozzle.id} holds its part {math.hypot(offset.x, offset.y):.2f} mm off center "
-            f"and turned {wrap(angle - expected):+.1f} degrees from the tape's angle.{note}"
-            f"{learned}"
+            f"and turned {wrap(angle - expected):+.1f} degrees from the tape's angle."
+            f"{look.note}{' Seen as trained.' if trained is not None else ''}{learned}"
         )
+
+    async def train(self, slot_id: str, nozzle: Nozzle, how: PickCorrection) -> str:
+        """Pick a part from ``slot_id``, find how the bottom camera sees it best
+        (``picnicplace.training``), take a picture of it so for the operator to approve,
+        keep what was found (to be approved), and drop the part in the discard."""
+        recorder = self._machine.recorder
+        part_for, _ = self._source_part(slot_id)
+        assert part_for is not None
+        started = None
+        if recorder.available and recorder.active is None:
+            started = recorder.start(f"train {part_for.id}", "train")
+        try:
+            return await self._train(slot_id, nozzle, how, started.id if started else None)
+        finally:
+            if started is not None:
+                recorder.stop("training ended")
+
+    async def _train(
+        self, slot_id: str, nozzle: Nozzle, how: PickCorrection, recording: str | None
+    ) -> str:
+        await self.pick(slot_id, nozzle, True, how)
+        load = self._load(nozzle)
+        camera = self._bottom_camera()
+        assert camera.focus_height is not None
+        library = self._library()
+        part = library.find_part(load.part_id) if library and load.part_id else None
+        assert part is not None and part.height is not None
+        footprint = _footprint(part, library)
+        output = next(
+            (o for o in self._machine.profile.outputs if o.id == camera.light_output), None
+        )
+        lights: list[LightColor | None] = (
+            list(lights_to_try(output.colored)) if output is not None else [None]
+        )
+        await self._machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y)
+        await self._machine.lower_nozzle(nozzle, camera.focus_height + part.height)
+        base = self._machine.nozzle_angle(nozzle)
+        shots: list[_Shot] = []
+        view: _View | None = None
+        try:
+            for turn in TURNS:
+                if turn:
+                    axis = nozzle.rotation_axis
+                    await self._machine.move_axes(
+                        {axis: self._machine.nozzle_turn(nozzle, base + turn)}
+                    )
+                for i, light in enumerate(lights):
+                    for k in range(FRAMES_PER_LIGHT):
+                        frame = await self._machine.frame(camera.id, settle=k == 0, light=light)
+                        if view is None:
+                            view = self._view(camera, part, library, frame.image.shape[1])
+                        crop = _middle(frame.image, view.search + 4)
+                        angle = self._machine.nozzle_angle(nozzle)
+                        shots.append(
+                            _Shot(
+                                i,
+                                crop,
+                                self._machine.nozzle_position(nozzle),
+                                angle,
+                                angle + load.angle,
+                            )
+                        )
+                        if k == 0:
+                            await self._machine.recorder.frame(
+                                crop, camera.id, "train", light=light, turn=turn
+                            )
+                            if turn == 0:
+                                self.trained.save_image(part.id, f"light-{i:02d}", crop)
+            assert view is not None
+            candidates = await self._judge(view, shots, lights, footprint)
+            usable = [c for c in candidates if c.score is not None]
+            if not usable:
+                best_seen = max((c.seen for c in candidates), default=0)
+                raise PlacementError(
+                    f"training found no way of seeing {part.id} in every frame (the best "
+                    f"found it in {best_seen} of {candidates[0].frames if candidates else 0}): "
+                    "check the part is held flat and its footprint is right"
+                )
+            pool = usable
+            if footprint is not None and not symmetric_half_turn(footprint):
+                # An outline cannot say which way round such a part is: its pads can.
+                pool = [c for c in usable if c.vision.method == "pads"] or usable
+            best = min(pool, key=lambda c: c.score or 0.0)
+            # The picture to approve: back where it was picked, under the light chosen.
+            await self._machine.move_axes(
+                {nozzle.rotation_axis: self._machine.nozzle_turn(nozzle, base)}
+            )
+            frame = await self._machine.frame(camera.id, light=best.vision.light)
+            look = await self._final_look(view, frame.image, nozzle, load.angle, best.vision)
+            if look is not None and footprint is not None:
+                self._approval_images(part.id, view, frame.image, nozzle, look, footprint)
+        finally:
+            await self._machine.light_for(camera)
+            await self._machine.raise_nozzles()
+        discarded = await self.discard(nozzle)
+        vision = best.vision
+        how_seen = "by fitting its pads" if vision.method == "pads" else "by its outline"
+        flip = (
+            " Its pads show it turned about 180 degrees from the tape's angle: check its "
+            "orientation in the tape."
+            if best.flipped
+            else ""
+        )
+        message = (
+            f"Trained {part.id}: {describe_light(vision.light)}, {how_seen}, with "
+            f"{describe_threshold(vision.threshold)}. Over {len(TURNS)} turns and "
+            f"{best.frames} frames its angle on the nozzle held within "
+            f"{best.angle_spread or 0.0:.2f} degrees and its place within "
+            f"{best.offset_spread or 0.0:.3f} mm; {len(usable)} of {len(candidates)} ways of "
+            f"seeing it found it every time.{flip} Approve it in the Studio, where its "
+            f"footprint is drawn over it, before it is used. {discarded}"
+        )
+        self.trained.put(
+            TrainedPart(
+                part_id=part.id,
+                vision=vision,
+                trained_at=now(),
+                nozzle=nozzle.id,
+                tip=nozzle.tip,
+                message=message,
+                candidates=sorted(
+                    candidates, key=lambda c: (c.score is None, c.score or 0.0, -c.seen)
+                )[:KEPT_CANDIDATES],
+                tried=len(candidates),
+                recording=recording,
+            )
+        )
+        return message
+
+    async def _judge(
+        self,
+        view: "_View",
+        shots: list["_Shot"],
+        lights: list[LightColor | None],
+        footprint: Footprint | None,
+    ) -> list[Candidate]:
+        """Every way of seeing the part tried on the frames, judged (``training``)."""
+
+        async def direct(name: str, image: Image, *args: Any) -> Any:
+            return await asyncio.to_thread(VISION_FUNCTIONS[name], image, *args)
+
+        methods: list[Method] = ["outline"]
+        if footprint is not None and len(footprint.pads) >= 2:
+            methods.insert(0, "pads")
+        out: list[Candidate] = []
+        for i, light in enumerate(lights):
+            mine = [s for s in shots if s.light == i]
+            for threshold in THRESHOLDS:
+                levels = [
+                    BRIGHT if threshold is None else bright_level(s.image, view.search, threshold)
+                    for s in mine
+                ]
+                for method in methods:
+                    looks = [
+                        await self._measure(
+                            view, s.image, s.nozzle_at, s.expected, direct, level, method
+                        )
+                        for s, level in zip(mine, levels, strict=True)
+                    ]
+                    out.append(
+                        _candidate(
+                            PartVision(light=light, threshold=threshold, method=method),
+                            mine,
+                            looks,
+                            i,
+                        )
+                    )
+        return out
+
+    async def _final_look(
+        self, view: "_View", image: Image, nozzle: Nozzle, angle: float, vision: PartVision
+    ) -> "Look | None":
+        async def direct(name: str, img: Image, *args: Any) -> Any:
+            return await asyncio.to_thread(VISION_FUNCTIONS[name], img, *args)
+
+        threshold = BRIGHT
+        if vision.threshold is not None:
+            threshold = bright_level(image, view.search, vision.threshold)
+        expected = self._machine.nozzle_angle(nozzle) + angle
+        at = self._machine.nozzle_position(nozzle)
+        return await self._measure(view, image, at, expected, direct, threshold, vision.method)
+
+    def _approval_images(
+        self,
+        part_id: str,
+        view: "_View",
+        image: Image,
+        nozzle: Nozzle,
+        look: "Look",
+        footprint: Footprint,
+    ) -> None:
+        """Save the part with its footprint drawn over it, and beside it."""
+        h, w = image.shape[:2]
+        camera = view.camera
+        ax, ay = self._machine.image_to_machine(camera, 1.0, 0.0)
+        bx, by = self._machine.image_to_machine(camera, 0.0, 1.0)
+        det = ax * by - bx * ay
+        at = self._machine.nozzle_position(nozzle)
+
+        def to_px(x: float, y: float) -> tuple[float, float]:
+            # The footprint's point on the part, in the machine, then in the picture.
+            p = rotate(Point(x=x, y=y), look.angle)
+            mx, my = look.center.x + p.x - at.x, look.center.y + p.y - at.y
+            right = (by * mx - bx * my) / det
+            down = (-ay * mx + ax * my) / det
+            return w / 2 + right / view.mm_per_px, h / 2 + down / view.mm_per_px
+
+        overlay, beside = approval_images(
+            image, to_px(0.0, 0.0), view.search * 0.6, footprint, to_px
+        )
+        self.trained.save_image(part_id, "overlay", overlay)
+        self.trained.save_image(part_id, "beside", beside)
 
     def _learn(self, load: NozzleLoad, seen: Point, nozzle_angle: float) -> str:
         """Tell the part's feeder where the part really lay when it was picked. ``seen``:

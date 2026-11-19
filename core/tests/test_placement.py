@@ -270,9 +270,9 @@ def test_a_sot23_is_placed_the_right_way_round(turned: float) -> None:
 
 
 def test_bottom_vision_sets_the_configured_light() -> None:
-    """The config gives the bottom camera's ring light a dim blue, as for parts washed out
-    at full white: aligning sets it so, and the part is still found."""
-    blue = {"red": 0, "green": 0, "blue": 255, "brightness": 60}
+    """The config gives the bottom camera's ring light a warmer white: aligning sets it
+    so, and the part is still found."""
+    blue = {"red": 255, "green": 255, "blue": 200, "brightness": 255}
     config = fast_config(
         machine={"profile": "lumenpnp-v4.1"},
         cameras={"top": {"source": "synthetic"}, "bottom": {"source": "synthetic", "light": blue}},

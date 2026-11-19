@@ -72,6 +72,9 @@ class SceneState:
     """Nozzle ID and the tip fitted on it, where the operator has said."""
     runout: tuple[tuple[str, float, float], ...] = ()
     """Nozzle ID and where its tip end is from the axis it turns about, as turned now."""
+    lights: tuple[tuple[str, tuple[int, int, int, int]], ...] = ()
+    """Light output ID and its color (red, green, blue, brightness), for lights set to a
+    color; a light that is on without one is full white."""
 
 
 @dataclass(frozen=True)
@@ -494,9 +497,17 @@ def _part(c: _Canvas, img: Image, x: float, y: float, angle: float, t: TapeScene
     _shape(c, img, x, y, angle, PartShape(body=t.body, pads=t.pads))
 
 
-def _shape(c: _Canvas, img: Image, x: float, y: float, angle: float, s: PartShape) -> None:
-    """A part seen from above or below: its body, and metal where its pads are. Without
-    a footprint, a 0603 chip."""
+def _shape(
+    c: _Canvas,
+    img: Image,
+    x: float,
+    y: float,
+    angle: float,
+    s: PartShape,
+    body: tuple[int, int, int] = PART_BODY,
+) -> None:
+    """A part seen from above or below: its body (``body`` colored), and metal where its
+    pads are. Without a footprint, a 0603 chip."""
     if s.disc is not None:
         c.circle(img, x, y, s.disc / 2, PAPER)
         return
@@ -506,7 +517,7 @@ def _shape(c: _Canvas, img: Image, x: float, y: float, angle: float, s: PartShap
     a = math.radians(angle)
     ca, sa = math.cos(a), math.sin(a)
     if s.body is not None:
-        c.rect(img, x, y, s.body[0], s.body[1], angle, PART_BODY)
+        c.rect(img, x, y, s.body[0], s.body[1], angle, body)
     for px, py, w, h, r in s.pads:
         cx, cy = x + px * ca - py * sa, y + px * sa + py * ca
         c.rect(img, cx, cy, w * 0.8, h * 0.8, angle + r, PART_END)
@@ -614,8 +625,8 @@ class BottomRenderer:
         self.collars = collars or {}
         """A lit ring behind each kind of tip's end, its diameter in mm, by tip ID."""
         self.washed_out = washed_out
-        """Held parts are overexposed: one even white, their metal not told from their
-        bodies."""
+        """Held parts are white chips, overexposed (``OVEREXPOSED``) under a full light:
+        their metal is not told from their bodies until the light is turned down."""
         rng = np.random.default_rng(11)
         w, h = size
         self._grain = rng.integers(-5, 6, size=(h, w, 1), dtype=np.int16)
@@ -638,6 +649,7 @@ class BottomRenderer:
             canvas.rect(img, head_x, head_y - 40, 90, 70, 0, HEAD_UNDERSIDE)
         tips = dict(state.tips)
         runout = {n: (rx, ry) for n, rx, ry in state.runout}
+        bright: list[Image] = []
         for nozzle in self.profile.nozzles:
             rx, ry = runout.get(nozzle.id, (0.0, 0.0))
             x, y = head_x + nozzle.offset.x + rx, head_y + nozzle.offset.y + ry
@@ -659,13 +671,15 @@ class BottomRenderer:
                 ox = known.dx * math.cos(a) - known.dy * math.sin(a)
                 oy = known.dx * math.sin(a) + known.dy * math.cos(a)
                 if self.washed_out and known.shape.body is not None:
-                    bx, by = known.shape.body
-                    canvas.rect(img, x + ox, y + oy, bx, by, angle + known.angle, WASHED_OUT)
+                    # A white chip, much brighter than the rest: drawn apart, and lit
+                    # brighter below.
+                    bright.append(_white_chip(canvas, img, x + ox, y + oy, angle, known))
                 else:
                     _shape(canvas, img, x + ox, y + oy, angle + known.angle, known.shape)
             elif state.held.get(nozzle.id):
                 # Parts never sit exactly centered: a small, fixed pick error.
                 _chip(canvas, img, x + 0.12, y - 0.07, angle + 3.0)
+        img = _lit(img, bright, _light_color(self.camera, state))
         if self.camera.image_rotation:
             # The camera mounted turned: its whole picture is turned (clockwise as shown).
             m = cv2.getRotationMatrix2D((w / 2, h / 2), -self.camera.image_rotation, 1.0)
@@ -675,8 +689,60 @@ class BottomRenderer:
         return _finish(img, self._grain, self.camera, state)
 
 
-WASHED_OUT = (244, 246, 249)
-"""A part's underside, overexposed: its tin and its white ceramic alike."""
+WHITE_CHIP = (150, 153, 156)
+"""A white chip's ceramic underside, a little duller than its tin ends (``PART_END``)."""
+OVEREXPOSED = 2.5
+"""How much brighter than the rest a white chip looks: under a full light both its
+ceramic and its tin are past white, as a real 0603 was, and told apart only below about
+40% of full light."""
+
+
+def _white_chip(
+    canvas: "_Canvas", img: Image, x: float, y: float, nozzle_angle: float, part: HeldPart
+) -> Image:
+    """A white chip held at (x, y), on a layer of its own: its ceramic body, with its tin
+    ends where its footprint's pads overlap the body (a chip's ends are within its body;
+    its land pattern reaches past it)."""
+    assert part.shape.body is not None
+    angle = nozzle_angle + part.angle
+    layer = np.zeros_like(img)
+    canvas.rect(layer, x, y, part.shape.body[0], part.shape.body[1], angle, WHITE_CHIP)
+    ends = np.zeros_like(img)
+    a = math.radians(angle)
+    ca, sa = math.cos(a), math.sin(a)
+    for px, py, w, h, r in part.shape.pads:
+        canvas.rect(ends, x + px * ca - py * sa, y + px * sa + py * ca, w, h, angle + r, PART_END)
+    body = layer.any(axis=2)
+    tin = ends.any(axis=2) & body
+    layer[tin] = PART_END
+    return layer
+
+
+def _light_color(camera: Camera, state: SceneState) -> tuple[float, float, float]:
+    """The camera's light as a gain on each image channel (blue, green, red), 1 for full
+    white."""
+    if camera.light_output is None:
+        return (1.0, 1.0, 1.0)
+    color = dict(state.lights).get(camera.light_output)
+    if color is None:
+        return (1.0, 1.0, 1.0)
+    r, g, b, level = color
+    k = level / 255 / 255
+    return (b * k, g * k, r * k)
+
+
+def _lit(img: Image, bright: list[Image], light: tuple[float, float, float]) -> Image:
+    """The picture under the camera's light, with white chips (``bright``) drawn
+    ``OVEREXPOSED`` over it."""
+    if not bright and light == (1.0, 1.0, 1.0):
+        return img
+    gain = np.asarray(light, dtype=np.float32)
+    out = img.astype(np.float32) * gain
+    for layer in bright:
+        mask = layer.any(axis=2)
+        out[mask] = layer[mask].astype(np.float32) * OVEREXPOSED * gain
+    return np.clip(out, 0, 255).astype(np.uint8)
+
 
 TIP_BODY_RADIUS = 2.6
 """A nozzle seen from below without a known tip, and a fitted tip's body behind its end."""

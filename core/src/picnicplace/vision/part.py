@@ -15,8 +15,9 @@ Nor is every bright thing metal: a white or ivory plastic body can be nearly as 
 as tin. Plastics like that are yellowish, and tin and solder are neutral or slightly
 blue, so the metal mask can leave out bright pixels warmer than a limit.
 
-The brightness threshold suits the simulator's images. Real parts and lighting will
-need tuning, from captured frames.
+The fixed brightness threshold suits the simulator's images. A part trained on the
+machine (``picnicplace.training``) has its own: a fraction of the brightest the part
+looks under its own light (``bright_level``), which follows the light up and down.
 """
 
 import math
@@ -99,6 +100,26 @@ def find_part(
     # minAreaRect measures in pixel cells; its box runs through pixel centers, so the
     # metal reaches half a pixel further on every side.
     return PartBox(u=u, v=v, width=bw + 1, height=bh + 1, angle=angle)
+
+
+BRIGHT_PERCENTILE = 99.5
+"""How bright a part looks: this percentile of the gray levels about the nozzle, not the
+very brightest pixel (a glint)."""
+
+
+def bright_level(image: Image, search_px: float, fraction: float) -> int:
+    """The gray level that is ``fraction`` of how bright the image is within
+    ``search_px`` of its center: a threshold for ``metal`` that follows the light."""
+    gray = np.asarray(
+        cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image, dtype=np.uint8
+    )
+    h, w = gray.shape
+    yy, xx = np.ogrid[:h, :w]
+    near: np.ndarray = gray[(xx - w / 2) ** 2 + (yy - h / 2) ** 2 <= search_px**2]
+    if near.size == 0:
+        return BRIGHT
+    top = float(np.percentile(near, BRIGHT_PERCENTILE))
+    return int(min(250, max(20, round(fraction * top))))
 
 
 def nearest_angle(measured: float, expected: float, period: float = 90.0) -> float:

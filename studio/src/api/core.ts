@@ -11,12 +11,19 @@ export interface CoreState {
   presence?: PresenceState;
   lease?: LeaseState;
   operations: Record<string, Operation>;
+  /** How many times each saved job has changed since connecting, by job ID: views of a
+   * job fetch it again when its count moves. */
+  jobChanges: Record<string, number>;
 }
 
 /** Recent operations kept for display; older ones are dropped. */
 const MAX_OPERATIONS = 50;
 
-export const initialCoreState: CoreState = { status: "connecting", operations: {} };
+export const initialCoreState: CoreState = {
+  status: "connecting",
+  operations: {},
+  jobChanges: {},
+};
 
 export type CoreAction =
   | { kind: "status"; status: ConnectionStatus }
@@ -50,6 +57,14 @@ export function coreReducer(state: CoreState, action: CoreAction): CoreState {
       }
       return { ...state, operations };
     }
+    case "job.changed":
+      return {
+        ...state,
+        jobChanges: {
+          ...state.jobChanges,
+          [event.job_id]: (state.jobChanges[event.job_id] ?? 0) + 1,
+        },
+      };
     default:
       return state;
   }

@@ -40,7 +40,7 @@ interface Files {
 
 /** Prepare a job: import a KiCad board (and panel), place it on the bed, check it, save it. */
 export function PrepareWorkspace() {
-  const { status } = useCore();
+  const { status, jobChanges } = useCore();
   const description = useDescription();
   const { run, pending, error } = useAction();
   const [jobs, setJobs] = useState<JobSummary[]>([]);
@@ -73,6 +73,27 @@ export function PrepareWorkspace() {
       cancelled = true;
     };
   }, [status]);
+
+  // The open job changed elsewhere (another client, or a script moved where it sits):
+  // take this machine's setup for it again, unless there are edits not saved here.
+  const changes = savedAs ? (jobChanges[savedAs] ?? 0) : 0;
+  useEffect(() => {
+    if (!savedAs || changes === 0 || dirty) return;
+    let cancelled = false;
+    void api
+      .GET("/api/v1/jobs/{job_id}/setup", { params: { path: { job_id: savedAs } } })
+      .then(({ data }) => {
+        if (!cancelled && data) setJob((j) => (j ? { ...j, ...data } : j));
+      });
+    void api.GET("/api/v1/jobs").then(({ data }) => {
+      if (data && !cancelled) setJobs(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Only a new change counts; editing here (dirty) is never overwritten.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedAs, changes]);
 
   // Check the job against the machine whenever it changes.
   const latest = useRef(0);

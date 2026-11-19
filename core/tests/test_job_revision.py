@@ -20,7 +20,7 @@ from picnicplace.job.revision import (
 )
 from picnicplace.job.store import JobStore, RevisionConflict
 from picnicplace.library import Library, Part
-from tests.conftest import fast_config, put_taped
+from tests.conftest import fast_config, put_taped, receive_until
 
 DATA = Path(__file__).parent / "data" / "kicad"
 WHEN = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
@@ -234,7 +234,12 @@ def test_a_job_from_a_file_is_set_up_and_planned(client: TestClient) -> None:
     url = "/api/v1/jobs/picnic-demo/setup"
     assert client.get(url).json() == {"location": None, "board_z": None}
     at = client.post("/api/v1/jobs/find-location", json=job.model_dump(mode="json")).json()
-    assert client.put(url, json={"location": at}).status_code == 200
+    with client.websocket_connect("/api/v1/events") as ws:
+        ws.receive_json()  # hello
+        assert client.put(url, json={"location": at}).status_code == 200
+        # Clients showing the job hear it moved, to fetch it again.
+        changed = receive_until(ws, lambda m: m.get("type") == "job.changed")
+        assert changed["job_id"] == "picnic-demo"
     assert client.get(url).json()["location"] == at
     assert client.get("/api/v1/jobs/none/setup").status_code == 404
     assert client.get("/api/v1/jobs").json()[0]["placed"]

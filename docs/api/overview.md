@@ -21,7 +21,7 @@ generate a client from it, as the Studio does.
 | Channel | Use |
 |---|---|
 | REST, JSON over HTTP | Machine description and state, commands, cameras, the control lease |
-| WebSocket at `/api/v1/events` | Live state, operation progress, and presence. A client must hold this connection to move the machine. |
+| WebSocket at `/api/v1/events` | Live state, operation progress, and presence, and `job.changed` when a saved job, its revisions, or where this machine has it set up changes (clients showing the job fetch it again). A client must hold this connection to move the machine. |
 | MJPEG over HTTP | Camera streams and snapshots at the size, rate, and quality the client asks for |
 
 ## Endpoints today

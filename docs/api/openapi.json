@@ -2549,6 +2549,27 @@
         "title": "Job",
         "type": "object"
       },
+      "JobChangedEvent": {
+        "description": "A saved job, its published revisions, or where this machine has it set up\nchanged: clients showing it fetch it again.",
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "job.changed",
+            "default": "job.changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "job_id"
+        ],
+        "title": "JobChangedEvent",
+        "type": "object"
+      },
       "JobDesign": {
         "additionalProperties": false,
         "description": "What to build: everything in a revision that its hash covers.",
@@ -7052,6 +7073,7 @@
           "mapping": {
             "error": "#/components/schemas/ErrorEvent",
             "hello": "#/components/schemas/HelloEvent",
+            "job.changed": "#/components/schemas/JobChangedEvent",
             "lease": "#/components/schemas/LeaseEvent",
             "machine.state": "#/components/schemas/MachineStateEvent",
             "operation": "#/components/schemas/OperationEvent",
@@ -7079,6 +7101,9 @@
           },
           {
             "$ref": "#/components/schemas/OperationEvent"
+          },
+          {
+            "$ref": "#/components/schemas/JobChangedEvent"
           },
           {
             "$ref": "#/components/schemas/PongEvent"

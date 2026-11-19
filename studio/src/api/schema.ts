@@ -3402,6 +3402,20 @@ export interface components {
             version: 1;
         };
         /**
+         * JobChangedEvent
+         * @description A saved job, its published revisions, or where this machine has it set up
+         *     changed: clients showing it fetch it again.
+         */
+        JobChangedEvent: {
+            /** Job Id */
+            job_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "job.changed";
+        };
+        /**
          * JobDesign
          * @description What to build: everything in a revision that its hash covers.
          */
@@ -5556,7 +5570,7 @@ export interface components {
              */
             label: string;
         };
-        ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
+        ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["JobChangedEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
         /** SetupChoice */
         SetupChoice: {
             /** Cameras */

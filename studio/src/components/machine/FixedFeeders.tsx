@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import type { FixedFeederState, Footprint } from "../../api/types";
-import { FootprintShape } from "../library/FootprintShape";
+import { FootprintShape, Pin1Corner } from "../library/FootprintShape";
 import { footprintExtent } from "../library/footprint";
 import { partPosition, remainingText, stripTape } from "./fixedFeederMath";
 import { Label } from "./MachineView";
@@ -129,7 +129,7 @@ function FixedFeederShape({
           className={taken ? "ff-fp ff-taken" : "ff-fp"}
           transform={`translate(${p.x} ${-p.y}) rotate(${-(state.angle ?? 0)})`}
         >
-          <Pin1Corner footprint={shape} ext={ext} />
+          <Pin1Corner footprint={shape} />
           <FootprintShape footprint={shape} />
         </g>
       ) : (
@@ -169,21 +169,5 @@ function FixedFeederShape({
         {label}
       </Label>
     </g>
-  );
-}
-
-/** The quarter of the part that holds pin 1, shaded, in footprint millimeters. */
-function Pin1Corner({ footprint, ext }: { footprint: Footprint; ext: { x: number; y: number } }) {
-  const marked = footprint.pads.filter((p) => p.pin1);
-  const pin = marked.length === 1 ? marked[0]! : null;
-  if (!pin || Math.abs(pin.x) < 1e-6 || Math.abs(pin.y) < 1e-6) return null;
-  return (
-    <rect
-      className="ff-pin1"
-      x={pin.x < 0 ? -ext.x : 0}
-      y={pin.y > 0 ? -ext.y : 0}
-      width={ext.x}
-      height={ext.y}
-    />
   );
 }

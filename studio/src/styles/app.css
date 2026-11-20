@@ -137,6 +137,11 @@ code,
   color: var(--text);
 }
 
+.icon-button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .pause {
   display: flex;
   align-items: center;
@@ -292,6 +297,26 @@ code,
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+
+/* A footprint drawn where a part should lie: bright enough to see over the picture. */
+.camera-footprint .fp-pad {
+  stroke: #ffd166;
+  stroke-width: 1.5px;
+}
+
+.camera-footprint .fp-pad-1 {
+  fill: rgb(229 72 77 / 45%);
+  stroke: #e5484d;
+  stroke-width: 2px;
+}
+
+.camera-footprint .fp-body {
+  stroke: #ffd166;
+}
+
+.camera-footprint .fp-pin1-corner {
+  fill: rgb(229 72 77 / 25%);
 }
 
 .camera-mark rect,
@@ -1561,6 +1586,10 @@ code,
   stroke-width: 1.5px;
 }
 
+.fp-pin1-corner {
+  fill: rgb(229 72 77 / 22%);
+}
+
 .fp-plus line {
   stroke: var(--text);
   stroke-width: 1px;
@@ -2548,9 +2577,6 @@ code,
   vector-effect: non-scaling-stroke;
 }
 
-.ff-pin1 {
-  fill: rgb(229 72 77 / 22%);
-}
 
 .ff-fp.ff-taken {
   opacity: 0.3;
@@ -2576,13 +2602,15 @@ code,
   fill: var(--danger);
 }
 
-.ff-row {
+.ff-row,
+.slot-row {
   display: flex;
   gap: var(--space-2);
   align-items: center;
 }
 
-.ff-row > .item {
+.ff-row > .item,
+.slot-row > .item {
   min-width: 0;
 }
 

@@ -45,6 +45,27 @@ export function FootprintShape({
   );
 }
 
+/**
+ * The quarter of a footprint that holds pin 1, shaded red, in footprint millimeters: easier
+ * to see than the pad when comparing with a part's pin-1 mark. Nothing without exactly one
+ * pin-1 pad, or with it on a center line.
+ */
+export function Pin1Corner({ footprint }: { footprint: Footprint }) {
+  const marked = footprint.pads.filter((p) => p.pin1);
+  const pin = marked.length === 1 ? marked[0]! : null;
+  if (!pin || Math.abs(pin.x) < 1e-6 || Math.abs(pin.y) < 1e-6) return null;
+  const ext = footprintExtent(footprint);
+  return (
+    <rect
+      className="fp-pin1-corner"
+      x={pin.x < 0 ? -ext.x : 0}
+      y={pin.y > 0 ? -ext.y : 0}
+      width={ext.x}
+      height={ext.y}
+    />
+  );
+}
+
 function PadShape({ pad, onClick }: { pad: Pad; onClick?: () => void }) {
   const r = (Math.min(pad.width, pad.height) / 2) * (pad.roundness / 100);
   return (

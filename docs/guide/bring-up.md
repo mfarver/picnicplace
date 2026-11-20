@@ -246,6 +246,10 @@ effect at once. The reset button next to one forgets it.
       empty: feed until parts arrive. A pick that finds its pocket empty feeds once and
       looks again; a second empty pocket stops it with a feeder error. Take loose parts off, or feed them on past the pick
       window: a run pauses for one rather than pick near it.
+- [ ] The eye button beside each slot with a part (and each strip or tray) takes the
+      camera to its pick and draws the part's footprint over the picture as it should lie
+      in the pocket, pin 1's pad and corner in red: check the part's pin-1 mark is there.
+      Without the part's tape rotation (or, on a strip, with none known), nothing is drawn.
 - [ ] For parts held on the bed (a cut strip of 24 mm tape in a holder, or a tray), use
       **Add strip or tray** under **Strips and trays**. Give it its part, the number of
       parts (and rows, for a tray), and a pick height: the nozzle height at the top of a
@@ -316,7 +320,10 @@ effect at once. The reset button next to one forgets it.
       number, no height, no feeder holding the part, tape too wide for the feeders, or
       out of reach). Fix what you can; tick **Place the rest** to leave out the others.
       The workspace's main area lists what the run will do, in order: scan the feeders,
-      find the board, then each placement.
+      find the board, then each placement. The eye button on a placement takes the top
+      camera there and draws its footprint over the picture, pin 1 in red, to check
+      against the silkscreen. It is drawn where the job's place puts it, before the run's
+      fiducial fit, so a board set slightly turned shows it a little off.
 - [ ] **Check fiducials** finds the board's fiducials and shows how the board sits,
       placing nothing (it works even with every part turned off). Check the offset and
       turn look right, and use the button beside each fiducial to look at it under the

@@ -2,6 +2,7 @@ import {
   Check,
   Circle,
   CircleAlert,
+  Eye,
   LoaderCircle,
   Minus,
   RefreshCw,
@@ -28,6 +29,9 @@ export function RunSteps({
   large = false,
   canSignal = false,
   onSkip,
+  onLook,
+  looking = null,
+  canLook = false,
 }: {
   items: RunItem[];
   /** The run of this job, if one has been started. */
@@ -40,6 +44,11 @@ export function RunSteps({
   canSignal?: boolean;
   /** Offer to skip placements (and put skipped ones back). */
   onSkip?: (item: RunItem, skip: boolean) => void;
+  /** Offer to look at each placement with the top camera, its footprint drawn over it. */
+  onLook?: (item: RunItem) => void;
+  /** The placement being looked at, by index. */
+  looking?: number | null;
+  canLook?: boolean;
 }) {
   const all = runSteps(items, run, fiducials, hasBus);
   const focus = focusIndex(all);
@@ -84,6 +93,14 @@ export function RunSteps({
                 <img src={picture(r.item)} alt={`${r.item.ref} where it landed`} />
               </button>
             )}
+          {r.item && onLook && (
+            <LookButton
+              item={r.item}
+              active={r.item.index === looking}
+              disabled={!canLook}
+              onLook={onLook}
+            />
+          )}
           {run && r.item && onSkip && (
             <SkipButton item={r.item} run={run} canSignal={canSignal} onSkip={onSkip} />
           )}
@@ -224,6 +241,35 @@ function StepIcon({ row, running, size }: { row: RunStepRow; running: boolean; s
     default:
       return <Circle size={size} className="run-step-icon" aria-label="to do" />;
   }
+}
+
+function LookButton({
+  item,
+  active,
+  disabled,
+  onLook,
+}: {
+  item: RunItem;
+  active: boolean;
+  disabled: boolean;
+  onLook: (item: RunItem) => void;
+}) {
+  const label = active
+    ? `Stop drawing ${item.ref}'s footprint on the camera`
+    : `Look at ${item.ref} with the top camera, its footprint drawn over it`;
+  return (
+    <button
+      type="button"
+      className={active ? "icon-button active" : "icon-button"}
+      disabled={disabled && !active}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      onClick={() => onLook(item)}
+    >
+      <Eye size={14} aria-hidden />
+    </button>
+  );
 }
 
 function SkipButton({

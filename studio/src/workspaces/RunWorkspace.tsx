@@ -32,6 +32,7 @@ import { Panel } from "../components/Panel";
 import { PickCorrectionSelect } from "../components/PickCorrection";
 import { RunSteps } from "../components/RunSteps";
 import { Placeholder } from "../components/Placeholder";
+import { useFootprint } from "../useFootprint";
 
 /**
  * Run a saved job: check it against the machine and its feeders, then place it. This is
@@ -174,6 +175,30 @@ export function RunWorkspace() {
   const errors = shownPlan?.issues.filter((i) => i.severity === "error") ?? [];
   const cautions = shownPlan?.issues.filter((i) => i.severity === "warning") ?? [];
   const topCamera = description?.cameras.find((c) => c.looking === "down");
+  // Where the top camera is now, to draw a placement's footprint on its picture.
+  const topAt =
+    topCamera && machine?.position.X !== undefined && machine.position.Y !== undefined
+      ? {
+          x: machine.position.X + topCamera.position.x,
+          y: machine.position.Y + topCamera.position.y,
+        }
+      : undefined;
+
+  // The placement being looked at with the top camera, its footprint drawn over it: where
+  // the job's place puts it, before the run's fiducial fit.
+  const [looking, setLooking] = useState<{ job: string; item: RunItem } | null>(null);
+  const lookingItem = looking && looking.job === chosen ? looking.item : null;
+  const lookFootprint = useFootprint(lookingItem?.footprint_id);
+  const look = (item: RunItem) => {
+    if (lookingItem?.index === item.index) {
+      setLooking(null);
+      return;
+    }
+    setLooking({ job: chosen, item });
+    if (!topCamera) return;
+    const target = { X: item.x - topCamera.position.x, Y: item.y - topCamera.position.y };
+    void act(() => api.POST("/api/v1/machine/move", { body: { position: target } }));
+  };
 
   return (
     <div className="workspace">
@@ -425,6 +450,21 @@ export function RunWorkspace() {
             title={topCamera.label}
             info={cameras?.find((c) => c.id === topCamera.id)}
             fieldOfView={topCamera.field_of_view.x}
+            footprints={
+              lookingItem && lookFootprint
+                ? [
+                    {
+                      footprint: lookFootprint,
+                      x: lookingItem.x,
+                      y: lookingItem.y,
+                      angle: lookingItem.rotation,
+                      title: `${lookingItem.ref}: where the job puts it, pin 1 in red`,
+                    },
+                  ]
+                : undefined
+            }
+            at={topAt}
+            orientation={description}
           />
         )}
       </aside>
@@ -479,6 +519,9 @@ export function RunWorkspace() {
               large
               canSignal={canSignal}
               onSkip={(item, value) => void skip(item, value)}
+              onLook={look}
+              looking={lookingItem?.index ?? null}
+              canLook={canMove && !!topCamera}
             />
           </div>
         ) : (

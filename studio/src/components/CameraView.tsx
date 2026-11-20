@@ -5,7 +5,14 @@ import { useCore } from "../api/core";
 import { readMjpeg } from "../mjpeg";
 import { scaleLength } from "../scaleBar";
 import type { CameraInfo } from "../api/types";
-import { placeMark, type CameraMark, type Orientation } from "../cameraMarks";
+import {
+  footprintMatrix,
+  placeMark,
+  type CameraFootprint,
+  type CameraMark,
+  type Orientation,
+} from "../cameraMarks";
+import { FootprintShape, Pin1Corner } from "./library/FootprintShape";
 import { Panel } from "./Panel";
 
 /** Stream width: twice the sidebar width, so it stays sharp on high-density screens. */
@@ -29,6 +36,8 @@ interface Props {
   crosshair?: boolean;
   /** What vision found, drawn on the picture where it is (with ``at`` and ``orientation``). */
   marks?: CameraMark[];
+  /** Footprints drawn where their parts should lie, to compare with what the camera sees. */
+  footprints?: CameraFootprint[];
   /** Where the camera is: machine X and Y, mm. */
   at?: { x: number; y: number };
   orientation?: Orientation;
@@ -45,6 +54,7 @@ export function CameraView({
   fieldOfView,
   crosshair = true,
   marks,
+  footprints,
   at,
   orientation,
 }: Props) {
@@ -56,6 +66,7 @@ export function CameraView({
         fieldOfView={fieldOfView}
         crosshair={crosshair}
         marks={marks}
+        footprints={footprints}
         at={at}
         orientation={orientation}
       />
@@ -70,6 +81,7 @@ export function CameraFeed({
   crosshair = true,
   inWindow = false,
   marks,
+  footprints,
   at,
   orientation,
 }: {
@@ -78,6 +90,7 @@ export function CameraFeed({
   fieldOfView?: number;
   crosshair?: boolean;
   marks?: CameraMark[];
+  footprints?: CameraFootprint[];
   at?: { x: number; y: number };
   orientation?: Orientation;
   /** Shown in its own window: streamed at full width, with no pop-out button. */
@@ -202,9 +215,10 @@ export function CameraFeed({
       {!failed && (
         <div className="camera-zoom" style={{ transform: `scale(${zoom})` }}>
           <StreamImage src={src} alt={`${id} camera`} onError={() => setFailed(true)} />
-          {marks && marks.length > 0 && at && orientation && fieldOfView ? (
+          {(marks?.length || footprints?.length) && at && orientation && fieldOfView ? (
             <Marks
-              marks={marks}
+              marks={marks ?? []}
+              footprints={footprints ?? []}
               at={at}
               orientation={orientation}
               width={fieldOfView}
@@ -260,12 +274,14 @@ export function CameraFeed({
 /** Marks over the picture, in mm from its center; they zoom with it. */
 function Marks({
   marks,
+  footprints,
   at,
   orientation,
   width,
   height,
 }: {
   marks: CameraMark[];
+  footprints: CameraFootprint[];
   at: { x: number; y: number };
   orientation: Orientation;
   width: number;
@@ -298,6 +314,17 @@ function Marks({
           </g>
         );
       })}
+      {footprints.map((f, i) => (
+        <g
+          key={`fp${i}`}
+          className="camera-footprint"
+          transform={`matrix(${footprintMatrix(f, at, orientation).join(" ")})`}
+        >
+          <title>{f.title}</title>
+          <Pin1Corner footprint={f.footprint} />
+          <FootprintShape footprint={f.footprint} />
+        </g>
+      ))}
     </svg>
   );
 }

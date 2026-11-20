@@ -888,8 +888,8 @@ Device):
 | Workspace | Contents |
 |---|---|
 | **Prepare** | Import boards, edit placements, assign parts/packages, set up panels and fiducials. Central canvas shows the board with placements. |
-| **Feeders** | Feeder layout on a machine-bed view, Photon feeder discovery, part assignment, pick-location teaching. |
-| **Run** | The operator's view, for someone at the machine: the job's steps fill the main area as a checklist from the moment it is planned (scan feeders, find the board, each placement; done steps checked off, the step under way highlighted, and the one a problem stopped at marked), in large type, with error prompts and their actions above it; the sidebar holds the job, its checks, pause/step/stop, and the top camera. |
+| **Feeders** | Feeder layout on a machine-bed view, Photon feeder discovery, part assignment, pick-location teaching. An eye button on each slot and strip takes the top camera to its pick and draws the part's footprint over the picture as it should lie, pin 1 in red. |
+| **Run** | The operator's view, for someone at the machine: the job's steps fill the main area as a checklist from the moment it is planned (scan feeders, find the board, each placement; done steps checked off, the step under way highlighted, and the one a problem stopped at marked), in large type, with error prompts and their actions above it; the sidebar holds the job, its checks, pause/step/stop, and the top camera. An eye button on each placement takes the top camera there and draws its footprint over the picture, pin 1 in red, to check against the silkscreen. |
 | **Machine** | Machine view (§8.3), camera views in the sidebar (each with a scale bar in millimeters, and zoomed with the mouse wheel, the bar following), jog controls, actuators, guided calibration wizards, machine settings. During a job run, the map shows the job's board and placements, and a strip under it shows the run's status and a few steps around the current one, for someone watching from elsewhere. |
 | **Vision** | Pipeline editor with live preview of each stage. |
 

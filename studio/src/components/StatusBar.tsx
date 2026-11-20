@@ -1,4 +1,5 @@
 import { type ConnectionStatus, hasControl, useCore } from "../api/core";
+import { useDescription } from "../api/useDescription";
 import { describeClient, formatAxis } from "../format";
 
 const CONNECTION_LABEL: Record<ConnectionStatus, string> = {
@@ -17,6 +18,9 @@ export function StatusBar() {
       ? describeClient(lease.holder)
       : "no one";
   const live = status === "open" && machine !== undefined;
+  // A nozzle's rotation axis is shown by the nozzle's name (N1, not A).
+  const description = useDescription();
+  const nozzleOf = new Map(description?.nozzles.map((n) => [n.rotation_axis, n.id]) ?? []);
 
   return (
     <footer className="statusbar">
@@ -60,7 +64,7 @@ export function StatusBar() {
           <span className="status-item mono">
             {machine.axes.map((axis) => (
               <span key={axis} className="status-axis">
-                {axis} {formatAxis(axis, machine.position[axis])}
+                {nozzleOf.get(axis) ?? axis} {formatAxis(axis, machine.position[axis])}
               </span>
             ))}
           </span>

@@ -97,8 +97,9 @@ pick_correction = "top"
 # Find heights by touch: with suction on, a nozzle steps down until the vacuum seals. The
 # board's top on a fiducial at the start of each run, and the top of the parts in each
 # feeder, strip, and tray on the first pick from it (kept with that feeder and part, and
-# found again after an empty pick or a change of nozzle tip). Off: the job's or the
-# profile's board height, and the profile's or the setup's pick heights.
+# found again after an empty pick or a change of nozzle tip). A strip with no pick height
+# is searched for from safe height. Off: the job's or the profile's board height, and the
+# profile's or the setup's pick heights (a strip with none is not used).
 sniff_heights = true
 
 # How far (mm) placing presses a part into the board's paste or tape: the nozzle goes this

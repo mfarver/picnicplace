@@ -3059,7 +3059,7 @@ export interface components {
             part_id?: string | null;
             /**
              * Pick Height
-             * @description Nozzle height at the top of a part. Empty: the board height plus the part's height, which is right only for parts lying on the bed itself.
+             * @description Nozzle height at the top of a part. Empty: on a strip, its parts' top is searched for by touch from safe Z on the first pick (with sniff_heights on); on a tray, the board height plus the part's height.
              */
             pick_height?: number | null;
             /**
@@ -3126,7 +3126,7 @@ export interface components {
             part_id: string | null;
             /**
              * Pick Height
-             * @description Nozzle height at the top of a part. Empty: the board height plus the part's height, which is right only for parts lying on the bed itself.
+             * @description Nozzle height at the top of a part. Empty: on a strip, its parts' top is searched for by touch from safe Z on the first pick (with sniff_heights on); on a tray, the board height plus the part's height.
              */
             pick_height: number | null;
             /**
@@ -6110,7 +6110,7 @@ export interface components {
             at?: components["schemas"]["Point"] | null;
             /**
              * Which
-             * @description The first part; the last part of the first row (sets the step along a row); or the last part of the last row (sets the step from row to row).
+             * @description The first part; the last part of the first row (sets the step along a row, and on a strip whose tape's pitch the library gives, how many parts it holds); or the last part of the last row (sets the step from row to row).
              * @enum {string}
              */
             which: "first" | "row_end" | "last";

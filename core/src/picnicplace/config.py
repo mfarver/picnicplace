@@ -207,8 +207,10 @@ class MachineConfig(_Section):
             "Find heights by touch during runs and picks: a nozzle, with suction on, steps "
             "down until the vacuum seals. The board's top on one of its fiducials at the "
             "start of each run, and the top of the parts in each feeder, strip, and tray on "
-            "the first pick from it (kept with that feeder and part). Off: the job's or the "
-            "profile's board height, and the profile's or the setup's pick heights."
+            "the first pick from it (kept with that feeder and part); a strip with no pick "
+            "height is searched for from safe Z. Off: the job's or the profile's board "
+            "height, and the profile's or the setup's pick heights (a strip with none is not "
+            "used)."
         ),
     )
     sim_time_scale: float = Field(

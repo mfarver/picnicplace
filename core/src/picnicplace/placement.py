@@ -566,7 +566,12 @@ class PlacementService:
         f = feeders.fixed(fixed_id)
         label = feeders.fixed_label(fixed_id)
         part = feeders.fixed_part(f)
-        height = feeders.fixed_pick_height(f, label)
+        # A strip with no pick height: its parts' top is searched for by touch, down from
+        # safe Z, on the first pick from it (and kept after).
+        search = f.kind == "strip" and f.pick_height is None and self.sniff_heights
+        height = (
+            feeders.strip_search_floor(f, label) if search else feeders.fixed_pick_height(f, label)
+        )
         angle = feeders.fixed_angle(f)
         if angle is None:
             raise PlacementError(
@@ -592,7 +597,7 @@ class PlacementService:
         feeders.took_fixed(fixed_id)  # tried or taken, that pocket is done with
         if check is not None:
             self._check_tape(fixed_id, label, check)
-        top = await self._take_counted(fixed_id, how, nozzle, at, height, label)
+        top = await self._take_counted(fixed_id, how, nozzle, at, height, label, search)
         self._loads[nozzle.id] = self._picked(nozzle, part, fixed_id, angle, at, base, how)
         what = part.id if part else "a part"
         return f"{nozzle.id} picked {what} number {index + 1} from {label}{found}{top}{why}."
@@ -634,16 +639,31 @@ class PlacementService:
         return "bottom", ""
 
     async def _take_counted(
-        self, source_id: str, how: PickMethod, nozzle: Nozzle, at: Point, height: float, label: str
+        self,
+        source_id: str,
+        how: PickMethod,
+        nozzle: Nozzle,
+        at: Point,
+        height: float,
+        label: str,
+        search: bool = False,
     ) -> str:
         """Take the part, and keep count for auto correction: after an empty pick, look
         with the top camera next time; a part taken after a look uses one up. ``height``:
         the setup's or profile's height for the part's top, used until a sniff finds it.
-        Returns a note for the pick's message when it sniffed."""
+        With ``search``, no height for it is known: a sniff searches down from safe Z,
+        no lower than ``height``. Returns a note for the pick's message when it sniffed."""
         top = self._feeders.part_top(source_id) if self.sniff_heights else None
         note = ""
         try:
-            if self.sniff_heights and top is None:
+            if search and top is None:
+                found = await self._search_take(nozzle, at, height, label)
+                self._feeders.set_part_top(source_id, found, nozzle)
+                note = (
+                    f" (no pick height set: found the part's top at Z {found:.2f} by touch, "
+                    "searching down from safe Z)"
+                )
+            elif self.sniff_heights and top is None:
                 found = await self._sniff_take(nozzle, at, height, label)
                 self._feeders.set_part_top(source_id, found, nozzle)
                 note = (
@@ -722,17 +742,28 @@ class PlacementService:
                 else f"{nozzle.id} picked nothing from {label}"
             )
 
-    async def _sniff_take(self, nozzle: Nozzle, at: Point, expected: float, label: str) -> float:
+    async def _sniff_take(
+        self,
+        nozzle: Nozzle,
+        at: Point,
+        expected: float,
+        label: str,
+        above: float = PART_SNIFF_ABOVE_MM,
+        below: float = PART_SNIFF_BELOW_MM,
+        missed: str | None = None,
+    ) -> float:
         """Take the part by touch: step down onto it with suction on until the vacuum
-        seals, lift, and check it came up. Returns the height it sealed at, its top."""
+        seals, from ``above`` over ``expected`` to ``below`` under it, lift, and check it
+        came up. Returns the height it sealed at, its top. ``missed``: the error when it
+        reaches the bottom without sealing."""
         try:
             found = await sniff(
                 self._machine,
                 nozzle,
                 self._axis_over(nozzle, at),
                 expected,
-                PART_SNIFF_ABOVE_MM,
-                PART_SNIFF_BELOW_MM,
+                above,
+                below,
                 f"the part at {label}",
                 hold=True,
                 dwell_s=PICK_DWELL_S,
@@ -741,7 +772,8 @@ class PlacementService:
             raise PlacementError(str(e)) from e
         if found is None:
             raise MispickError(
-                f"{floor_message(nozzle, f'a part at {label}', expected, PART_SNIFF_BELOW_MM)}: "
+                missed
+                or f"{floor_message(nozzle, f'a part at {label}', expected, below)}: "
                 "check there is a part in the pocket, and the pick height"
             )
         held, _ = await self._machine.holds_after_lift(nozzle, VACUUM_TIMEOUT_S)
@@ -752,6 +784,20 @@ class PlacementService:
                 "there is a part in the pocket"
             )
         return found
+
+    async def _search_take(self, nozzle: Nozzle, at: Point, floor: float, label: str) -> float:
+        """Take a part whose top is not known by touch: step down onto it from safe Z to
+        a little below ``floor``. Returns its top."""
+        safe = self._machine.profile.safe_z
+        bottom = floor - PART_SNIFF_BELOW_MM
+        missed = (
+            f"{nozzle.label} searched down from safe Z (Z {safe:g}) to Z {bottom:.2f} over "
+            f"{label} and found no part: check there is a part in the pocket. If the strip's "
+            "holder sits lower than a board, set its pick height (the nozzle height at the "
+            "top of a part, in the Feeders workspace)"
+        )
+        above = max(PART_SNIFF_ABOVE_MM, safe - floor)
+        return await self._sniff_take(nozzle, at, floor, label, above, PART_SNIFF_BELOW_MM, missed)
 
     def _view(
         self, camera: Camera, part: Part | None, library: Library | None, width: int

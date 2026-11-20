@@ -119,6 +119,10 @@ the tape (on an 8 mm feeder)."""
 SIM_PICK_RADIUS = 1.5
 """A simulated pick this close to a pocket takes its part."""
 
+POCKET_FIT = 0.25
+"""Teaching a strip's last part: how far (in pockets) from a whole number of pockets the
+first and last parts may lie, for centering the camera by eye."""
+
 SIM_FIXED_ERROR = Point(x=0.15, y=-0.1)
 """How far a simulated strip or tray really is from where its setup says."""
 
@@ -1086,20 +1090,26 @@ class FeederService:
     ) -> FixedFeeder:
         """Teach where a part is, by the camera centered over it: the first part, the
         last part of the first row (giving the step along a row), or the last part of
-        the last row (giving the step from row to row)."""
+        the last row (giving the step from row to row). On a strip whose tape's pitch the
+        library gives, the last part also gives how many parts it holds: one more than
+        the pockets from the first part to the last."""
         f = self.fixed(fixed_id)
-        update: dict[str, Point]
+        update: dict[str, Point | int]
         if which == "first":
             update = {"first": Point(x=round(at.x, 3), y=round(at.y, 3))}
         elif which == "row_end":
-            if f.columns < 2:
+            tape = self.tape_of(self.fixed_part(f)) if f.kind == "strip" else None
+            if tape is not None and tape.pitch is not None and f.rows == 1:
+                n = self._pockets_between(fixed_id, f.first, at, tape.pitch)
+                update = {"columns": n + 1}
+            elif f.columns < 2:
                 raise InvalidTargetError(f"{fixed_id} has one part per row: nothing to step")
-            n = f.columns - 1
-            update = {
-                "step": Point(
-                    x=round((at.x - f.first.x) / n, 4), y=round((at.y - f.first.y) / n, 4)
-                )
-            }
+            else:
+                n = f.columns - 1
+                update = {}
+            update["step"] = Point(
+                x=round((at.x - f.first.x) / n, 4), y=round((at.y - f.first.y) / n, 4)
+            )
         else:
             if f.rows < 2:
                 raise InvalidTargetError(f"{fixed_id} has one row: teach the end of the row")
@@ -1117,6 +1127,24 @@ class FeederService:
         self._invalidate()
         return f
 
+    def _pockets_between(self, fixed_id: str, first: Point, last: Point, pitch: float) -> int:
+        """How many pockets of ``pitch`` lie from a strip's first part to its last."""
+        distance = math.hypot(last.x - first.x, last.y - first.y)
+        pockets = distance / pitch
+        n = round(pockets)
+        if n < 1:
+            raise InvalidTargetError(
+                f"the camera is {distance:.2f} mm from {fixed_id}'s first part, less than one "
+                f"pocket ({pitch:g} mm): center it on the strip's last part"
+            )
+        if abs(pockets - n) > POCKET_FIT:
+            raise InvalidTargetError(
+                f"{fixed_id}'s last part is {distance:.2f} mm from its first, {pockets:.2f} "
+                f"pockets of {pitch:g} mm: not a whole number. Check the camera is centered on "
+                "the last part, the first part was taught, and the tape's pitch in the library"
+            )
+        return n
+
     def fixed_part(self, f: FixedFeeder) -> Part | None:
         return self._part(FeederAssignment(part_id=f.part_id))
 
@@ -1130,8 +1158,18 @@ class FeederService:
         return _strip_direction(f) + (tape.rotation or 0.0)
 
     def fixed_pick_height(self, f: FixedFeeder, label: str) -> float:
+        """The setup's height for the top of the parts in a strip or tray. A tray with
+        none set: the board height plus the part's height. A strip with none set has no
+        such height: its tape sits in a holder, lifted off the bed by however much the
+        holder lifts it, so its parts' top is found by touch (``strip_search_floor``)."""
         if f.pick_height is not None:
             return f.pick_height
+        if f.kind == "strip":
+            raise FeederError(
+                f"{label} has no pick height: set one (the nozzle height at the top of a part, "
+                "in the Feeders workspace), or turn on sniff_heights in the config to find it "
+                "by touch"
+            )
         board = self._profile.board_height
         part = self.fixed_part(f)
         if board is None or part is None or part.height is None:
@@ -1139,6 +1177,19 @@ class FeederService:
                 f"{label} has no pick height: set one (the nozzle height at the top of a part)"
             )
         return board + part.height
+
+    def strip_search_floor(self, f: FixedFeeder, label: str) -> float:
+        """How low a search for the top of a strip's parts may go: the top they would
+        have lying at the board's height. A holder only lifts the tape higher."""
+        board = self._profile.board_height
+        if board is None:
+            raise FeederError(
+                f"{label} has no pick height, and the machine profile gives no board height "
+                "to search for its parts' top above: set its pick height (the nozzle height "
+                "at the top of a part, in the Feeders workspace)"
+            )
+        part = self.fixed_part(f)
+        return board + (part.height if part is not None and part.height is not None else 0.0)
 
     def next_fixed(self, fixed_id: str) -> tuple[int, Point]:
         """The next part to take from a strip or tray, and where it lies."""

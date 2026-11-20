@@ -414,6 +414,7 @@ def plan_job(
     feeders: FeedersState,
     library: PartsSource | None,
     revision: int | None = None,
+    sniff_heights: bool = False,
 ) -> JobPlan:
     result = layout(job, profile)
     issues = [i for i in result.issues if not (i.ref and i.severity == "warning")]
@@ -436,6 +437,19 @@ def plan_job(
             problem = "its part has no tape data, so the parts' angle is not known"
         elif f.feeder.pick_height is None and profile.board_height is None:
             problem = "it has no pick height"
+        elif f.feeder.pick_height is None and f.feeder.kind == "strip" and not sniff_heights:
+            problem = (
+                "it has no pick height (set one in the Feeders workspace, or turn on "
+                "sniff_heights in the config to find it by touch)"
+            )
+        elif f.feeder.pick_height is None and f.feeder.kind == "strip":
+            issues.append(
+                Issue(
+                    severity="warning",
+                    message=f"{f.id} has no pick height: its first pick searches down from "
+                    "safe Z for its parts' top, which is slow; setting the height is quicker",
+                )
+            )
         if problem:
             issues.append(Issue(severity="warning", message=f"{f.id} is not used: {problem}"))
             continue
@@ -748,7 +762,15 @@ class JobRunner:
 
     def _plan(self, job_id: str, revision: int | None) -> tuple[Job, PartsSource | None, JobPlan]:
         job, parts, number = self._resolve(job_id, revision)
-        plan = plan_job(job_id, job, self._machine.profile, self._feeders.state(), parts, number)
+        plan = plan_job(
+            job_id,
+            job,
+            self._machine.profile,
+            self._feeders.state(),
+            parts,
+            number,
+            sniff_heights=self.sniff_board,
+        )
         aligns = any(i.status == "pending" for i in plan.items)
         for severity, message in run_issues(current(self._machine, self._feeders), aligns):
             plan.issues.append(Issue(severity=severity, message=message))
@@ -1053,7 +1075,14 @@ class JobRunner:
         await self._feeders.scan()
         run.located = []
         self._picked = set()
-        plan = plan_job(run.job_id, job, self._machine.profile, self._feeders.state(), self._parts)
+        plan = plan_job(
+            run.job_id,
+            job,
+            self._machine.profile,
+            self._feeders.state(),
+            self._parts,
+            sniff_heights=self.sniff_board,
+        )
         now = {(i.copy_id, i.ref): i for i in plan.items}
         lost: list[str] = []
         for item in run.plan.items:

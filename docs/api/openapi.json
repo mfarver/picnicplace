@@ -7105,6 +7105,12 @@
             "title": "Held",
             "type": "object"
           },
+          "interrupted": {
+            "default": false,
+            "description": "The core stopped in the middle of this run (a restart, a crash, a power cut) and read it back from disk when it started again. Cleared on resume.",
+            "title": "Interrupted",
+            "type": "boolean"
+          },
           "job_id": {
             "title": "Job Id",
             "type": "string"
@@ -7215,6 +7221,7 @@
           "recording",
           "held",
           "current",
+          "interrupted",
           "started_at",
           "finished_at",
           "placed",
@@ -14062,6 +14069,73 @@
           }
         ],
         "summary": "Set Output",
+        "tags": [
+          "machine"
+        ]
+      }
+    },
+    "/api/v1/machine/park": {
+      "post": {
+        "description": "Raise the nozzles and move the head out of the way: to the park location, or else to\nthe back of its travel.",
+        "operationId": "park_api_v1_machine_park_post",
+        "parameters": [
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Park",
         "tags": [
           "machine"
         ]

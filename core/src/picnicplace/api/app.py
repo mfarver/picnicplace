@@ -223,6 +223,8 @@ def create_app(
         ctx.runner.check_placements = config.machine.check_placements
         ctx.runner.sim_board_bump = config.machine.sim_board_bump
         ctx.runner.checks_dir = config.data.dir.expanduser() / "run-checks"
+        ctx.runner.run_path = config.data.dir.expanduser() / "run.json"
+        ctx.runner.restore()
         recorder.snapshot = recording_routes.snapshot_builder(ctx, jobs.get)
         await machine.start()
         try:

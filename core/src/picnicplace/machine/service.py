@@ -790,6 +790,33 @@ class MachineService:
             speed = APPROACH_SPEED if speed is None else min(speed, APPROACH_SPEED)
         await self.move_axes({nozzle.z_axis: nozzle.z_sign * raw}, speed)
 
+    async def park(self) -> str:
+        """Raise the nozzles and move the head out of the operator's way: to the park
+        location, or else to the back of its travel. For use inside an operation. Says
+        where it went."""
+        profile = self._profile
+        park = next((loc for loc in profile.locations if loc.kind == "park"), None)
+        if park is not None:
+            target = {"X": park.position.x, "Y": park.position.y}
+            where = f"the {park.label.lower()}"
+        else:
+            y = next((a for a in profile.axes if a.name == "Y"), None)
+            if y is None:
+                return "nowhere: the machine has no Y axis"
+            target = {"Y": y.max if profile.y_sign > 0 else y.min}
+            where = "the back (no park location is set)"
+        await self.raise_nozzles()
+        await self.move_axes(target)
+        return where
+
+    def start_park(self) -> Operation:
+        """Park the head (``park``) as an operation."""
+
+        async def work() -> str:
+            return f"The head moved to {await self.park()}."
+
+        return self.start_task("park", work)
+
     async def raise_nozzles(self) -> None:
         await self.move_axes({axis: TRAVEL_HEIGHT for axis in sorted(self._z_axes)})
 

@@ -38,7 +38,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import IntEnum
 
-from picnicplace.machine.errors import FeederError
+from picnicplace.machine.errors import FeederError, FeedNotAnsweredError
 
 log = logging.getLogger(__name__)
 
@@ -218,7 +218,7 @@ class PhotonBus:
     async def _move(self, address: int, command: Command, tenths: int) -> None:
         reply = await self.request(address, command, bytes([tenths]))
         if reply is None:
-            raise FeederError(f"no feeder answered in slot {address}")
+            raise FeedNotAnsweredError(f"no feeder answered in slot {address}")
         _check(reply, address)
         expected_s = int.from_bytes(reply.data[:2], "big") / 1000 if len(reply.data) >= 2 else 1
         loop = asyncio.get_running_loop()
@@ -230,7 +230,7 @@ class PhotonBus:
                 _check(status, address)
                 return
             if loop.time() > deadline:
-                raise FeederError(
+                raise FeedNotAnsweredError(
                     f"the feeder in slot {address} did not finish feeding in "
                     f"{expected_s + self._timeout_margin_s:.1f} s"
                 )

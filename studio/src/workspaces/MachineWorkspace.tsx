@@ -80,6 +80,7 @@ export function MachineWorkspace() {
     const zAxes = new Set(description.nozzles.map((n) => n.z_axis));
     moveTo(Object.fromEntries([...zAxes].map((axis) => [axis, 0])));
   };
+  const park = () => void track(() => api.POST("/api/v1/machine/park"));
   const takeControl = () => void run(() => api.POST("/api/v1/lease", { body: { force: true } }));
   const releaseControl = () => void run(() => api.DELETE("/api/v1/lease"));
   const reset = () => run(() => api.POST("/api/v1/machine/reset"));
@@ -126,6 +127,7 @@ export function MachineWorkspace() {
             canMove={canMove}
             onJog={jog}
             onSafeZ={safeZ}
+            onPark={park}
           />
         )}
 

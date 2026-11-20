@@ -2425,6 +2425,40 @@ code,
   font-size: var(--text-lg);
 }
 
+/* Why the run paused: floating over the page, in view however far the list scrolls. */
+.run-alert {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(480px, calc(100vw - 2 * var(--space-4)));
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.run-alert-title {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-lg);
+  font-weight: 650;
+}
+
+.run-alert-text {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
 /* The Machine workspace: the map, with a few of a run's steps under it. */
 .machine-split {
   display: flex;

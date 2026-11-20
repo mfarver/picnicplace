@@ -36,6 +36,7 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/machine/connect` | Connect to the machine's controller |
 | `POST /api/v1/machine/home` | Home, then visual home if the profile enables it |
 | `POST /api/v1/machine/move` | Move to a position, traveling at safe Z |
+| `POST /api/v1/machine/park` | Raise the nozzles and move the head to the park location (else the back) |
 | `POST /api/v1/machine/jog` | Jog one axis by a distance |
 | `PUT /api/v1/machine/outputs/{id}` | Switch a pump, valve, or light |
 | `PUT /api/v1/machine/lights/{id}` | Set a light's color and brightness (each 0 to 255; brightness 0 is off), if the profile marks it colored |

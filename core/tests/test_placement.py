@@ -347,25 +347,51 @@ def test_an_empty_pocket_is_fed_past_once(lumen: TestClient) -> None:
         assert sorted(parts.held) == ["N1", "N2"]
 
 
-def test_a_second_empty_pocket_stops_the_pick(lumen: TestClient) -> None:
-    """The pocket fed to after an empty one is empty too: the feeder is out of parts or
-    not advancing, and the pick stops with a feeder error, no nozzle having gone down."""
+def test_a_pocket_seen_empty_twice_is_tried_anyway(lumen: TestClient) -> None:
+    """The pocket fed to after an empty one looks empty too. A gray capacitor in paper
+    tape looks just like an empty pocket to the top camera (on a real LumenPnP, 0.02 to
+    0.04 of it dark, against 0.95 for a black resistor), so the nozzle goes down anyway and
+    the vacuum tells: here the pockets really are empty, and the pick comes up empty."""
     with connect(lumen) as s:
         set_up(lumen, s)
         pick = {"slot_id": "1", "nozzle_id": "N1", "feed": False, "pick_correction": "top"}
         ok(s.wait(s.post("/api/v1/placement/pick", pick)))
-        top = feeders(lumen).part_top("1")
         # The pocket just emptied, then one more empty one after it.
         feeders(lumen).sim_empty_pockets["1"] = 2
         again = {"slot_id": "1", "nozzle_id": "N2", "feed": False, "pick_correction": "top"}
         op = s.wait(s.post("/api/v1/placement/pick", again))
         assert op["status"] == "failed"
-        assert "fed once, and saw the next one empty too" in op["error"], op
-        # It never touched the tape, so the part's top is still known.
-        assert feeders(lumen).part_top("1") == top
-        state = lumen.get("/api/v1/feeders").json()
-        pocket = next(x for x in state["slots"] if x["slot"]["id"] == "1")["pocket"]
-        assert pocket["part"] is False and pocket["loose"] == []
+        assert op["error"].startswith("N2 picked nothing from Slot 1"), op
+        loads = lumen.get("/api/v1/placement").json()["loads"]
+        assert [x["nozzle"] for x in loads] == ["N1"]
+
+
+def test_tape_whose_sprocket_holes_cannot_be_seen_is_picked_where_the_setup_says(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Black tape over a dark holder, or holes with a feeder's sprocket teeth in them: the
+    top camera finds no holes, and the pick goes where the feeder's setup says, the bottom
+    camera finding the part on the nozzle as for every pick."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+
+        async def no_circles(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        monkeypatch.setattr(machine, "locate_circles", no_circles)
+        body = {
+            "slot_id": "1",
+            "nozzle_id": "N1",
+            "x": 200.0,
+            "y": 260.0,
+            "rotation": 0.0,
+            "pick_correction": "top",
+        }
+        op = ok(s.wait(s.post("/api/v1/placement/pick-and-place", body)))
+        assert "no sprocket holes seen: picked where the feeder's setup says" in op["message"]
+        landed = placed(lumen)[-1]
+        assert (landed.x, landed.y) == pytest.approx((200.0, 260.0), abs=0.05)
 
 
 def test_picking_from_an_empty_pocket_fails(lumen: TestClient) -> None:
@@ -502,3 +528,107 @@ def test_a_part_still_on_the_nozzle_after_placing_is_caught() -> None:
         # Still known to be held: it can be discarded, and lets go this time.
         loads = s.client.get("/api/v1/placement").json()["loads"]
         assert [load["nozzle"] for load in loads] == ["N1"]
+
+
+def test_a_part_is_looked_at_again_after_its_turn_over_the_camera() -> None:
+    """The reel's parts sit 12 degrees turned in their tape, and the left nozzle's tip is
+    bent 0.5 mm off its axis, not yet measured. The bottom camera finds the part turned;
+    the nozzle turns it the 12 degrees while still over the camera, and it is looked at
+    again before it is placed. (The simulator's turns are exact, so the first look would
+    have done here too; a real axis's backlash, or a part slipping as it turns, would
+    not be caught without the second.)"""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_parts_turned": {"2": 12.0},
+            "sim_nozzle_runout": {"N1": (0.5, 0.0)},
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s, slots=("2",))
+        body = {
+            "slot_id": "2",
+            "nozzle_id": "N1",
+            "x": 200.0,
+            "y": 260.0,
+            "rotation": 30.0,
+            "pick_correction": "off",
+        }
+        op = ok(s.wait(s.post("/api/v1/placement/pick-and-place", body)))
+        assert re.search(
+            r"Turned -1[12]\.\d degrees over the camera and looked at again: "
+            r"[+-]0\.\d degrees left",
+            op["message"],
+        ), op["message"]
+        landed = placed(client)[-1]
+        assert (landed.x, landed.y) == pytest.approx((200.0, 260.0), abs=0.03)
+        assert angle_error(landed.angle, 30.0) < 0.5
+
+
+@pytest.mark.parametrize("moved", [True, False])
+def test_a_feed_the_feeder_does_not_answer_is_picked_all_the_same(
+    moved: bool, lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On a real LumenPnP (2026-11-20) a feeder kept not answering its feed commands. A
+    reply can be lost though the tape moved: the pick goes on, and the pocket check and the
+    vacuum tell. Where the tape moved, the part is taken and the message says the feeder did
+    not answer; where every pocket stays empty, the pick fails, saying so."""
+    from picnicplace.machine.errors import FeedNotAnsweredError
+
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        pick = {"slot_id": "1", "nozzle_id": "N1", "feed": False, "pick_correction": "top"}
+        ok(s.wait(s.post("/api/v1/placement/pick", pick)))
+        bus = feeders(lumen)._need_bus()  # type: ignore[attr-defined]
+        real = bus.feed
+
+        async def silent(address: int, distance_mm: float) -> None:
+            await real(address, distance_mm)
+            raise FeedNotAnsweredError(f"no feeder answered in slot {address}")
+
+        if not moved:
+            # A feeder that answers nothing because it is not advancing: every pocket it
+            # brings is the empty one it had.
+            feeders(lumen).sim_empty_pockets["1"] = 20
+
+        monkeypatch.setattr(bus, "feed", silent)
+        again = {"slot_id": "1", "nozzle_id": "N2", "feed": True, "pick_correction": "top"}
+        op = s.wait(s.post("/api/v1/placement/pick", again))
+        if moved:
+            assert op["status"] == "succeeded", op
+            assert "the feeder did not answer its feed" in op["message"], op
+            assert "the part was there all the same" in op["message"]
+        else:
+            assert op["status"] == "failed", op
+            assert "the feeder did not answer its feed" in op["error"], op
+            assert "reseat it" in op["error"]
+
+
+@pytest.mark.parametrize("lower", [0.9, 2.0])
+def test_a_part_below_the_first_search_is_looked_for_once_more_deeper(lower: float) -> None:
+    """On a real LumenPnP (2026-11-20) the feeder rails were lower at the left end, and the
+    parts in the leftmost slots lay below the search. Here the parts lie ``lower`` mm
+    below the feeder's pick height; paper tape is searched 0.5 mm below it, then once more,
+    1 mm further down. At 0.9 mm the second search finds them; at 2 mm neither does, and
+    the pick says both looked."""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sniff_heights": True,
+            "sim_part_height_error": -lower,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        pick = {"slot_id": "1", "nozzle_id": "N1", "feed": False, "pick_correction": "top"}
+        op = s.wait(s.post("/api/v1/placement/pick", pick))
+        if lower < 1.5:
+            assert op["status"] == "succeeded", op
+            assert "the second, deeper one found it" in op["message"], op["message"]
+            top = feeders(client).part_top("1")
+            assert top is not None
+        else:
+            assert op["status"] == "failed", op
+            assert "a second search 1 mm further down found nothing either" in op["error"]

@@ -47,7 +47,9 @@ from picnicplace.library.tape import (
 from picnicplace.machine.errors import (
     FeederEmptyError,
     FeederError,
+    FeedNotAnsweredError,
     InvalidTargetError,
+    NoSprocketHolesError,
     NotSupportedError,
 )
 from picnicplace.machine.profile import FeederBank, Nozzle, Point
@@ -517,18 +519,29 @@ class FeederService:
         mm = self.feed_distance(slot) if distance is None else distance
         # Pause holds an advance as it holds a move.
         await self._machine.hold()
+        unanswered: FeedNotAnsweredError | None = None
         try:
             await bus.feed(address, mm)
+        except FeedNotAnsweredError as e:
+            # The reply may be lost though the tape moved: what was seen of the pocket is
+            # forgotten as after a feed, so the camera looks again.
+            self._errors[slot.id] = str(e)
+            unanswered = e
         except FeederError as e:
             self._errors[slot.id] = str(e)
             raise
-        self._errors.pop(slot.id, None)
+        if unanswered is None:
+            self._errors.pop(slot.id, None)
+        # The simulator's tape: taken to have moved, as real tape most often has when a
+        # reply is lost (on a machine, the camera sees the tape; this is kept only here).
         if mm > 0:
             left = self.sim_empty_pockets.get(slot.id, 0)
             if left > 0:
                 self.sim_empty_pockets[slot.id] = left - 1
             self._sim_full[address] = left <= 1
         self._invalidate()
+        if unanswered is not None:
+            raise unanswered
         return mm
 
     def start_feed(self, slot_id: str, distance: float | None) -> Operation:
@@ -1353,7 +1366,7 @@ class FeederService:
         ]
         fix = pocket_from_holes(holes, line, pitch)
         if fix is None:
-            raise FeederError(f"{label}: no sprocket holes found near the pick location")
+            raise NoSprocketHolesError(f"{label}: no sprocket holes found near the pick location")
         along, part, loose = fix.along, None, []
         if body is not None:
             along, part, loose = await self._look_at_tape(

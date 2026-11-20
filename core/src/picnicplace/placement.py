@@ -42,16 +42,19 @@ import numpy as np
 from picnicplace.camera.source import Image
 from picnicplace.feeders.service import FeederService, PocketCheck, rotate
 from picnicplace.feeders.setup import PickCorrection, PickMethod
+from picnicplace.feeders.slots import Slot
 from picnicplace.library import Footprint, Library, Part, Size
 from picnicplace.machine.errors import (
     FeederError,
+    FeedNotAnsweredError,
     InvalidTargetError,
     MachineError,
+    NoSprocketHolesError,
     VisionError,
 )
 from picnicplace.machine.profile import Camera, LightColor, Location, Nozzle, Point
 from picnicplace.machine.service import MachineService
-from picnicplace.machine.sniff import SniffError, floor_message, sniff
+from picnicplace.machine.sniff import SNIFF_STEP_MM, SniffError, floor_message, sniff
 from picnicplace.recorder import VISION_FUNCTIONS
 from picnicplace.schemas import Operation, WireModel
 from picnicplace.training import (
@@ -98,6 +101,16 @@ PART_SNIFF_ABOVE_MM = 1.5
 """Sniffing for a part's top starts this far above the setup's height for it..."""
 PART_SNIFF_BELOW_MM = 0.5
 """...and stops this far below it, gently: further would press into the part."""
+EMBOSSED_SNIFF_BELOW_MM = 1.2
+"""In embossed tape a part thinner than its pocket lies at the pocket's bottom, its top
+below the tape's surface (the feeder's pick height): a sniff there goes this far below.
+On a real LumenPnP (2026-11-20), an LM63615 (WQFN) in 12 mm black embossed tape was not
+reached 0.5 mm below the surface."""
+DEEPER_SNIFF_MM = 1.0
+"""A sniff that reaches the bottom of its search without sealing searches once more, this
+much further down (never past the bottom of the nozzle's travel). On a real LumenPnP
+(2026-11-20) the feeder rails were 0.6 to 0.9 mm lower at the left end than the right, and
+parts in the leftmost slots lay below a search that found every other slot's."""
 SEARCH_MARGIN_MM = 3.0
 """Bottom vision looks this far around the part's expected size."""
 AUTO_MISS_MM = 0.3
@@ -116,6 +129,11 @@ SIZE_TOLERANCE = 0.35
 ELONGATED = 1.2
 """An outline longer than this times its width has two ways round, not four: its longer
 side is told from its shorter."""
+SECOND_LOOK_DEG = 0.5
+"""A part the bottom camera finds more than this many degrees from its place angle is
+turned by that much while still over the camera, and looked at again, and placed as that
+second look found it: a turn the rotation axis's backlash cut short, or a part that
+slipped on the nozzle as it turned, is caught before placing, not after."""
 HALF_TURN_BETTER = 0.5
 """With as many pads found either way round, the pads fitted 180 degrees from the tape's
 angle are taken only if they lie this much closer to their metal (a fraction of the
@@ -182,6 +200,10 @@ class _Shot:
 
 class MispickError(PlacementError):
     """The nozzle came up from a pocket without a part."""
+
+
+class NoSealError(MispickError):
+    """A sniff for a part's top reached the bottom of its search without sealing."""
 
 
 class Alignment(WireModel):
@@ -526,38 +548,71 @@ class PlacementService:
         if bank.pick_height is None:
             raise PlacementError(f"the machine profile gives no pick height for {slot.label}")
         part = self._feeders.part(slot)
+        unanswered = ""
         if feed:
-            await self._feeders.feed(slot)
+            unanswered = await self._feed(slot)
         base = self._feeders.pick(slot)
         how, why = self._method(slot.id, correction, first)
         at, found, fed = base, "", ""
+        check: PocketCheck | None = None
         if how == "top":
-            check = await self._feeders.locate_pocket(slot)
+            try:
+                check = await self._feeders.locate_pocket(slot)
+            except NoSprocketHolesError:
+                # Tape it cannot see the holes in: pick where the setup says, and let the
+                # bottom camera find the part on the nozzle, as for every pick.
+                at, found = self._learned(slot.id, base)
+                found += " (no sprocket holes seen: picked where the feeder's setup says)"
+        if check is not None:
             self._check_loose(slot.label, check)
             if check.part is False:
-                # An empty pocket: feed once and look again. A second one is the feeder's
-                # trouble (an empty reel or leader, or a feeder not advancing), not a pick's.
-                await self._feeders.feed(slot)
+                # An empty pocket: feed once and look again.
+                unanswered = await self._feed(slot) or unanswered
                 check = await self._feeders.locate_pocket(slot)
                 self._check_loose(slot.label, check)
-                if check.part is False:
-                    raise FeederError(
-                        f"{slot.label}: the top camera saw the pick pocket empty, fed once, and "
-                        "saw the next one empty too: the reel may be out of parts or still on "
-                        "its empty leader, or the feeder may not be advancing. Check it, feed "
-                        "it until a part is in the pick pocket, then try again"
-                    )
                 fed = " (fed once past an empty pocket)"
+                if check.part is False:
+                    # Seen empty twice: a part the camera cannot tell from an empty pocket
+                    # (a gray ceramic capacitor in paper tape looks like one), or the reel's
+                    # empty leader. The vacuum tells which: a pick that comes up empty is
+                    # tried again, and after its tries pauses the run.
+                    fed = (
+                        " (fed once past an empty pocket; the next looked empty too, and was "
+                        "tried anyway)"
+                    )
             at = check.at
             found = f" (pocket {check.along:+.2f} mm along, {check.across:+.2f} mm across)"
         elif how == "bottom":
             at, found = self._learned(slot.id, base)
         tape = self._feeders.tape_of(part)
         tape_angle = slot.rotation + (tape.rotation or 0.0 if tape else 0.0)
-        top = await self._take_counted(slot.id, how, nozzle, at, bank.pick_height, slot.label)
+        below = EMBOSSED_SNIFF_BELOW_MM if tape is not None and tape.kind == "embossed" else None
+        try:
+            top = await self._take_counted(
+                slot.id, how, nozzle, at, bank.pick_height, slot.label, below=below
+            )
+        except MispickError as e:
+            if unanswered:
+                raise MispickError(
+                    f"{e}; and {unanswered}: check the feeder is pushed fully into its slot, "
+                    "and reseat it to restart it"
+                ) from e
+            raise
         self._loads[nozzle.id] = self._picked(nozzle, part, slot.id, tape_angle, at, base, how)
         what = part.id if part else "a part"
-        return f"{nozzle.id} picked {what} from {slot.label}{fed}{found}{top}{why}."
+        note = f" ({unanswered}; the part was there all the same)" if unanswered else ""
+        return f"{nozzle.id} picked {what} from {slot.label}{fed}{found}{top}{why}{note}."
+
+    async def _feed(self, slot: Slot) -> str:
+        """Feed a slot before a pick. A feed the feeder does not answer goes on all the
+        same, saying so: the reply may have been lost though the tape moved, and the pocket
+        check and the pick tell whether there is a part. Any other feeder error stops it."""
+        try:
+            await self._feeders.feed(slot)
+        except FeedNotAnsweredError as e:
+            log.warning("%s: %s; picking all the same", slot.label, e)
+            return f"the feeder did not answer its feed ({e})"
+        return ""
 
     async def _pick_fixed(
         self, fixed_id: str, nozzle: Nozzle, correction: PickCorrection, first: bool
@@ -589,9 +644,14 @@ class PlacementService:
         at, found = base, ""
         check = None
         if how == "top":
-            check = await feeders.locate_strip_pocket(fixed_id)
-            at = check.at
-            found = f" (pocket {check.along:+.2f} mm along, {check.across:+.2f} mm across)"
+            try:
+                check = await feeders.locate_strip_pocket(fixed_id)
+                at = check.at
+                found = f" (pocket {check.along:+.2f} mm along, {check.across:+.2f} mm across)"
+            except NoSprocketHolesError:
+                # Black tape on a dark holder: pick where the strip was taught.
+                at, found = self._learned(fixed_id, base)
+                found += " (no sprocket holes seen: picked where the strip was taught)"
         elif how == "bottom":
             at, found = self._learned(fixed_id, base)
         feeders.took_fixed(fixed_id)  # tried or taken, that pocket is done with
@@ -647,6 +707,7 @@ class PlacementService:
         height: float,
         label: str,
         search: bool = False,
+        below: float | None = None,
     ) -> str:
         """Take the part, and keep count for auto correction: after an empty pick, look
         with the top camera next time; a part taken after a look uses one up. ``height``:
@@ -664,11 +725,32 @@ class PlacementService:
                     "searching down from safe Z)"
                 )
             elif self.sniff_heights and top is None:
-                found = await self._sniff_take(nozzle, at, height, label)
+                depth = below or PART_SNIFF_BELOW_MM
+                deeper = ""
+                try:
+                    found = await self._sniff_take(nozzle, at, height, label, below=depth)
+                except NoSealError as first:
+                    # Lower than thought (a feeder rail lower at one end, say): once more,
+                    # from just above where the first search stopped.
+                    try:
+                        found = await self._sniff_take(
+                            nozzle,
+                            at,
+                            height - depth,
+                            label,
+                            above=SNIFF_STEP_MM,
+                            below=DEEPER_SNIFF_MM,
+                        )
+                    except NoSealError as e:
+                        raise NoSealError(
+                            f"{first}; a second search {DEEPER_SNIFF_MM:g} mm further down "
+                            "found nothing either"
+                        ) from e
+                    deeper = ", below the first search: the second, deeper one found it"
                 self._feeders.set_part_top(source_id, found, nozzle)
                 note = (
                     f" (found the part's top at Z {found:.2f} by touch, "
-                    f"{found - height:+.2f} mm from the setup's height)"
+                    f"{found - height:+.2f} mm from the setup's height{deeper})"
                 )
             else:
                 await self._take(nozzle, at, height if top is None else top, label)
@@ -771,7 +853,7 @@ class PlacementService:
         except SniffError as e:
             raise PlacementError(str(e)) from e
         if found is None:
-            raise MispickError(
+            raise NoSealError(
                 missed
                 or f"{floor_message(nozzle, f'a part at {label}', expected, below)}: "
                 "check there is a part in the pocket, and the pick height"
@@ -1001,6 +1083,32 @@ class PlacementService:
         look = await self._measure(
             view, frame.image, nozzle_at, expected, vision, threshold, method
         )
+        again = ""
+        if look is not None and place_angle is not None:
+            fix = wrap(place_angle - look.angle)
+            if abs(fix) > SECOND_LOOK_DEG:
+                # Turned by what it found, over the camera, and looked at again.
+                held = wrap(look.angle - nozzle_angle)
+                await self._machine.move_axes(
+                    {nozzle.rotation_axis: self._machine.nozzle_turn(nozzle, nozzle_angle + fix)}
+                )
+                frame = await self._machine.frame(
+                    camera.id, light=trained.light if trained else None
+                )
+                at = self._machine.nozzle_position(nozzle)
+                turned = self._machine.nozzle_angle(nozzle)
+                second = await self._measure(
+                    view, frame.image, at, turned + held, vision, threshold, method
+                )
+                if second is not None:
+                    look, nozzle_at, nozzle_angle = second, at, turned
+                    expected = nozzle_angle + load.angle
+                    again = (
+                        f" Turned {fix:+.1f} degrees over the camera and looked at again: "
+                        f"{wrap(place_angle - look.angle):+.1f} degrees left to turn."
+                    )
+                else:
+                    log.warning("the second look at %s's part found nothing", nozzle.id)
         await self._machine.raise_nozzles()
         if look is None:
             # Likely a bad pick (nothing there, or a part on its side), even when the
@@ -1022,7 +1130,7 @@ class PlacementService:
         return (
             f"{nozzle.id} holds its part {math.hypot(offset.x, offset.y):.2f} mm off center "
             f"and turned {wrap(angle - expected):+.1f} degrees from the tape's angle."
-            f"{look.note}{' Seen as trained.' if trained is not None else ''}{learned}"
+            f"{again}{look.note}{' Seen as trained.' if trained is not None else ''}{learned}"
         )
 
     async def train(self, slot_id: str, nozzle: Nozzle, how: PickCorrection) -> str:

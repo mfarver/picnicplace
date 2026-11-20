@@ -37,16 +37,27 @@ consecutive picks come from the same tape.
 **Problems.** A pick that comes up empty is tried again, feeding the next part, up to
 ``PICK_ATTEMPTS`` times. A part bottom vision cannot find goes to the discard bin, and
 its placement is tried again later; with no discard location, the run parks the head and
-pauses for the operator to take the part off and say so (Part removed). Anything else
-pauses the run, with the parts already picked left on their nozzles: fix the cause, then
-resume, or skip the placement. An empty strip or tray pauses the run too, with the head
+pauses for the operator to take the part off and say so (Part removed). A feeder
+problem on one nozzle's pick (nothing picked after the tries, a pocket or strip it cannot
+use) lets the other nozzles pick, places every part held, and then pauses for it. Anything
+else pauses the run at once, with the parts already picked left on their nozzles: fix the
+cause, then resume, or skip the placement. An empty strip or tray pauses the run too, with the head
 moved to the park position out of the operator's way: refill it, mark it refilled, and
 resume. Pausing and stopping take effect after the batch in progress; a step resumes a
 paused run for one batch.
 
+A pause that asks the operator to do something (a problem, or the Pause button) parks the
+head out of the way first, as the end of a run does (finished or stopped, for the board to
+come off); the eye button on a placement's line brings the camera back
+over it. A step's pause leaves the head where it is.
+
 **Progress.** The run state says which step is under way (scanning the feeders, finding
 the board, or finding a feeder's fiducial, picking, aligning, or placing one item), and
-keeps it when a problem pauses the run, so the Studio can show where it stopped.
+keeps it when a problem pauses the run, so the Studio can show where it stopped. It is
+written to disk after every batch and every change, and read back when the core starts:
+a run the core stopped in the middle of comes back paused and marked interrupted. The
+machine must be homed again, and the nozzles may still hold parts, so the operator clears
+them first; resuming finds the board's fiducials again, then goes on with what is left.
 """
 
 import asyncio
@@ -73,8 +84,10 @@ from picnicplace.job.models import Job
 from picnicplace.job.revision import JobFileError, PartsSource
 from picnicplace.job.store import JobStore
 from picnicplace.library import Library, Part, Tape
+from picnicplace.library.models import Footprint
 from picnicplace.machine.errors import (
     FeederEmptyError,
+    FeederError,
     InvalidTargetError,
     MachineBusyError,
     MachineError,
@@ -85,6 +98,7 @@ from picnicplace.machine.service import MachineService
 from picnicplace.machine.sniff import floor_message, sniff
 from picnicplace.placement import MispickError, PlacementService
 from picnicplace.schemas import Operation, WireModel
+from picnicplace.storage import write_atomic
 from picnicplace.vision.placed import (
     FoundPads,
     PlacedChip,
@@ -131,11 +145,22 @@ and one 0.3 mm across, 72%; those well placed had 97% or more."""
 CHECK_PADS_SCORE = 0.6
 """The pads' shape must match the bright copper this well (0 to 1) to be judged by; real
 0603 pads matched 0.8 to 0.9."""
-CHECK_PADS_MOVED_MM = 0.15
+CHECK_PADS_MOVED_MM = 0.4
 """Pads found further than this from where the board's fit puts them mean the board has
 moved since its fiducials were found: the run pauses, and finds them again on resume. On a
 real board knocked by the parts pressed into its tape, the pads were 0.2 to 0.33 mm off;
-on one held firmly, within 0.08 mm."""
+but on a real LumenPnP (2026-11-20), pads on a board that never moved (its fiducials found
+again eight times, each time within 0.01 mm of the last) were up to 0.33 mm off too, the
+machine's own error from place to place: lower than this, the pause is a false alarm.
+The pads are looked for no more than about 0.5 mm from where they should be."""
+
+
+TIP_HOLE_FIT = 0.75
+"""A nozzle tip suits a part when its hole is no wider than this share of the part's
+narrower side, so the hole lies well inside the part's top; of the tips that suit it, the
+one with the largest hole holds it best. On a real LumenPnP (2026-11-20), an N08 tip (0.8 mm
+hole) on 0603 capacitors (0.8 mm wide) sealed on the tape beside them and lifted nothing,
+while the N045 picked every 0603."""
 
 
 class RunError(MachineError):
@@ -349,6 +374,13 @@ class RunState(WireModel):
             "stopped; empty between batches and when the run ends."
         ),
     )
+    interrupted: bool = Field(
+        default=False,
+        description=(
+            "The core stopped in the middle of this run (a restart, a crash, a power cut) "
+            "and read it back from disk when it started again. Cleared on resume."
+        ),
+    )
     started_at: datetime
     finished_at: datetime | None = None
 
@@ -371,6 +403,48 @@ def machine_angle(profile: MachineProfile, view: float) -> float:
     a = math.radians(view)
     x, y = profile.x_sign * math.cos(a), profile.y_sign * math.sin(a)
     return round(math.degrees(math.atan2(y, x)), 6) + 0.0
+
+
+def part_width(footprint: Footprint | None) -> float | None:
+    """A part's narrower side seen from above: its body's, or else its pads' extent."""
+    if footprint is None:
+        return None
+    if footprint.body is not None:
+        return min(footprint.body.x, footprint.body.y)
+    if not footprint.pads:
+        return None
+    xs: list[float] = []
+    ys: list[float] = []
+    for pad in footprint.pads:
+        across = round(pad.rotation / 90) % 2 == 1
+        w, h = (pad.height, pad.width) if across else (pad.width, pad.height)
+        xs += [pad.x - w / 2, pad.x + w / 2]
+        ys += [pad.y - h / 2, pad.y + h / 2]
+    return min(max(xs) - min(xs), max(ys) - min(ys))
+
+
+def tip_nozzles(
+    nozzles: list[str], part: Part | None, library: PartsSource | None, profile: MachineProfile
+) -> list[str]:
+    """Of ``nozzles``, the ones to pick ``part`` with, by the tips fitted: those whose hole
+    suits it (``TIP_HOLE_FIT``), and of those the largest hole. All of them when a tip or
+    the part's size is not known, or when no tip suits it."""
+    footprint = library.find_footprint(part.footprint_id) if library and part else None
+    width = part_width(footprint)
+    if width is None:
+        return nozzles
+    holes: dict[str, float] = {}
+    for nozzle_id in nozzles:
+        nozzle = next((n for n in profile.nozzles if n.id == nozzle_id), None)
+        tip = profile.nozzle_tip(nozzle.tip) if nozzle is not None else None
+        if tip is None or tip.inner_diameter is None:
+            return nozzles
+        holes[nozzle_id] = tip.inner_diameter
+    fit = {n: h for n, h in holes.items() if h <= TIP_HOLE_FIT * width}
+    if not fit:
+        return nozzles
+    best = max(fit.values())
+    return [n for n, h in fit.items() if h == best]
 
 
 def _inside(rect: Rect, x: float, y: float) -> bool:
@@ -496,6 +570,8 @@ def plan_job(
         return parts[part_id]
 
     items: list[RunItem] = []
+    by_tip: set[str] = set()
+    """Placements left to fewer nozzles by the tips fitted (``tip_nozzles``)."""
     fiducials: list[MachinePlacement] = []
     for p in result.placements:
         if p.kind == "fiducial":
@@ -530,7 +606,9 @@ def plan_job(
                         if _inside(r, p.x, p.y) and all(_inside(r, q.x, q.y) for q in picks)
                     ]
                     if ok:
-                        slot_id, nozzles = sid, ok
+                        slot_id, nozzles = sid, tip_nozzles(ok, what, library, profile)
+                        if len(nozzles) < len(ok):
+                            by_tip.add(p.ref + (p.copy_id or ""))
                         break
                 if slot_id is None:
                     note = "no nozzle reaches both the place and a feeder holding its part"
@@ -572,7 +650,35 @@ def plan_job(
         refs = [f"{i.ref}{f' (board {i.copy_id})' if i.copy_id else ''}" for i in affected]
         shown = ", ".join(refs[:6]) + (f", and {len(refs) - 6} more" if len(refs) > 6 else "")
         issues.append(Issue(severity="error", message=f"{note}: {shown}", ref=affected[0].ref))
-    one_nozzle = [i for i in items if i.status == "pending" and len(i.nozzles) < len(reach)]
+
+    def key(i: RunItem) -> str:
+        return i.ref + (i.copy_id or "")
+
+    one_nozzle = [
+        i
+        for i in items
+        if i.status == "pending" and len(i.nozzles) < len(reach) and key(i) not in by_tip
+    ]
+    tipped: dict[str, int] = {}
+    for i in items:
+        if i.status == "pending" and key(i) in by_tip:
+            names: list[str] = []
+            for nozzle_id in i.nozzles:
+                nozzle = next(n for n in profile.nozzles if n.id == nozzle_id)
+                names.append(f"{nozzle.label.lower()} ({nozzle.tip})")
+            shown = " or ".join(names)
+            tipped[shown] = tipped.get(shown, 0) + 1
+    if tipped:
+        each = "; ".join(f"{n} only on the {where}" for where, n in tipped.items())
+        issues.append(
+            Issue(
+                severity="warning",
+                message=(
+                    f"by the tips fitted, some parts are picked by one nozzle: {each}. A tip "
+                    "suits a part when its hole lies well inside the part's top"
+                ),
+            )
+        )
     if one_nozzle:
         issues.append(
             Issue(
@@ -761,6 +867,8 @@ class JobRunner:
         """Look at each part with the top camera once placed (from the config)."""
         self.checks_dir: Path | None = None
         """Where pictures of the current run's checked placements are kept."""
+        self.run_path: Path | None = None
+        """Where the run is kept, to come back after the core restarts (``restore``)."""
         self._sim_error = sim_board_error if feeders.sim_parts is not None else None
         self.sim_decoys = False
         """In the simulator, print a round silkscreen mark smaller than each fiducial
@@ -781,6 +889,65 @@ class JobRunner:
         if run is not None and not self._active:
             self._forget_removed(run)
         return run
+
+    def restore(self) -> None:
+        """Read back the run kept in ``run_path``, if any. One the core stopped in the
+        middle of comes back paused and interrupted: the machine must be homed again, its
+        nozzles may still hold parts, and resuming finds the board again first."""
+        path = self.run_path
+        if path is None or not path.is_file():
+            return
+        try:
+            run = RunState.model_validate_json(path.read_text())
+        except (OSError, ValueError) as e:
+            log.warning("could not read the last run from %s: %s", path, e)
+            return
+        if run.status in ("running", "paused"):
+            items = run.plan.items
+            notes: list[str] = []
+            held = [
+                f"{items[i].ref} on {n}" for n, i in sorted(run.held.items()) if 0 <= i < len(items)
+            ]
+            if held:
+                notes.append(f"the nozzles held parts ({', '.join(held)})")
+            step = run.current
+            if (
+                step is not None
+                and step.action == "placing"
+                and step.index is not None
+                and 0 <= step.index < len(items)
+                and items[step.index].status == "pending"
+            ):
+                notes.append(
+                    f"it stopped while placing {items[step.index].ref}: if that part is on "
+                    "the board, skip its placement"
+                )
+            run.status = "paused"
+            run.interrupted = True
+            run.fix = None
+            run.board_z = None
+            run.located = []
+            run.held = {}
+            run.current = None
+            run.recording = None
+            run.pause_requested = run.stop_requested = False
+            run.message = f"interrupted: {self._summary(run)}"
+            run.error = (
+                "the core stopped in the middle of this run"
+                + (f"; {'; '.join(notes)}" if notes else "")
+                + ". Take any parts off the nozzles by hand, home the machine, then resume: "
+                "the run finds the board's fiducials again and places what is left."
+            )
+        self._run = run
+
+    def _save(self) -> None:
+        """Keep the run on disk, to come back after a restart."""
+        if self.run_path is None or self._run is None:
+            return
+        try:
+            write_atomic(self.run_path, self._run.model_dump_json())
+        except OSError as e:
+            log.warning("could not keep the run on disk: %s", e)
 
     def _forget_removed(self, run: RunState) -> None:
         """Forget the parts taken off their nozzles (discarded, or by hand) while paused:
@@ -902,6 +1069,7 @@ class JobRunner:
             self._run.recording = info.id
             self._recording = info.id
         recorder.event("run.start", run=self._run)
+        self._save()
         return self._start_task()
 
     def check_board(self, job_id: str, revision: int | None = None) -> Operation:
@@ -948,17 +1116,42 @@ class JobRunner:
         run = self._need_run()
         if run.status != "paused":
             raise RunError(f"the run is {run.status}, not paused")
+        if self._job is None:
+            # Read back after a restart: the job comes from its revision again.
+            try:
+                job, parts, _ = self._resolve(run.job_id, run.plan.revision)
+            except InvalidTargetError as e:
+                raise RunError(f"the run's job cannot be read: {e}") from e
+            self._job, self._parts = job, parts
+            if self._sim_error is not None:
+                self._load_sim_board(job, parts)
+        # The tips fitted may have changed while paused (or a run read back after a
+        # restart was planned before the tips counted): each pending part goes to the
+        # nozzles whose tips suit it.
+        for item in run.plan.items:
+            if item.status == "pending" and item.part_id:
+                part = self._parts.find_part(item.part_id) if self._parts else None
+                item.nozzles = tip_nozzles(item.nozzles, part, self._parts, self._machine.profile)
+        error = run.error
         run.status = "running"
         run.error = None
         run.pause_requested = False
         self._step = step
-        return self._start_task()
+        try:
+            op = self._start_task()
+        except MachineError:
+            run.error = error
+            raise
+        run.interrupted = False
+        self._save()
+        return op
 
     def pause(self) -> RunState:
         run = self._need_run()
         if run.status == "running":
             run.pause_requested = True
             run.message = "pausing after the parts on the nozzles are placed"
+            self._save()
         return run
 
     def stop(self) -> RunState:
@@ -990,6 +1183,7 @@ class JobRunner:
             item.status == "failed" or (item.status == "skipped" and item.note == operator)
         ):
             item.status, item.note, item.discards = "pending", "", 0
+        self._save()
         return run
 
     def _need_run(self) -> RunState:
@@ -1019,6 +1213,7 @@ class JobRunner:
         if self._recording is not None and active is not None and active.id == self._recording:
             recorder.stop(message)
         self._recording = None
+        self._save()
 
     # --- The run itself ----------------------------------------------------------------
 
@@ -1048,6 +1243,7 @@ class JobRunner:
                 run.current = None
             while True:
                 if run.stop_requested:
+                    await self._park()
                     self._finish(run, "stopped", f"stopped: {self._summary(run)}")
                     return run.message or ""
                 if run.pause_requested:
@@ -1061,27 +1257,40 @@ class JobRunner:
                         )
                     else:
                         run.message = f"paused: {self._summary(run)}"
+                        if not self._step:
+                            # The Pause button: out of the operator's way. A step's pause
+                            # leaves the head over the parts just placed.
+                            run.message += await self._park()
+                    self._save()
                     return run.message
                 found = None
                 batch = self._next_batch(run)
                 if not batch:
+                    # Done: the head out of the way, for the board to come off.
+                    await self._park()
                     self._finish(run, "finished", f"finished: {self._summary(run)}")
                     return run.message or ""
                 await self._do_batch(run, batch)
                 run.current = None
                 if self._step:
                     run.pause_requested = True
+                self._save()
         except MachineError as e:
             run.status, run.error = "paused", str(e)
             run.pause_requested = False
             self._machine.recorder.event("run.paused", error=str(e), code=e.code)
-            if isinstance(e, FeederEmptyError):
+            if isinstance(e, (FeederEmptyError, RunError)):
+                # A pause for the operator to act: out of their way. Other errors (the
+                # machine itself failing) leave the head where it is.
                 run.error += await self._park()
-                if run.stop_requested:
-                    self._finish(run, "stopped", f"stopped: {self._summary(run)}")
-                raise FeederEmptyError(run.error) from e
             if run.stop_requested:
                 self._finish(run, "stopped", f"stopped: {self._summary(run)}")
+            else:
+                self._save()
+            if isinstance(e, FeederEmptyError):
+                raise FeederEmptyError(run.error) from e
+            if isinstance(e, RunError):
+                raise RunError(run.error) from e
             raise
         except asyncio.CancelledError:
             run.status, run.error = "paused", "cancelled"
@@ -1306,38 +1515,27 @@ class JobRunner:
         job = self._job
         assert job is not None and run.fix is not None
         items = run.plan.items
-        for nozzle_id, index in batch.items():
+        # A feeder problem on one nozzle's pick (nothing picked, a pocket or a strip it
+        # cannot use): the other nozzles still pick, and every part held is placed before
+        # the run pauses for it, so none waits on a nozzle while the feeder is seen to.
+        failed: MachineError | None = None
+        failed_step: RunStep | None = None
+        for nozzle_id, index in list(batch.items()):
             if nozzle_id in run.held:
                 continue
             item = items[index]
             nozzle = self._machine.nozzle(nozzle_id)
             assert item.slot_id is not None
-            await self._locate_feeder(run, item.slot_id, index)
-            run.message = f"{nozzle_id} picking {item.ref} from {_source(item.slot_id)}"
-            run.current = RunStep(stage="item", action="picking", index=index, nozzle=nozzle_id)
-            for attempt in range(1, PICK_ATTEMPTS + 1):
-                run.stats.picks += 1
-                try:
-                    await self._placement.pick(
-                        item.slot_id,
-                        nozzle,
-                        True,
-                        run.pick_correction,
-                        first=item.slot_id not in self._picked,
-                    )
-                    self._picked.add(item.slot_id)
-                    break
-                except MispickError as e:
-                    run.stats.empty_picks += 1
-                    if attempt == PICK_ATTEMPTS:
-                        where = _source(item.slot_id)
-                        item.note = f"picked nothing {PICK_ATTEMPTS} times from {where}"
-                        raise RunError(
-                            f"{item.ref}: {e} ({PICK_ATTEMPTS} tries). Check the feeder, "
-                            "then resume to try again, or skip the placement."
-                        ) from e
+            try:
+                await self._pick_item(run, item, index, nozzle_id)
+            except (RunError, FeederError) as e:
+                failed, failed_step = e, run.current
+                del batch[nozzle_id]
+                continue
             run.held[nozzle_id] = index
             item.note = ""
+        if failed is not None and not run.held:
+            raise failed
 
         for nozzle_id in list(batch):
             index = batch[nozzle_id]
@@ -1357,10 +1555,9 @@ class JobRunner:
                 if not self._placement.can_discard():
                     item.discards += 1
                     item.note = f"bottom vision failed ({e}): take the part off {nozzle_id}"
-                    parked = await self._park()
                     raise RunError(
-                        f"{item.ref}: {e}, and there is no discard location to drop it in."
-                        f"{parked} Take whatever is on {nozzle_id} off it (it may be empty), "
+                        f"{item.ref}: {e}, and there is no discard location to drop it in. "
+                        f"Take whatever is on {nozzle_id} off it (it may be empty), "
                         "click Part removed, and resume to pick it again, or skip the "
                         "placement. Set a discard location (Calibration panel, Machine "
                         "workspace), and the run will do this itself."
@@ -1394,6 +1591,44 @@ class JobRunner:
                 )
                 await self._check_placed(run, item, target, item.rotation + run.fix.angle)
             self._bump_sim_board(run)
+        if failed is not None:
+            # The parts held are placed: now the pick that failed, where it stopped.
+            run.current = failed_step
+            raise failed
+
+    async def _pick_item(self, run: RunState, item: RunItem, index: int, nozzle_id: str) -> None:
+        """Pick ``item``'s part with ``nozzle_id``, trying again (feeding the next part)
+        after an empty pick, up to ``PICK_ATTEMPTS`` times."""
+        assert item.slot_id is not None
+        nozzle = self._machine.nozzle(nozzle_id)
+        await self._locate_feeder(run, item.slot_id, index)
+        run.message = f"{nozzle_id} picking {item.ref} from {_source(item.slot_id)}"
+        run.current = RunStep(stage="item", action="picking", index=index, nozzle=nozzle_id)
+        for attempt in range(1, PICK_ATTEMPTS + 1):
+            run.stats.picks += 1
+            # After a miss, a pick that looks first does not feed: the camera sees whether
+            # the part is still in its pocket (tried again) or gone (then it feeds), so a
+            # part the nozzle failed to take is not fed past and lost.
+            looks = run.pick_correction in ("top", "auto")
+            try:
+                await self._placement.pick(
+                    item.slot_id,
+                    nozzle,
+                    attempt == 1 or not looks,
+                    run.pick_correction,
+                    first=item.slot_id not in self._picked,
+                )
+                self._picked.add(item.slot_id)
+                return
+            except MispickError as e:
+                run.stats.empty_picks += 1
+                if attempt == PICK_ATTEMPTS:
+                    where = _source(item.slot_id)
+                    item.note = f"picked nothing {PICK_ATTEMPTS} times from {where}"
+                    raise RunError(
+                        f"{item.ref}: {e} ({PICK_ATTEMPTS} tries). Check the feeder, "
+                        "then resume to try again, or skip the placement."
+                    ) from e
 
     async def _check_placed(
         self, run: RunState, item: RunItem, target: Point, rotation: float
@@ -1586,23 +1821,12 @@ class JobRunner:
         return path if path.is_file() else None
 
     async def _park(self) -> str:
-        """Move the head out of the way of an operator refilling a strip or tray: to the
-        park location, or else to the back of its travel. Says where it went, for the
-        run's message; a move that fails is reported, not raised, so the pause stands."""
-        profile = self._machine.profile
-        park = next((loc for loc in profile.locations if loc.kind == "park"), None)
-        if park is not None:
-            target = {"X": park.position.x, "Y": park.position.y}
-            where = f"the {park.label.lower()}"
-        else:
-            y = next((a for a in profile.axes if a.name == "Y"), None)
-            if y is None:
-                return ""
-            target = {"Y": y.max if profile.y_sign > 0 else y.min}
-            where = "the back (no park location is set)"
+        """Move the head out of the way of an operator who must do something (refill a
+        strip, fix a placement): to the park location, or else to the back of its travel.
+        Says where it went, for the run's message; a move that fails is reported, not
+        raised, so the pause stands."""
         try:
-            await self._machine.raise_nozzles()
-            await self._machine.move_axes(target)
+            where = await self._machine.park()
         except MachineError as e:
             log.warning("could not park the head: %s", e)
             return f" The head could not move out of the way ({e}): mind it."

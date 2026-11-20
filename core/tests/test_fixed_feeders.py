@@ -249,7 +249,8 @@ def empty_tray_run(client: TestClient, s: Session) -> dict[str, Any]:
     assert op["status"] == "failed"
     assert op["error"].startswith("T1 (SOIC tray) is empty after 2 parts: refill it")
     run = client.get("/api/v1/run").json()
-    assert run["status"] == "paused" and run["placed"] == 2
+    # The other nozzle's part is placed before the run pauses: none waits on a nozzle.
+    assert run["status"] == "paused" and run["placed"] == 3 and run["held"] == {}
     assert run["error"] == op["error"]
     return op
 

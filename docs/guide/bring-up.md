@@ -347,7 +347,7 @@ effect at once. The reset button next to one forgets it.
       orange, where it landed in magenta, and its pads in green. It catches a part off its
       pads, standing up, or gone. (Where the pads cannot be seen, it judges the part from
       where it was sent instead: 0.25 mm.)
-      If the pads themselves are more than 0.15 mm from where the board's fiducials put
+      If the pads themselves are more than 0.4 mm from where the board's fiducials put
       them, the board has moved since the run found it (a board not held firmly can be
       knocked by the parts pressed onto it): the run pauses and says so. Hold the board
       down, set right any part that landed off, and resume: the run finds the fiducials
@@ -368,12 +368,29 @@ effect at once. The reset button next to one forgets it.
       problem pauses the run, the step it stopped at is marked in red. The Machine
       workspace shows the same run for someone watching from elsewhere: the map, with the
       run's status and the few steps around the current one under it.
-- [ ] **Step** places one part on each nozzle and pauses again. Check them, then
-      **Resume**. A jammed feeder or a failed pick pauses the run with the parts already
-      on the nozzles kept there; fix it and resume, or skip that placement. A part the
-      bottom camera cannot find goes to the discard location; without one, the run moves
-      the head out of the way and pauses: take the part off the nozzle, click **Part
-      removed**, and resume to pick it again.
+- [ ] Say which tip is on each nozzle (Machine workspace). The plan sends each part to the
+      nozzles whose tip suits it: the hole well inside the part's top (no wider than 75% of
+      its narrower side), and of those the largest, which holds it best. On a LumenPnP
+      with the N045 and N08 fitted, the 0603s go to the N045 and larger parts to the N08;
+      the plan lists how many go to each.
+- [ ] **Step** places one part on each nozzle and pauses again, with the head left over
+      them. Check them, then **Resume**. A jammed feeder or a failed pick pauses the run
+      once the parts already on the other nozzles are placed; fix it and resume, or skip
+      that placement. A part the bottom camera cannot find goes to the discard location;
+      without one, the run pauses: take the part off the nozzle, click **Part removed**,
+      and resume to pick it again.
+- [ ] A pause that asks you to do something (a problem, or **Pause**) moves the head out
+      of the way first, as for a refill below, and so does the end of a run, finished or
+      stopped, for the board to come off. Why it paused shows in a red panel at the
+      bottom right of the Run workspace, wherever the list is scrolled to, with
+      **Resume**, **Look at** what it stopped on (the feeder's pick pocket for a pick, or
+      the placement, its footprint drawn on the picture), **Stop**, and **Hide**.
+- [ ] Stop the core in the middle of a run (or let the power go) and start it again. The
+      Run workspace shows the run paused and interrupted, with how far it got: the core
+      keeps the run on disk after every batch. Take any parts off the nozzles, home the
+      machine, and resume: the run finds the board's fiducials again and places what is
+      left. If it says it stopped while placing a part and that part is on the board,
+      skip its placement first.
 - [ ] With a part on a strip or tray, the run takes them in order and pauses when one is
       empty, with the nozzles up and the head moved out of the way: to the park
       location, if the machine has one (see **Discard and park** below), or else to the

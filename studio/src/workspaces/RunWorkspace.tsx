@@ -1,5 +1,6 @@
 import {
   Crosshair,
+  Eye,
   Hand,
   LocateFixed,
   Pause,
@@ -7,6 +8,7 @@ import {
   RefreshCw,
   Square,
   StepForward,
+  TriangleAlert,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
@@ -169,6 +171,26 @@ export function RunWorkspace() {
   };
 
   const paused = current?.status === "paused";
+  // Why the run paused, kept in view however far the list is scrolled, until hidden.
+  const [hiddenError, setHiddenError] = useState<string | null>(null);
+  const alert = paused && current?.error && current.error !== hiddenError ? current.error : null;
+  const pausedAt = current?.current?.index;
+  const pausedItem = pausedAt !== undefined && pausedAt !== null ? items[pausedAt] : undefined;
+  // Paused on a pick: the feeder it picks from is what to look at, not the placement.
+  const pausedPick = current?.current?.action === "picking" ? pausedItem?.slot_id : null;
+  const pickAt = (() => {
+    if (!pausedPick || !feeders) return null;
+    const slot = feeders.slots.find((x) => x.slot.id === pausedPick);
+    if (slot) return { label: slot.slot.label, at: slot.pick };
+    const fixed = feeders.fixed.find((f) => f.id === pausedPick);
+    return fixed?.next ? { label: fixed.id, at: fixed.next } : null;
+  })();
+  const lookAtPick = () => {
+    if (!pickAt || !topCamera) return;
+    setLooking(null);
+    const target = { X: pickAt.at.x - topCamera.position.x, Y: pickAt.at.y - topCamera.position.y };
+    void act(() => api.POST("/api/v1/machine/move", { body: { position: target } }));
+  };
   const startable = !current || current.status === "finished" || current.status === "stopped";
   // While paused, the fiducials the run found, to look at before going on.
   const pausedFix = paused && current?.fix?.fiducials.length ? current.fix : null;
@@ -488,6 +510,64 @@ export function RunWorkspace() {
               <p className={`run-message ${current.error ? "note note-danger" : "text-muted"}`}>
                 {current.error ?? current.message}
               </p>
+            )}
+            {alert && (
+              <div className="run-alert" role="alertdialog" aria-label="Why the run paused">
+                <p className="run-alert-title">
+                  <TriangleAlert size={18} aria-hidden />
+                  Paused
+                </p>
+                <p className="run-alert-text">{alert}</p>
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className="button primary"
+                    disabled={!canMove}
+                    onClick={() => void resume("/api/v1/run/resume")}
+                  >
+                    <Play size={16} aria-hidden />
+                    Resume
+                  </button>
+                  {pickAt ? (
+                    <button
+                      type="button"
+                      className="button"
+                      disabled={!canMove || !topCamera}
+                      title="Move the top camera over the pocket it picks from"
+                      onClick={lookAtPick}
+                    >
+                      <Eye size={16} aria-hidden />
+                      Look at {pickAt.label}
+                    </button>
+                  ) : (
+                    pausedItem && (
+                      <button
+                        type="button"
+                        className="button"
+                        disabled={!canMove || !topCamera}
+                        title="Move the top camera over it, its footprint drawn on the picture"
+                        onClick={() => look(pausedItem)}
+                      >
+                        <Eye size={16} aria-hidden />
+                        Look at {pausedItem.ref}
+                      </button>
+                    )
+                  )}
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={!canSignal}
+                    title="End the run here; what is placed stays placed"
+                    onClick={() => void signal("/api/v1/run/stop")}
+                  >
+                    <Square size={16} aria-hidden />
+                    Stop
+                  </button>
+                  <button type="button" className="button" onClick={() => setHiddenError(alert)}>
+                    Hide
+                  </button>
+                </div>
+              </div>
             )}
             {current && current.stats.picks > 0 && <RunStatsLine stats={current.stats} />}
             {paused &&

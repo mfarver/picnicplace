@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ArrowUp,
   ChevronsUp,
+  ParkingSquare,
   RotateCcw,
   RotateCw,
 } from "lucide-react";
@@ -22,13 +23,15 @@ interface Props {
   onJog: (axis: string, distance: number) => void;
   /** Raise every nozzle to travel height. */
   onSafeZ: () => void;
+  /** Raise the nozzles and move the head to the park location (else the back). */
+  onPark: () => void;
 }
 
 /**
  * Step jogging. X and Y are disabled while a nozzle is below safe Z; the core refuses those
  * jogs anyway, and the safe-Z button is right there to fix it.
  */
-export function JogPanel({ description, machine, canMove, onJog, onSafeZ }: Props) {
+export function JogPanel({ description, machine, canMove, onJog, onSafeZ, onPark }: Props) {
   const [step, setStep] = useState(1);
   const [turn, setTurn] = useState(15);
 
@@ -61,6 +64,23 @@ export function JogPanel({ description, machine, canMove, onJog, onSafeZ }: Prop
   return (
     <Panel title="Jog">
       <StepPicker label="Step" unit="mm" steps={LINEAR_STEPS} value={step} onChange={setStep} />
+      <div className="button-row">
+        <button
+          type="button"
+          className="button"
+          disabled={!enabled}
+          onClick={onPark}
+          title={
+            !machine?.homed
+              ? "Home the machine first"
+              : "Raise the nozzles and move the head out of the way: to the park location, " +
+                "or the back if none is set"
+          }
+        >
+          <ParkingSquare size={16} aria-hidden />
+          Park
+        </button>
+      </div>
 
       <div className="jog-layout">
         <div className="jog-pad">

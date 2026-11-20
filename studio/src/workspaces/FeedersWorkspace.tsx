@@ -135,6 +135,8 @@ export function FeedersWorkspace() {
     ctl.moveTo(Object.fromEntries([...zAxes].map((axis) => [axis, 0])));
   };
 
+  const park = () => void track(() => api.POST("/api/v1/machine/park"));
+
   const slotPath = (id: string) => ({ params: { path: { slot_id: id } } });
   const scan = () => void track(() => api.POST("/api/v1/feeders/scan"));
   const feed = (id: string, distance: number | null) =>
@@ -427,6 +429,7 @@ export function FeedersWorkspace() {
           canMove={canMove}
           onJog={ctl.jog}
           onSafeZ={safeZ}
+          onPark={park}
         />
       </aside>
 

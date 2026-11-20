@@ -1371,6 +1371,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/park": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Park
+         * @description Raise the nozzles and move the head out of the way: to the park location, or else to
+         *     the back of its travel.
+         */
+        post: operations["park_api_v1_machine_park_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/pause": {
         parameters: {
             query?: never;
@@ -5639,6 +5660,12 @@ export interface components {
             held: {
                 [key: string]: number;
             };
+            /**
+             * Interrupted
+             * @description The core stopped in the middle of this run (a restart, a crash, a power cut) and read it back from disk when it started again. Cleared on resume.
+             * @default false
+             */
+            interrupted: boolean;
             /** Job Id */
             job_id: string;
             /**
@@ -9622,6 +9649,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    park_api_v1_machine_park_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
                 };
             };
             /** @description The machine cannot do this right now, or this client does not hold the control lease. */

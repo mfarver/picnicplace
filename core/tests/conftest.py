@@ -93,13 +93,14 @@ class Session:
     def state(self) -> dict[str, Any]:
         return self.client.get("/api/v1/machine").json()
 
-    def wait(self, response: httpx.Response) -> dict[str, Any]:
+    def wait(self, response: httpx.Response, limit: int = 500) -> dict[str, Any]:
         """Wait for the operation a 202 response started, and return it finished. Sends a
         heartbeat first, as the Studio does, so a test of several operations stays
-        connected."""
+        connected. ``limit``: events to read before giving up, for a long operation."""
         assert response.status_code == 202, response.json()
         self.ws.send_json({"type": "ping"})
-        return receive_until(self.ws, operation_done(response.json()["id"]))["operation"]
+        done = operation_done(response.json()["id"])
+        return receive_until(self.ws, done, limit)["operation"]
 
     def home(self) -> None:
         assert self.wait(self.post("/api/v1/machine/home"))["status"] == "succeeded"

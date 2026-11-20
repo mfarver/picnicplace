@@ -3446,6 +3446,60 @@
         "title": "LocalProfileUpdate",
         "type": "object"
       },
+      "LocateRequest": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the fiducial is. Empty: where the top camera is now."
+          },
+          "copy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its board copy, or empty for a fiducial on the panel.",
+            "title": "Copy Id"
+          },
+          "job": {
+            "$ref": "#/components/schemas/Job-Input",
+            "description": "The job, saved or not."
+          },
+          "ref": {
+            "description": "The fiducial the top camera is centered on, such as FID1.",
+            "title": "Ref",
+            "type": "string"
+          },
+          "rotation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How far the panel is turned. Empty: the job's, or 0 if it has none.",
+            "title": "Rotation"
+          }
+        },
+        "required": [
+          "job",
+          "ref"
+        ],
+        "title": "LocateRequest",
+        "type": "object"
+      },
       "Location": {
         "additionalProperties": false,
         "properties": {
@@ -11173,6 +11227,63 @@
           }
         ],
         "summary": "Job Layout",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/locate": {
+      "post": {
+        "description": "Where the job's panel is on the bed, from one of its fiducials: by default, the one\nthe top camera is centered on now. Nothing is saved: the job's location is set when\nit is saved. The run's board check then finds every fiducial and fits the board.",
+        "operationId": "job_locate_api_v1_jobs_locate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineLocation-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine is not homed."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The job has no such fiducial."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Job Locate",
         "tags": [
           "jobs"
         ]

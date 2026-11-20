@@ -79,6 +79,7 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/jobs/{id}/layout` | Where what runs for a job (a revision, else its working copy) lands on this machine |
 | `POST /api/v1/jobs/layout` | Where a job's placements land on the machine, and what stops it |
 | `POST /api/v1/jobs/find-location` | A place on the bed where a job fits |
+| `POST /api/v1/jobs/locate` | Where a job's panel is on the bed, from one of its fiducials (`ref`, and `copy_id` for a board copy's): by default, the one the top camera is centered on now, the panel turned by `rotation` (default: the job's). Nothing is saved |
 | `GET`, `POST /api/v1/jobs/{id}/revisions`; `GET /api/v1/jobs/{id}/revisions/{n}` | A job's published revisions; publish the saved job as the next one |
 | `GET /api/v1/jobs/{id}/revisions/{n}/file` | A revision's job file, exactly as kept |
 | `POST /api/v1/jobs/import` | Load a job file from disk: a published revision, or a job saved before revisions |

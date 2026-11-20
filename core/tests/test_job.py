@@ -9,10 +9,17 @@ from fastapi.testclient import TestClient
 
 from picnicplace.board.kicad import read_kicad_pcb
 from picnicplace.board.panel import Panel, find_copies, to_panel
-from picnicplace.job.layout import find_location, layout, machine_placements, overlaps
+from picnicplace.job.layout import (
+    find_location,
+    layout,
+    location_from_fiducial,
+    machine_placements,
+    overlaps,
+)
 from picnicplace.job.models import Job, MachineLocation
 from picnicplace.library.models import Footprint
 from picnicplace.machine.profile import Point, Rect, load_profile
+from tests.conftest import connect
 
 DATA = Path(__file__).parent / "data" / "kicad"
 ORIGIN = (100.0, 80.0)  # the demo board's top-left corner in KiCad
@@ -167,6 +174,29 @@ def test_a_found_place_passes_the_checks() -> None:
         assert result.ok, result.issues
 
 
+def test_a_place_from_a_fiducial_under_the_camera() -> None:
+    """Centering the camera on one fiducial gives back the location it was placed at,
+    whichever fiducial (a board copy's or the panel's), side up, and turn."""
+    job, _ = demo()
+    for side in ("top", "bottom"):
+        panel_job = job.model_copy(update={"panel": demo_panel(), "side_up": side})
+        for turn in (0.0, 90.0, 180.0, 270.0):
+            truth = MachineLocation(x=212.5, y=143.25, rotation=turn)
+            fiducials = [
+                p for p in machine_placements(panel_job, LUMEN, truth) if p.kind == "fiducial"
+            ]
+            assert {p.copy_id for p in fiducials} >= {None, "1"}
+            for f in fiducials:
+                at = Point(x=f.x, y=f.y)
+                found = location_from_fiducial(panel_job, LUMEN, f.ref, f.copy_id, at, turn)
+                assert math.isclose(found.x, truth.x, abs_tol=1e-3), (side, turn, f.ref)
+                assert math.isclose(found.y, truth.y, abs_tol=1e-3), (side, turn, f.ref)
+                assert found.rotation == turn
+
+    with pytest.raises(ValueError, match="no fiducial FID9"):
+        location_from_fiducial(job, LUMEN, "FID9", "1", Point(x=0, y=0), 0.0)
+
+
 def test_too_big_to_fit_anywhere() -> None:
     job, _ = demo()
     big = job.model_copy(
@@ -246,3 +276,38 @@ def test_job_endpoints(client: TestClient) -> None:
 
     job["panel"]["size"] = {"x": 900, "y": 900}
     assert client.post("/api/v1/jobs/find-location", json=job).status_code == 409
+
+
+def test_locating_a_job_from_the_fiducial_under_the_camera(client: TestClient) -> None:
+    job, _ = demo()
+    panel_job = job.model_copy(update={"panel": demo_panel()})
+    truth = MachineLocation(x=212.5, y=143.25, rotation=90.0)
+    fid = next(
+        p
+        for p in machine_placements(panel_job, LUMEN, truth)
+        if p.kind == "fiducial" and p.copy_id == "1"
+    )
+    body = {
+        "job": panel_job.model_dump(mode="json"),
+        "ref": fid.ref,
+        "copy_id": "1",
+        "rotation": 90,
+    }
+    with connect(client) as s:
+        # Before homing, the camera's position is not known.
+        r = s.post("/api/v1/jobs/locate", body)
+        assert r.status_code == 409 and "home" in r.json()["detail"]
+        s.home()
+        camera = s.client.get("/api/v1/machine/description").json()["cameras"]
+        top = next(c for c in camera if c["mount"] == "head" and c["looking"] == "down")
+        s.move(X=fid.x - top["position"]["x"], Y=fid.y - top["position"]["y"])
+        r = s.post("/api/v1/jobs/locate", body)
+        assert r.status_code == 200, r.json()
+        found = r.json()
+        assert math.isclose(found["x"], truth.x, abs_tol=0.01)
+        assert math.isclose(found["y"], truth.y, abs_tol=0.01)
+        assert found["rotation"] == 90
+
+        # A fiducial the job does not have.
+        r = s.post("/api/v1/jobs/locate", {**body, "ref": "FID9"})
+        assert r.status_code == 422 and "FID9" in r.json()["detail"]

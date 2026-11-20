@@ -254,7 +254,10 @@ effect at once. The reset button next to one forgets it.
       keeps what it found. Center the camera on the first
       part and click **First part**, then on the last part and click **Last part** (on a
       tray, also the end of the first row). On a strip, **Find pocket** should land on
-      the next part. The map shows how many parts each one has left.
+      the next part. The map shows how many parts each one has left, and, once the part
+      has a footprint (and, on a strip, its tape), draws them to scale: a strip's tape at
+      its width with its sprocket holes, and each part's footprint as it lies, pin 1's pad
+      and corner in red. Compare it with the top camera's view of the first part.
 
 ## 6. One part
 
@@ -300,7 +303,10 @@ effect at once. The reset button next to one forgets it.
 ![A run of the demo panel, paused on a part that landed off its target, with its picture on its line](../images/studio-run.jpg){ .pp-screenshot }
 
 - [ ] In the Prepare workspace, import the board (and its panel), use **Find a place**,
-      fasten the board where the map shows it, and save the job. Its parts may run to
+      fasten the board where the map shows it, and save the job. Or fasten the board
+      where you like, choose its **Turn**, center the top camera on a fiducial (FID1, say)
+      in the Machine workspace, then choose that fiducial and click **Set from camera**,
+      and save. The run's board check finds every fiducial, so this need only be close. Its parts may run to
       the edges of where both nozzles reach; rails without parts may go beyond. Then
       **Publish** it under **Published revisions**: a run runs the newest published
       revision, with its own copy of the parts. Where the board sits is kept by the

@@ -636,6 +636,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/locate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Job Locate
+         * @description Where the job's panel is on the bed, from one of its fiducials: by default, the one
+         *     the top camera is centered on now. Nothing is saved: the job's location is set when
+         *     it is saved. The run's board check then finds every fiducial and fits the board.
+         */
+        post: operations["job_locate_api_v1_jobs_locate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -3854,6 +3876,28 @@ export interface components {
             x_points?: ("right" | "left") | null;
             /** Y Points */
             y_points?: ("back" | "front") | null;
+        };
+        /** LocateRequest */
+        LocateRequest: {
+            /** @description Where the fiducial is. Empty: where the top camera is now. */
+            at?: components["schemas"]["Point"] | null;
+            /**
+             * Copy Id
+             * @description Its board copy, or empty for a fiducial on the panel.
+             */
+            copy_id?: string | null;
+            /** @description The job, saved or not. */
+            job: components["schemas"]["Job-Input"];
+            /**
+             * Ref
+             * @description The fiducial the top camera is centered on, such as FID1.
+             */
+            ref: string;
+            /**
+             * Rotation
+             * @description How far the panel is turned. Empty: the job's, or 0 if it has none.
+             */
+            rotation?: number | null;
         };
         /** Location */
         Location: {
@@ -7771,6 +7815,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    job_locate_api_v1_jobs_locate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineLocation-Output"];
+                };
+            };
+            /** @description The machine is not homed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The job has no such fiducial. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

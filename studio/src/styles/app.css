@@ -2541,6 +2541,21 @@ code,
   opacity: 0.5;
 }
 
+.ff-hole {
+  fill: var(--bg);
+  stroke: var(--border-strong);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.ff-pin1 {
+  fill: rgb(229 72 77 / 22%);
+}
+
+.ff-fp.ff-taken {
+  opacity: 0.3;
+}
+
 .ff-next {
   fill: none;
   stroke: var(--mv-camera);

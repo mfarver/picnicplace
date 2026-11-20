@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from picnicplace.api.context import Context, require
 from picnicplace.auth import Permission
-from picnicplace.job.layout import JobLayout, find_location, layout
+from picnicplace.job.layout import JobLayout, find_location, layout, location_from_fiducial
 from picnicplace.job.models import Job, JobSetup, MachineLocation
 from picnicplace.job.revision import JobFileError, JobRevision, load, make_revision
 from picnicplace.job.store import (
@@ -20,6 +20,8 @@ from picnicplace.job.store import (
     RevisionSummary,
     job_id_for,
 )
+from picnicplace.machine.errors import NotHomedError
+from picnicplace.machine.profile import Point
 from picnicplace.schemas import ErrorResponse, JobChangedEvent, WireModel
 
 router = APIRouter(
@@ -81,6 +83,48 @@ def job_find_location(ctx: Context, job: Job) -> MachineLocation:
             ),
         )
     return location
+
+
+class LocateRequest(WireModel):
+    job: Job = Field(description="The job, saved or not.")
+    ref: str = Field(description="The fiducial the top camera is centered on, such as FID1.")
+    copy_id: str | None = Field(
+        default=None, description="Its board copy, or empty for a fiducial on the panel."
+    )
+    rotation: float | None = Field(
+        default=None,
+        description="How far the panel is turned. Empty: the job's, or 0 if it has none.",
+    )
+    at: Point | None = Field(
+        default=None, description="Where the fiducial is. Empty: where the top camera is now."
+    )
+
+
+@router.post(
+    "/locate",
+    responses={
+        409: {"model": ErrorResponse, "description": "The machine is not homed."},
+        422: {"model": ErrorResponse, "description": "The job has no such fiducial."},
+    },
+)
+def job_locate(ctx: Context, body: LocateRequest) -> MachineLocation:
+    """Where the job's panel is on the bed, from one of its fiducials: by default, the one
+    the top camera is centered on now. Nothing is saved: the job's location is set when
+    it is saved. The run's board check then finds every fiducial and fits the board."""
+    at = body.at
+    if at is None:
+        if not ctx.machine.state.homed:
+            raise NotHomedError("home the machine first, so the camera's position is known")
+        at = ctx.machine.camera_position()
+    turn = body.rotation
+    if turn is None:
+        turn = body.job.location.rotation if body.job.location else 0.0
+    try:
+        return location_from_fiducial(
+            body.job, ctx.machine.profile, body.ref, body.copy_id, at, turn
+        )
+    except ValueError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from e
 
 
 @router.get("/{job_id}", responses=NOT_FOUND)

@@ -1,5 +1,6 @@
 import {
   CircuitBoard,
+  Crosshair,
   FileInput,
   FileUp,
   FolderOpen,
@@ -21,6 +22,7 @@ import { ImportReportView } from "../components/library/ImportReportView";
 import { MachineView } from "../components/machine/MachineView";
 import { Panel } from "../components/Panel";
 import { Placeholder } from "../components/Placeholder";
+import { fiducialChoices } from "../fiducials";
 
 /** A file-safe job ID from its name, as the core expects. */
 function jobId(name: string): string {
@@ -57,6 +59,7 @@ export function PrepareWorkspace() {
   const [notice, setNotice] = useState<string | null>(null);
   const [jobFile, setJobFile] = useState<File>();
   const [loaded, setLoaded] = useState<string | null>(null);
+  const [fiducialKey, setFiducialKey] = useState<string | null>(null);
 
   const reloadJobs = useCallback(async () => {
     const { data } = await api.GET("/api/v1/jobs");
@@ -226,6 +229,30 @@ export function PrepareWorkspace() {
     }
   };
 
+  const fromCamera = async () => {
+    if (!job) return;
+    const choices = fiducialChoices(job);
+    const choice = choices.find((c) => c.key === fiducialKey) ?? choices[0];
+    if (!choice) return;
+    const location = await run(() =>
+      api.POST("/api/v1/jobs/locate", {
+        body: {
+          job,
+          ref: choice.ref,
+          copy_id: choice.copyId,
+          rotation: job.location?.rotation ?? 0,
+        },
+      }),
+    );
+    if (location) {
+      update({ location });
+      setNotice(
+        `Placed from ${choice.label} under the camera. Save to keep it; the run finds every ` +
+          "fiducial and fits the board.",
+      );
+    }
+  };
+
   const close = () => {
     setJob(null);
     setSavedAs(null);
@@ -241,6 +268,7 @@ export function PrepareWorkspace() {
   const cautions = layout?.issues.filter((i) => i.severity === "warning") ?? [];
   const parts = layout?.placements.filter((p) => p.kind === "part" && p.enabled).length ?? 0;
   const location = job?.location;
+  const fiducials = job ? fiducialChoices(job) : [];
 
   return (
     <div className="workspace">
@@ -493,6 +521,36 @@ export function PrepareWorkspace() {
                   Find a place
                 </button>
               </div>
+              {fiducials.length > 0 && (
+                <>
+                  <p className="text-muted">
+                    Or put the board on the bed, set its turn, center the top camera on a
+                    fiducial (in the Machine workspace), and set the place from it.
+                  </p>
+                  <div className="button-row">
+                    <select
+                      aria-label="Fiducial under the camera"
+                      value={fiducialKey ?? fiducials[0]?.key ?? ""}
+                      onChange={(e) => setFiducialKey(e.target.value)}
+                    >
+                      {fiducials.map((f) => (
+                        <option key={f.key} value={f.key}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="button"
+                      disabled={pending}
+                      onClick={() => void fromCamera()}
+                    >
+                      <Crosshair size={16} aria-hidden />
+                      Set from camera
+                    </button>
+                  </div>
+                </>
+              )}
             </Panel>
 
             <Panel title="Checks">

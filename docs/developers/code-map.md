@@ -183,7 +183,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `board/` | Boards and panels, and reading them from KiCad (`kicad.py`, with a small S-expression reader) and KiKit panels |
 | `job/models.py`, `job/store.py` | Jobs (a board or panel on the machine) and their files, with their published revisions and this machine's setup for each |
 | `job/revision.py` | Job revisions: the design and a copy of the library entries it uses, the job file, and its hash |
-| `job/layout.py` | Where a job's placements land on the machine, and what the machine cannot reach |
+| `job/layout.py` | Where a job's placements land on the machine, what the machine cannot reach, and the place from a fiducial under the camera |
 | `job/run.py` | Running a job's published revision: the planner (also the dry run), board alignment, batches, pause, step, resume, stop, refills |
 
 ### The data directory
@@ -241,7 +241,7 @@ client. Useful pieces:
 | `components/` | Panels and controls used by the workspaces; `machine/` holds the machine view (the overhead map and head inset), `wizard/` the setup wizard (a panel over the map) and the calibration banner, `job/` and `library/` their own pieces |
 | `api/schema.ts` | **Generated** TypeScript types for the whole API (`make api`); never edit by hand |
 | `api/types.ts` | Short names for the generated types |
-| `tape.ts`, `runSteps.ts` | Pure logic with unit tests: tape geometry, fit check, pin-1 quadrant, and table-cell parsing; a run's step list |
+| `tape.ts`, `runSteps.ts`, `fiducials.ts` | Pure logic with unit tests: tape geometry, fit check, pin-1 quadrant, and table-cell parsing; a run's step list; the fiducials a job can be placed from |
 | `cameraMarks.ts` | Marks drawn on a top camera's picture where vision found something (the pick pocket, loose parts), placed from machine coordinates as the head moves |
 | `mjpeg.ts` | Reads a camera's MJPEG stream with `fetch`, so leaving a view closes its connection (an `<img>` can hold it open and use up the browser's six connections to the core) |
 | `api/client.ts` | The typed REST client (`api.GET("/api/v1/...")`) |

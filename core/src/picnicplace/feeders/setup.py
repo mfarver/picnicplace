@@ -267,6 +267,12 @@ class FeederSetup(_Model):
         description="The top of the parts in each slot or strip or tray, found by sniffing, "
         "by slot ID or T ID.",
     )
+    found: dict[str, str] = Field(
+        default_factory=dict[str, str],
+        description="What the last scan of the feeder bus found: the ID of the feeder in "
+        "each slot, by slot ID. Shown after the core restarts, until it scans again; "
+        "feeding needs that scan.",
+    )
 
 
 class FeederSetupStore:

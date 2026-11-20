@@ -280,7 +280,10 @@ export function FeedersWorkspace() {
               <p className="text-muted">
                 {state.scanned
                   ? `${found.length} feeder${found.length === 1 ? "" : "s"} found.`
-                  : "Not scanned since the core started."}
+                  : state.restored
+                    ? `Not scanned since the core started: showing the ${found.length} the ` +
+                      "last scan found. Scan before feeding (a run scans first)."
+                    : "Not scanned since the core started."}
               </p>
               <div className="button-row">
                 <button

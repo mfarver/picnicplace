@@ -224,7 +224,8 @@ effect at once. The reset button next to one forgets it.
 ## 5. Feeders
 
 - [ ] **Scan feeders** in the Feeders workspace. Each feeder found is initialized and
-      listed under its slot.
+      listed under its slot. After the core restarts, the slots show what the last scan
+      found until you scan again; scan before feeding (a run scans first by itself).
 - [ ] Give each feeder its part, and the width of tape it takes (**Takes tape**), and feed
       one. Check it moves one part's pitch. A part whose tape is another width is flagged:
       it is in the wrong feeder, or its tape is wrong in the Parts workspace.
@@ -323,6 +324,10 @@ effect at once. The reset button next to one forgets it.
       feeders: each placement's feeder and nozzles, and what blocks any of them (no part
       number, no height, no feeder holding the part, tape too wide for the feeders, or
       out of reach). Fix what you can; tick **Place the rest** to leave out the others.
+      A warning also names any placement whose part's footprint is not the board's there,
+      unless their pads are the same: different pads, or the same pads turned (pin 1 on
+      another pad) or with the origin elsewhere, would place the part turned or off its
+      pads. Check the part number, or the part's footprint in the Parts workspace.
       The workspace's main area lists what the run will do, in order: scan the feeders,
       find the board, then each placement. The eye button on a placement takes the top
       camera there and draws its footprint over the picture, pin 1 in red, to check

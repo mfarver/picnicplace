@@ -1520,6 +1520,11 @@
             "title": "Rails",
             "type": "array"
           },
+          "restored": {
+            "default": false,
+            "title": "Restored",
+            "type": "boolean"
+          },
           "scanned": {
             "title": "Scanned",
             "type": "boolean"
@@ -1535,6 +1540,7 @@
         "required": [
           "bus",
           "scanned",
+          "restored",
           "slots",
           "fiducial_offset",
           "fiducial_offset_source",

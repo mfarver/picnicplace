@@ -183,6 +183,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `board/` | Boards and panels, and reading them from KiCad (`kicad.py`, with a small S-expression reader) and KiKit panels |
 | `job/models.py`, `job/store.py` | Jobs (a board or panel on the machine) and their files, with their published revisions and this machine's setup for each |
 | `job/revision.py` | Job revisions: the design and a copy of the library entries it uses, the job file, and its hash |
+| `job/footprint_check.py` | Whether a part's footprint fits the board's where it goes: the same pads, or turned, moved, or different |
 | `job/layout.py` | Where a job's placements land on the machine, what the machine cannot reach, and the place from a fiducial under the camera |
 | `job/run.py` | Running a job's published revision: the planner (also the dry run), board alignment, batches, pause, step, resume, stop, refills |
 

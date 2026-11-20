@@ -611,7 +611,10 @@ correction. Implementations:
   - Slots come from the profile's feeder banks (pick location, pitch, tape direction,
     and each slot's bus address). The owner's feeder setup (`feeders.json` in the data
     directory) holds which part each feeder holds, by feeder ID, so the part follows the
-    feeder and its reel to another slot, and each slot's pick correction.
+    feeder and its reel to another slot, and each slot's pick correction. It also keeps
+    what the last scan found in each slot: after the core restarts, the plan and the
+    Studio show that until the next scan, and feeding waits for that scan (a run scans
+    first anyway), which initializes the feeders. Nothing is sent on the bus at startup.
   - Pick corrections are taught by eye, or found from the feeder's alignment fiducial,
     which sits at a fixed place on the feeder's design (in the profile; it can also be
     measured once by eye): every slot is calibrated by finding its feeder's fiducial
@@ -691,7 +694,8 @@ correction. Implementations:
   next pocket can be found from its sprocket holes (the camera looks at the holes, since
   on wide tape they are out of view from the pocket); a tray's parts have one angle.
   The planner uses feeder slots first, warns when a strip or tray has fewer parts than
-  the job takes from it, and lets a part on tape too wide for the feeders come from a
+  the job takes from it, warns of a part whose footprint is not the board's where it
+  goes (unless their pads are the same: the same places, pin 1 on pin 1), and lets a part on tape too wide for the feeders come from a
   strip. An empty one pauses the run until the operator marks it refilled, with the nozzles
   raised and the head moved to the owner's park location (or, without one, to the back
   of its travel) so it is out of the way. The machine

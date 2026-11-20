@@ -240,6 +240,9 @@ class FeedersState(WireModel):
     bus: Literal["photon"] | None
     scanned: bool
     """Whether the bus has been scanned since the core started."""
+    restored: bool = False
+    """Not scanned since the core started: the slots show what the last scan before it
+    found. Feeding needs a new scan (a run does one first)."""
     slots: list[SlotState]
     fiducial_offset: Point | None
     fiducial_offset_source: Literal["measured", "profile"] | None
@@ -303,7 +306,12 @@ class FeederService:
         self._bus = (
             PhotonBus(machine.driver.rs485) if self._profile.feeder_bus == "photon" else None
         )
-        self._found: dict[str, str] = {}
+        # What the last scan found, kept over a restart: the run's plan and the Studio
+        # show it until the next scan, which a run does first, and which feeding needs.
+        known = {s.id for s in self._slots}
+        self._found: dict[str, str] = {
+            k: v for k, v in store.setup.found.items() if k in known and self._bus is not None
+        }
         """Slot ID to the ID of the feeder found there."""
         self._initialized: set[str] = set()
         self._errors: dict[str, str] = {}
@@ -393,6 +401,7 @@ class FeederService:
         return FeedersState(
             bus=self._profile.feeder_bus,
             scanned=self._scanned,
+            restored=not self._scanned and bool(self._found),
             slots=slots,
             fiducial_offset=offset,
             fiducial_offset_source=source,  # type: ignore[arg-type]
@@ -472,6 +481,8 @@ class FeederService:
                 errors[slot.id] = str(e)
         self._found, self._initialized, self._errors = found, initialized, errors
         self._scanned = True
+        self._store.setup.found = dict(found)
+        self._store.save()
         self._invalidate()
         new = [u for u in found.values() if u not in self._store.setup.feeders]
         parts = [f"Found {len(found)} feeder{'' if len(found) == 1 else 's'}"]

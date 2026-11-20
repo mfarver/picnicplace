@@ -2987,6 +2987,11 @@ export interface components {
             fixed: components["schemas"]["FixedFeederState"][];
             /** Rails */
             rails: components["schemas"]["RailState"][];
+            /**
+             * Restored
+             * @default false
+             */
+            restored: boolean;
             /** Scanned */
             scanned: boolean;
             /** Slots */

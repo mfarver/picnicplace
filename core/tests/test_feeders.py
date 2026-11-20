@@ -246,6 +246,33 @@ def test_scan_assign_and_feed(lumen: TestClient) -> None:
         assert service(lumen).setup.setup.feeders[uuid].part_id == "RC0603-10K"
 
 
+def test_the_last_scan_is_shown_after_a_restart_until_the_next() -> None:
+    """A core restart keeps which feeder the last scan found in each slot, so the plan
+    and the Studio still know what is loaded; feeding waits for a new scan, which
+    initializes the feeders."""
+    config = fast_config(machine={"profile": "lumenpnp-v4.1"})
+    with TestClient(create_app(config)) as client:
+        add_part(client)
+        with connect(client) as s:
+            succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+            uuid = slot_state(s, "2")["feeder"]["uuid"]
+            s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": "RC0603-10K"})
+            assert not client.get("/api/v1/feeders").json()["restored"]
+
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        state = client.get("/api/v1/feeders").json()
+        assert state["restored"] and not state["scanned"]
+        slot = slot_state(s, "2")
+        assert slot["feeder"]["uuid"] == uuid and not slot["feeder"]["initialized"]
+        assert slot["feeder"]["assignment"]["part_id"] == "RC0603-10K"
+        r = s.post("/api/v1/feeders/slots/2/feed", {})
+        assert r.status_code == 409 and "scan the feeders" in r.json()["detail"]
+
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        assert not client.get("/api/v1/feeders").json()["restored"]
+        assert succeeded(s.wait(s.post("/api/v1/feeders/slots/2/feed", {})))
+
+
 def test_pause_holds_a_feeder_advance(lumen: TestClient) -> None:
     """Pause holds an advance as it holds a move: one asked for inside a run waits until
     Resume, and a new feed is refused while paused."""

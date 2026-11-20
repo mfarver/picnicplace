@@ -52,6 +52,7 @@ keeps it when a problem pauses the run, so the Studio can show where it stopped.
 import asyncio
 import logging
 import math
+import re
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -66,6 +67,7 @@ from picnicplace.camera.source import Image
 from picnicplace.camera.synthetic import BoardScene
 from picnicplace.feeders.service import FeederService, FeedersState, rotate
 from picnicplace.feeders.setup import PickCorrection
+from picnicplace.job.footprint_check import footprint_mismatch
 from picnicplace.job.layout import Issue, MachinePlacement, layout
 from picnicplace.job.models import Job
 from picnicplace.job.revision import JobFileError, PartsSource
@@ -403,6 +405,12 @@ def _slot_order(slot_id: str | None) -> int:
     return 2_000_000
 
 
+def _ref_order(ref: str) -> tuple[str, int, str]:
+    """C2 before C10."""
+    match = re.fullmatch(r"([^\d]*)(\d+)(.*)", ref)
+    return (ref, 0, "") if match is None else (match[1], int(match[2]), match[3])
+
+
 def _source(slot_id: str) -> str:
     return f"slot {slot_id}" if slot_id.isdigit() else slot_id
 
@@ -466,7 +474,16 @@ def plan_job(
                 "click Set discard here)",
             )
         )
-    if not feeders.scanned and profile.feeder_bus is not None:
+    if feeders.restored:
+        issues.append(
+            Issue(
+                severity="warning",
+                message="the feeders have not been scanned since the core started: the slots "
+                "are as the last scan found them. The run scans them again first; scan now to "
+                "see any you moved since",
+            )
+        )
+    elif not feeders.scanned and profile.feeder_bus is not None:
         issues.append(
             Issue(severity="warning", message="the feeders have not been scanned since start")
         )
@@ -584,6 +601,32 @@ def plan_job(
                     f"{' and more' if len(turned) > 6 else ''}: they are placed as if it "
                     "were 0 degrees. Give each part its tape in the Parts workspace."
                 ),
+            )
+        )
+    # Parts whose footprint is not the board's where they go.
+    mismatched: dict[tuple[str, str, str], list[RunItem]] = {}
+    for item in items:
+        what = part(item.part_id) if item.status != "skipped" and item.part_id else None
+        if library is None or what is None or what.footprint_id == item.footprint_id:
+            continue
+        why = footprint_mismatch(
+            library.find_footprint(item.footprint_id), library.find_footprint(what.footprint_id)
+        )
+        if why is not None:
+            mismatched.setdefault((what.id, item.footprint_id, why), []).append(item)
+    for (part_id, board_footprint, why), affected in mismatched.items():
+        what = part(part_id)
+        refs = sorted({i.ref for i in affected}, key=_ref_order)
+        shown = ", ".join(refs[:6]) + (f", and {len(refs) - 6} more" if len(refs) > 6 else "")
+        issues.append(
+            Issue(
+                severity="warning",
+                message=(
+                    f"{part_id}'s footprint {what.footprint_id if what else '?'} is not the "
+                    f"board's {board_footprint} at {shown}: {why}. Check the part number, or "
+                    "the part's footprint in the Parts workspace"
+                ),
+                ref=affected[0].ref,
             )
         )
     # Feeders whose tape width does not match their part's tape.

@@ -11,12 +11,16 @@ export interface LoadRow {
   left: number;
 }
 
-/** "8 mm embossed, 4 mm pitch"; "" when the tape is not known. */
+/**
+ * "8 mm embossed, 4 mm pitch"; "" when the tape is not known; "(guessed)" after one guessed
+ * from the part's footprint, not yet checked against a reel.
+ */
 export function tapeLabel(tape: Tape | null | undefined): string {
   if (!tape || tape.width == null) return "";
   const kind = tape.kind && tape.kind !== "unknown" ? ` ${tape.kind}` : "";
   const pitch = tape.pitch != null ? `, ${tape.pitch} mm pitch` : "";
-  return `${tape.width} mm${kind}${pitch}`;
+  const guess = tape.id.endsWith("-guessed") ? " (guessed)" : "";
+  return `${tape.width} mm${kind}${pitch}${guess}`;
 }
 
 /** "slots 3, 7 and T1": feeder slots by number, strips and trays by ID. */

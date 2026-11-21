@@ -772,6 +772,26 @@ def plan_job(
                 ),
             )
         )
+    # Parts whose tape is still the guess made from their footprint (``tape_rules``).
+    guessed: list[str] = []
+    for item in items:
+        what = part(item.part_id) if item.status == "pending" and item.part_id else None
+        tape = library.tape_of(what) if library and what else None
+        is_guess = tape is not None and tape.id.endswith("-guessed")
+        if what is not None and is_guess and what.id not in guessed:
+            guessed.append(what.id)
+    if guessed:
+        issues.append(
+            Issue(
+                severity="warning",
+                message=(
+                    f"the tape of {', '.join(guessed[:6])}{' and more' if len(guessed) > 6 else ''}"
+                    " is guessed from its footprint: check its width, pitch and which way round "
+                    "the parts lie against the reel, and give the part that tape in the Parts "
+                    "workspace"
+                ),
+            )
+        )
     # Parts whose footprint is not the board's where they go.
     mismatched: dict[tuple[str, str, str], list[RunItem]] = {}
     for item in items:

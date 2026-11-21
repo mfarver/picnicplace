@@ -360,6 +360,28 @@ def test_a_reel_is_counted_down_by_each_feed(lumen: TestClient) -> None:
         assert r.status_code == 422 and "holds no part" in r.json()["detail"], r.json()
 
 
+def test_the_plan_names_parts_whose_tape_is_guessed(lumen: TestClient) -> None:
+    """A tape guessed from the footprint at import is to be checked against the reel."""
+    from picnicplace.library.tape_rules import guessed_tape
+
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        library = lumen.app.state.ctx.library  # type: ignore[attr-defined]
+        part = library.find_part("EX-R0603-10K")
+        tape = guessed_tape(library.find_footprint(part.footprint_id))
+        assert tape is not None
+        library.put_tape(tape)
+        library.put_part(part.model_copy(update={"tape_id": tape.id}))
+        publish(s)
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        found = [i for i in plan["issues"] if "is guessed from its footprint" in i["message"]]
+        assert len(found) == 1 and found[0]["message"].startswith(
+            "the tape of EX-R0603-10K is guessed from its footprint"
+        ), plan["issues"]
+        need = next(n for n in plan["parts"] if n["part_id"] == "EX-R0603-10K")
+        assert need["tape"]["id"] == "8mm-paper-p4-r90-guessed"
+
+
 def test_start_in_step_mode(lumen: TestClient) -> None:
     """Started in step mode, the run finds the board and pauses before the first part;
     each step places one batch, and resume places the rest."""

@@ -2315,6 +2315,24 @@ code,
   white-space: nowrap;
 }
 
+.load-list .load-row {
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.load-list .run-row {
+  align-items: baseline;
+}
+
+.load-list .run-where {
+  white-space: normal;
+}
+
+.load-about {
+  padding: 0 var(--space-1) 2px calc(var(--space-1) + 8px + var(--space-2));
+  font-size: var(--text-xs);
+}
+
 .run-dot {
   flex: none;
   width: 8px;

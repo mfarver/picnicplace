@@ -50,6 +50,7 @@ from picnicplace.machine.service import MachineService
 from picnicplace.machine.tips import TipStore
 from picnicplace.machine_setup import SetupStore, setup_facts
 from picnicplace.operations import OperationManager
+from picnicplace.panel import PanelLink
 from picnicplace.placement import PlacementService
 from picnicplace.presence import PresenceTracker
 from picnicplace.recorder import FlightRecorder
@@ -234,9 +235,22 @@ def create_app(
         ctx.runner.restore()
         recorder.snapshot = recording_routes.snapshot_builder(ctx, jobs.get)
         await machine.start()
+        if config.panel.port:
+            ctx.panel = PanelLink.serial(
+                config.panel.port,
+                machine=machine,
+                lease=lease,
+                presence=presence,
+                bus=bus,
+                runner=lambda: ctx.runner,
+            )
+            ctx.panel.start()
         try:
             yield
         finally:
+            if ctx.panel is not None:
+                await ctx.panel.stop()
+                ctx.panel = None
             recorder.stop("the core stopped")
             ctx.library.close()
             ctx.library = None

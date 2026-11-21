@@ -91,7 +91,8 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/feeders/slots/{id}/pocket` | Find the pick pocket from the tape's sprocket holes |
 | `POST /api/v1/feeders/slots/{id}/fiducial`, `POST /api/v1/feeders/calibrate` | Measure the feeder fiducial's offset; calibrate slots from their fiducials |
 | `POST /api/v1/feeders/rails/calibrate`, `POST /api/v1/feeders/slots/{id}/rail-fiducial`, `DELETE /api/v1/feeders/rails/{bank}` | Find where each feeder rail really is from its end feeders' fiducials (or one the operator centered the camera on); go back to the profile's place |
-| `PUT`, `DELETE /api/v1/feeders/assignments/{feeder_id}` | Which part a feeder holds |
+| `PUT`, `DELETE /api/v1/feeders/assignments/{feeder_id}` | Which part a feeder holds (its reel count is kept while the part stays the same) |
+| `PUT /api/v1/feeders/assignments/{feeder_id}/reel` | How many parts are on a feeder's reel (counted down by each feed) and the level to warn the operator at |
 | `POST /api/v1/feeders/fixed`; `PUT`, `DELETE …/fixed/{id}` | Strips and trays held on the bed (T1, T2, ...): add, change, remove |
 | `PUT /api/v1/feeders/fixed/{id}/teach` | Teach a strip or tray's first part, end of its first row, or last part (at the camera) |
 | `POST /api/v1/feeders/fixed/{id}/refill`, `…/pocket` | Mark it refilled; find a strip's next pocket from its sprocket holes |

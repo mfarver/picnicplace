@@ -229,6 +229,13 @@ effect at once. The reset button next to one forgets it.
 - [ ] Give each feeder its part, and the width of tape it takes (**Takes tape**), and feed
       one. Check it moves one part's pitch. A part whose tape is another width is flagged:
       it is in the wrong feeder, or its tape is wrong in the Parts workspace.
+- [ ] Optional, per reel: under **Reel**, enter **Parts on reel** from the reel's label and
+      a **Warn at** level, and **Save reel**. Each feed takes one part off the count (a
+      feed back adds one), and the count stays with the feeder, as the part does. When it
+      gets down to the level, a popup in the Studio says the reel is low (and again when
+      it should be empty), so the next reel is ready. The run's checks warn before a run
+      when a reel's count is less than the job places from it. Giving the feeder another
+      part clears the count: enter the new reel's.
 - [ ] **Calibrate rails** (under **Rails**): with feeders near both ends of each rail (the
       core uses the two farthest apart), it finds their fiducials and moves the rail's
       slots to where the rail really is. If it cannot find one, jog the camera onto that

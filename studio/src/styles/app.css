@@ -2477,6 +2477,42 @@ code,
   font-size: var(--text-lg);
 }
 
+/* Reels running low: below the top bar and its banner, clear of the run's alert at the
+   bottom. */
+.reel-alerts {
+  position: fixed;
+  top: 120px;
+  right: var(--space-4);
+  z-index: 39;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(360px, calc(100vw - 2 * var(--space-4)));
+}
+
+.reel-alert {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-3);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 35%);
+}
+
+.reel-alert-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
+
+.reel-alert-text {
+  flex: 1;
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
 /* The Machine workspace: the map, with a few of a run's steps under it. */
 .machine-split {
   display: flex;

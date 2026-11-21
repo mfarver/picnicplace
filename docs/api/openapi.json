@@ -1225,6 +1225,32 @@
             "description": "Distance from one part to the next. Empty: the part's tape pitch.",
             "title": "Part Pitch"
           },
+          "reel_left": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parts left on the reel, counted down by each feed; empty: not counted. Set with the feeder's reel route, from the reel's label when it is loaded.",
+            "title": "Reel Left"
+          },
+          "reel_low": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Warn the operator once this many parts or fewer are left; empty: never.",
+            "title": "Reel Low"
+          },
           "tape_width": {
             "anyOf": [
               {
@@ -1280,6 +1306,32 @@
             "description": "Distance from one part to the next. Empty: the part's tape pitch.",
             "title": "Part Pitch"
           },
+          "reel_left": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parts left on the reel, counted down by each feed; empty: not counted. Set with the feeder's reel route, from the reel's label when it is loaded.",
+            "title": "Reel Left"
+          },
+          "reel_low": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Warn the operator once this many parts or fewer are left; empty: never.",
+            "title": "Reel Low"
+          },
           "tape_width": {
             "anyOf": [
               {
@@ -1299,7 +1351,9 @@
           "part_pitch",
           "tape_width",
           "enabled",
-          "note"
+          "note",
+          "reel_left",
+          "reel_low"
         ],
         "title": "FeederAssignment",
         "type": "object"
@@ -6838,6 +6892,38 @@
         "title": "Rect",
         "type": "object"
       },
+      "ReelRequest": {
+        "properties": {
+          "left": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parts on the reel now (from its label); empty: do not count them.",
+            "title": "Left"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Warn once this many or fewer are left; empty: never.",
+            "title": "Low"
+          }
+        },
+        "title": "ReelRequest",
+        "type": "object"
+      },
       "RefillRequest": {
         "properties": {
           "picked": {
@@ -9841,6 +9927,57 @@
           }
         ],
         "summary": "Assign",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
+    "/api/v1/feeders/assignments/{feeder_id}/reel": {
+      "put": {
+        "description": "How many parts are on a feeder's reel, counted down by each feed from now, and the\nlevel at which the Studio warns the operator that it is running low.",
+        "operationId": "set_reel_api_v1_feeders_assignments__feeder_id__reel_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feeder_id",
+            "required": true,
+            "schema": {
+              "title": "Feeder Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedersState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Not a feeder ID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Reel",
         "tags": [
           "feeders"
         ]

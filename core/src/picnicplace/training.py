@@ -118,6 +118,35 @@ class PartVision(WireModel):
     method: Method = "auto"
 
 
+RESCUE_WAYS: tuple[PartVision, ...] = (
+    PartVision(
+        light=LightColor(red=255, green=255, blue=255, brightness=180),
+        threshold=0.6,
+        method="outline",
+    ),
+    PartVision(
+        light=LightColor(red=0, green=255, blue=0, brightness=120), threshold=0.6, method="outline"
+    ),
+    PartVision(light=LightColor(red=0, green=0, blue=255, brightness=255), method="pads"),
+    PartVision(
+        light=LightColor(red=255, green=255, blue=255, brightness=120),
+        threshold=0.75,
+        method="auto",
+    ),
+    PartVision(
+        light=LightColor(red=255, green=255, blue=255, brightness=255),
+        threshold=0.8,
+        method="pads",
+    ),
+)
+"""Ways of seeing a part tried in turn, before it is discarded, when the usual (or trained)
+one sees nothing: the part is already over the camera, so each costs a frame or two. They
+are what training chose for the parts a first real board's run could not see (2026-11-20,
+a LumenPnP): an LM63615 (WSON) by its outline under green light, a CD74HC4051 (TSSOP) and an
+MMBTA06Q (SOT-23) by their pads under blue, and white at other brightnesses. On a light
+that cannot take a color, those with a color are left out."""
+
+
 class Candidate(WireModel):
     """One way of seeing a part, as training judged it."""
 

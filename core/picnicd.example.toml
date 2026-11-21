@@ -134,7 +134,8 @@ command_timeout_s = 10.0
 # The flight recorder keeps every frame vision looks at and what the machine does, to send
 # to PicnicPlace's developers (see the guide: Send a flight recording).
 [recorder]
-record_runs = false        # Record every job run (a run can also ask for it).
+record_runs = false        # Record every job run (a run can also ask for it), and again
+                           # when a run resumes after the core restarts.
 keep = 10                  # Keep at most this many recordings,
 max_mb = 5000              # and at most this many megabytes of them; older ones go.
 

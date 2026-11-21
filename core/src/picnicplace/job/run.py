@@ -138,6 +138,11 @@ CHECK_SCORE = 0.5
 """...or not found (the pattern matched worse than this) pauses the run, to be looked at:
 a real 0603 that landed 0.43 mm along its length, one end lifted, would have stood up when
 soldered."""
+CHECK_UNSURE = 0.35
+"""A part matched worse than ``CHECK_SCORE`` but at least this well is not judged: on a real
+LumenPnP (2026-11-20) gray ceramic capacitors sitting squarely on their pads matched 0.42 to
+0.5 (black resistors 0.6 to 0.7), and the run paused after each. Such a placement is marked
+not checked, and the run goes on."""
 CHECK_ON_PADS = 0.75
 """A part with less than this of either metal end over its pad pauses the run. On a real
 0603 (2026-11-19), one 0.3 mm along its length from its pads had 23% of an end on its pad,
@@ -215,6 +220,13 @@ class PlacementCheck(WireModel):
     )
     pads_dy: float | None = None
     ok: bool
+    checked: bool = Field(
+        default=True,
+        description=(
+            "Judged at all: false when the camera could not make the part out well enough "
+            "to say (a gray ceramic capacitor on a board, say), so the run went on."
+        ),
+    )
     picture: bool = Field(
         default=False,
         description="A picture of it is kept (GET /api/v1/run/checks/{index}).",
@@ -232,6 +244,10 @@ class RunStats(WireModel):
     )
     placed: int = Field(default=0, description="Parts placed.")
     checked: int = Field(default=0, description="Placements checked with the top camera.")
+    unsure: int = Field(
+        default=0,
+        description="Checked placements the camera could not make out well enough to judge.",
+    )
     bad_placements: int = Field(
         default=0, description="Checked placements off their target, turned, or not found."
     )
@@ -857,6 +873,8 @@ class JobRunner:
         scanned."""
         self._board_check: BoardCheck | None = None
         self._recording: str | None = None
+        self._record_wanted = False
+        """The run being resumed was recorded before the core restarted: record it again."""
         """The flight recording this runner started for the run, if any."""
         self.record_runs = False
         """Record every run (from the config)."""
@@ -929,6 +947,7 @@ class JobRunner:
             run.located = []
             run.held = {}
             run.current = None
+            self._record_wanted = run.recording is not None
             run.recording = None
             run.pause_requested = run.stop_requested = False
             run.message = f"interrupted: {self._summary(run)}"
@@ -1143,8 +1162,27 @@ class JobRunner:
             run.error = error
             raise
         run.interrupted = False
+        self._record_again(run)
         self._save()
         return op
+
+    def _record_again(self, run: RunState) -> None:
+        """On resuming a run that is not being recorded (read back after a restart, or its
+        recording stopped while paused), start one if the config records every run or the
+        run was recorded before: a run's later part is kept as well as its start."""
+        recorder = self._machine.recorder
+        active = recorder.active
+        if active is not None and active.id == self._recording:
+            return
+        if not (self.record_runs or self._record_wanted):
+            return
+        if not recorder.available or active is not None:
+            return
+        name = self._job.name if self._job is not None else run.name
+        info = recorder.start(f"run {name} (resumed)", "run", run.job_id)
+        run.recording = self._recording = info.id
+        self._record_wanted = False
+        recorder.event("run.resume", run=run)
 
     def pause(self) -> RunState:
         run = self._need_run()
@@ -1315,6 +1353,8 @@ class JobRunner:
             )
         if st.bad_placements:
             trouble.append(f"{st.bad_placements} of {st.checked} checked placements were off")
+        if st.unsure:
+            trouble.append(f"{st.unsure} placements could not be made out to check")
         return text + (f" ({'; '.join(trouble)})" if trouble else "")
 
     async def _rescan(self, run: RunState) -> None:
@@ -1717,6 +1757,20 @@ class JobRunner:
                 found_pads,
             ),
         )
+        if found is not None and not good and found.score >= CHECK_UNSURE:
+            # Not made out well enough to judge: say so, and go on.
+            run.stats.unsure += 1
+            item.check = PlacementCheck(
+                dx=0.0,
+                dy=0.0,
+                turn=0.0,
+                score=round(found.score, 2),
+                ok=True,
+                checked=False,
+                picture=picture,
+            )
+            machine.recorder.event("run.checked", ref=item.ref, check=item.check)
+            return
         if found is None or not good:
             run.stats.bad_placements += 1
             item.check = PlacementCheck(

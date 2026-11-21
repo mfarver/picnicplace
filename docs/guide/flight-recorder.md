@@ -22,8 +22,11 @@ make the simulator more like real machines.
 ## Record
 
 - **A run:** in the Run workspace, tick **Record it** before **Start**. The recording
-  stops when the run finishes or is stopped. To record every run, set `record_runs = true`
-  under `[recorder]` in the config.
+  stops when the run finishes or is stopped. A run that comes back after the core
+  restarts is recorded again from where it resumes, in a recording of its own ending
+  "(resumed)". To record every run, set `record_runs = true` under `[recorder]` in the
+  config; on a machine you are bringing up, also raise `keep` and `max_mb` (one board's
+  run can come to a gigabyte or more).
 - **Anything else** (homing, calibrating a slot, single placements): in the Machine
   workspace's **Flight recorder** panel, type what it is for and click **Record**. Do the
   steps, then click **Stop**.

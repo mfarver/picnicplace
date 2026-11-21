@@ -21,7 +21,7 @@ type Check = NonNullable<RunItem["check"]>;
 
 /** Pads found further than this from where the board's fit puts them: the board moved (the
  * core's ``CHECK_PADS_MOVED_MM``). */
-const PADS_MOVED_MM = 0.15;
+const PADS_MOVED_MM = 0.4;
 
 /** How far a checked part's pads were from where the board's fit put them, in mm, if they
  * were seen and that is far enough to say the board moved. */
@@ -34,6 +34,8 @@ export function padsMoved(c: Check): number | null {
 /** Where a checked part landed, after "placed by N1": on its pads (if they were seen) or
  * from where it was sent, and how it is turned. */
 function checkDetail(c: Check): string {
+  // Matched too poorly to judge (a gray ceramic capacitor on a board, say): not checked.
+  if (!c.checked) return ", not checked: the camera could not make it out";
   const t = Math.round(c.turn * 10) / 10 || 0; // never "-0.0"
   const turn = `${t >= 0 ? "+" : ""}${t.toFixed(1)}°`;
   let text: string;

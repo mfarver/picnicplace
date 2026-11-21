@@ -6053,6 +6053,12 @@
       "PlacementCheck": {
         "description": "Where the top camera found a part just placed, against where it was sent.",
         "properties": {
+          "checked": {
+            "default": true,
+            "description": "Judged at all: false when the camera could not make the part out well enough to say (a gray ceramic capacitor on a board, say), so the run went on.",
+            "title": "Checked",
+            "type": "boolean"
+          },
           "dx": {
             "description": "Machine X from where it was sent, mm.",
             "title": "Dx",
@@ -6127,6 +6133,7 @@
           "pads_dx",
           "pads_dy",
           "ok",
+          "checked",
           "picture"
         ],
         "title": "PlacementCheck",
@@ -7274,6 +7281,12 @@
             "description": "Parts placed.",
             "title": "Placed",
             "type": "integer"
+          },
+          "unsure": {
+            "default": 0,
+            "description": "Checked placements the camera could not make out well enough to judge.",
+            "title": "Unsure",
+            "type": "integer"
           }
         },
         "required": [
@@ -7283,6 +7296,7 @@
           "failed_alignments",
           "placed",
           "checked",
+          "unsure",
           "bad_placements"
         ],
         "title": "RunStats",

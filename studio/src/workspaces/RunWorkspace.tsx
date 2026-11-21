@@ -674,7 +674,8 @@ function RunStatsLine({ stats }: { stats: RunState["stats"] }) {
   if (stats.checked) {
     parts.push(
       `${stats.checked} placements checked` +
-        (stats.bad_placements ? `, ${stats.bad_placements} off target` : ", all on target"),
+        (stats.bad_placements ? `, ${stats.bad_placements} off target` : ", all on target") +
+        (stats.unsure ? `, ${stats.unsure} could not be made out` : ""),
     );
   }
   const trouble = stats.empty_picks + stats.failed_alignments + stats.bad_placements > 0;

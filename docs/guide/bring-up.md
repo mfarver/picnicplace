@@ -422,3 +422,69 @@ when they hold for every machine of the model.
 When every page of the wizard is done, the banner goes and moves run at full speed. If a
 config file sets `speed_scale` under `[machine]`, remove it (or set it to 1.0) and
 restart the core.
+
+## 10. What the first real board taught
+
+The first real board run on a LumenPnP (20 November 2026, 248 parts, 170 placed by the
+machine) met problems the simulator does not have. Until they are fixed in the core
+(see the release plan), this is how to get past each.
+
+**Is the machine flat?** Part tops found by touch fell 0.6 to 0.9 mm from the right end of
+each feeder rail to the left, and the leftmost slots were out of reach. Compare the
+heights the Feeders workspace shows for slots at each end of a rail. More than 0.3 mm
+apart: shim the low end of the rail (or the bed) level with the gantry. A pick that finds
+nothing searches once more, 1 mm deeper, which covers some of it.
+
+**Strip holders sit lower than the board.** On that machine, by 0.8 mm. A strip's pick
+height is the nozzle height at the top of its parts: the holder's surface plus the
+part's height, not the board's. Once a strip's first part is found by touch, its height
+is kept.
+
+**Black tape.** The top camera finds a pocket from the sprocket holes, and could not see
+them in black tape, either because a feeder's sprocket teeth filled them or because the
+tape lay black on a dark holder (strip holders cover part of the holes too). The pick then
+goes where the feeder's setup says. For each slot of black tape, center the camera on a
+part in the pick pocket and click **Pick is here** (Feeders workspace). Tape with an 8 mm
+pitch has a pocket at every second hole: check a part, not a gap, sits at the pick point,
+and if not, move the tape on one hole.
+
+**Gray capacitors.** A gray ceramic capacitor's body is no darker than an empty pocket's
+floor; the pocket check now looks for its bright metal ends too, and a pocket seen empty
+twice is still tried anyway. On the board, the check after placing often cannot make one
+out well enough to judge: it marks it **not checked** and goes on, rather than pausing.
+Look over those by eye.
+
+**New parts: train them first.** Before a run, train the bottom camera on each part it
+has not placed before, especially leadless ICs (QFN, WSON) and leaded parts: Machine
+workspace, **Placement** panel, choose the feeder and a nozzle, **Train**, and approve the
+outline drawn over the part. A part the usual look does not see is looked for under other
+lights and ways before it is discarded; the message names the way that found it, and the
+run tries that way first for the part from then on. Train such a part, so it is seen at
+once. A part discarded even so ("saw no part ... nor under other lights and ways of
+looking") needs training before the run goes on.
+
+**Footprints for the machine.** The bottom camera looks for the part the footprint
+describes. A KiCad footprint's F.Fab layer must show the body only, not the leads; its
+pads are the board's land pattern, larger than the part's own terminals. The plan warns
+when a part's footprint is not the board's.
+
+**Tips.** Say which tip is on each nozzle. The plan sends each part to the nozzle whose tip
+suits it (0603s to the N045, larger parts to the N08) and lists how many go to each.
+
+**A feeder that stops answering.** A feed the feeder does not answer goes on, and the
+camera and the vacuum tell whether there was a part. If its picks keep failing, look at
+the feeder: on that board the metal splice joining a reel's leader to its tape had been
+drawn into one and jammed it. Clear it, or cut the tape past the splice. Parts can also be
+moved to a strip on the bed, and the run takes them from there after the core restarts.
+
+**Restarts.** A run is kept on disk and comes back paused after the core restarts; home
+the machine and resume. The restart turns the suction off, so take any part off the
+nozzles first, or it drops where the head is. Do not click **Run again** on a board that is
+not finished: it starts the board over.
+
+**Skip after a pick fails, not while it is failing.** A part skipped while its pick was
+still being tried could not be put back.
+
+**Keep the Studio in front.** A Studio tab in the background can miss its heartbeat, and
+the core then stops the move under way. `heartbeat_timeout_s` under `[presence]` in the
+config gives it longer.

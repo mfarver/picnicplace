@@ -1429,7 +1429,27 @@ class FeederService:
                 position=position,
                 mm_per_px=mm,
             )
-            verdicts.append(holds_part(darkness))
+            ends: float | None = None
+            if size.in_tape is not None and darkness is not None:
+                # A gray part's middle is no darker than an empty pocket's floor: its metal
+                # ends tell. Its longer side, in the picture (counterclockwise from right).
+                a = math.radians(size.in_tape + (90.0 if size.body[1] > size.body[0] else 0.0))
+                u2, v2 = pixel(s + math.cos(a), across + math.sin(a))
+                axis = math.degrees(math.atan2(v - v2, u2 - u))
+                ends = await machine.recorder.vision(
+                    "pocket_ends",
+                    image,
+                    u,
+                    v,
+                    size.body,
+                    mm,
+                    size.outline,
+                    axis,
+                    camera=camera.id,
+                    position=position,
+                    mm_per_px=mm,
+                )
+            verdicts.append(holds_part(darkness, ends))
         chosen = choose_pocket(verdicts)
         # Round each pocket, a rectangle turned with the part (or, turn unknown, a square
         # as wide as its longer side), and a square round each sprocket hole.

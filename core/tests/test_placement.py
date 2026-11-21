@@ -632,3 +632,59 @@ def test_a_part_below_the_first_search_is_looked_for_once_more_deeper(lower: flo
         else:
             assert op["status"] == "failed", op
             assert "a second search 1 mm further down found nothing either" in op["error"]
+
+
+def test_a_part_not_seen_the_usual_way_is_looked_for_other_ways(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On a real board 13 parts the bottom camera did not see were discarded, though
+    training later found several of them under another light (green, by its outline; blue,
+    by its pads). Before giving a part up, alignment tries other lights and ways of looking,
+    the part still over the camera, and keeps one only if two frames agree. Here the usual
+    look sees nothing: the part is found another way, placed, and that way is tried first for
+    the part from then on."""
+    import picnicplace.placement as placement_module
+
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        service = lumen.app.state.ctx.placement  # type: ignore[attr-defined]
+        real = service._measure  # type: ignore[attr-defined]
+        calls = {"n": 0}
+
+        async def misses_first(*args: Any, **kwargs: Any) -> Any:
+            calls["n"] += 1
+            return None if calls["n"] == 1 else await real(*args, **kwargs)
+
+        monkeypatch.setattr(service, "_measure", misses_first)
+        body = {"slot_id": "1", "nozzle_id": "N1", "x": 200.0, "y": 260.0, "rotation": 0.0}
+        op = ok(s.wait(s.post("/api/v1/placement/pick-and-place", body)))
+        first = placement_module.RESCUE_WAYS[0]
+        assert "The usual look saw nothing; it was found under" in op["message"], op
+        assert "train the part" in op["message"]
+        landed = placed(lumen)[-1]
+        assert (landed.x, landed.y) == pytest.approx((200.0, 260.0), abs=0.05)
+        assert service._rescued["RC0805-1K"] == first  # type: ignore[attr-defined]
+
+        # The next part of it is looked at that way from the start, and seen at once.
+        body = {**body, "x": 210.0}
+        op = ok(s.wait(s.post("/api/v1/placement/pick-and-place", body)))
+        assert "The usual look saw nothing" not in op["message"]
+
+
+def test_a_part_no_way_of_looking_sees_is_given_up(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing seen the usual way nor any other: the part is given up, saying both were
+    tried."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        service = lumen.app.state.ctx.placement  # type: ignore[attr-defined]
+
+        async def blind(*args: Any, **kwargs: Any) -> Any:
+            return None
+
+        monkeypatch.setattr(service, "_measure", blind)
+        ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "1", "nozzle_id": "N1"})))
+        op = s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"}))
+        assert op["status"] == "failed"
+        assert "nor under other lights and ways of looking" in op["error"], op

@@ -561,18 +561,22 @@ def test_without_a_discard_location_the_operator_takes_the_part_off(lumen: TestC
 
         recorder = lumen.app.state.ctx.machine.recorder  # type: ignore[attr-defined]
         vision = recorder.vision
-        blind = {"left": 1}
+        blind = {"on": True}
 
-        async def fails_once(name: str, *args: Any, **kwargs: Any) -> Any:
-            if name in ("find_part", "fit_pads") and blind["left"] > 0:
-                blind["left"] -= 1
+        async def blind_for_now(name: str, *args: Any, **kwargs: Any) -> Any:
+            # Every way of looking fails, the other lights and methods too, until it pauses.
+            if name in ("find_part", "fit_pads") and blind["on"]:
                 return None
             return await vision(name, *args, **kwargs)
 
-        recorder.vision = fails_once
+        recorder.vision = blind_for_now
         op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        blind["on"] = False
         assert op["status"] == "failed"
-        assert "saw no part on N1, and there is no discard location" in op["error"]
+        assert (
+            "saw no part on N1, nor under other lights and ways of looking, and there is no "
+            "discard location"
+        ) in op["error"], op["error"]
         assert "The head moved to the back" in op["error"]
         run = lumen.get("/api/v1/run").json()
         assert run["status"] == "paused" and "N1" in run["held"]
@@ -638,6 +642,37 @@ def test_placements_are_checked_with_the_top_camera(lumen: TestClient) -> None:
         assert stats["placed"] == 4 and stats["checked"] == len(items)
         assert stats["picks"] >= 4 and stats["alignments"] >= 4
         assert stats["empty_picks"] == stats["failed_alignments"] == stats["bad_placements"] == 0
+
+
+def test_a_part_the_camera_cannot_make_out_is_not_checked(lumen: TestClient) -> None:
+    """Gray ceramic capacitors on a real board matched 0.42 to 0.5, under the 0.5 a part
+    must match to be judged, and the run paused after each though they sat on their pads.
+    A match that poor, but not far off, is marked not checked and the run goes on."""
+    from dataclasses import replace as with_score
+
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        recorder = lumen.app.state.ctx.machine.recorder  # type: ignore[attr-defined]
+        vision = recorder.vision
+
+        async def faint(name: str, *args: Any, **kwargs: Any) -> Any:
+            found = await vision(name, *args, **kwargs)
+            if name == "find_placed_chip" and found is not None:
+                return with_score(found, score=0.44)
+            return found
+
+        recorder.vision = faint
+        body = {"job_id": "demo", "skip_blocked": True, "check_placements": True}
+        op = ok(s.wait(s.post("/api/v1/run/start", body)))
+        assert op["message"].startswith("finished: 4 placed, 1 blocked, 3 skipped (")
+        assert "placements could not be made out to check" in op["message"]
+        run = lumen.get("/api/v1/run").json()
+        checked = [i for i in run["plan"]["items"] if i["check"]]
+        assert checked and all(not i["check"]["checked"] for i in checked)
+        assert all(i["check"]["ok"] and i["check"]["score"] == 0.44 for i in checked)
+        stats = run["stats"]
+        assert stats["unsure"] == len(checked) and stats["bad_placements"] == 0
+        assert check_landed(lumen, run) == 4
 
 
 def test_a_part_that_lands_off_its_target_pauses_the_run() -> None:
@@ -759,13 +794,17 @@ def test_parts_are_turned_to_their_place_angle_before_the_bottom_camera_looks(
 def test_a_run_comes_back_after_the_core_restarts() -> None:
     """The core stops after a run's first batch, with a part on a nozzle and another being
     placed. Started again, it shows the run paused and interrupted, and says so; once
-    homed, resuming finds the board again and places what is left."""
+    homed, resuming finds the board again and places what is left, recording it as the
+    run's start was recorded."""
     config = fast_config(
         machine={"profile": "lumenpnp-v4.1"}, presence={"heartbeat_timeout_s": 300.0}
     )
     with TestClient(create_app(config)) as client, connect(client) as s:
         set_up(client, s)
-        r = s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True, "step": True})
+        r = s.post(
+            "/api/v1/run/start",
+            {"job_id": "demo", "skip_blocked": True, "step": True, "record": True},
+        )
         ok(s.wait(r))
         ok(s.wait(s.post("/api/v1/run/step")))
         assert client.get("/api/v1/run").json()["placed"] == 2
@@ -802,10 +841,17 @@ def test_a_run_comes_back_after_the_core_restarts() -> None:
         assert client.get("/api/v1/run").json()["interrupted"]
 
         s.home()
+        assert client.get("/api/v1/run").json()["recording"] is None
         op = ok(s.wait(s.post("/api/v1/run/resume")))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
         run = client.get("/api/v1/run").json()
         assert not run["interrupted"] and run["fix"] is not None
+        # It was recorded before the restart, so its rest is recorded too.
+        assert run["recording"] is not None
+        recordings = client.get("/api/v1/recordings").json()
+        listed = recordings if isinstance(recordings, list) else recordings["recordings"]
+        mine = next(x for x in listed if x["id"] == run["recording"])
+        assert mine["label"].endswith("(resumed)"), mine
         # This simulator saw only the parts placed since the restart: they are where the
         # board wants them.
         before = {i["index"] for i in kept["plan"]["items"] if i["status"] == "placed"}

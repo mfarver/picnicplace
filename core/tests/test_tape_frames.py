@@ -1,5 +1,5 @@
-"""The pocket finder and the tape checks on real top-camera frames of 0603 resistors in
-8 mm paper tape, on a LumenPnP's back rail (tests/data/vision/README.md)."""
+"""The pocket finder and the tape checks on real top-camera frames of 0603 resistors, and
+0603 ceramic capacitors, in 8 mm paper tape on a LumenPnP (tests/data/vision/README.md)."""
 
 import math
 from pathlib import Path
@@ -11,7 +11,7 @@ import pytest
 from picnicplace.camera.source import Image
 from picnicplace.feeders.pocket import choose_pocket, pocket_choices, pocket_from_holes
 from picnicplace.vision.fiducial import find_circles
-from picnicplace.vision.tape import holds_part, loose_parts, pocket_darkness
+from picnicplace.vision.tape import holds_part, loose_parts, pocket_darkness, pocket_ends
 
 FRAMES = Path(__file__).parent / "data" / "vision"
 MM_PER_PX = 20.176616212637704 / 1920
@@ -68,8 +68,12 @@ def _contents(name: str) -> list[bool | None]:
     """Whether each pocket in view holds a part, from the top of the picture down."""
     image = _frame(name)
     pockets, _ = _pockets(image)
+    # The resistors' length lies along the picture's width: their ends are looked for there.
     return [
-        holds_part(pocket_darkness(image, u, v, BODY, MM_PER_PX, OUTLINE))
+        holds_part(
+            pocket_darkness(image, u, v, BODY, MM_PER_PX, OUTLINE),
+            pocket_ends(image, u, v, BODY, MM_PER_PX, OUTLINE, 0.0),
+        )
         for u, v in sorted(pockets, key=lambda p: p[1])
     ]
 
@@ -136,3 +140,35 @@ def test_of_two_pockets_half_a_pitch_off_the_full_one_is_taken() -> None:
         holds.append(holds_part(pocket_darkness(image, u, v, BODY, MM_PER_PX, OUTLINE)))
     assert holds == [False, True]
     assert choose_pocket(holds) == 1
+
+
+CAP_MM_PER_PX = 0.01059562780069793
+"""The top camera's scale as calibrated on 2026-11-20, when the capacitor frames were taken."""
+
+
+@pytest.mark.parametrize(
+    ("name", "pocket"),
+    [
+        # Centered in its pocket.
+        ("tape-gray-cap", (401.0, 300.2)),
+        # Lying toward one end of its pocket, which was found 0.2 mm off the part's middle.
+        ("tape-gray-cap-off-center", (406.9, 299.6)),
+    ],
+)
+def test_a_gray_capacitor_is_told_from_an_empty_pocket(
+    name: str, pocket: tuple[float, float]
+) -> None:
+    """A 10 uF 0603 ceramic capacitor in paper tape, on a LumenPnP's front rail (2026-11-20):
+    its gray body is no darker than an empty pocket's floor, so its middle alone took it for
+    an empty pocket, and the run stopped. Its bright metal ends tell it is there. The empty
+    pockets of the frames above stay empty with the same test."""
+    image = _frame(name)
+    u, v = pocket
+    darkness = pocket_darkness(image, u, v, BODY, CAP_MM_PER_PX, OUTLINE)
+    assert darkness is not None and darkness < 0.1  # the middle alone: "empty"
+    ends = pocket_ends(image, u, v, BODY, CAP_MM_PER_PX, OUTLINE, 0.0)
+    assert ends is not None and ends > 0.95
+    assert holds_part(darkness, ends) is True
+    # Looked for across the part instead, its ends would fall on the pocket's dark sides.
+    across = pocket_ends(image, u, v, BODY, CAP_MM_PER_PX, OUTLINE, 90.0)
+    assert across is not None and across < 0.85

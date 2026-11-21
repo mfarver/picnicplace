@@ -5152,6 +5152,12 @@ export interface components {
          */
         PlacementCheck: {
             /**
+             * Checked
+             * @description Judged at all: false when the camera could not make the part out well enough to say (a gray ceramic capacitor on a board, say), so the run went on.
+             * @default true
+             */
+            checked: boolean;
+            /**
              * Dx
              * @description Machine X from where it was sent, mm.
              */
@@ -5762,6 +5768,12 @@ export interface components {
              * @default 0
              */
             placed: number;
+            /**
+             * Unsure
+             * @description Checked placements the camera could not make out well enough to judge.
+             * @default 0
+             */
+            unsure: number;
         };
         /** SerialPort */
         SerialPort: {

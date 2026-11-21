@@ -63,6 +63,7 @@ from picnicplace.training import (
     FRAMES_PER_LIGHT,
     KEPT_CANDIDATES,
     OFFSET_STEADY,
+    RESCUE_WAYS,
     THRESHOLDS,
     TURNS,
     Candidate,
@@ -111,6 +112,11 @@ DEEPER_SNIFF_MM = 1.0
 much further down (never past the bottom of the nozzle's travel). On a real LumenPnP
 (2026-11-20) the feeder rails were 0.6 to 0.9 mm lower at the left end than the right, and
 parts in the leftmost slots lay below a search that found every other slot's."""
+RESCUE_AGREE_MM = 0.1
+"""A way of seeing a part tried after the usual one failed counts only if two frames put it
+within this of each other..."""
+RESCUE_AGREE_DEG = 1.0
+"""...and within this many degrees."""
 SEARCH_MARGIN_MM = 3.0
 """Bottom vision looks this far around the part's expected size."""
 AUTO_MISS_MM = 0.3
@@ -397,6 +403,9 @@ class PlacementService:
         self._look: dict[str, tuple[int, str]] = {}
         """Auto correction: by slot or strip ID, how many more picks to look at with the
         top camera first, and why."""
+        self._rescued: dict[str, PartVision] = {}
+        """By part ID, a way of seeing it found when the usual one saw nothing
+        (``RESCUE_WAYS``): tried first for that part from then on, until the core stops."""
 
     def state(self) -> PlacementState:
         return PlacementState(
@@ -1051,6 +1060,8 @@ class PlacementService:
         part = library.find_part(load.part_id) if library and load.part_id else None
         height = part.height if part is not None and part.height is not None else 0.0
         trained = self.trained.vision(load.part_id)
+        rescued = self._rescued.get(load.part_id or "") if trained is None else None
+        way = trained or rescued
 
         turn = None
         if place_angle is not None:
@@ -1059,7 +1070,7 @@ class PlacementService:
             turn = now + wrap(place_angle - load.angle - now)
         await self._machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y, turn)
         await self._machine.lower_nozzle(nozzle, camera.focus_height + height)
-        frame = await self._machine.frame(camera.id, light=trained.light if trained else None)
+        frame = await self._machine.frame(camera.id, light=way.light if way else None)
         view = self._view(camera, part, library, frame.image.shape[1])
         nozzle_at = self._machine.nozzle_position(nozzle)
         nozzle_angle = self._machine.nozzle_angle(nozzle)
@@ -1077,12 +1088,27 @@ class PlacementService:
             return await self._machine.recorder.vision(name, image, *args, **context)
 
         threshold = BRIGHT
-        if trained is not None and trained.threshold is not None:
-            threshold = bright_level(frame.image, view.search, trained.threshold)
-        method: Method = trained.method if trained is not None else "auto"
+        if way is not None and way.threshold is not None:
+            threshold = bright_level(frame.image, view.search, way.threshold)
+        method: Method = way.method if way is not None else "auto"
         look = await self._measure(
             view, frame.image, nozzle_at, expected, vision, threshold, method
         )
+        found_other = ""
+        if look is None:
+            # Before giving the part up: other lights and methods, the part still over the
+            # camera, each kept only if two frames agree.
+            other = await self._rescue(camera, view, nozzle_at, expected, vision, way)
+            if other is not None:
+                look, way = other
+                method = way.method
+                if load.part_id:
+                    self._rescued[load.part_id] = way
+                found_other = (
+                    f" The usual look saw nothing; it was found under "
+                    f"{describe_light(way.light)}, by its {look.method}: train the part "
+                    "(Placement panel) to see it so from the start."
+                )
         again = ""
         if look is not None and place_angle is not None:
             fix = wrap(place_angle - look.angle)
@@ -1092,9 +1118,9 @@ class PlacementService:
                 await self._machine.move_axes(
                     {nozzle.rotation_axis: self._machine.nozzle_turn(nozzle, nozzle_angle + fix)}
                 )
-                frame = await self._machine.frame(
-                    camera.id, light=trained.light if trained else None
-                )
+                frame = await self._machine.frame(camera.id, light=way.light if way else None)
+                if way is not None and way.threshold is not None:
+                    threshold = bright_level(frame.image, view.search, way.threshold)
                 at = self._machine.nozzle_position(nozzle)
                 turned = self._machine.nozzle_angle(nozzle)
                 second = await self._measure(
@@ -1118,6 +1144,7 @@ class PlacementService:
             raise VisionError(
                 f"the {camera.label.lower()} saw no part on {nozzle.id}"
                 + (how if trained is not None else "")
+                + ", nor under other lights and ways of looking"
             )
         center, angle = look.center, look.angle
         offset = rotate(Point(x=center.x - nozzle_at.x, y=center.y - nozzle_at.y), -nozzle_angle)
@@ -1130,8 +1157,58 @@ class PlacementService:
         return (
             f"{nozzle.id} holds its part {math.hypot(offset.x, offset.y):.2f} mm off center "
             f"and turned {wrap(angle - expected):+.1f} degrees from the tape's angle."
-            f"{again}{look.note}{' Seen as trained.' if trained is not None else ''}{learned}"
+            f"{again}{found_other}{look.note}"
+            f"{' Seen as trained.' if trained is not None else ''}{learned}"
         )
+
+    async def _rescue(
+        self,
+        camera: Camera,
+        view: "_View",
+        nozzle_at: Point,
+        expected: float,
+        vision: _Vision,
+        tried: PartVision | None,
+    ) -> "tuple[Look, PartVision] | None":
+        """Look for a held part the usual way did not see, other ways (``RESCUE_WAYS``),
+        the nozzle still: the first that finds it in two frames running, at the same place
+        and angle, and the way. None if none does."""
+        output = next(
+            (o for o in self._machine.profile.outputs if o.id == camera.light_output), None
+        )
+        colored = output is not None and output.colored
+        for way in RESCUE_WAYS:
+            light = way.light
+            if way == tried or (
+                light is not None
+                and not colored
+                and (light.red, light.green, light.blue) != (255, 255, 255)
+            ):
+                continue
+            looks: list[Look] = []
+            for _ in range(2):
+                frame = await self._machine.frame(camera.id, light=light)
+                threshold = (
+                    bright_level(frame.image, view.search, way.threshold)
+                    if way.threshold is not None
+                    else BRIGHT
+                )
+                look = await self._measure(
+                    view, frame.image, nozzle_at, expected, vision, threshold, way.method
+                )
+                if look is None:
+                    break
+                looks.append(look)
+            if len(looks) < 2:
+                continue
+            a, b = looks
+            if (
+                math.hypot(a.center.x - b.center.x, a.center.y - b.center.y) <= RESCUE_AGREE_MM
+                and abs(wrap(a.angle - b.angle)) <= RESCUE_AGREE_DEG
+            ):
+                self._machine.recorder.event("align.rescued", vision=way)
+                return b, way
+        return None
 
     async def train(self, slot_id: str, nozzle: Nozzle, how: PickCorrection) -> str:
         """Pick a part from ``slot_id``, find how the bottom camera sees it best

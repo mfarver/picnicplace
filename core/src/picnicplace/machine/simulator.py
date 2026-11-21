@@ -38,7 +38,7 @@ from collections.abc import Callable, Mapping, Sequence
 from picnicplace.feeders.sim import SimulatedPhotonBus
 from picnicplace.machine.driver import MotionDriver
 from picnicplace.machine.errors import MotionInterruptedError
-from picnicplace.machine.profile import MachineProfile, Nozzle, Point, nozzle_height
+from picnicplace.machine.profile import LightColor, MachineProfile, Nozzle, Point, nozzle_height
 
 TICK_S = 0.05
 """Real-time interval between updates during a move or a vacuum change."""
@@ -308,8 +308,14 @@ class SimulatorDriver(MotionDriver):
         if output_id not in self._outputs:
             raise KeyError(output_id)
         self._outputs[output_id] = on
+        self._light_colors.pop(output_id, None)
         self._update_parts()
         self._notify()
+
+    async def set_light(self, output_id: str, color: LightColor) -> None:
+        await self.set_output(output_id, color.brightness > 0)
+        if color.brightness > 0:
+            self._light_colors[output_id] = color
 
     def _height(self, nozzle: Nozzle) -> float:
         real_z = self._position[nozzle.z_axis] + self._z_slip.get(nozzle.z_axis, 0.0)

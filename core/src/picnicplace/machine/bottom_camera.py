@@ -21,7 +21,7 @@ import itertools
 import math
 import statistics
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import cv2
 import numpy as np
@@ -96,6 +96,9 @@ class BottomCameraFix:
     scale_y: float
     rotation: float
     """Degrees the image is turned from what the profile's axes say."""
+    mirrored: bool
+    """The picture shows the machine mirrored, as from below; false if it is flipped to
+    show it as from above."""
     width: int
     height: int
     tip_diameter: float | None
@@ -391,10 +394,18 @@ async def _calibrate(
     scale_x = 1 / math.hypot(*final.x)
     scale_y = 1 / math.hypot(*final.y)
 
+    # Mirrored or not: a mirror reverses the turn from +X to +Y in the picture. A flipped
+    # picture (a config's flip_x or flip_y) is not mirrored; taken for one, its X would
+    # seem turned 180 degrees and its Y not at all, averaging to a turn of 90.
+    (ax_, ay_), (bx_, by_) = final.x, final.y
+    seen = ax_ * by_ - ay_ * bx_
+    (ex, ey), (fx, fy) = (_image_direction(machine, camera, a, False) for a in ("X", "Y"))
+    mirrored = (seen > 0) != (ex * fy - ey * fx > 0)
+
     # Which way the profile says +X and +Y move the tip in the image (right, down).
     turns: list[float] = []
     for axis, (du, dv) in (("X", final.x), ("Y", final.y)):
-        right, down = _image_direction(machine, camera, axis)
+        right, down = _image_direction(machine, camera, axis, mirrored)
         expected = math.atan2(down, right)
         actual = math.atan2(dv, du)
         turns.append(math.degrees(math.remainder(actual - expected, math.tau)))
@@ -419,6 +430,7 @@ async def _calibrate(
         scale_x,
         scale_y,
         rotation,
+        mirrored,
         final.width,
         final.height,
         tip_diameter,
@@ -427,11 +439,14 @@ async def _calibrate(
     )
 
 
-def _image_direction(machine: MachineService, camera: Camera, axis: str) -> tuple[float, float]:
-    """Which way (right, down) a nozzle tip moving +1 along an axis moves in the image."""
+def _image_direction(
+    machine: MachineService, camera: Camera, axis: str, mirrored: bool
+) -> tuple[float, float]:
+    """Which way (right, down) a nozzle tip moving +1 along an axis moves in the image,
+    the picture not turned, and mirrored or not."""
     # image_to_machine is linear; invert it for the two unit image directions.
-    rx, ry = machine.image_to_machine(camera, 1.0, 0.0, turned=False)
-    dx, dy = machine.image_to_machine(camera, 0.0, 1.0, turned=False)
+    rx, ry = machine.image_to_machine(camera, 1.0, 0.0, turned=False, mirrored=mirrored)
+    dx, dy = machine.image_to_machine(camera, 0.0, 1.0, turned=False, mirrored=mirrored)
     det = rx * dy - dx * ry
     mx, my = (1.0, 0.0) if axis == "X" else (0.0, 1.0)
     right = (mx * dy - dx * my) / det
@@ -461,7 +476,9 @@ def bottom_camera_work(
                 else ""
             )
             + f"; {(fix.scale_x + fix.scale_y) / 2:.5f} mm/pixel; image turned "
-            f"{fix.rotation:+.2f}°. Measured with {nozzle.label}, on the axis it turns "
+            f"{fix.rotation:+.2f}°"
+            + ("" if fix.mirrored else ", flipped to show the machine as from above")
+            + f". Measured with {nozzle.label}, on the axis it turns "
             f"about (its tip's end was {fix.runout:.2f} mm off it). "
             + tip_size_note(fitted_tip(machine, nozzle), fix.tip_diameter)
         )
@@ -475,6 +492,7 @@ def bottom_camera_work(
                 "scale_x": fix.scale_x,
                 "scale_y": fix.scale_y,
                 "rotation": fix.rotation,
+                "mirrored": fix.mirrored,
                 "width": fix.width,
                 "height": fix.height,
                 # Where the nozzle was taken to be: the place moves with it if its offset
@@ -528,6 +546,9 @@ HOLE_LIT_MM = 5.0
 nozzle's own dark bore at the bottom). Such a tip fits only if its end and its hole are
 both its size, and not if a tip with a dark hole fits too: a lit ring behind a smaller
 tip, about 8.2 mm across with an inner edge 5.8 to 6.7 mm, can otherwise pass for one."""
+HOLE_SEARCH_MM = 1.0
+"""When no tip's end is found, a tip's hole is looked for this far from the picture's
+middle: the nozzle is over the calibrated camera, so its hole is near it."""
 HOLE_CENTER = 0.25
 """A tip's hole is centered on its end within this fraction of the hole's size (or
 ``TIP_EDGE_PX``, if more)."""
@@ -645,9 +666,49 @@ def _outer(tip: NozzleTip) -> float:
     return tip.outer_diameter or 0.0
 
 
+async def _named_by_hole(
+    machine: MachineService, camera: Camera, image: np.ndarray, mm: float
+) -> tuple[list[NozzleTip], float | None]:
+    """The tips a nozzle could have by its hole alone, and the hole's size seen (mm; None
+    if no hole was found): for a tip whose end does not stand out from the cone behind it.
+    A real LumenPnP's N045 and N08, seen at 0.0371 mm per pixel, had ends lit no brighter
+    than their cones, and their ends were not found; their holes, 0.39 to 0.44 and 0.79 to
+    0.85 mm, were plain and dark. A tip fits if its hole is within ``HOLE_SLACK`` of the
+    size seen, wide enough to judge how dark it is, and dark against the end round it."""
+    holed = [
+        t
+        for t in machine.profile.nozzle_tips
+        if t.inner_diameter and t.outer_diameter and t.inner_diameter / mm >= HOLE_DARK_MIN_PX
+    ]
+    if not holed:
+        return [], None
+    low = min(t.inner_diameter or 0.0 for t in holed) / HOLE_SLACK
+    high = max(t.inner_diameter or 0.0 for t in holed) * HOLE_SLACK
+    hole: Circle | None = await machine.recorder.vision(
+        "find_hole",
+        image,
+        low / mm,
+        high / mm,
+        HOLE_SEARCH_MM / mm,
+        camera=camera.id,
+        mm_per_px=mm,
+        purpose="a tip's hole, its end not found",
+    )
+    if hole is None:
+        return [], None
+    seen = hole.diameter * mm
+    named = [
+        t
+        for t in holed
+        if abs(math.log(seen / (t.inner_diameter or seen))) <= math.log(HOLE_SLACK)
+        and _dark_inside(image, hole, replace(hole, diameter=(t.outer_diameter or 0.0) / mm))
+    ]
+    return named, seen
+
+
 async def measure_tip(
     machine: MachineService, nozzle: Nozzle
-) -> tuple[NozzleTip | None, float, list[str]]:
+) -> tuple[NozzleTip | None, float, list[str], bool]:
     """Which of the profile's tips a nozzle has, by how its end looks from the calibrated
     bottom camera. Each tip is looked for in its own size window; it fits if a circle is
     found there within ``TIP_NAME_TOLERANCE`` of its size, with the tip's hole seen inside
@@ -655,9 +716,11 @@ async def measure_tip(
     end, and a larger tip's hole like a smaller tip's end. A smaller tip's window can also
     fit a larger tip's end merged with its hole, so the largest that fits wins, unless
     another tip, allowing ``TIP_EDGE_PX`` more, could be the same circle: then the camera
-    cannot tell them apart.
-    Returns the tip (None: none fits, or it cannot tell), the size seen, in mm, and the
-    tips it cannot tell apart (empty unless so)."""
+    cannot tell them apart. If no tip's end fits, the tip is named by its hole
+    (``_named_by_hole``), if only one tip's hole fits it.
+    Returns the tip (None: none fits, or it cannot tell), the size seen, in mm, the tips it
+    cannot tell apart (empty unless so), and whether it was named by its hole: then the
+    size is its hole's (also when the circle fitted round it was not its end's size)."""
     camera = bottom_camera(machine)
     height = focus_height_for(machine, nozzle, camera)
     await machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y)
@@ -668,6 +731,7 @@ async def measure_tip(
     lit: list[tuple[NozzleTip, float]] = []  # fit by a wide hole lit inside
     near: list[tuple[NozzleTip, float]] = []  # within the tolerance plus TIP_EDGE_PX
     nearest: float | None = None
+    holes: dict[str, float] = {}  # each fitted tip's hole, seen (mm)
     for tip in machine.profile.nozzle_tips:
         if not tip.outer_diameter:
             continue
@@ -701,6 +765,8 @@ async def measure_tip(
             )
         ):
             fits.append((tip, seen))
+            if isinstance(hole, Circle):
+                holes[tip.id] = hole.diameter * mm
         slack = TIP_NAME_TOLERANCE * tip.outer_diameter + TIP_EDGE_PX * mm
         if abs(seen - tip.outer_diameter) <= slack:
             near.append((tip, seen))
@@ -709,14 +775,21 @@ async def measure_tip(
         best, seen = max(fits, key=lambda f: f[0].outer_diameter or 0.0)
         alike = [t for t, d in near if t is not best and abs(d - seen) <= SAME_CIRCLE_PX * mm]
         if alike:
-            return None, seen, [t.id for t in sorted([*alike, best], key=_outer)]
-        return best, seen, []
+            return None, seen, [t.id for t in sorted([*alike, best], key=_outer)], False
+        if best.id in holes and not _alike(seen, best.outer_diameter or seen):
+            # Named by its hole: the circle found round it was not its end (a real N08's
+            # cone, 2.23 mm across, was found in its window).
+            return best, holes[best.id], [], True
+        return best, seen, [], False
+    named, hole_seen = await _named_by_hole(machine, camera, frame.image, mm)
+    if len(named) == 1 and hole_seen is not None:
+        return named[0], hole_seen, [], True
     if nearest is None:
         raise VisionError(
             f"the {camera.label.lower()} cannot see {nozzle.label.lower()}'s tip: check a "
             "tip is fitted and empty"
         )
-    return None, nearest, []
+    return None, nearest, [], False
 
 
 async def identify_tips(machine: MachineService) -> str:
@@ -725,7 +798,7 @@ async def identify_tips(machine: MachineService) -> str:
     notes: list[str] = []
     try:
         for nozzle in machine.profile.nozzles:
-            tip, seen, alike = await measure_tip(machine, nozzle)
+            tip, seen, alike, by_hole = await measure_tip(machine, nozzle)
             if alike:
                 notes.append(
                     f"{nozzle.label}: its end looked {seen:.2f} mm across, which could be "
@@ -741,7 +814,12 @@ async def identify_tips(machine: MachineService) -> str:
                 continue
             if nozzle.tip != tip.id:
                 machine.set_tip(nozzle.id, tip.id, in_task=True)
-            notes.append(f"{nozzle.label}: {tip.id} (its end looked {seen:.2f} mm across)")
+            notes.append(
+                f"{nozzle.label}: {tip.id} (by its hole, {seen:.2f} mm across: its end did "
+                "not stand out from the cone behind it)"
+                if by_hole
+                else f"{nozzle.label}: {tip.id} (its end looked {seen:.2f} mm across)"
+            )
     finally:
         await machine.raise_nozzles()
     return "; ".join(notes) + "."

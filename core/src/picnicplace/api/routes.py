@@ -13,7 +13,7 @@ from picnicplace.machine.bottom_camera import start_bottom_camera_calibration
 from picnicplace.machine.errors import NotHomedError
 from picnicplace.machine.local import LocalProfileState, LocationKind
 from picnicplace.machine.nozzle_offsets import start_nozzle_offset_calibration
-from picnicplace.machine.profile import KeepOut, MachineProfile, Point
+from picnicplace.machine.profile import KeepOut, LightColor, MachineProfile, Point
 from picnicplace.machine.runout import start_nozzle_runout
 from picnicplace.machine.tip_heights import start_tip_heights
 from picnicplace.schemas import (
@@ -175,6 +175,23 @@ async def set_nozzle_tip(ctx: Context, nozzle_id: str, body: NozzleTipRequest) -
 async def set_output(ctx: Context, output_id: str, body: OutputRequest) -> MachineState:
     """Switch an output on or off. Turning one on requires motion to be enabled."""
     await ctx.machine.set_output(output_id, body.on)
+    return ctx.machine.state
+
+
+@router.put(
+    "/machine/lights/{output_id}",
+    tags=["machine"],
+    responses={
+        **MACHINE_ERRORS,
+        404: {"model": ErrorResponse, "description": "No output with this ID."},
+    },
+    dependencies=[Depends(require_control)],
+)
+async def set_light(ctx: Context, output_id: str, body: LightColor) -> MachineState:
+    """Set a light's color and brightness (each 0 to 255); a brightness of 0 switches it
+    off. Only lights the profile marks as colored take a color; others take full white or
+    off. Setting a light on requires motion to be enabled."""
+    await ctx.machine.set_light(output_id, body)
     return ctx.machine.state
 
 

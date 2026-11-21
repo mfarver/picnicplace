@@ -1167,6 +1167,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/lights/{output_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Light
+         * @description Set a light's color and brightness (each 0 to 255); a brightness of 0 switches it
+         *     off. Only lights the profile marks as colored take a color; others take full white or
+         *     off. Setting a light on requires motion to be enabled.
+         */
+        put: operations["set_light_api_v1_machine_lights__output_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/local-profile": {
         parameters: {
             query?: never;
@@ -2387,6 +2409,12 @@ export interface components {
             /** Id */
             id: string;
             /**
+             * Image Mirrored
+             * @description Up-looking cameras: whether the picture shows the machine mirrored left to right, as seen from below (true), or as from above (false: the camera's picture is flipped, as a config's flip_x or flip_y does). Measured by calibrating the camera.
+             * @default true
+             */
+            image_mirrored: boolean;
+            /**
              * Image Rotation
              * @description Up-looking cameras: degrees the picture is turned from what the machine's axes say (clockwise as shown), measured by calibrating the camera. What the camera sees is turned back by this much.
              * @default 0
@@ -3531,6 +3559,84 @@ export interface components {
             /** Tapes */
             tapes: components["schemas"]["Tape-Output"][];
         };
+        /**
+         * LightColor
+         * @description A light's color and brightness, each 0 to 255.
+         */
+        LightColor: {
+            /**
+             * Blue
+             * @default 255
+             */
+            blue: number;
+            /**
+             * Brightness
+             * @default 255
+             */
+            brightness: number;
+            /**
+             * Green
+             * @default 255
+             */
+            green: number;
+            /**
+             * Red
+             * @default 255
+             */
+            red: number;
+        };
+        /**
+         * LightColor
+         * @description A light's color and brightness, each 0 to 255.
+         */
+        "LightColor-Input": {
+            /**
+             * Blue
+             * @default 255
+             */
+            blue: number;
+            /**
+             * Brightness
+             * @default 255
+             */
+            brightness: number;
+            /**
+             * Green
+             * @default 255
+             */
+            green: number;
+            /**
+             * Red
+             * @default 255
+             */
+            red: number;
+        };
+        /**
+         * LightColor
+         * @description A light's color and brightness, each 0 to 255.
+         */
+        "LightColor-Output": {
+            /**
+             * Blue
+             * @default 255
+             */
+            blue: number;
+            /**
+             * Brightness
+             * @default 255
+             */
+            brightness: number;
+            /**
+             * Green
+             * @default 255
+             */
+            green: number;
+            /**
+             * Red
+             * @default 255
+             */
+            red: number;
+        };
         /** LocalProfileState */
         LocalProfileState: {
             /**
@@ -3877,6 +3983,13 @@ export interface components {
                 [key: string]: boolean | number;
             };
             /**
+             * Lights
+             * @description The color and brightness set on each light that is on; a light switched on without one is at full white.
+             */
+            lights: {
+                [key: string]: components["schemas"]["LightColor"];
+            };
+            /**
              * Motion Enabled
              * @description Motion commands are currently allowed (connected, client present, no E-stop).
              */
@@ -3973,6 +4086,11 @@ export interface components {
         };
         /** MarlinOutput */
         MarlinOutput: {
+            /**
+             * Color
+             * @description Colored lights: commands that set the light's color and brightness, with {red}, {green}, {blue} and {brightness} (each 0 to 255) filled in.
+             */
+            color?: string[] | null;
             /** Off */
             off: string[];
             /** On */
@@ -4285,6 +4403,12 @@ export interface components {
         };
         /** Output */
         Output: {
+            /**
+             * Colored
+             * @description Lights: the light can be set to a color and brightness (an RGB ring light), not only switched on and off.
+             * @default false
+             */
+            colored: boolean;
             /** Id */
             id: string;
             /** Label */
@@ -4774,9 +4898,26 @@ export interface components {
             across: number;
             /** Along */
             along: number;
+            /**
+             * Angle
+             * @description The footprint's X axis in machine degrees, with the outline.
+             */
+            angle: number | null;
             at: components["schemas"]["Point"];
             /** Holes */
             holes: number;
+            /**
+             * Loose
+             * @description Parts seen lying loose on the tape in view, out of their pockets.
+             */
+            loose: components["schemas"]["Point"][];
+            /** @description The part's outline, leads and all, along its footprint's X and Y (mm), where the library gives its body: for drawing the pocket on the camera's picture. */
+            outline: components["schemas"]["Size"] | null;
+            /**
+             * Part
+             * @description Whether the pocket holds a part, as the top camera sees it: paper tape and parts with a known body only. None if not judged.
+             */
+            part: boolean | null;
         };
         /** Point */
         Point: {
@@ -8614,6 +8755,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    set_light_api_v1_machine_lights__output_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                output_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LightColor-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineState"];
+                };
+            };
+            /** @description No output with this ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

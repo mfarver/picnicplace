@@ -21,8 +21,9 @@ from picnicplace.board.kicad import read_kicad_pcb
 from picnicplace.job.models import Job
 from picnicplace.job.run import JobRunner, RunItem, fit_board, machine_angle
 from picnicplace.library import Part
+from picnicplace.library.models import TapeKind
 from picnicplace.machine.profile import Point, load_profile
-from picnicplace.simparts import PlacedPart
+from picnicplace.simparts import PartShape, PlacedPart
 from tests.conftest import Session, connect, fast_config, put_taped
 
 DATA = Path(__file__).parent / "data" / "kicad"
@@ -56,9 +57,11 @@ def placed(client: TestClient) -> list[PlacedPart]:
     return list(parts.placed)
 
 
-def set_up(client: TestClient, s: Session, calibrate: bool = True) -> None:
+def set_up(
+    client: TestClient, s: Session, calibrate: bool = True, tape: TapeKind = "embossed"
+) -> None:
     """The demo board as a saved job, with its parts in the library and on feeders (with
-    their slots calibrated, unless not)."""
+    their slots calibrated, unless not), in ``tape`` (embossed or paper)."""
     result = read_kicad_pcb((DATA / "picnic-demo.kicad_pcb").read_text(), "picnic-demo")
     library = client.app.state.ctx.library  # type: ignore[attr-defined]
     for footprint in result.footprints:
@@ -71,7 +74,7 @@ def set_up(client: TestClient, s: Session, calibrate: bool = True) -> None:
         put_taped(
             library,
             Part(id=part_id, footprint_id=footprints[part_id], height=height),
-            "embossed",
+            tape,
             width,
             pitch,
             rotation,
@@ -323,6 +326,66 @@ def test_the_run_finds_the_boards_top_by_touch() -> None:
         assert parts.crashes == []
         assert all(p.fell < 0.15 for p in parts.placed)
         assert check_landed(client, run) == 4
+
+
+def test_a_run_feeds_past_an_empty_pocket() -> None:
+    """Slot 2's reel starts with an empty pocket, as a real reel's leader may. In paper
+    tape the top camera sees it empty before a nozzle goes down, and the pick feeds once
+    and takes the part in the next pocket."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_empty_pockets": {"2": 2}},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s, tape="paper")
+        op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        run = client.get("/api/v1/run").json()
+        assert check_landed(client, run) == 4
+
+
+def test_two_empty_pockets_pause_the_run() -> None:
+    """Slot 2's reel has a longer empty leader: the pocket fed to after an empty one is
+    empty too, and the run stops for the operator to see to the feeder."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_empty_pockets": {"2": 3}},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s, tape="paper")
+        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        run = client.get("/api/v1/run").json()
+        assert run["status"] == "paused", (op, run["error"])
+        assert "fed once, and saw the next one empty too" in run["error"], run["error"]
+
+
+def test_a_part_loose_on_the_tape_pauses_the_run() -> None:
+    """A part that jumped out of its pocket lies on the paper tape by the pick pocket:
+    the run stops before picking there, and says where it is."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1"}, presence={"heartbeat_timeout_s": 300.0}
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s, tape="paper")
+        feeders = client.app.state.ctx.feeders  # type: ignore[attr-defined]
+        slot = next(
+            x for x in client.get("/api/v1/feeders").json()["slots"] if x["slot"]["id"] == "2"
+        )
+        pick = slot["pick"]
+        # Between the pick pocket and the next one, turned, as one was on a real LumenPnP.
+        tape = feeders.slot("2").rotation
+        a = math.radians(tape)
+        loose = PlacedPart(
+            PartShape(body=(1.6, 0.8), height=0.45),
+            pick["x"] + 2.0 * math.cos(a),
+            pick["y"] + 2.0 * math.sin(a),
+            tape + 30,
+        )
+        feeders.sim_parts.placed.append(loose)
+        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        run = client.get("/api/v1/run").json()
+        assert run["status"] == "paused", (op, run["error"])
+        assert "a part lying loose on the tape near the pick pocket" in run["error"], run["error"]
 
 
 def test_pause_skip_and_resume(lumen: TestClient) -> None:

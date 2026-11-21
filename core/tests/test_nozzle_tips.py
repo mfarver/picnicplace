@@ -277,7 +277,7 @@ def test_small_tips_are_named_or_said_to_be_too_alike(
         assert s.wait(s.post("/api/v1/machine/bottom-camera", {}))["status"] == "succeeded"
         machine = client.app.state.ctx.machine  # type: ignore[attr-defined]
         assert client.portal is not None
-        found, _, said = client.portal.call(measure_tip, machine, machine.profile.nozzles[0])
+        found, _, said, _ = client.portal.call(measure_tip, machine, machine.profile.nozzles[0])
         assert (found.id if found else None, said) == (named, alike)
 
 
@@ -303,7 +303,7 @@ def test_a_lit_ring_behind_the_end_is_not_taken_for_a_larger_tip(
         assert s.wait(s.post("/api/v1/machine/bottom-camera", {}))["status"] == "succeeded"
         machine = client.app.state.ctx.machine  # type: ignore[attr-defined]
         assert client.portal is not None
-        found, _, said = client.portal.call(measure_tip, machine, machine.profile.nozzles[0])
+        found, _, said, _ = client.portal.call(measure_tip, machine, machine.profile.nozzles[0])
         assert (found.id if found else None, said) == (tip, [])
 
 

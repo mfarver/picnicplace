@@ -46,6 +46,7 @@ from picnicplace.machine.errors import (
     NoClientPresentError,
     NotConnectedError,
     NotHomedError,
+    NotSupportedError,
     SafeZFaultError,
     StoppedError,
     UnknownOutputError,
@@ -53,8 +54,10 @@ from picnicplace.machine.errors import (
     ZNotSafeError,
 )
 from picnicplace.machine.profile import (
+    WHITE,
     Camera,
     Input,
+    LightColor,
     Location,
     MachineProfile,
     Nozzle,
@@ -158,6 +161,9 @@ class MachineService:
         self.limits: Callable[[str], Limit] | None = None
         """Set by the setup wizard: whether a task of a kind may start now, and what to
         warn of if it may."""
+        self.camera_lights: dict[str, LightColor] = {}
+        """From the config: the color and brightness each camera's light is set to for
+        vision, by camera ID (none given: whatever it is, or white if it is off)."""
         self.sim_tips: dict[str, str] = {}
         """Simulator only: the tips really fitted, by nozzle, whatever the operator said."""
         self.limited: Callable[[], bool] | None = None
@@ -284,6 +290,7 @@ class MachineService:
             position=dict(self._driver.position),
             inputs=dict(self._driver.inputs),
             outputs=dict(self._driver.outputs),
+            lights=dict(self._driver.light_colors),
             z_safe=self.z_safe,
             speed_scale=self.speed_scale,
             warnings=list(self._driver.warnings),
@@ -376,6 +383,24 @@ class MachineService:
         elif not self._driver.connected:
             raise NotConnectedError("the machine is not connected")
         await self._driver.set_output(output_id, on)
+
+    async def set_light(self, output_id: str, color: LightColor) -> None:
+        """Set a light's color and brightness; a brightness of 0 switches it off, which is
+        allowed whenever the machine is connected."""
+        output = next((o for o in self._profile.outputs if o.id == output_id), None)
+        if output is None or output_id not in self._driver.outputs:
+            raise UnknownOutputError(f"unknown output {output_id!r}")
+        if output.role != "light":
+            raise InvalidTargetError(f"{output.label} is not a light: switch it on or off")
+        if not output.colored and color.brightness > 0 and color != WHITE:
+            raise NotSupportedError(
+                f"the {output.label.lower()} can only be switched on and off, at full white"
+            )
+        if color.brightness > 0:
+            self._check_can_actuate()
+        elif not self._driver.connected:
+            raise NotConnectedError("the machine is not connected")
+        await self._driver.set_light(output_id, color)
 
     async def emergency_stop(self) -> None:
         """Always allowed, from any client, in any state."""
@@ -853,15 +878,29 @@ class MachineService:
         """Vision needs the camera's light: switch it on if it is off, and leave it on
         (switching it for every look would flicker through a run). The caller then waits
         the camera's settle time, which lets the picture brighten."""
-        if camera.light_output is not None and not self._driver.outputs.get(camera.light_output):
-            await self._driver.set_output(camera.light_output, True)
+        light = camera.light_output
+        if light is None:
+            return
+        want = self.camera_lights.get(camera.id)
+        if want is not None:
+            # The config's color for this camera, unless it is already so.
+            if not self._driver.outputs.get(light) or self._driver.light_colors.get(light) != want:
+                await self._driver.set_light(light, want)
+        elif not self._driver.outputs.get(light):
+            await self._driver.set_output(light, True)
 
     def image_to_machine(
-        self, camera: Camera, right: float, down: float, turned: bool = True
+        self,
+        camera: Camera,
+        right: float,
+        down: float,
+        turned: bool = True,
+        mirrored: bool | None = None,
     ) -> tuple[float, float]:
         """A displacement seen in a camera's image (mm right and mm down, as shown) as a
         machine X/Y displacement. Up-looking cameras see the machine mirrored left to
-        right, as from below, and their picture's measured turn is undone (unless
+        right, as from below, unless their picture is flipped (``mirrored``, by default
+        as calibration found it), and their picture's measured turn is undone (unless
         ``turned`` is false: how the profile alone says the picture should be)."""
         if turned and camera.looking == "up" and camera.image_rotation:
             t = math.radians(-camera.image_rotation)
@@ -870,7 +909,9 @@ class MachineService:
                 right * math.sin(t) + down * math.cos(t),
             )
         x, y = self._profile.image_to_machine(right, down)
-        return (-x, y) if camera.looking == "up" else (x, y)
+        if mirrored is None:
+            mirrored = camera.image_mirrored
+        return (-x, y) if camera.looking == "up" and mirrored else (x, y)
 
     def top_camera(self) -> Camera:
         camera = next(

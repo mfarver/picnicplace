@@ -122,9 +122,11 @@ kept in `calibration.json` in the data directory, and the pages you confirm in
       larger tip's end, so a tip whose hole is not seen is not named, and you say which it
       is. A wide hole (5 mm or more, an N75's or N110's) is a cup, lit inside: it is named
       only if its end and hole are both its size and the cup is lit all through, and not
-      if a tip with a dark hole fits too. A nozzle that cannot reach the focus height (a
-      short tip on a low nozzle) goes as low as its travel allows, if that is within
-      1 mm: the picture is about as sharp over that much;
+      if a tip with a dark hole fits too. A small tip whose end is lit no brighter than
+      the cone behind it (an N045 or N08, under the stock ring light) is named by its
+      dark hole alone, if only one tip's hole is that size. A nozzle that cannot reach
+      the focus height (a short tip on a low nozzle) goes as low as its travel allows, if
+      that is within 1 mm: the picture is about as sharp over that much;
     - scans the feeders and calibrates their rails, if there are feeders at each rail's
       ends (otherwise each feeder's fiducial is found on its first pick).
 2. **Token on the datum board.** Lay a [calibration token](../hardware/calibration-token.md)
@@ -243,7 +245,13 @@ effect at once. The reset button next to one forgets it.
       feeder's fiducial on its first pick anyway. A correction belongs to the feeder it
       was found from; put another feeder in the slot and it is found again.
 - [ ] Feed a few times, then **Find pocket**. It finds the sprocket holes and centers the
-      camera on the next part's pocket.
+      camera on the next part's pocket. In paper tape, with the part's footprint body in
+      the library, it also says whether the pocket holds a part, and sees parts lying
+      loose on the tape; the camera's picture outlines the pocket (green with a part,
+      amber empty) and rings loose ones in red. A reel's first pockets (its leader) are
+      empty: feed until parts arrive. A pick that finds its pocket empty feeds once and
+      looks again; a second empty pocket stops it with a feeder error. Take loose parts off, or feed them on past the pick
+      window: a run pauses for one rather than pick near it.
 - [ ] For parts held on the bed (a cut strip of 24 mm tape in a holder, or a tray), use
       **Add strip or tray** under **Strips and trays**. Give it its part, the number of
       parts (and rows, for a tray), and a pick height: the nozzle height at the top of a

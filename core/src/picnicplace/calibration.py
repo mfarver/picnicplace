@@ -304,6 +304,7 @@ def apply_measurements(profile: MachineProfile, record: CalibrationRecord) -> No
             camera.position = Point(x=v["x"] + dx, y=v["y"] + dy)
             camera.focus_height = v["focus"] - dz
             camera.image_rotation = v.get("rotation", 0.0)
+            camera.image_mirrored = bool(v.get("mirrored", True))
             camera.field_of_view = Point(x=v["scale_x"] * v["width"], y=v["scale_y"] * v["height"])
 
 

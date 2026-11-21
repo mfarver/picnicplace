@@ -532,6 +532,8 @@ class FeederService:
             raise
         if unanswered is None:
             self._errors.pop(slot.id, None)
+        # A feed with no answer most often moved the tape: counted as one that did.
+        self._count_feed(slot, mm)
         # The simulator's tape: taken to have moved, as real tape most often has when a
         # reply is lost (on a machine, the camera sees the tape; this is kept only here).
         if mm > 0:
@@ -576,9 +578,48 @@ class FeederService:
     # --- Setup ---------------------------------------------------------------------------
 
     def assign(self, uuid: str, assignment: FeederAssignment) -> None:
+        """Say what a feeder holds. Its reel count is kept (set with ``set_reel``), unless
+        the part changed: another part is another reel."""
+        old = self._store.setup.feeders.get(uuid)
+        if old is not None and old.part_id == assignment.part_id:
+            assignment = assignment.model_copy(
+                update={"reel_left": old.reel_left, "reel_low": old.reel_low}
+            )
+        else:
+            assignment = assignment.model_copy(update={"reel_left": None, "reel_low": None})
         self._store.setup.feeders[uuid] = assignment
         self._store.save()
         self._invalidate()
+
+    def set_reel(self, uuid: str, left: int | None, low: int | None) -> FeederAssignment:
+        """How many parts are on a feeder's reel (counted down by each feed from now), and
+        the level to warn the operator at. None: not counted, or no warning."""
+        assignment = self._store.setup.feeders.get(uuid)
+        if assignment is None or assignment.part_id is None:
+            raise InvalidTargetError(
+                f"feeder {uuid} holds no part: say which part it holds before counting its reel"
+            )
+        assignment = assignment.model_copy(update={"reel_left": left, "reel_low": low})
+        self._store.setup.feeders[uuid] = assignment
+        self._store.save()
+        return assignment
+
+    def _count_feed(self, slot: Slot, mm: float) -> None:
+        """Take what a feed advanced off its reel's count, in parts (a feed back adds)."""
+        uuid = self._found.get(slot.id)
+        assignment = self._store.setup.feeders.get(uuid) if uuid else None
+        if assignment is None or assignment.reel_left is None:
+            return
+        parts = round(mm / self.feed_distance(slot))
+        if parts == 0:
+            return
+        left = max(0, assignment.reel_left - parts)
+        assert uuid is not None
+        self._store.setup.feeders[uuid] = assignment.model_copy(update={"reel_left": left})
+        self._store.save()
+        low = assignment.reel_low
+        if low is not None and left <= low < assignment.reel_left:
+            log.warning("%s: its reel is low, %d parts left", slot.label, left)
 
     def forget(self, uuid: str) -> None:
         self._store.setup.feeders.pop(uuid, None)

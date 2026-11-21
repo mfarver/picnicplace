@@ -206,6 +206,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/feeders/assignments/{feeder_id}/reel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Reel
+         * @description How many parts are on a feeder's reel, counted down by each feed from now, and the
+         *     level at which the Studio warns the operator that it is running low.
+         */
+        put: operations["set_reel_api_v1_feeders_assignments__feeder_id__reel_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/feeders/calibrate": {
         parameters: {
             query?: never;
@@ -2895,6 +2916,16 @@ export interface components {
              */
             part_pitch?: number | null;
             /**
+             * Reel Left
+             * @description Parts left on the reel, counted down by each feed; empty: not counted. Set with the feeder's reel route, from the reel's label when it is loaded.
+             */
+            reel_left?: number | null;
+            /**
+             * Reel Low
+             * @description Warn the operator once this many parts or fewer are left; empty: never.
+             */
+            reel_low?: number | null;
+            /**
              * Tape Width
              * @description The width of tape this feeder takes, mm (8, 12, ...), if known. A part whose tape is another width is flagged: the wrong feeder, or the wrong tape.
              */
@@ -2922,6 +2953,16 @@ export interface components {
              * @description Distance from one part to the next. Empty: the part's tape pitch.
              */
             part_pitch: number | null;
+            /**
+             * Reel Left
+             * @description Parts left on the reel, counted down by each feed; empty: not counted. Set with the feeder's reel route, from the reel's label when it is loaded.
+             */
+            reel_left: number | null;
+            /**
+             * Reel Low
+             * @description Warn the operator once this many parts or fewer are left; empty: never.
+             */
+            reel_low: number | null;
             /**
              * Tape Width
              * @description The width of tape this feeder takes, mm (8, 12, ...), if known. A part whose tape is another width is flagged: the wrong feeder, or the wrong tape.
@@ -5534,6 +5575,19 @@ export interface components {
             /** Y Min */
             y_min: number;
         };
+        /** ReelRequest */
+        ReelRequest: {
+            /**
+             * Left
+             * @description Parts on the reel now (from its label); empty: do not count them.
+             */
+            left?: number | null;
+            /**
+             * Low
+             * @description Warn once this many or fewer are left; empty: never.
+             */
+            low?: number | null;
+        };
         /** RefillRequest */
         RefillRequest: {
             /**
@@ -6976,6 +7030,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    set_reel_api_v1_feeders_assignments__feeder_id__reel_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feeder_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedersState"];
+                };
+            };
+            /** @description Not a feeder ID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

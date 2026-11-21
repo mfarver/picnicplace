@@ -29,8 +29,9 @@ SNIFF_WAIT_S = 0.3
 """How long each step waits for the vacuum to seal (in a simulator running faster than
 real time, less, down to ``MIN_WAIT_S``)."""
 MIN_WAIT_S = 0.1
-CLEAR_WAIT_S = 1.0
-"""How long the vacuum is given to settle open before the first step."""
+CLEAR_WAIT_S = 2.0
+"""How long the vacuum is given to settle open before the first step (an N045's took
+0.6 s, and settling is judged over a further ``VACUUM_STEADY_S``)."""
 MEASURE_JUMP = 0.1
 """While measuring a nozzle's levels, a reading this far (as a fraction of its sensor's
 range) past the open reading means the tip sealed."""
@@ -108,6 +109,7 @@ async def sniff(
                 )
             levels = nozzle.vacuum
             level = None if levels is None else open_reading + levels.threshold - levels.open
+        machine.recorder.event("sniff.open", nozzle=nozzle.id, open=open_reading, level=level)
         for step in range(round((start - floor) / SNIFF_STEP_MM) + 1):
             z = max(floor, round(start - step * SNIFF_STEP_MM, 3))
             await machine.lower_nozzle(nozzle, z)

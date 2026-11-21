@@ -1,7 +1,7 @@
 /** Marks drawn on a top camera's picture: what vision found, in machine coordinates, placed
  * where it is in the picture as the head moves. */
 
-import type { SlotState } from "./api/types";
+import type { Footprint, SlotState } from "./api/types";
 
 export type MarkKind = "part" | "empty" | "unknown" | "loose";
 
@@ -43,6 +43,38 @@ export function placeMark(
   // The mark's X axis in the picture: +X right flips with sx, +Y up (down negative).
   const rotate = (Math.atan2(-sy * Math.sin(a), sx * Math.cos(a)) * 180) / Math.PI;
   return { right: sx * (mark.x - camera.x), down: -sy * (mark.y - camera.y), rotate };
+}
+
+/** A footprint drawn on the picture: a part as it should lie, to hold up against the real
+ * one (or the board's silkscreen). */
+export interface CameraFootprint {
+  footprint: Footprint;
+  /** The footprint's origin, machine X and Y in mm. */
+  x: number;
+  y: number;
+  /** The machine angle of the footprint's 0 degree direction (its +X), counterclockwise. */
+  angle: number;
+  title: string;
+}
+
+/**
+ * The SVG matrix (a b c d e f) that draws a footprint, given in footprint millimeters with
+ * Y negated as FootprintShape draws it, where it lies in the picture: turned to its machine
+ * angle, and mirrored when the picture is (one axis flipped), so pin 1 lands on the right
+ * corner either way. Translation is in mm right and down from the picture's center.
+ */
+export function footprintMatrix(
+  f: { x: number; y: number; angle: number },
+  camera: { x: number; y: number },
+  o: Orientation,
+): [number, number, number, number, number, number] {
+  const sx = o.x_points === "right" ? 1 : -1;
+  const sy = o.y_points === "back" ? 1 : -1;
+  const a = (f.angle * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  // Picture = flip(sx, -sy) * turn(angle) * flip(1, -1) * drawn.
+  return [sx * c, -sy * s, sx * s, sy * c, sx * (f.x - camera.x), -sy * (f.y - camera.y)];
 }
 
 /** A loose part's mark: about an 0603's size, not turned. */

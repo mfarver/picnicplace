@@ -47,7 +47,9 @@ from picnicplace.library.tape import (
 from picnicplace.machine.errors import (
     FeederEmptyError,
     FeederError,
+    FeedNotAnsweredError,
     InvalidTargetError,
+    NoSprocketHolesError,
     NotSupportedError,
 )
 from picnicplace.machine.profile import FeederBank, Nozzle, Point
@@ -118,6 +120,10 @@ the tape (on an 8 mm feeder)."""
 
 SIM_PICK_RADIUS = 1.5
 """A simulated pick this close to a pocket takes its part."""
+
+POCKET_FIT = 0.25
+"""Teaching a strip's last part: how far (in pockets) from a whole number of pockets the
+first and last parts may lie, for centering the camera by eye."""
 
 SIM_FIXED_ERROR = Point(x=0.15, y=-0.1)
 """How far a simulated strip or tray really is from where its setup says."""
@@ -236,6 +242,9 @@ class FeedersState(WireModel):
     bus: Literal["photon"] | None
     scanned: bool
     """Whether the bus has been scanned since the core started."""
+    restored: bool = False
+    """Not scanned since the core started: the slots show what the last scan before it
+    found. Feeding needs a new scan (a run does one first)."""
     slots: list[SlotState]
     fiducial_offset: Point | None
     fiducial_offset_source: Literal["measured", "profile"] | None
@@ -299,7 +308,12 @@ class FeederService:
         self._bus = (
             PhotonBus(machine.driver.rs485) if self._profile.feeder_bus == "photon" else None
         )
-        self._found: dict[str, str] = {}
+        # What the last scan found, kept over a restart: the run's plan and the Studio
+        # show it until the next scan, which a run does first, and which feeding needs.
+        known = {s.id for s in self._slots}
+        self._found: dict[str, str] = {
+            k: v for k, v in store.setup.found.items() if k in known and self._bus is not None
+        }
         """Slot ID to the ID of the feeder found there."""
         self._initialized: set[str] = set()
         self._errors: dict[str, str] = {}
@@ -389,6 +403,7 @@ class FeederService:
         return FeedersState(
             bus=self._profile.feeder_bus,
             scanned=self._scanned,
+            restored=not self._scanned and bool(self._found),
             slots=slots,
             fiducial_offset=offset,
             fiducial_offset_source=source,  # type: ignore[arg-type]
@@ -468,6 +483,8 @@ class FeederService:
                 errors[slot.id] = str(e)
         self._found, self._initialized, self._errors = found, initialized, errors
         self._scanned = True
+        self._store.setup.found = dict(found)
+        self._store.save()
         self._invalidate()
         new = [u for u in found.values() if u not in self._store.setup.feeders]
         parts = [f"Found {len(found)} feeder{'' if len(found) == 1 else 's'}"]
@@ -502,18 +519,29 @@ class FeederService:
         mm = self.feed_distance(slot) if distance is None else distance
         # Pause holds an advance as it holds a move.
         await self._machine.hold()
+        unanswered: FeedNotAnsweredError | None = None
         try:
             await bus.feed(address, mm)
+        except FeedNotAnsweredError as e:
+            # The reply may be lost though the tape moved: what was seen of the pocket is
+            # forgotten as after a feed, so the camera looks again.
+            self._errors[slot.id] = str(e)
+            unanswered = e
         except FeederError as e:
             self._errors[slot.id] = str(e)
             raise
-        self._errors.pop(slot.id, None)
+        if unanswered is None:
+            self._errors.pop(slot.id, None)
+        # The simulator's tape: taken to have moved, as real tape most often has when a
+        # reply is lost (on a machine, the camera sees the tape; this is kept only here).
         if mm > 0:
             left = self.sim_empty_pockets.get(slot.id, 0)
             if left > 0:
                 self.sim_empty_pockets[slot.id] = left - 1
             self._sim_full[address] = left <= 1
         self._invalidate()
+        if unanswered is not None:
+            raise unanswered
         return mm
 
     def start_feed(self, slot_id: str, distance: float | None) -> Operation:
@@ -1086,20 +1114,26 @@ class FeederService:
     ) -> FixedFeeder:
         """Teach where a part is, by the camera centered over it: the first part, the
         last part of the first row (giving the step along a row), or the last part of
-        the last row (giving the step from row to row)."""
+        the last row (giving the step from row to row). On a strip whose tape's pitch the
+        library gives, the last part also gives how many parts it holds: one more than
+        the pockets from the first part to the last."""
         f = self.fixed(fixed_id)
-        update: dict[str, Point]
+        update: dict[str, Point | int]
         if which == "first":
             update = {"first": Point(x=round(at.x, 3), y=round(at.y, 3))}
         elif which == "row_end":
-            if f.columns < 2:
+            tape = self.tape_of(self.fixed_part(f)) if f.kind == "strip" else None
+            if tape is not None and tape.pitch is not None and f.rows == 1:
+                n = self._pockets_between(fixed_id, f.first, at, tape.pitch)
+                update = {"columns": n + 1}
+            elif f.columns < 2:
                 raise InvalidTargetError(f"{fixed_id} has one part per row: nothing to step")
-            n = f.columns - 1
-            update = {
-                "step": Point(
-                    x=round((at.x - f.first.x) / n, 4), y=round((at.y - f.first.y) / n, 4)
-                )
-            }
+            else:
+                n = f.columns - 1
+                update = {}
+            update["step"] = Point(
+                x=round((at.x - f.first.x) / n, 4), y=round((at.y - f.first.y) / n, 4)
+            )
         else:
             if f.rows < 2:
                 raise InvalidTargetError(f"{fixed_id} has one row: teach the end of the row")
@@ -1117,6 +1151,24 @@ class FeederService:
         self._invalidate()
         return f
 
+    def _pockets_between(self, fixed_id: str, first: Point, last: Point, pitch: float) -> int:
+        """How many pockets of ``pitch`` lie from a strip's first part to its last."""
+        distance = math.hypot(last.x - first.x, last.y - first.y)
+        pockets = distance / pitch
+        n = round(pockets)
+        if n < 1:
+            raise InvalidTargetError(
+                f"the camera is {distance:.2f} mm from {fixed_id}'s first part, less than one "
+                f"pocket ({pitch:g} mm): center it on the strip's last part"
+            )
+        if abs(pockets - n) > POCKET_FIT:
+            raise InvalidTargetError(
+                f"{fixed_id}'s last part is {distance:.2f} mm from its first, {pockets:.2f} "
+                f"pockets of {pitch:g} mm: not a whole number. Check the camera is centered on "
+                "the last part, the first part was taught, and the tape's pitch in the library"
+            )
+        return n
+
     def fixed_part(self, f: FixedFeeder) -> Part | None:
         return self._part(FeederAssignment(part_id=f.part_id))
 
@@ -1130,8 +1182,18 @@ class FeederService:
         return _strip_direction(f) + (tape.rotation or 0.0)
 
     def fixed_pick_height(self, f: FixedFeeder, label: str) -> float:
+        """The setup's height for the top of the parts in a strip or tray. A tray with
+        none set: the board height plus the part's height. A strip with none set has no
+        such height: its tape sits in a holder, lifted off the bed by however much the
+        holder lifts it, so its parts' top is found by touch (``strip_search_floor``)."""
         if f.pick_height is not None:
             return f.pick_height
+        if f.kind == "strip":
+            raise FeederError(
+                f"{label} has no pick height: set one (the nozzle height at the top of a part, "
+                "in the Feeders workspace), or turn on sniff_heights in the config to find it "
+                "by touch"
+            )
         board = self._profile.board_height
         part = self.fixed_part(f)
         if board is None or part is None or part.height is None:
@@ -1139,6 +1201,19 @@ class FeederService:
                 f"{label} has no pick height: set one (the nozzle height at the top of a part)"
             )
         return board + part.height
+
+    def strip_search_floor(self, f: FixedFeeder, label: str) -> float:
+        """How low a search for the top of a strip's parts may go: the top they would
+        have lying at the board's height. A holder only lifts the tape higher."""
+        board = self._profile.board_height
+        if board is None:
+            raise FeederError(
+                f"{label} has no pick height, and the machine profile gives no board height "
+                "to search for its parts' top above: set its pick height (the nozzle height "
+                "at the top of a part, in the Feeders workspace)"
+            )
+        part = self.fixed_part(f)
+        return board + (part.height if part is not None and part.height is not None else 0.0)
 
     def next_fixed(self, fixed_id: str) -> tuple[int, Point]:
         """The next part to take from a strip or tray, and where it lies."""
@@ -1291,7 +1366,7 @@ class FeederService:
         ]
         fix = pocket_from_holes(holes, line, pitch)
         if fix is None:
-            raise FeederError(f"{label}: no sprocket holes found near the pick location")
+            raise NoSprocketHolesError(f"{label}: no sprocket holes found near the pick location")
         along, part, loose = fix.along, None, []
         if body is not None:
             along, part, loose = await self._look_at_tape(
@@ -1354,7 +1429,27 @@ class FeederService:
                 position=position,
                 mm_per_px=mm,
             )
-            verdicts.append(holds_part(darkness))
+            ends: float | None = None
+            if size.in_tape is not None and darkness is not None:
+                # A gray part's middle is no darker than an empty pocket's floor: its metal
+                # ends tell. Its longer side, in the picture (counterclockwise from right).
+                a = math.radians(size.in_tape + (90.0 if size.body[1] > size.body[0] else 0.0))
+                u2, v2 = pixel(s + math.cos(a), across + math.sin(a))
+                axis = math.degrees(math.atan2(v - v2, u2 - u))
+                ends = await machine.recorder.vision(
+                    "pocket_ends",
+                    image,
+                    u,
+                    v,
+                    size.body,
+                    mm,
+                    size.outline,
+                    axis,
+                    camera=camera.id,
+                    position=position,
+                    mm_per_px=mm,
+                )
+            verdicts.append(holds_part(darkness, ends))
         chosen = choose_pocket(verdicts)
         # Round each pocket, a rectangle turned with the part (or, turn unknown, a square
         # as wide as its longer side), and a square round each sprocket hole.

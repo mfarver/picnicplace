@@ -97,6 +97,11 @@ class SimulatedParts:
     held: dict[str, HeldPart] = field(default_factory=dict[str, HeldPart])
     placed: list[PlacedPart] = field(default_factory=list[PlacedPart])
     crashes: list[str] = field(default_factory=list[str])
+    place_shift: dict[str, tuple[float, float]] = field(
+        default_factory=dict[str, tuple[float, float]]
+    )
+    """How far (X, Y mm) each part a nozzle lets go of lands from where it was held, by
+    nozzle ID, as a part dragged or knocked as the nozzle lifts would."""
 
     def pick(self, nozzle: str, x: float, y: float, nozzle_angle: float, tip: float) -> bool:
         """The nozzle at (x, y), its tip at ``tip``, turned on suction: take the part
@@ -160,7 +165,8 @@ class SimulatedParts:
         if part is None or tip > PLACED_BELOW:
             return
         ox, oy = _turn(part.dx, part.dy, nozzle_angle)
-        px, py = x + ox, y + oy
+        sx, sy = self.place_shift.get(nozzle, (0.0, 0.0))
+        px, py = x + ox + sx, y + oy + sy
         fell = 0.0
         board = self.board_at(px, py) if self.board_at is not None else None
         if board is not None and part.shape.height is not None:

@@ -230,7 +230,8 @@ effect at once. The reset button next to one forgets it.
 ## 5. Feeders
 
 - [ ] **Scan feeders** in the Feeders workspace. Each feeder found is initialized and
-      listed under its slot.
+      listed under its slot. After the core restarts, the slots show what the last scan
+      found until you scan again; scan before feeding (a run scans first by itself).
 - [ ] Give each feeder its part, and the width of tape it takes (**Takes tape**), and feed
       one. Check it moves one part's pitch. A part whose tape is another width is flagged:
       it is in the wrong feeder, or its tape is wrong in the Parts workspace.
@@ -252,15 +253,26 @@ effect at once. The reset button next to one forgets it.
       empty: feed until parts arrive. A pick that finds its pocket empty feeds once and
       looks again; a second empty pocket stops it with a feeder error. Take loose parts off, or feed them on past the pick
       window: a run pauses for one rather than pick near it.
+- [ ] The eye button beside each slot with a part (and each strip or tray) takes the
+      camera to its pick and draws the part's footprint over the picture as it should lie
+      in the pocket, pin 1's pad and corner in red: check the part's pin-1 mark is there.
+      Without the part's tape rotation (or, on a strip, with none known), nothing is drawn.
 - [ ] For parts held on the bed (a cut strip of 24 mm tape in a holder, or a tray), use
       **Add strip or tray** under **Strips and trays**. Give it its part, the number of
       parts (and rows, for a tray), and a pick height: the nozzle height at the top of a
       part, roughly (jog the nozzle down onto one). The first pick finds the part's top by
       touch, starting 1.5 mm above the pick height and stopping 0.5 mm below it, and
-      keeps what it found. Center the camera on the first
+      keeps what it found. A strip with no pick height is searched for instead: its first
+      pick steps down from safe height until it touches the part, which is slower (with
+      `sniff_heights` off, a strip needs its pick height). Center the camera on the first
       part and click **First part**, then on the last part and click **Last part** (on a
-      tray, also the end of the first row). On a strip, **Find pocket** should land on
-      the next part. The map shows how many parts each one has left.
+      tray, also the end of the first row). On a strip whose tape's pitch the library
+      gives, **Last part** also counts its parts, refusing if the two parts are not a whole
+      number of pockets apart. On a strip, **Find pocket** should land on
+      the next part. The map shows how many parts each one has left, and, once the part
+      has a footprint (and, on a strip, its tape), draws them to scale: a strip's tape at
+      its width with its sprocket holes, and each part's footprint as it lies, pin 1's pad
+      and corner in red. Compare it with the top camera's view of the first part.
 
 ## 6. One part
 
@@ -280,20 +292,38 @@ effect at once. The reset button next to one forgets it.
       Later picks from that feeder go straight there, until one comes up empty or the
       part is changed.
 - [ ] **Align**: the part is shown to the bottom camera with its underside in focus, and
-      the panel reports how far off center and how turned it sits on the nozzle.
+      the panel reports how far off center and how turned it sits on the nozzle. In a run,
+      and with **All three**, the part is first turned to the angle it will be placed at,
+      so it is measured as it will be placed.
+- [ ] **Train** (optional, once per part): with the feeder chosen, the machine picks a
+      part, holds it over the bottom camera and turns it to four angles under every light
+      it can give, measuring it every way it can, which takes a minute or two. The part
+      goes to the discard. In the **Trained parts** panel, check that the footprint drawn
+      over the part lines up with it, and that pin 1 (red) is where the part's marking
+      says, beside it; then **Approve**. From then on, aligning that part uses the light
+      and the way of seeing it that held steadiest. A run trains parts too, with the part
+      it then places rather than discards (see section 10); what it finds shows here as
+      **Found in a run, in use**, waiting for approval.
+
+      ![The Trained parts panel: a part waiting for approval, its footprint drawn over it and beside it](../images/studio-trained.jpg){ .pp-screenshot width="300" }
 - [ ] Center the top camera on a spot on the board, click the crosshair button to use
-      its position, and **Place**. The part is let go there, and the nozzle is checked
-      to be empty after lifting.
+      its position, and **Place**. The part is let go there; the nozzle waits for its
+      vacuum to drain before lifting (a small tip that still holds would carry one end
+      of the part up), and is checked to be empty after lifting, once the vacuum has
+      settled with suction on again.
 - [ ] Use the **Capture** panel on the way: the pocket from above, the part on the
       nozzle from below, and the placed part. Captured frames are saved losslessly in the
       data directory's `captures/` folder, for tuning vision on real images.
 
 ## 7. A whole job
 
-![A run of the demo panel, paused halfway](../images/studio-run.jpg){ .pp-screenshot }
+![A run of the demo panel, paused on a part that landed off its target, with its picture on its line](../images/studio-run.jpg){ .pp-screenshot }
 
 - [ ] In the Prepare workspace, import the board (and its panel), use **Find a place**,
-      fasten the board where the map shows it, and save the job. Its parts may run to
+      fasten the board where the map shows it, and save the job. Or fasten the board
+      where you like, choose its **Turn**, center the top camera on a fiducial (FID1, say)
+      in the Machine workspace, then choose that fiducial and click **Set from camera**,
+      and save. The run's board check finds every fiducial, so this need only be close. Its parts may run to
       the edges of where both nozzles reach; rails without parts may go beyond. Then
       **Publish** it under **Published revisions**: a run runs the newest published
       revision, with its own copy of the parts. Where the board sits is kept by the
@@ -302,12 +332,38 @@ effect at once. The reset button next to one forgets it.
       feeders: each placement's feeder and nozzles, and what blocks any of them (no part
       number, no height, no feeder holding the part, tape too wide for the feeders, or
       out of reach). Fix what you can; tick **Place the rest** to leave out the others.
+      A warning also names any placement whose part's footprint is not the board's there,
+      unless their pads are the same: different pads, or the same pads turned (pin 1 on
+      another pad) or with the origin elsewhere, would place the part turned or off its
+      pads. Check the part number, or the part's footprint in the Parts workspace.
       The workspace's main area lists what the run will do, in order: scan the feeders,
-      find the board, then each placement.
+      find the board, then each placement. The eye button on a placement takes the top
+      camera there and draws its footprint over the picture, pin 1 in red, to check
+      against the silkscreen. It is drawn where the job's place puts it, before the run's
+      fiducial fit, so a board set slightly turned shows it a little off.
 - [ ] **Check fiducials** finds the board's fiducials and shows how the board sits,
       placing nothing (it works even with every part turned off). Check the offset and
       turn look right, and use the button beside each fiducial to look at it under the
       camera's crosshair.
+- [ ] To have each part looked at once placed, tick **Check each part with the top
+      camera once placed** (or set `check_placements` in the config). After placing a
+      two-terminal chip (a resistor, a capacitor, an LED), the top camera finds it and the
+      board's pads under it, and the step list says how much of it lies on its pads and
+      how it is turned. One with less than 75% of either end on its pad, turned more than
+      10°, or not found pauses the run: look at it, fix or remove it, and resume: its line
+      in the step list has a picture of it (click to enlarge), with where it was sent in
+      orange, where it landed in magenta, and its pads in green. It catches a part off its
+      pads, standing up, or gone. (Where the pads cannot be seen, it judges the part from
+      where it was sent instead: 0.25 mm.)
+      If the pads themselves are more than 0.4 mm from where the board's fiducials put
+      them, the board has moved since the run found it (a board not held firmly can be
+      knocked by the parts pressed onto it): the run pauses and says so. Hold the board
+      down, set right any part that landed off, and resume: the run finds the fiducials
+      again before placing the rest. At the end, the finish message and the Run workspace
+      give the run's statistics: picks and empty picks, parts the bottom camera could not
+      find, placements, and checked placements off their pads.
+
+      ![A real check: an 0603 on a LumenPnP, 0.35 mm off its target](../images/placement-check-real.jpg){ .pp-screenshot width="300" }
 - [ ] Tick **Start in step mode** and **Start**: the run scans the feeders (a feeder
       moved since the checks is picked from where it is now), finds the board again,
       and pauses before the first part. After finding the board, a nozzle sniffs its top on
@@ -320,12 +376,29 @@ effect at once. The reset button next to one forgets it.
       problem pauses the run, the step it stopped at is marked in red. The Machine
       workspace shows the same run for someone watching from elsewhere: the map, with the
       run's status and the few steps around the current one under it.
-- [ ] **Step** places one part on each nozzle and pauses again. Check them, then
-      **Resume**. A jammed feeder or a failed pick pauses the run with the parts already
-      on the nozzles kept there; fix it and resume, or skip that placement. A part the
-      bottom camera cannot find goes to the discard location; without one, the run moves
-      the head out of the way and pauses: take the part off the nozzle, click **Part
-      removed**, and resume to pick it again.
+- [ ] Say which tip is on each nozzle (Machine workspace). The plan sends each part to the
+      nozzles whose tip suits it: the hole well inside the part's top (no wider than 75% of
+      its narrower side), and of those the largest, which holds it best. On a LumenPnP
+      with the N045 and N08 fitted, the 0603s go to the N045 and larger parts to the N08;
+      the plan lists how many go to each.
+- [ ] **Step** places one part on each nozzle and pauses again, with the head left over
+      them. Check them, then **Resume**. A jammed feeder or a failed pick pauses the run
+      once the parts already on the other nozzles are placed; fix it and resume, or skip
+      that placement. A part the bottom camera cannot find goes to the discard location;
+      without one, the run pauses: take the part off the nozzle, click **Part removed**,
+      and resume to pick it again.
+- [ ] A pause that asks you to do something (a problem, or **Pause**) moves the head out
+      of the way first, as for a refill below, and so does the end of a run, finished or
+      stopped, for the board to come off. Why it paused shows in a red panel at the
+      bottom right of the Run workspace, wherever the list is scrolled to, with
+      **Resume**, **Look at** what it stopped on (the feeder's pick pocket for a pick, or
+      the placement, its footprint drawn on the picture), **Stop**, and **Hide**.
+- [ ] Stop the core in the middle of a run (or let the power go) and start it again. The
+      Run workspace shows the run paused and interrupted, with how far it got: the core
+      keeps the run on disk after every batch. Take any parts off the nozzles, home the
+      machine, and resume: the run finds the board's fiducials again and places what is
+      left. If it says it stopped while placing a part and that part is on the board,
+      skip its placement first.
 - [ ] With a part on a strip or tray, the run takes them in order and pauses when one is
       empty, with the nozzles up and the head moved out of the way: to the park
       location, if the machine has one (see **Discard and park** below), or else to the
@@ -357,3 +430,82 @@ when they hold for every machine of the model.
 When every page of the wizard is done, the banner goes and moves run at full speed. If a
 config file sets `speed_scale` under `[machine]`, remove it (or set it to 1.0) and
 restart the core.
+
+## 10. What the first real board taught
+
+The first real board run on a LumenPnP (20 November 2026, 248 parts, 170 placed by the
+machine) met problems the simulator does not have. Until they are fixed in the core
+(see the release plan), this is how to get past each.
+
+**Is the machine flat?** Part tops found by touch fell 0.6 to 0.9 mm from the right end of
+each feeder rail to the left, and the leftmost slots were out of reach. Compare the
+heights the Feeders workspace shows for slots at each end of a rail. More than 0.3 mm
+apart: shim the low end of the rail (or the bed) level with the gantry. A pick that finds
+nothing searches once more, 1 mm deeper, which covers some of it.
+
+**Strip holders sit lower than the board.** On that machine, by 0.8 mm. A strip's pick
+height is the nozzle height at the top of its parts: the holder's surface plus the
+part's height, not the board's. Once a strip's first part is found by touch, its height
+is kept.
+
+**Black tape.** The top camera finds a pocket from the sprocket holes, and could not see
+them in black tape, either because a feeder's sprocket teeth filled them or because the
+tape lay black on a dark holder (strip holders cover part of the holes too). The pick then
+goes where the feeder's setup says. For each slot of black tape, center the camera on a
+part in the pick pocket and click **Pick is here** (Feeders workspace). Tape with an 8 mm
+pitch has a pocket at every second hole: check a part, not a gap, sits at the pick point,
+and if not, move the tape on one hole.
+
+**Gray capacitors.** A gray ceramic capacitor's body is no darker than an empty pocket's
+floor; the pocket check now looks for its bright metal ends too, and a pocket seen empty
+twice is still tried anyway. On the board, the check after placing often cannot make one
+out well enough to judge: it marks it **not checked** and goes on, rather than pausing.
+Look over those by eye.
+
+**New parts are trained as they are placed.** The parts that needed training on the first
+board were the dear ones (leadless ICs such as a WSON, leaded ICs, SOT-23s), and training
+from the Placement panel costs a part: it goes to the discard. A run now trains with the
+part it is about to place, and then places it:
+
+- on the first pick of a part with three or more pads and no training (the config's
+  `train_new`: `"multi-pad"`, the default; `"all"`; or `"off"`), which adds a minute or so
+  per new part;
+- whatever `train_new` says, when neither the usual look nor the quicker other lights and
+  ways of looking see the part, and the vacuum says something is held.
+
+What training finds, or a quicker way that saw the part, is kept for the part, used from
+then on, and shown in the **Trained parts** panel (Machine workspace) as **Found in a run,
+in use**: check the footprint drawn over the part there and **Approve** it, or **Forget**
+it if pin 1 is wrong. If training's pads show the part turned from the tape's angle, the
+run pauses with the part still on the nozzle: check the tape, approve the training if the
+footprint lines up, and resume. A part is discarded only when no way of looking, training
+included, sees it ("saw no part ... nor under other lights and ways of looking. Training
+it: ..."). Then that placement and the part's other placements are **skipped**, not picked
+again (each pick would cost another part), and the run goes on with the rest. Check the
+part's footprint, train it from the Placement panel, and un-skip them.
+
+**Footprints for the machine.** The bottom camera looks for the part the footprint
+describes. A KiCad footprint's F.Fab layer must show the body only, not the leads; its
+pads are the board's land pattern, larger than the part's own terminals. The plan warns
+when a part's footprint is not the board's.
+
+**Tips.** Say which tip is on each nozzle. The plan sends each part to the nozzle whose tip
+suits it (0603s to the N045, larger parts to the N08) and lists how many go to each.
+
+**A feeder that stops answering.** A feed the feeder does not answer goes on, and the
+camera and the vacuum tell whether there was a part. If its picks keep failing, look at
+the feeder: on that board the metal splice joining a reel's leader to its tape had been
+drawn into one and jammed it. Clear it, or cut the tape past the splice. Parts can also be
+moved to a strip on the bed, and the run takes them from there after the core restarts.
+
+**Restarts.** A run is kept on disk and comes back paused after the core restarts; home
+the machine and resume. The restart turns the suction off, so take any part off the
+nozzles first, or it drops where the head is. Do not click **Run again** on a board that is
+not finished: it starts the board over.
+
+**Skip after a pick fails, not while it is failing.** A part skipped while its pick was
+still being tried could not be put back.
+
+**Keep the Studio in front.** A Studio tab in the background can miss its heartbeat, and
+the core then stops the move under way. `heartbeat_timeout_s` under `[presence]` in the
+config gives it longer.

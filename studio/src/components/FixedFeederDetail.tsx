@@ -38,6 +38,8 @@ export function FixedFeederDetail(p: Props) {
   const part = parts.find((x) => x.id === draft.part_id);
   const tape = tapes.find((t) => t.id === part?.tape_id);
   const fmt = (v: number) => v.toFixed(2);
+  // Teaching a strip's last part counts its parts, when its tape's pitch is known.
+  const countsParts = f.kind === "strip" && f.rows === 1 && !!tape?.pitch;
 
   const refresh = async () => {
     const { data } = await api.GET("/api/v1/feeders");
@@ -209,8 +211,10 @@ export function FixedFeederDetail(p: Props) {
         {strip
           ? `A strip's parts take their angle from the part's tape${tape ? ` (${tape.rotation ?? "not known, taken as 0"}° in ${tape.width ?? "?"} mm tape)` : ", which the library does not give yet"}. Pick from the end where the cover film is peeled back.`
           : "Part angle: the machine angle of the part's 0° direction, the same for every part."}{" "}
-        The pick height is where the first pick starts feeling for the part's top, by touch;
-        empty, the board height plus the part's height.
+        The pick height is where the first pick starts feeling for the part's top, by touch.
+        {strip
+          ? " Empty: the first pick searches down from safe height for it, which is slower."
+          : " Empty: the board height plus the part's height."}
       </p>
       <div className="button-row">
         <button
@@ -232,6 +236,7 @@ export function FixedFeederDetail(p: Props) {
       <p className="text-muted note">
         Center the top camera on a part, then say which one it is. Teach the first part
         before the others.
+        {countsParts && " The last part also counts the parts, from the tape's pitch."}
       </p>
       <div className="button-row">
         <button
@@ -246,7 +251,7 @@ export function FixedFeederDetail(p: Props) {
         <button
           type="button"
           className="button"
-          disabled={!p.canActuate || changed || f.columns < 2}
+          disabled={!p.canActuate || changed || (f.columns < 2 && !countsParts)}
           onClick={() => p.onTeach("row_end")}
         >
           <Crosshair size={16} aria-hidden />

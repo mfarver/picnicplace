@@ -198,8 +198,9 @@ class FixedFeeder(_Model):
     pick_height: float | None = Field(
         default=None,
         description=(
-            "Nozzle height at the top of a part. Empty: the board height plus the part's "
-            "height, which is right only for parts lying on the bed itself."
+            "Nozzle height at the top of a part. Empty: on a strip, its parts' top is "
+            "searched for by touch from safe Z on the first pick (with sniff_heights on); on "
+            "a tray, the board height plus the part's height."
         ),
     )
     picked: int = Field(default=0, ge=0, description="Parts taken (or tried) so far.")
@@ -265,6 +266,12 @@ class FeederSetup(_Model):
         default_factory=dict[str, PartTop],
         description="The top of the parts in each slot or strip or tray, found by sniffing, "
         "by slot ID or T ID.",
+    )
+    found: dict[str, str] = Field(
+        default_factory=dict[str, str],
+        description="What the last scan of the feeder bus found: the ID of the feeder in "
+        "each slot, by slot ID. Shown after the core restarts, until it scans again; "
+        "feeding needs that scan.",
     )
 
 

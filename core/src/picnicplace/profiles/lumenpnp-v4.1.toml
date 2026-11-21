@@ -52,6 +52,11 @@ visual_homing = true
 # blurred.
 board_height = -27.5
 
+# The nozzles are spring-loaded: placing presses a part this far into the paste or tape
+# (an 0603 set down just touching double-sided tape landed 0.45 mm off and lifted at one
+# end, 2026-11-18).
+place_press = 0.3
+
 # Feeders talk Opulo's Photon protocol over RS-485, through the motherboard (M485).
 feeder_bus = "photon"
 

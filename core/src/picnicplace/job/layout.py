@@ -321,3 +321,25 @@ def find_location(
                 if not any(overlaps(moved, k.area) for k in keep_outs):
                     return MachineLocation(x=round(dx, 3), y=round(dy, 3), rotation=turn)
     return None
+
+
+def location_from_fiducial(
+    job: Job,
+    profile: MachineProfile,
+    ref: str,
+    copy_id: str | None,
+    at: Point,
+    rotation: float,
+) -> MachineLocation:
+    """The location that puts a fiducial (``ref`` on board copy ``copy_id``, or on the
+    panel when that is None) at ``at``, the panel turned by ``rotation``: where the
+    operator has centered the top camera on it. The run's board check then fits the
+    board to all its fiducials, so this need only be close."""
+    origin = MachineLocation(x=0.0, y=0.0, rotation=rotation)
+    for p in machine_placements(job, profile, origin):
+        if p.kind == "fiducial" and p.ref == ref and p.copy_id == copy_id:
+            return MachineLocation(
+                x=round(at.x - p.x, 4) + 0.0, y=round(at.y - p.y, 4) + 0.0, rotation=rotation
+            )
+    where = f"on board {copy_id}" if copy_id else "on the panel"
+    raise ValueError(f"the job has no fiducial {ref} {where} on the side facing up")

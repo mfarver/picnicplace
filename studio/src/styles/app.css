@@ -137,6 +137,11 @@ code,
   color: var(--text);
 }
 
+.icon-button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .pause {
   display: flex;
   align-items: center;
@@ -292,6 +297,26 @@ code,
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+
+/* A footprint drawn where a part should lie: bright enough to see over the picture. */
+.camera-footprint .fp-pad {
+  stroke: #ffd166;
+  stroke-width: 1.5px;
+}
+
+.camera-footprint .fp-pad-1 {
+  fill: rgb(229 72 77 / 45%);
+  stroke: #e5484d;
+  stroke-width: 2px;
+}
+
+.camera-footprint .fp-body {
+  stroke: #ffd166;
+}
+
+.camera-footprint .fp-pin1-corner {
+  fill: rgb(229 72 77 / 25%);
 }
 
 .camera-mark rect,
@@ -602,6 +627,14 @@ code,
   border-radius: var(--radius-sm);
   background: var(--warn-soft);
   color: var(--warn);
+  font-weight: 600;
+}
+
+.badge-ok {
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--ok);
   font-weight: 600;
 }
 
@@ -1553,6 +1586,10 @@ code,
   stroke-width: 1.5px;
 }
 
+.fp-pin1-corner {
+  fill: rgb(229 72 77 / 22%);
+}
+
 .fp-plus line {
   stroke: var(--text);
   stroke-width: 1px;
@@ -2388,6 +2425,40 @@ code,
   font-size: var(--text-lg);
 }
 
+/* Why the run paused: floating over the page, in view however far the list scrolls. */
+.run-alert {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(480px, calc(100vw - 2 * var(--space-4)));
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.run-alert-title {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-lg);
+  font-weight: 650;
+}
+
+.run-alert-text {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
 /* The Machine workspace: the map, with a few of a run's steps under it. */
 .machine-split {
   display: flex;
@@ -2533,6 +2604,18 @@ code,
   opacity: 0.5;
 }
 
+.ff-hole {
+  fill: var(--bg);
+  stroke: var(--border-strong);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+
+.ff-fp.ff-taken {
+  opacity: 0.3;
+}
+
 .ff-next {
   fill: none;
   stroke: var(--mv-camera);
@@ -2553,13 +2636,15 @@ code,
   fill: var(--danger);
 }
 
-.ff-row {
+.ff-row,
+.slot-row {
   display: flex;
   gap: var(--space-2);
   align-items: center;
 }
 
-.ff-row > .item {
+.ff-row > .item,
+.slot-row > .item {
   min-width: 0;
 }
 
@@ -2941,12 +3026,10 @@ code,
   }
 }
 
-/* Asking that the nozzles be level before homing. */
-.home-check {
-  width: min(440px, calc(100vw - 2 * var(--space-4)));
-/* The machine asking the operator to do something (a tip change), over every workspace. */
+/* Dialogs: asking that the nozzles be level before homing, and the machine asking the
+   operator to do something (a tip change), over every workspace. */
+.home-check,
 .machine-asks {
-  width: min(460px, calc(100vw - 2 * var(--space-4)));
   padding: var(--space-4);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
@@ -2954,25 +3037,26 @@ code,
   color: var(--text);
 }
 
-.home-check::backdrop {
-  background: rgb(0 0 0 / 50%);
+.home-check {
+  width: min(440px, calc(100vw - 2 * var(--space-4)));
 }
 
-.home-check h2 {
+.machine-asks {
+  width: min(460px, calc(100vw - 2 * var(--space-4)));
+}
+
+.home-check::backdrop,
 .machine-asks::backdrop {
   background: rgb(0 0 0 / 50%);
 }
 
+.home-check h2,
 .machine-asks h2 {
   margin: 0 0 var(--space-3);
   font-size: var(--text-lg);
 }
 
-.home-check p {
-  margin: 0 0 var(--space-3);
-}
-
-.home-check .button-row {
+.home-check p,
 .machine-asks p {
   margin: 0 0 var(--space-3);
 }
@@ -2985,6 +3069,110 @@ code,
   white-space: nowrap;
 }
 
+.home-check .button-row,
 .machine-asks .button-row {
   justify-content: flex-end;
+}
+
+/* --- Trained parts ------------------------------------------------------------------- */
+
+.trained-part + .trained-part {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.trained-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: 1rem;
+}
+
+.trained-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: var(--space-2) 0;
+}
+
+.trained-images figure {
+  margin: 0;
+  flex: 1 1 240px;
+  max-width: 100%;
+}
+
+.trained-images img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  background: #000;
+}
+
+.trained-images figcaption {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.trained-table {
+  margin-top: var(--space-2);
+}
+
+/* --- Checked placements -------------------------------------------------------------- */
+
+.run-step-thumb {
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: #000;
+  cursor: zoom-in;
+  line-height: 0;
+}
+
+.run-step-thumb img {
+  display: block;
+  width: calc(var(--run-step-h, 30px) - 4px);
+  height: calc(var(--run-step-h, 30px) - 4px);
+  min-width: 26px;
+  min-height: 26px;
+  object-fit: cover;
+}
+
+.run-check-view {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(0, 0, 0, 0.72);
+  list-style: none;
+  cursor: zoom-out;
+}
+
+.run-check-view figure {
+  margin: 0;
+  max-width: min(720px, 100%);
+}
+
+.run-check-view img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+
+.run-check-view figcaption {
+  margin-top: var(--space-2);
+  color: #fff;
+}
+
+.run-stats {
+  margin: 0 0 var(--space-2);
+  font-size: 0.9rem;
 }

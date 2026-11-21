@@ -98,10 +98,28 @@ class VisionError(MachineError):
     code = "vision_failed"
 
 
+class UntrainableError(VisionError):
+    """Bottom vision saw no held part, and training with the part found no way of seeing
+    it: picking another will not do better until the part is trained, or its footprint
+    fixed."""
+
+
 class FeederError(MachineError):
     """A feeder did not answer, or answered with a failure."""
 
     code = "feeder_failed"
+
+
+class FeedNotAnsweredError(FeederError):
+    """A feeder did not answer a feed command, or did not say it had finished: on a busy
+    bus a reply can be lost though the tape moved, so a pick goes on, and the camera and the
+    vacuum tell whether there was a part to take."""
+
+
+class NoSprocketHolesError(FeederError):
+    """The top camera found no sprocket holes by a pick pocket (tape it cannot see them in,
+    such as black tape over a dark holder, or holes with a feeder's sprocket teeth in
+    them): a pick goes where the feeder's setup says instead."""
 
 
 class FeederEmptyError(FeederError):

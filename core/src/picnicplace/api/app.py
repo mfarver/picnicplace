@@ -62,6 +62,7 @@ from picnicplace.simparts import (
     PartShape,
     PlacedPart,
 )
+from picnicplace.training import TrainedPartStore
 from picnicplace.wizard import SetupFacts, Wizard, WizardStore
 
 TITLE = "PicnicPlace Core API"
@@ -179,6 +180,8 @@ def create_app(
         ctx.feeders.sim_part_height_error = config.machine.sim_part_height_error
         ctx.feeders.sim_empty_pockets = dict(config.machine.sim_empty_pockets)
         ctx.feeders.sim_parts_turned = dict(config.machine.sim_parts_turned)
+        if ctx.feeders.sim_parts is not None:
+            ctx.feeders.sim_parts.place_shift = dict(config.machine.sim_place_shift)
         disc = config.machine.sim_calibration_disc
         if disc is not None and ctx.feeders.sim_parts is not None:
             ctx.feeders.sim_parts.placed.append(
@@ -205,7 +208,11 @@ def create_app(
                 )
             )
         ctx.placement = PlacementService(
-            machine, ctx.feeders, lambda: ctx.library, config.machine.pick_correction
+            machine,
+            ctx.feeders,
+            lambda: ctx.library,
+            config.machine.pick_correction,
+            TrainedPartStore(config.data.trained_parts_path, config.data.trained_frames_dir),
         )
         jobs = JobStore(config.data.jobs_dir, config.data.setups_dir)
         ctx.runner = JobRunner(
@@ -218,7 +225,14 @@ def create_app(
         )
         ctx.runner.record_runs = config.recorder.record_runs
         ctx.placement.sniff_heights = config.machine.sniff_heights
+        ctx.placement.place_press = config.machine.place_press
+        ctx.placement.train_new = config.machine.train_new
         ctx.runner.sniff_board = config.machine.sniff_heights
+        ctx.runner.check_placements = config.machine.check_placements
+        ctx.runner.sim_board_bump = config.machine.sim_board_bump
+        ctx.runner.checks_dir = config.data.dir.expanduser() / "run-checks"
+        ctx.runner.run_path = config.data.dir.expanduser() / "run.json"
+        ctx.runner.restore()
         recorder.snapshot = recording_routes.snapshot_builder(ctx, jobs.get)
         await machine.start()
         if config.panel.port:
@@ -260,6 +274,8 @@ def create_app(
     app.include_router(job_routes.router)
     app.include_router(feeder_routes.router)
     app.include_router(placement_routes.router)
+    app.include_router(placement_routes.media)
+    app.include_router(run_routes.media)
     app.include_router(run_routes.router)
     app.include_router(calibration_routes.router)
     app.include_router(wizard_routes.router)

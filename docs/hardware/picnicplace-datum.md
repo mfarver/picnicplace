@@ -1,7 +1,7 @@
 # PicnicPlace datum
 
 PicnicPlace requires a datum board, even on machines that are not LumenPnPs. This is
-the design PicnicPlace publishes for one: a PCB (revision B, not yet made) on a
+the design PicnicPlace publishes for one: a PCB (revision C, not yet made) on a
 3D-printed holder (modeled, not yet printed).
 
 ![Plan view of the PicnicPlace datum](picnicplace-datum-plan.svg)
@@ -26,8 +26,8 @@ found. The board's own fiducials correct what remains, so the corner has to be c
 repeatable, not exact. The L does not have to run the length of the board's edges: the
 LumenPnP board holders, or later vacuum standoffs, support the other sides.
 
-- **Locating pins, not the routed edge.** A board touches three 3 mm dowel pins, two
-  along X (at 20 and 105 mm) and one along Y (at 32 mm). Fabs typically rout an outline
+- **Locating pins, not the routed edge.** A board touches 3 mm dowel pins: along X, at
+  10, 40 and 105 mm, and one along Y, at 12 mm (see [Board sizes](#board-sizes)). Fabs typically rout an outline
   to only ±0.1–0.2 mm, but holes are drilled much more accurately. A pin that touches
   the board's edge has its center 1.5 mm from it, so the PCB, level with the board,
   cannot surround it. Instead the PCB's inside edges run through the pin centers, 1.5 mm
@@ -63,7 +63,7 @@ LumenPnP board holders, or later vacuum standoffs, support the other sides.
   assembled: every feature is left out of the BOM and the placement files.
 - **A 3D-printed holder** under the PCB, 158 × 83 × 8.4 mm, printed flat on its bottom:
   - It extends 4 mm beyond the PCB, with a 10 mm ledge under the board's edges.
-  - It grips each pin 6 mm deep, in a hole printed for a press fit, with the pin's foot on
+  - It grips each of the four pins 6 mm deep, in a hole printed for a press fit, with the pin's foot on
     the hole's floor; a 10 mm pin then stands 2.4 mm above a 1.6 mm board's top. A small
     vent under each pin lets the air out as it goes in, and lets a pin be pushed out from
     below. Printers make small holes a little small, so print the coupon first
@@ -80,6 +80,38 @@ LumenPnP board holders, or later vacuum standoffs, support the other sides.
     ledge, reached with no board in place. The 30 mm spacing fits v4.1's 15 mm
     checkerboard and v4.2's 30 mm grid.
 
+## Board sizes
+
+A board is located by resting on two X pins, which set where its front edge is and how it
+is turned, and on the Y pin, which sets where it is along X. The pins are close to the
+corner so that small boards reach them too:
+
+| Board, along X × along Y | Rests on | Located |
+|---|---|---|
+| 108 mm or more × 15 mm or more | the X pins at 10 and 105 mm (and 40, if it stands out), and the Y pin | fully, with the X pins far apart |
+| 43–108 mm × 15 mm or more | the X pins at 10 and 40 mm, and the Y pin | fully |
+| 13–43 mm × 15 mm or more | the X pin at 10 mm, and the Y pin | where it is, but it can turn on the X pin |
+| any × under 15 mm | the X pins only | its front edge and turn, but not where it is along X |
+
+Each size needs a few millimeters past its last pin, so that the board's edge rests on the
+pin and not on its corner.
+
+The datum only gets the job close: the board's fiducials then measure where it really is
+and how it is turned, so a board that rests on fewer pins still works, as long as the
+operator pushes it squarely into the corner. A 30 mm board turned 1° moves a far
+fiducial about 0.5 mm, well inside the fiducial search. Boards in the last row are the
+ones to avoid: **panelize small boards** (with KiKit, for example) to at least 43 × 15 mm,
+better 108 × 15 mm, which production wants anyway, and gives the board holders rails to
+grip.
+
+Three X pins in a line could rock a long board on the middle one; they are drilled in line
+to some 0.05 mm, so a board resting on any two of them is turned at most a few hundredths
+of a degree from one to another.
+
+Revision B had two X pins, at 20 and 105 mm, and the Y pin at 32 mm: a board shorter than
+about 108 mm along X rested on one X pin and could turn, and one shorter than 35 mm along
+Y missed the Y pin.
+
 The [test board](test-board.md) is its partner: the datum calibrates the machine, and the
 test board shows whether the calibration worked.
 
@@ -90,7 +122,7 @@ To make one yourself:
 | Part | Quantity | Notes |
 |---|---|---|
 | Datum PCB | 1 | `hardware/datum/picnicplace-datum.kicad_pcb`, plotted to Gerbers and a drill file: 2 layers, 1.6 mm, ENIG, black (or green) mask. Fabs usually make five at least. |
-| Dowel pins, 3 × 10 mm | 3 | Hardened, h6 or m6, rounded or chamfered end up. For example McMaster-Carr 91595A108 (m6, 100 for about $20) or FastenerMart PCH584-600 (DIN 6325, h6, plain steel: a wipe of oil keeps it from rusting). |
+| Dowel pins, 3 × 10 mm | 4 | Hardened, h6 or m6, rounded or chamfered end up. For example McMaster-Carr 91595A108 (m6, 100 for about $20) or FastenerMart PCH584-600 (DIN 6325, h6, plain steel: a wipe of oil keeps it from rusting). |
 | The holder | 1 | `make_holder.py`'s `picnicplace-datum-holder.stl`, in PLA or PETG; print the pin coupon first. |
 | M3 heat-set inserts | 4 | For a 4.0 mm hole, up to 6 mm long. |
 | M3 × 6 screws | 4 | PCB to holder. Low or button heads stand lowest. |

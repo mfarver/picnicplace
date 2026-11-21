@@ -8,8 +8,10 @@ The simulator puts the job's board on the bed a little off from where the job sa
 the parts really landed against where the simulated board really wants them.
 """
 
+import json
 import math
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -122,8 +124,9 @@ def angle_error(a: float, b: float, period: float) -> float:
     return min(abs(d), period - abs(d))
 
 
-def check_landed(client: TestClient, run: dict[str, Any]) -> int:
-    """Every placed item's part is where the simulated board wants it."""
+def check_landed(client: TestClient, run: dict[str, Any], turn: float = 0.5) -> int:
+    """Every placed item's part is where the simulated board wants it, turned within
+    ``turn`` degrees."""
     parts = placed(client)
     n = 0
     for data in run["plan"]["items"]:
@@ -137,7 +140,7 @@ def check_landed(client: TestClient, run: dict[str, Any]) -> int:
         assert (part.x, part.y) == pytest.approx((target.x, target.y), abs=0.06), item.ref
         # Two-pad parts look the same turned half way round.
         period = 180.0 if item.ref[0] in "RC" else 360.0
-        assert angle_error(part.angle, angle, period) < 0.5, (item.ref, part.angle, angle)
+        assert angle_error(part.angle, angle, period) < turn, (item.ref, part.angle, angle)
         n += 1
     assert n == len(parts)
     return n
@@ -304,6 +307,10 @@ def test_run_a_job(lumen: TestClient) -> None:
             "N1",
             "N2",
         }
+        # Finished, the head is parked out of the way for the board to come off: with no
+        # park location set, at the back.
+        y = next(a for a in lumen.app.state.ctx.machine.profile.axes if a.name == "Y")  # type: ignore[attr-defined]
+        assert lumen.get("/api/v1/machine").json()["position"]["Y"] == pytest.approx(y.max)
 
 
 def test_the_run_finds_the_boards_top_by_touch() -> None:
@@ -344,19 +351,29 @@ def test_a_run_feeds_past_an_empty_pocket() -> None:
         assert check_landed(client, run) == 4
 
 
-def test_two_empty_pockets_pause_the_run() -> None:
-    """Slot 2's reel has a longer empty leader: the pocket fed to after an empty one is
-    empty too, and the run stops for the operator to see to the feeder."""
+def test_a_long_empty_leader_pauses_the_run() -> None:
+    """Slot 2's reel has a long empty leader. Pockets seen empty are fed past, and one
+    seen empty twice is tried anyway; after three tries come up empty, the run stops for
+    the operator to see to the feeder, once the other nozzle's part is placed."""
     config = fast_config(
-        machine={"profile": "lumenpnp-v4.1", "sim_empty_pockets": {"2": 3}},
+        machine={"profile": "lumenpnp-v4.1", "sim_empty_pockets": {"2": 8}},
         presence={"heartbeat_timeout_s": 300.0},
     )
     with TestClient(create_app(config)) as client, connect(client) as s:
         set_up(client, s, tape="paper")
-        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        # Three tries, each feeding past empty pockets and searching twice: many events.
+        start = s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})
+        op = s.wait(start, limit=3000)
         run = client.get("/api/v1/run").json()
         assert run["status"] == "paused", (op, run["error"])
-        assert "fed once, and saw the next one empty too" in run["error"], run["error"]
+        assert "(3 tries). Check the feeder" in run["error"], run["error"]
+        # The other nozzle's part was placed first: none waits on a nozzle meanwhile.
+        assert s.client.get("/api/v1/placement").json()["loads"] == []
+        assert run["held"] == {} and run["placed"] == 1, run["placed"]
+        assert check_landed(client, run) == 1
+        # The step shown is the pick that failed.
+        assert run["current"]["action"] == "picking"
+        assert run["plan"]["items"][run["current"]["index"]]["slot_id"] == "2"
 
 
 def test_a_part_loose_on_the_tape_pauses_the_run() -> None:
@@ -403,6 +420,7 @@ def test_pause_skip_and_resume(lumen: TestClient) -> None:
         ok(s.wait(s.post("/api/v1/run/step")))
         run = lumen.get("/api/v1/run").json()
         assert run["status"] == "paused" and run["placed"] == 2  # one batch: both nozzles
+        assert "head moved" not in run["message"]  # a step leaves the head where it is
         assert lumen.get("/api/v1/placement").json()["loads"] == []
 
         u2 = next(i for i in run["plan"]["items"] if i["ref"] == "U2")
@@ -442,9 +460,9 @@ def test_machine_angles_follow_the_axes() -> None:
 
 
 def test_a_jammed_feeder_pauses_the_run(lumen: TestClient) -> None:
-    """The second batch is C1 (slot 1) and U2 (slot 5). With slot 5 jammed, C1 is
-    already on its nozzle when the run pauses; after the jam is cleared, resuming
-    places both."""
+    """The second batch is C1 (slot 1) and U2 (slot 5). With slot 5 jammed, C1 is placed
+    before the run pauses, so no part waits on a nozzle while the jam is cleared; then
+    resuming places U2."""
     with connect(lumen) as s:
         set_up(lumen, s)
         sim = lumen.app.state.ctx.feeders._sim  # type: ignore[attr-defined]
@@ -452,21 +470,16 @@ def test_a_jammed_feeder_pauses_the_run(lumen: TestClient) -> None:
         op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
         assert op["status"] == "failed" and "could not reach the next part" in op["error"]
         run = lumen.get("/api/v1/run").json()
-        assert run["status"] == "paused" and run["error"] == op["error"]
-        assert run["placed"] == 2
-        c1 = next(i["index"] for i in run["plan"]["items"] if i["ref"] == "C1")
-        u2 = next(i["index"] for i in run["plan"]["items"] if i["ref"] == "U2")
-        # It shows where it stopped: picking U2, with C1 waiting on its nozzle.
+        assert run["status"] == "paused" and op["error"] in run["error"]
+        assert run["placed"] == 3
+        items = {i["ref"]: i for i in run["plan"]["items"]}
+        assert items["C1"]["status"] == "placed"
+        # It shows where it stopped: picking U2, with nothing left on a nozzle.
         current = run["current"]
+        u2 = items["U2"]["index"]
         assert (current["stage"], current["action"], current["index"]) == ("item", "picking", u2)
-        assert current["nozzle"] not in run["held"]
-        assert list(run["held"].values()) == [c1]
-        loads = lumen.get("/api/v1/placement").json()["loads"]
-        assert [load["part_id"] for load in loads] == ["EX-C0805-1U"]
-
-        # A part on a nozzle cannot be skipped.
-        r = s.put(f"/api/v1/run/items/{c1}", {"skip": True})
-        assert r.status_code == 409 and "on a nozzle" in r.json()["detail"]
+        assert run["held"] == {}
+        assert lumen.get("/api/v1/placement").json()["loads"] == []
 
         sim.feeders[5].jammed = False
         op = ok(s.wait(s.post("/api/v1/run/resume")))
@@ -548,18 +561,25 @@ def test_without_a_discard_location_the_operator_takes_the_part_off(lumen: TestC
 
         recorder = lumen.app.state.ctx.machine.recorder  # type: ignore[attr-defined]
         vision = recorder.vision
-        blind = {"left": 1}
+        blind = {"on": True}
 
-        async def fails_once(name: str, *args: Any, **kwargs: Any) -> Any:
-            if name in ("find_part", "fit_pads") and blind["left"] > 0:
-                blind["left"] -= 1
+        async def blind_for_now(name: str, *args: Any, **kwargs: Any) -> Any:
+            # Every way of looking fails, the other lights and methods too, until it pauses.
+            if name in ("find_part", "fit_pads") and blind["on"]:
                 return None
             return await vision(name, *args, **kwargs)
 
-        recorder.vision = fails_once
+        recorder.vision = blind_for_now
+        # Not trained either (training would see it: it looks without the recorder).
+        placement = lumen.app.state.ctx.placement  # type: ignore[attr-defined]
+        placement._may_train = lambda part_id: False  # type: ignore[method-assign]
         op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        blind["on"] = False
         assert op["status"] == "failed"
-        assert "saw no part on N1, and there is no discard location" in op["error"]
+        assert (
+            "saw no part on N1, nor under other lights and ways of looking, and there is no "
+            "discard location"
+        ) in op["error"], op["error"]
         assert "The head moved to the back" in op["error"]
         run = lumen.get("/api/v1/run").json()
         assert run["status"] == "paused" and "N1" in run["held"]
@@ -572,8 +592,59 @@ def test_without_a_discard_location_the_operator_takes_the_part_off(lumen: TestC
         assert [x["nozzle"] for x in loads] == ["N2"]
 
         op = ok(s.wait(s.post("/api/v1/run/resume")))
-        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        # The run says how it went: one part the bottom camera could not find.
+        assert op["message"] == (
+            "finished: 4 placed, 1 blocked, 3 skipped (the bottom camera could not find 1 "
+            "of 5 parts)"
+        )
+        stats = lumen.get("/api/v1/run").json()["stats"]
+        assert (stats["alignments"], stats["failed_alignments"]) == (5, 1)
         assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
+
+
+def test_a_part_training_cannot_see_is_skipped_not_picked_again() -> None:
+    """A new IC is trained on its first pick; when training finds no way of seeing it and
+    no other look does either, the part is discarded and its placements skipped (each
+    pick would cost a part and see no more), and the run goes on with the rest. They may
+    be un-skipped once the part is trained."""
+    from picnicplace.placement import PlacementError
+
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.2", "train_new": "multi-pad"},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        placement = client.app.state.ctx.placement  # type: ignore[attr-defined]
+        recorder = client.app.state.ctx.machine.recorder  # type: ignore[attr-defined]
+        vision = recorder.vision
+        trainings: list[str] = []
+
+        async def cannot_train(nozzle: Any, load: Any, part: Any, *args: Any) -> Any:
+            trainings.append(part.id)
+            raise PlacementError(f"training found no way of seeing {part.id} in every frame")
+
+        async def mcu_unseen(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name in ("find_part", "fit_pads") and kwargs.get("part") == "EX-MCU-8":
+                return None
+            return await vision(name, *args, **kwargs)
+
+        placement._train_held = cannot_train  # type: ignore[method-assign]
+        recorder.vision = mcu_unseen
+        op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
+        assert op["message"].startswith("finished: 3 placed"), op["message"]
+        assert trainings == ["EX-MCU-8"]
+        run = client.get("/api/v1/run").json()
+        mcu = [i for i in run["plan"]["items"] if i["part_id"] == "EX-MCU-8"]
+        assert mcu and all(i["status"] == "skipped" for i in mcu)
+        assert all(i["note"].startswith("skipped: training found no way") for i in mcu)
+        assert sum(i["discards"] for i in mcu) == 1
+        assert run["stats"]["picks"] == 4  # three chips, and the MCU once
+
+        r = s.put(f"/api/v1/run/items/{mcu[0]['index']}", {"skip": False})
+        assert r.status_code == 200, r.json()
+        item = client.get("/api/v1/run").json()["plan"]["items"][mcu[0]["index"]]
+        assert item["status"] == "pending"
 
 
 def test_run_a_job_on_a_lumenpnp_v4_2() -> None:
@@ -588,4 +659,326 @@ def test_run_a_job_on_a_lumenpnp_v4_2() -> None:
         assert not any("discard" in i["message"] for i in plan["issues"]), plan["issues"]
         op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
-        assert check_landed(client, client.get("/api/v1/run").json()) == 4
+        # The v4.2's bottom camera sees 70.5 mm across, 0.055 mm per simulated pixel: an
+        # 0805 is 36 x 23 pixels. Parts are measured turned to their place angle, not
+        # square to the picture, and its pads fit to within about 1 degree there (0.02 mm
+        # at their ends).
+        assert check_landed(client, client.get("/api/v1/run").json(), turn=1.5) == 4
+
+
+def test_placements_are_checked_with_the_top_camera(lumen: TestClient) -> None:
+    """With the check on, the top camera looks at each two-terminal chip once placed:
+    where it found it is kept with the placement."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        body = {"job_id": "demo", "skip_blocked": True, "check_placements": True}
+        op = ok(s.wait(s.post("/api/v1/run/start", body)))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        items = [i for i in lumen.get("/api/v1/run").json()["plan"]["items"] if i["check"]]
+        assert items, "no chip was checked"
+        for item in items:
+            check = item["check"]
+            assert check["ok"], item
+            assert math.hypot(check["dx"], check["dy"]) < 0.1 and abs(check["turn"]) < 4
+            # Its pads were seen where the board's fit puts them, and it lies on them.
+            assert check["on_pads"] >= 0.9, item
+            assert math.hypot(check["pads_dx"], check["pads_dy"]) < 0.05, item
+            assert check["picture"]
+            r = lumen.get(f"/api/v1/run/checks/{item['index']}")
+            assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
+        stats = lumen.get("/api/v1/run").json()["stats"]
+        assert stats["placed"] == 4 and stats["checked"] == len(items)
+        assert stats["picks"] >= 4 and stats["alignments"] >= 4
+        assert stats["empty_picks"] == stats["failed_alignments"] == stats["bad_placements"] == 0
+
+
+def test_a_part_the_camera_cannot_make_out_is_not_checked(lumen: TestClient) -> None:
+    """Gray ceramic capacitors on a real board matched 0.42 to 0.5, under the 0.5 a part
+    must match to be judged, and the run paused after each though they sat on their pads.
+    A match that poor, but not far off, is marked not checked and the run goes on."""
+    from dataclasses import replace as with_score
+
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        recorder = lumen.app.state.ctx.machine.recorder  # type: ignore[attr-defined]
+        vision = recorder.vision
+
+        async def faint(name: str, *args: Any, **kwargs: Any) -> Any:
+            found = await vision(name, *args, **kwargs)
+            if name == "find_placed_chip" and found is not None:
+                return with_score(found, score=0.44)
+            return found
+
+        recorder.vision = faint
+        body = {"job_id": "demo", "skip_blocked": True, "check_placements": True}
+        op = ok(s.wait(s.post("/api/v1/run/start", body)))
+        assert op["message"].startswith("finished: 4 placed, 1 blocked, 3 skipped (")
+        assert "placements could not be made out to check" in op["message"]
+        run = lumen.get("/api/v1/run").json()
+        checked = [i for i in run["plan"]["items"] if i["check"]]
+        assert checked and all(not i["check"]["checked"] for i in checked)
+        assert all(i["check"]["ok"] and i["check"]["score"] == 0.44 for i in checked)
+        stats = run["stats"]
+        assert stats["unsure"] == len(checked) and stats["bad_placements"] == 0
+        assert check_landed(lumen, run) == 4
+
+
+def test_a_part_that_lands_off_its_target_pauses_the_run() -> None:
+    """As a real 0603 did, dragged as the nozzle lifted: it landed 0.45 mm from its
+    target. The check finds it off its pads, which are where they should be, and pauses
+    the run."""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_place_shift": {"N1": (0.0, 0.45), "N2": (0.0, 0.45)},
+            "check_placements": True,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        run = client.get("/api/v1/run").json()
+        assert run["status"] == "paused", (op, run["message"])
+        assert "% of an end on its pad" in run["error"], run["error"]
+        assert "turned" not in run["error"] and "seems to have moved" not in run["error"]
+        # Out of the way of the operator's tweezers: parked at the back.
+        assert run["error"].endswith("The head moved to the back (no park location is set).")
+        y = next(a for a in client.app.state.ctx.machine.profile.axes if a.name == "Y")  # type: ignore[attr-defined]
+        assert client.get("/api/v1/machine").json()["position"]["Y"] == pytest.approx(y.max)
+        checked = [i for i in run["plan"]["items"] if i["check"]]
+        check = checked[-1]["check"]
+        assert checked and not check["ok"] and check["on_pads"] < 0.75
+        assert check["dy"] == pytest.approx(0.45, abs=0.1)
+        assert math.hypot(check["pads_dx"], check["pads_dy"]) < 0.05
+        assert check["picture"]
+        assert run["stats"]["bad_placements"] == 1
+
+
+def test_a_board_that_moves_mid_run_is_found_again() -> None:
+    """As a real board did, knocked by the parts pressed onto its tape: after two parts it
+    slides 0.45 mm. The next part lands where the board was; its check finds the pads moved
+    and pauses. Once that part is set right by hand, resuming finds the board again, and
+    the rest land on their pads."""
+    config = fast_config(
+        machine={
+            "profile": "lumenpnp-v4.1",
+            "sim_board_bump": (2, 0.0, 0.45),
+            "check_placements": True,
+        },
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        run = client.get("/api/v1/run").json()
+        assert run["status"] == "paused", (op, run["message"])
+        assert "the board seems to have moved" in run["error"], run["error"]
+        assert "finds the fiducials again" in run["error"]
+        checked = [i for i in run["plan"]["items"] if i["check"]]
+        assert len(checked) == 3
+        last = checked[-1]["check"]
+        assert last["pads_dx"] == pytest.approx(0.0, abs=0.05)
+        assert last["pads_dy"] == pytest.approx(0.45, abs=0.05)
+        before = run["fix"]
+        # Set the part that landed where the board was right, as the operator would.
+        item = RunItem.model_validate(checked[-1])
+        truth = runner(client).sim_target(item)
+        sim = client.app.state.ctx.feeders.sim_parts  # type: ignore[attr-defined]
+        assert truth is not None and sim is not None
+        target, _ = truth
+        i = min(
+            range(len(sim.placed)),
+            key=lambda k: math.hypot(sim.placed[k].x - target.x, sim.placed[k].y - target.y),
+        )
+        sim.placed[i] = replace(sim.placed[i], x=target.x, y=target.y)
+        op = ok(s.wait(s.post("/api/v1/run/resume", {})))
+        run = client.get("/api/v1/run").json()
+        assert run["status"] == "finished", run["message"]
+        assert run["fix"]["dy"] - before["dy"] == pytest.approx(0.45, abs=0.05)
+        # All four sit where the board, as it now lies, wants them; the last (not a
+        # two-terminal chip, so not checked) was placed after the board was found again.
+        assert check_landed(client, run) == 4
+        others = [i["check"] for i in run["plan"]["items"] if i["check"] and i["ref"] != item.ref]
+        assert len(others) == 2 and all(c["ok"] and c["on_pads"] >= 0.9 for c in others)
+
+
+def test_parts_are_turned_to_their_place_angle_before_the_bottom_camera_looks(
+    lumen: TestClient, tmp_path: Path
+) -> None:
+    """Each part is measured as it will be placed: the nozzle turns it to its place angle
+    before the bottom camera looks, and turns it only the few degrees alignment finds
+    afterward. (On a real LumenPnP, two of eight 0603s turned 88 and 180 degrees after
+    alignment landed 0.3 to 0.45 mm off.)"""
+    import io
+    import json
+    import zipfile
+
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        body = {"job_id": "demo", "skip_blocked": True, "record": True}
+        ok(s.wait(s.post("/api/v1/run/start", body)))
+        rid = lumen.get("/api/v1/run").json()["recording"]
+        r = lumen.get(f"/api/v1/recordings/{rid}/download")
+        with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+            lines = z.read(f"{rid}/events.jsonl").decode().splitlines()
+    axis = {"N1": "A", "N2": "B"}
+    seen: dict[str, float] = {}
+    aligned: dict[str, float] = {}
+    turns: list[float] = []
+    for line in lines:
+        e = json.loads(line)
+        if e["kind"] == "vision" and e.get("fn") == "find_part":
+            seen[e["nozzle"]] = e["position"][axis[e["nozzle"]]]
+        elif e["kind"] == "align":
+            aligned[e["nozzle"]] = e["alignment"]["angle"]
+        elif e["kind"] == "place":
+            n = e["nozzle"]
+            at_place = e["rotation"] - aligned[n]
+            turns.append(abs((at_place - seen[n] + 180.0) % 360.0 - 180.0))
+    assert len(turns) == 4 and max(turns) < 5.0, turns
+
+
+def test_a_run_comes_back_after_the_core_restarts() -> None:
+    """The core stops after a run's first batch, with a part on a nozzle and another being
+    placed. Started again, it shows the run paused and interrupted, and says so; once
+    homed, resuming finds the board again and places what is left, recording it as the
+    run's start was recorded."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1"}, presence={"heartbeat_timeout_s": 300.0}
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        r = s.post(
+            "/api/v1/run/start",
+            {"job_id": "demo", "skip_blocked": True, "step": True, "record": True},
+        )
+        ok(s.wait(r))
+        ok(s.wait(s.post("/api/v1/run/step")))
+        assert client.get("/api/v1/run").json()["placed"] == 2
+        path = runner(client).run_path
+        assert path is not None and path.is_file()
+
+    # As if the core had stopped in the next batch: running, N1 holding one part and N2
+    # placing another.
+    kept = json.loads(path.read_text())
+    pending = [i for i in kept["plan"]["items"] if i["status"] == "pending"]
+    kept["status"] = "running"
+    kept["held"] = {"N1": pending[0]["index"]}
+    kept["current"] = {
+        "stage": "item",
+        "action": "placing",
+        "index": pending[1]["index"],
+        "nozzle": "N2",
+    }
+    path.write_text(json.dumps(kept))
+
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        run = client.get("/api/v1/run").json()
+        assert run["status"] == "paused" and run["interrupted"] and run["placed"] == 2
+        assert run["fix"] is None and run["held"] == {} and run["current"] is None
+        assert run["error"] == (
+            f"the core stopped in the middle of this run; the nozzles held parts "
+            f"({pending[0]['ref']} on N1); it stopped while placing {pending[1]['ref']}: if "
+            "that part is on the board, skip its placement. Take any parts off the nozzles "
+            "by hand, home the machine, then resume: the run finds the board's fiducials "
+            "again and places what is left."
+        )
+        r = s.post("/api/v1/run/resume")
+        assert r.status_code == 409, r.json()  # not homed yet
+        assert client.get("/api/v1/run").json()["interrupted"]
+
+        s.home()
+        assert client.get("/api/v1/run").json()["recording"] is None
+        op = ok(s.wait(s.post("/api/v1/run/resume")))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        run = client.get("/api/v1/run").json()
+        assert not run["interrupted"] and run["fix"] is not None
+        # It was recorded before the restart, so its rest is recorded too.
+        assert run["recording"] is not None
+        recordings = client.get("/api/v1/recordings").json()
+        listed = recordings if isinstance(recordings, list) else recordings["recordings"]
+        mine = next(x for x in listed if x["id"] == run["recording"])
+        assert mine["label"].endswith("(resumed)"), mine
+        # This simulator saw only the parts placed since the restart: they are where the
+        # board wants them.
+        before = {i["index"] for i in kept["plan"]["items"] if i["status"] == "placed"}
+        for i in run["plan"]["items"]:
+            if i["index"] in before:
+                i["status"] = "placed before"
+        assert check_landed(client, run) == 2
+
+
+def test_parts_go_to_the_nozzles_whose_tips_suit_them(lumen: TestClient) -> None:
+    """With an N045 tip (0.45 mm hole) on the left nozzle and an N08 (0.8 mm) on the
+    right, the 0603 resistors are picked by the left one only (the N08's hole is as wide as
+    they are), and the 0805 and the SOIC by the right one (the larger hole that suits them
+    holds them best). The plan says so, and the run places them all."""
+    from tests.test_nozzle_tips import fit
+
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        fit(s, "N1", "N045")
+        fit(s, "N2", "N08")
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        nozzles = {i["ref"]: i["nozzles"] for i in plan["items"] if i["status"] == "pending"}
+        assert nozzles == {"R1": ["N1"], "R2": ["N1"], "C1": ["N2"], "U2": ["N2"]}, nozzles
+        tips = [i["message"] for i in plan["issues"] if "by the tips fitted" in i["message"]]
+        assert tips and "2 only on the left nozzle (N045)" in tips[0], plan["issues"]
+        assert not [i for i in plan["issues"] if "only some of the nozzles" in i["message"]]
+
+        op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        run = lumen.get("/api/v1/run").json()
+        by = {i["ref"]: i["nozzle"] for i in run["plan"]["items"] if i["status"] == "placed"}
+        assert by == {"R1": "N1", "R2": "N1", "C1": "N2", "U2": "N2"}, by
+        assert check_landed(lumen, run) == 4
+
+
+def test_tip_nozzles_by_part_size() -> None:
+    """The rule itself: the hole no wider than 75% of the part's narrower side, and of
+    those the largest; with no tip known, or none that suits, any nozzle."""
+    from picnicplace.job.run import part_width, tip_nozzles
+    from picnicplace.library.models import Footprint, Pad, Size
+
+    profile = load_profile("lumenpnp-v4.1")
+    fitted = profile.model_copy(
+        update={
+            "nozzles": [
+                profile.nozzles[0].model_copy(update={"tip": "N045"}),
+                profile.nozzles[1].model_copy(update={"tip": "N08"}),
+            ]
+        }
+    )
+
+    class Library:
+        def __init__(self, footprint: Footprint) -> None:
+            self.footprint = footprint
+
+        def find_part(self, part_id: str) -> Part | None:
+            return None
+
+        def find_footprint(self, footprint_id: str) -> Footprint | None:
+            return self.footprint
+
+        def tape_of(self, part: Part | None) -> None:
+            return None
+
+    def chip(width: float) -> Footprint:
+        return Footprint(id="X", body=Size(x=2 * width, y=width))
+
+    qfn = Footprint(
+        id="QFN",
+        pads=[
+            Pad(name=str(n), x=x, y=y, width=0.3, height=0.8)
+            for n, (x, y) in enumerate([(-1.45, 0), (1.45, 0), (0, -1.45), (0, 1.45)])
+        ],
+    )
+    assert part_width(qfn) == pytest.approx(3.2)  # the pads' extent
+    part = Part(id="P", footprint_id="X")
+    both = ["N1", "N2"]
+    assert tip_nozzles(both, part, Library(chip(0.8)), fitted) == ["N1"]  # 0603
+    assert tip_nozzles(both, part, Library(chip(1.25)), fitted) == ["N2"]  # 0805
+    assert tip_nozzles(both, part, Library(qfn), fitted) == ["N2"]
+    assert tip_nozzles(both, part, Library(chip(0.5)), fitted) == both  # 0402: none suits
+    assert tip_nozzles(both, part, Library(chip(0.8)), profile) == both  # no tips known

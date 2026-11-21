@@ -509,9 +509,19 @@ function FrontMarker({ description }: { description: MachineProfile }) {
   );
 }
 
-/** Feeders in one bank: the body extends behind the pick location, against the feed. */
+/** How far past its fiducial a feeder is drawn: the fiducial sits on the nose's front edge. */
+const NOSE_PAST_FIDUCIAL = 5;
+
+/**
+ * Feeders in one bank: the body extends behind the pick location, against the feed. A
+ * feeder with a fiducial is drawn to just past it, so the gap between the noses and the
+ * staging plates shows; boards are still kept clear of the bank's whole reach.
+ */
 function FeederBankShape({ bank }: { bank: FeederBank }) {
-  const ahead = bank.pick_to_front;
+  const behind = bank.length - bank.pick_to_front;
+  const ahead = bank.fiducial_offset
+    ? Math.min(bank.pick_to_front, bank.fiducial_offset.x + NOSE_PAST_FIDUCIAL)
+    : bank.pick_to_front;
   const slots = Array.from({ length: bank.count }, (_, i) => ({
     x: bank.first_pick.x + bank.pitch.x * i,
     y: bank.first_pick.y + bank.pitch.y * i,
@@ -523,9 +533,9 @@ function FeederBankShape({ bank }: { bank: FeederBank }) {
         <g key={i} transform={`translate(${p.x} ${-p.y}) rotate(${-bank.rotation})`}>
           <rect
             className="mv-feeder"
-            x={-(bank.length - ahead)}
+            x={-behind}
             y={-bank.width / 2}
-            width={bank.length}
+            width={behind + ahead}
             height={bank.width}
             rx={1.5}
           />

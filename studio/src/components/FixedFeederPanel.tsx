@@ -1,4 +1,4 @@
-import { Plus, RefreshCw } from "lucide-react";
+import { Eye, Plus, RefreshCw } from "lucide-react";
 import { api } from "../api/client";
 import { useAction } from "../api/useAction";
 import type { FeedersState, FixedFeederState } from "../api/types";
@@ -12,6 +12,8 @@ export function FixedFeederPanel({
   onSelect,
   selected,
   onAdd,
+  onLook,
+  canLook = false,
 }: {
   fixed: FixedFeederState[];
   onChanged: (state: FeedersState) => void;
@@ -19,6 +21,9 @@ export function FixedFeederPanel({
   selected?: string | null;
   /** Offer to add one. */
   onAdd?: () => void;
+  /** Offer to look at each one's next part with the top camera. */
+  onLook?: (id: string) => void;
+  canLook?: boolean;
 }) {
   const { run, pending, error } = useAction();
 
@@ -75,6 +80,21 @@ export function FixedFeederPanel({
                 </button>
               ) : (
                 <div className="item">{body}</div>
+              )}
+              {onLook && (
+                <button
+                  type="button"
+                  className="icon-button"
+                  disabled={!canLook}
+                  title={
+                    `Look at ${s.id}'s next part with the top camera, ` +
+                    "its footprint drawn over it"
+                  }
+                  aria-label={`Look at ${s.id}'s next part`}
+                  onClick={() => onLook(s.id)}
+                >
+                  <Eye size={14} aria-hidden />
+                </button>
               )}
               <button
                 type="button"

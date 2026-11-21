@@ -248,6 +248,14 @@ class OperationEvent(WireModel):
     operation: Operation
 
 
+class JobChangedEvent(WireModel):
+    """A saved job, its published revisions, or where this machine has it set up
+    changed: clients showing it fetch it again."""
+
+    type: Literal["job.changed"] = "job.changed"
+    job_id: str
+
+
 class PongEvent(WireModel):
     type: Literal["pong"] = "pong"
     server_time: datetime
@@ -265,6 +273,7 @@ Event = (
     | PresenceLostEvent
     | LeaseEvent
     | OperationEvent
+    | JobChangedEvent
     | PongEvent
     | ErrorEvent
 )

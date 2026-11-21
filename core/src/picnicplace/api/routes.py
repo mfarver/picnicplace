@@ -235,6 +235,19 @@ async def move(ctx: Context, body: MoveRequest) -> Operation:
 
 
 @router.post(
+    "/machine/park",
+    tags=["machine"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def park(ctx: Context) -> Operation:
+    """Raise the nozzles and move the head out of the way: to the park location, or else to
+    the back of its travel."""
+    return ctx.machine.start_park()
+
+
+@router.post(
     "/machine/visual-home",
     tags=["machine"],
     status_code=status.HTTP_202_ACCEPTED,

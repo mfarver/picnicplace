@@ -1,5 +1,6 @@
 import {
   Crosshair,
+  Eye,
   Focus,
   Lightbulb,
   Map as MapIcon,
@@ -19,7 +20,7 @@ import { useMachineControl } from "../api/useMachineControl";
 import { WidthSelect, WidthWarning } from "../components/TapeWidth";
 import type { FeedersState, MachineProfile, Part, RailState, SlotState, Tape } from "../api/types";
 import { CameraView } from "../components/CameraView";
-import { pocketMarks } from "../cameraMarks";
+import { pocketMarks, type CameraFootprint } from "../cameraMarks";
 import { FixedFeederDetail, type TeachWhich } from "../components/FixedFeederDetail";
 import { FixedFeederPanel } from "../components/FixedFeederPanel";
 import { Field, NumberInput } from "../components/Form";
@@ -28,6 +29,7 @@ import { Panel } from "../components/Panel";
 import { LearnedPicks } from "../components/PickCorrection";
 import { Placeholder } from "../components/Placeholder";
 import { MachineView } from "../components/machine/MachineView";
+import { useFootprint } from "../useFootprint";
 
 const shortId = (uuid: string) => `${uuid.slice(0, 6)}…${uuid.slice(-6)}`;
 
@@ -89,11 +91,51 @@ export function FeedersWorkspace() {
     if (!camera) return;
     ctl.moveTo({ X: x - camera.position.x, Y: y - camera.position.y });
   };
+
+  // The part the chosen slot or strip holds, drawn on the camera's picture where the next
+  // one is picked, as it should lie in its pocket: pin 1 in red, to compare with the part.
+  const shownPart = parts.find(
+    (p) => p.id === (slot ? slot.feeder?.assignment?.part_id : fixed?.feeder.part_id),
+  );
+  const shownFootprint = useFootprint(shownPart?.footprint_id);
+  const shownTape = tapes.find((t) => t.id === shownPart?.tape_id);
+  const pickFootprint = ((): CameraFootprint | null => {
+    if (!shownFootprint || !shownPart) return null;
+    const title = `${shownPart.id} as it should lie in its pocket, pin 1 in red`;
+    if (slot) {
+      const turn = shownTape?.rotation;
+      if (turn === null || turn === undefined) return null;
+      const angle = slot.slot.rotation + turn;
+      return { footprint: shownFootprint, x: slot.pick.x, y: slot.pick.y, angle, title };
+    }
+    if (fixed && fixed.angle !== null) {
+      const at = fixed.next ?? fixed.feeder.first;
+      return { footprint: shownFootprint, x: at.x, y: at.y, angle: fixed.angle, title };
+    }
+    return null;
+  })();
+  const lookAtSlot = (s: SlotState) => {
+    setSelected(s.slot.id);
+    setSelectedFixed(null);
+    setNotice(null);
+    cameraTo(s.pick.x, s.pick.y);
+  };
+  const lookAtFixed = (id: string) => {
+    const f = state?.fixed.find((x) => x.id === id);
+    if (!f) return;
+    setSelectedFixed(id);
+    setSelected(null);
+    setNotice(null);
+    const at = f.next ?? f.feeder.first;
+    cameraTo(at.x, at.y);
+  };
   const safeZ = () => {
     if (!description) return;
     const zAxes = new Set(description.nozzles.map((n) => n.z_axis));
     ctl.moveTo(Object.fromEntries([...zAxes].map((axis) => [axis, 0])));
   };
+
+  const park = () => void track(() => api.POST("/api/v1/machine/park"));
 
   const slotPath = (id: string) => ({ params: { path: { slot_id: id } } });
   const scan = () => void track(() => api.POST("/api/v1/feeders/scan"));
@@ -228,6 +270,7 @@ export function FeedersWorkspace() {
             info={cameras?.find((c) => c.id === camera.id)}
             fieldOfView={camera.field_of_view.x}
             marks={slot ? pocketMarks(slot) : undefined}
+            footprints={pickFootprint ? [pickFootprint] : undefined}
             at={cameraAt}
             orientation={description}
           />
@@ -239,7 +282,10 @@ export function FeedersWorkspace() {
               <p className="text-muted">
                 {state.scanned
                   ? `${found.length} feeder${found.length === 1 ? "" : "s"} found.`
-                  : "Not scanned since the core started."}
+                  : state.restored
+                    ? `Not scanned since the core started: showing the ${found.length} the ` +
+                      "last scan found. Scan before feeding (a run scans first)."
+                    : "Not scanned since the core started."}
               </p>
               <div className="button-row">
                 <button
@@ -312,7 +358,7 @@ export function FeedersWorkspace() {
           </label>
           <ul className="item-list slot-list" aria-label="Feeder slots">
             {shown.map((s) => (
-              <li key={s.slot.id}>
+              <li key={s.slot.id} className="slot-row">
                 <button
                   type="button"
                   className={s.slot.id === selected ? "item active" : "item"}
@@ -336,6 +382,21 @@ export function FeedersWorkspace() {
                     )}
                   </span>
                 </button>
+                {s.feeder?.assignment?.part_id && (
+                  <button
+                    type="button"
+                    className="icon-button"
+                    disabled={!canMove || !machine?.homed}
+                    title={
+                      `Look at ${s.slot.label}'s pick with the top camera, ` +
+                      "its part's footprint drawn over it"
+                    }
+                    aria-label={`Look at ${s.slot.label}'s pick`}
+                    onClick={() => lookAtSlot(s)}
+                  >
+                    <Eye size={14} aria-hidden />
+                  </button>
+                )}
               </li>
             ))}
             {shown.length === 0 && (
@@ -357,6 +418,8 @@ export function FeedersWorkspace() {
               setNotice(null);
             }}
             onAdd={() => void addFixed()}
+            onLook={lookAtFixed}
+            canLook={canMove && !!machine?.homed}
           />
         )}
 
@@ -366,6 +429,7 @@ export function FeedersWorkspace() {
           canMove={canMove}
           onJog={ctl.jog}
           onSafeZ={safeZ}
+          onPark={park}
         />
       </aside>
 

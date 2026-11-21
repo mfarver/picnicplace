@@ -40,8 +40,15 @@ export function LeaseStatus({ busy, onTake, onRelease }: Props) {
     );
   }
   if (!holder) {
+    // Moving the machine takes free control, but not while it is paused or busy: then
+    // nothing can be moved, so take it here.
     return (
-      <p className="lease note text-muted">No one has control. Moving the machine takes it.</p>
+      <div className="lease">
+        <span className="text-muted">No one has control. Moving the machine takes it.</span>
+        <button type="button" className="button button-sm" disabled={busy} onClick={onTake}>
+          Take control
+        </button>
+      </div>
     );
   }
   return (

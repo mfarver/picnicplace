@@ -6,6 +6,13 @@ darker (a resistor's is black), between its metal ends. On a LumenPnP's top came
 (2026-11-18, 0603 resistors in 8 mm paper tape) a pocket with a part had 26 to 80% of
 its middle darker than a third of the paper's brightness; an empty pocket had at most 6%.
 
+A ceramic capacitor's body is gray, not black: about half the paper's brightness, as an
+empty pocket's floor is, so its middle alone does not tell (2026-11-20, 0603 capacitors in
+8 mm paper tape: 0.02 to 0.04 of it dark, where a resistor's is 0.9 or more). Its metal
+ends do: where a part's two ends would lie (looked for a few tenths of a millimeter either
+way along the part), a capacitor's were 1.01 to 1.14 of the paper's brightness, and an
+empty pocket's floor at most 0.71.
+
 A part that jumps out of its pocket as the cover tape is peeled lies on the tape beside
 the pockets, right side up or upside down (its white back is a little darker than the
 paper). Anything darker than the paper inside the tape, away from the pockets and the
@@ -26,7 +33,22 @@ from picnicplace.camera.source import Image
 PART_DARK = 0.35
 """A pixel darker than this fraction of the paper's brightness is a part's body."""
 PART_FRACTION = 0.15
-"""A pocket holds a part if at least this much of its middle is that dark."""
+"""A pocket holds a part if at least this much of its middle is that dark..."""
+PART_ENDS = 0.85
+"""...or if, where its two metal ends would lie, both are at least this fraction of the
+paper's brightness, and its middle darker than paper (``PAPER_MIDDLE``)."""
+PAPER_MIDDLE = 0.8
+"""A pocket whose middle is this fraction of the paper's brightness or more is not judged
+by its ends: it is paper (a pocket looked for in the wrong place)."""
+END_IN_MM = 0.15
+"""Each end is looked at this far in from the part's end, over ``END_LENGTH_MM`` along
+the part and two thirds of its width across."""
+END_LENGTH_MM = 0.2
+END_SLIDE_MM = 0.35
+"""The two ends are looked for together, slid up to this far either way along the part:
+a part lies anywhere in its pocket, and the pocket is found to a few tenths of a
+millimeter."""
+END_STEP_MM = 0.05
 CORE = 0.6
 """The middle looked at: a square this fraction of the part's smaller side, clear of its
 metal ends and of the pocket's walls."""
@@ -54,6 +76,73 @@ def _gray(image: Image) -> np.ndarray:
     return cv2.GaussianBlur(gray, (5, 5), 0)
 
 
+def _paper(
+    gray: np.ndarray, x: float, y: float, big: float, mm_per_px: float
+) -> tuple[float, np.ndarray, int, int, np.ndarray, np.ndarray] | None:
+    """The paper's brightness in a ring round the pocket at (``x``, ``y``) pixels, past
+    ``big`` mm from its middle, and the patch it was found in (with its corner and pixel
+    grids); None if the ring is not all in view, or is not even paper."""
+    h, w = gray.shape
+    r1 = (big + RING_GAP_MM) / mm_per_px
+    r2 = r1 + RING_WIDTH_MM / mm_per_px
+    if x - r2 < 0 or y - r2 < 0 or x + r2 >= w or y + r2 >= h:
+        return None
+    x0, y0 = math.floor(x - r2), math.floor(y - r2)
+    patch = gray[y0 : math.ceil(y + r2) + 1, x0 : math.ceil(x + r2) + 1].astype(np.float32)
+    yy, xx = np.mgrid[0 : patch.shape[0], 0 : patch.shape[1]]
+    dist = np.hypot(xx + x0 - x, yy + y0 - y)
+    ring = patch[(dist >= r1) & (dist <= r2)]
+    paper = float(np.median(ring))
+    if paper < RING_MIN or float(np.percentile(ring, 20)) < RING_EVEN * paper:
+        return None
+    return paper, patch, x0, y0, xx, yy
+
+
+def pocket_ends(
+    image: Image,
+    x: float,
+    y: float,
+    body: tuple[float, float],
+    mm_per_px: float,
+    outline: tuple[float, float] | None = None,
+    axis: float = 0.0,
+) -> float | None:
+    """How bright a part's metal ends would be in the pocket at (``x``, ``y``) pixels: of
+    the two places where the ends of a part ``body`` mm (its two sides) lie, its longer side
+    along ``axis`` (degrees counterclockwise from the picture's right, as seen), the dimmer
+    one's mean, as a fraction of the paper's brightness round the pocket; the pair slid
+    along the part (``END_SLIDE_MM``) to where it is brightest. 0 if the pocket's middle is
+    as bright as paper (``PAPER_MIDDLE``); None if the paper round it is not all in view."""
+    gray = _gray(image)
+    found = _paper(gray, x, y, max(outline or body) / 2, mm_per_px)
+    if found is None:
+        return None
+    paper, patch, x0, y0, xx, yy = found
+    length, width = max(body), min(body)
+    a = math.radians(axis)
+    dx, dy = xx + x0 - x, yy + y0 - y
+    along = (dx * math.cos(a) - dy * math.sin(a)) * mm_per_px
+    across = (dx * math.sin(a) + dy * math.cos(a)) * mm_per_px
+    middle = patch[(np.abs(along) <= CORE * width / 2) & (np.abs(across) <= CORE * width / 2)]
+    if middle.size == 0 or float(middle.mean()) >= PAPER_MIDDLE * paper:
+        return 0.0
+    end = length / 2 - END_IN_MM
+    band = np.abs(across) <= width / 3
+    best: float | None = None
+    steps = round(END_SLIDE_MM / END_STEP_MM)
+    for k in range(-steps, steps + 1):
+        shift = k * END_STEP_MM
+        means: list[float] = []
+        for sign in (-1, 1):
+            inside = band & (np.abs(along - shift - sign * end) <= END_LENGTH_MM / 2)
+            if not inside.any():
+                break
+            means.append(float(patch[inside].mean()))
+        if len(means) == 2 and (best is None or min(means) > best):
+            best = min(means)
+    return None if best is None else best / paper
+
+
 def pocket_darkness(
     image: Image,
     x: float,
@@ -67,29 +156,23 @@ def pocket_darkness(
     leads and all, ``outline`` (default: the body): the pocket is a little larger. None if
     the paper round the pocket is not all in view, so the pocket cannot be judged."""
     gray = _gray(image)
-    h, w = gray.shape
-    big, small = max(outline or body) / 2, min(body) / 2
-    r1 = (big + RING_GAP_MM) / mm_per_px
-    r2 = r1 + RING_WIDTH_MM / mm_per_px
-    if x - r2 < 0 or y - r2 < 0 or x + r2 >= w or y + r2 >= h:
+    small = min(body) / 2
+    found = _paper(gray, x, y, max(outline or body) / 2, mm_per_px)
+    if found is None:
         return None
-    x0, y0 = math.floor(x - r2), math.floor(y - r2)
-    patch = gray[y0 : math.ceil(y + r2) + 1, x0 : math.ceil(x + r2) + 1].astype(np.float32)
-    yy, xx = np.mgrid[0 : patch.shape[0], 0 : patch.shape[1]]
-    dist = np.hypot(xx + x0 - x, yy + y0 - y)
-    ring = patch[(dist >= r1) & (dist <= r2)]
-    paper = float(np.median(ring))
-    if paper < RING_MIN or float(np.percentile(ring, 20)) < RING_EVEN * paper:
-        return None
+    paper, patch, x0, y0, xx, yy = found
     half = max(1, round(CORE * small / mm_per_px))
     core = patch[(np.abs(xx + x0 - x) <= half) & (np.abs(yy + y0 - y) <= half)]
     return float((core < PART_DARK * paper).mean())
 
 
-def holds_part(darkness: float | None) -> bool | None:
-    """Whether a pocket holds a part, from ``pocket_darkness``; None if it could not be
-    judged."""
-    return None if darkness is None else darkness >= PART_FRACTION
+def holds_part(darkness: float | None, ends: float | None = None) -> bool | None:
+    """Whether a pocket holds a part, from ``pocket_darkness`` and, if looked at,
+    ``pocket_ends``: a dark middle, or bright metal ends either side of a middle darker than
+    paper (a gray capacitor). None if it could not be judged."""
+    if darkness is None:
+        return None
+    return darkness >= PART_FRACTION or (ends is not None and ends >= PART_ENDS)
 
 
 def loose_parts(

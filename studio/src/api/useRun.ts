@@ -49,7 +49,8 @@ export function useJobLayout(
   revision?: number | null,
   refreshKey: unknown = 0,
 ) {
-  const { status } = useCore();
+  const { status, jobChanges } = useCore();
+  const changes = jobId ? (jobChanges[jobId] ?? 0) : 0;
   const [layout, setLayout] = useState<{ jobId: string; layout: JobLayout | null } | null>(
     null,
   );
@@ -66,6 +67,6 @@ export function useJobLayout(
     return () => {
       cancelled = true;
     };
-  }, [status, jobId, revision, refreshKey]);
+  }, [status, jobId, revision, refreshKey, changes]);
   return layout && layout.jobId === jobId ? layout.layout : null;
 }

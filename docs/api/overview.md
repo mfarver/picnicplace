@@ -21,7 +21,7 @@ generate a client from it, as the Studio does.
 | Channel | Use |
 |---|---|
 | REST, JSON over HTTP | Machine description and state, commands, cameras, the control lease |
-| WebSocket at `/api/v1/events` | Live state, operation progress, and presence. A client must hold this connection to move the machine. |
+| WebSocket at `/api/v1/events` | Live state, operation progress, and presence, and `job.changed` when a saved job, its revisions, or where this machine has it set up changes (clients showing the job fetch it again). A client must hold this connection to move the machine. |
 | MJPEG over HTTP | Camera streams and snapshots at the size, rate, and quality the client asks for |
 
 ## Endpoints today
@@ -36,6 +36,7 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/machine/connect` | Connect to the machine's controller |
 | `POST /api/v1/machine/home` | Home, then visual home if the profile enables it |
 | `POST /api/v1/machine/move` | Move to a position, traveling at safe Z |
+| `POST /api/v1/machine/park` | Raise the nozzles and move the head to the park location (else the back) |
 | `POST /api/v1/machine/jog` | Jog one axis by a distance |
 | `PUT /api/v1/machine/outputs/{id}` | Switch a pump, valve, or light |
 | `PUT /api/v1/machine/lights/{id}` | Set a light's color and brightness (each 0 to 255; brightness 0 is off), if the profile marks it colored |
@@ -79,6 +80,7 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/jobs/{id}/layout` | Where what runs for a job (a revision, else its working copy) lands on this machine |
 | `POST /api/v1/jobs/layout` | Where a job's placements land on the machine, and what stops it |
 | `POST /api/v1/jobs/find-location` | A place on the bed where a job fits |
+| `POST /api/v1/jobs/locate` | Where a job's panel is on the bed, from one of its fiducials (`ref`, and `copy_id` for a board copy's): by default, the one the top camera is centered on now, the panel turned by `rotation` (default: the job's). Nothing is saved |
 | `GET`, `POST /api/v1/jobs/{id}/revisions`; `GET /api/v1/jobs/{id}/revisions/{n}` | A job's published revisions; publish the saved job as the next one |
 | `GET /api/v1/jobs/{id}/revisions/{n}/file` | A revision's job file, exactly as kept |
 | `POST /api/v1/jobs/import` | Load a job file from disk: a published revision, or a job saved before revisions |
@@ -100,8 +102,13 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/placement` | What each nozzle holds, how it sits once aligned, and the configured pick correction |
 | `POST /api/v1/placement/pick`, `…/align`, `…/place` | Pick from a feeder slot; find the part on the bottom camera; place it at a location and angle |
 | `POST /api/v1/placement/pick-and-place`, `…/discard`, `…/release` | All three steps at once; drop a held part in the discard bin; a part was taken off its nozzle by hand (suction off, part forgotten) |
+| `POST /api/v1/placement/train` | Pick a part, try every light and way of seeing it over the bottom camera at four turns, keep the steadiest for the part (to be approved), take its approval pictures, and drop it in the discard. Needs control |
+| `GET /api/v1/placement/trained` | Parts trained on this machine: how each is seen, whether approved or found in a run (used before approval), and the best ways tried |
+| `GET /api/v1/placement/trained/{part_id}/images/{name}` | A trained part's picture: `overlay` (its footprint over it), `beside` (its footprint beside it), or `light-NN` (under each light tried). Takes the token as a query parameter too, for `<img>` tags |
+| `POST /api/v1/placement/trained/{part_id}/approve`, `DELETE …/trained/{part_id}` | Approve what training found, so alignment uses it; or forget it. Need control |
 | `POST /api/v1/run/plan` | A dry run of a job's published revision (its newest, or one given): each placement's feeder and nozzles, and what blocks any |
-| `POST /api/v1/run/start`, `…/pause`, `…/step`, `…/resume`, `…/stop`; `GET /api/v1/run` | Run a job (a feeder scan, board fiducials, then batches of pick, align, and place, each feeder's fiducial found on its first pick), optionally starting in step mode; its progress |
+| `POST /api/v1/run/start`, `…/pause`, `…/step`, `…/resume`, `…/stop`; `GET /api/v1/run` | Run a job (a feeder scan, board fiducials, then batches of pick, align, and place, each feeder's fiducial found on its first pick), optionally starting in step mode, and optionally checking each two-terminal chip with the top camera once placed (`check_placements`: pausing on one off its pads, turned, or not there, and when its pads show the board has moved, finding the board again on resume; where it was found, how much of it is on its pads, and where the pads were found are kept with each item); its progress, and `stats`: picks tried and how many came up empty, parts the bottom camera looked for and could not find, placements, and placements checked and how many were off their pads |
+| `GET /api/v1/run/checks/{index}` | The current run's checked placement (by plan item) as the top camera saw it: where it was sent (orange) and where it was found (magenta). Takes the token as a query parameter too, for `<img>` tags |
 | `POST /api/v1/run/check-board`; `GET /api/v1/run/board-check` | Find a job's board by its fiducials and fit it, placing nothing; the last check |
 | `PUT /api/v1/run/items/{index}` | Skip a placement, or take back a skip |
 | `POST`, `GET /api/v1/cameras/captures`; `GET …/captures/{id}.png` | Save full-resolution frames with the machine's state; list and fetch them |

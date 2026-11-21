@@ -82,10 +82,12 @@ the demo board from PicnicPlace's tests: a KiKit panel of four.
 
 === "Run"
 
-    ![The Run workspace partway through the demo panel](images/studio-run.jpg){ .pp-screenshot }
+    ![The Run workspace, paused on a part that landed off its target](images/studio-run.jpg){ .pp-screenshot }
     /// caption
-    A run, paused halfway: the board found by its fiducials, each placement checked off
-    with the nozzle that placed it, and the parts left out and why.
+    A run in the simulator, with one nozzle made to drop its parts 0.3 mm off: each part
+    is checked with the top camera once placed, the run pauses on one off its target, and
+    its picture is on its line. Above, the run's statistics; below, the parts left out and
+    why.
     ///
 
 ## Why PicnicPlace
@@ -156,8 +158,8 @@ assumptions. See the [LumenPnP notes](hardware/lumenpnp-v4.md).
 | M0: Skeleton | Core, simulator, event socket, Studio shell | Done |
 | M1: Manual control | Machine profiles, machine view, jogging, safe-Z interlock, control lease, Marlin driver, camera streams | Done, and working on a real LumenPnP v4.1 |
 | M2: Calibration | Visual homing (also on a real LumenPnP), camera scale, the bottom camera, nozzle offsets (with a paper disc or the calibration token, found by its opening), heights by touch, vacuum levels, nozzle runout, a tip seat check on a paper pad after each tip change, discard and park locations, and the setup wizard (done in the simulator); lens calibration | In progress |
-| M3: Single placement | Parts library (with shared tapes, pin 1, and a tape preview), Photon feeders (discovery, part assignment, feeding, slots calibrated from feeder fiducials, pockets found from sprocket holes, and in paper tape whether a pocket holds a part and parts lying loose, tested on real frames), pick, bottom-camera alignment (the part's outline, then its footprint's pads, both ways round for a SOT-23; tested on real frames), ring lights set to a color, and place: done in the simulator, to be tried on a real machine | In progress |
-| M4: Jobs | KiCad board and KiKit panel import, placing a job within every nozzle's reach, board fiducials, planner and dry run, running a whole job with pause, step, and skip, strips and trays on the bed, feeders rescanned and each one's fiducial found on its first pick in a run, picks kept centered by the top or the bottom camera or both (auto), and a flight recorder (done in the simulator); run history | In progress |
+| M3: Single placement | Parts library (with shared tapes, pin 1, and a tape preview), Photon feeders (discovery, part assignment, feeding, slots calibrated from feeder fiducials, pockets found from sprocket holes, and in paper tape whether a pocket holds a part and parts lying loose, tested on real frames), pick, bottom-camera alignment (the part's outline, then its footprint's pads, both ways round for a SOT-23; tested on real frames), ring lights set to a color, training how the bottom camera sees a part (approved by the operator from its footprint drawn over it; in a run, with the part it then places, on a new part's first pick and before a part no other look sees is given up), and place: done in the simulator, to be tried on a real machine | In progress |
+| M4: Jobs | KiCad board and KiKit panel import, placing a job within every nozzle's reach (or from a fiducial under the camera), board fiducials, planner and dry run (warning of a part whose footprint is not the board's), running a whole job with pause, step, and skip (parking the head on a pause for the operator, and kept on disk to resume after a restart), strips and trays on the bed (drawn to scale on the map), and a placement's or pick's footprint drawn on the top camera's picture, feeders rescanned (the last scan kept over a restart) and each one's fiducial found on its first pick in a run, picks kept centered by the top or the bottom camera or both (auto), each part looked at again by the bottom camera after its last turn, and checked against its pads by the top camera once placed, and a flight recorder (done in the simulator; a first real board placed, 170 of 179 machine parts); run history | In progress |
 | M5: 1.0 | Packaging and user documentation; the operator app at the machine and the Creator, a website for preparing jobs (job revisions, accounts, house parts, problem reports), a calibration checklist, and parts counted on every reel and tray | Started: job revisions and job files, which runs run; the calibration checklist; the top and bottom cameras and the nozzle offsets calibrated; board and part heights found by touch; each nozzle's vacuum levels measured; heights and vacuum levels kept for each nozzle tip, and the fitted tip's size seen by the bottom camera; tip changes asked for in a dialog, with the head at the front; the setup wizard, choosing the machine, its serial port and cameras and calibrating it, with the machine limited until it is done; homing asks that the nozzles be level; the PicnicPlace datum and test board drawn in KiCad, and the datum's printed holder modeled (not yet made); a first control panel at the machine, a 7" touchscreen on USB showing the machine's state, with Home, Pause and Stop, and a printed enclosure for it and an E-stop designed (not yet made) |
 
 ## Get involved

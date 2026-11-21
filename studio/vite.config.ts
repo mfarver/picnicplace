@@ -15,5 +15,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Stylesheets are read as text by a test that checks every rule is closed.
+    css: { include: [/\/src\/styles\/.+\.css/] },
   },
 });

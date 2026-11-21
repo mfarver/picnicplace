@@ -636,6 +636,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/locate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Job Locate
+         * @description Where the job's panel is on the bed, from one of its fiducials: by default, the one
+         *     the top camera is centered on now. Nothing is saved: the job's location is set when
+         *     it is saved. The run's board check then finds every fiducial and fits the board.
+         */
+        post: operations["job_locate_api_v1_jobs_locate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -1350,6 +1372,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/machine/park": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Park
+         * @description Raise the nozzles and move the head out of the way: to the park location, or else to
+         *     the back of its travel.
+         */
+        post: operations["park_api_v1_machine_park_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/machine/pause": {
         parameters: {
             query?: never;
@@ -1641,6 +1684,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/placement/train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Train how the bottom camera sees a part
+         * @description Pick a part, try every light and way of seeing it over the bottom camera, keep the
+         *     best for the part (to be approved), and drop the part in the discard.
+         */
+        post: operations["train_api_v1_placement_train_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/trained": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trained Parts
+         * @description Parts trained on this machine, and how the bottom camera sees each.
+         */
+        get: operations["trained_parts_api_v1_placement_trained_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/trained/{part_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget Trained
+         * @description Forget what training found for a part: it is seen the usual way again.
+         */
+        delete: operations["forget_trained_api_v1_placement_trained__part_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/trained/{part_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Trained
+         * @description The footprint lines up with the part, the right way round: use what training
+         *     found from now on.
+         */
+        post: operations["approve_trained_api_v1_placement_trained__part_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/placement/trained/{part_id}/images/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trained Image
+         * @description A picture kept with a trained part: 'overlay' (its footprint drawn over it),
+         *     'beside' (its footprint beside it), or 'light-NN' (under the NNth light tried).
+         */
+        get: operations["trained_image_api_v1_placement_trained__part_id__images__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/presence": {
         parameters: {
             query?: never;
@@ -1797,6 +1943,27 @@ export interface paths {
          *     The result is kept (``GET /api/v1/run/board-check``).
          */
         post: operations["check_board_api_v1_run_check_board_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/run/checks/{index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check Picture
+         * @description The current run's checked placement ``index`` (its plan item), as the top camera saw
+         *     it: where it was sent (orange) and where it was found (magenta).
+         */
+        get: operations["check_picture_api_v1_run_checks__index__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2545,6 +2712,51 @@ export interface components {
              */
             width: number | null;
         };
+        /**
+         * Candidate
+         * @description One way of seeing a part, as training judged it.
+         */
+        Candidate: {
+            /**
+             * Angle Spread
+             * @description How far the part's angle on the nozzle wandered (degrees).
+             */
+            angle_spread: number | null;
+            /**
+             * Fit
+             * @description Pad fit residual, or outline size error, the worst frame's (mm).
+             */
+            fit: number | null;
+            /**
+             * Flipped
+             * @description Its pads showed the part turned 180 degrees from the tape.
+             * @default false
+             */
+            flipped: boolean;
+            /** Frames */
+            frames: number;
+            /**
+             * Light Index
+             * @description Which light's thumbnail shows it (light-NN.jpg).
+             */
+            light_index: number | null;
+            /**
+             * Offset Spread
+             * @description How far its place on the nozzle wandered (mm).
+             */
+            offset_spread: number | null;
+            /**
+             * Score
+             * @description Lower is better; none: it did not find the part every time.
+             */
+            score: number | null;
+            /**
+             * Seen
+             * @description Frames it found the part in.
+             */
+            seen: number;
+            vision: components["schemas"]["PartVision"];
+        };
         /** CaptureInfo */
         CaptureInfo: {
             /** Camera */
@@ -2797,6 +3009,11 @@ export interface components {
             fixed: components["schemas"]["FixedFeederState"][];
             /** Rails */
             rails: components["schemas"]["RailState"][];
+            /**
+             * Restored
+             * @default false
+             */
+            restored: boolean;
             /** Scanned */
             scanned: boolean;
             /** Slots */
@@ -2869,7 +3086,7 @@ export interface components {
             part_id?: string | null;
             /**
              * Pick Height
-             * @description Nozzle height at the top of a part. Empty: the board height plus the part's height, which is right only for parts lying on the bed itself.
+             * @description Nozzle height at the top of a part. Empty: on a strip, its parts' top is searched for by touch from safe Z on the first pick (with sniff_heights on); on a tray, the board height plus the part's height.
              */
             pick_height?: number | null;
             /**
@@ -2936,7 +3153,7 @@ export interface components {
             part_id: string | null;
             /**
              * Pick Height
-             * @description Nozzle height at the top of a part. Empty: the board height plus the part's height, which is right only for parts lying on the bed itself.
+             * @description Nozzle height at the top of a part. Empty: on a strip, its parts' top is searched for by touch from safe Z on the first pick (with sniff_heights on); on a tray, the board height plus the part's height.
              */
             pick_height: number | null;
             /**
@@ -3253,6 +3470,20 @@ export interface components {
              * @constant
              */
             version: 1;
+        };
+        /**
+         * JobChangedEvent
+         * @description A saved job, its published revisions, or where this machine has it set up
+         *     changed: clients showing it fetch it again.
+         */
+        JobChangedEvent: {
+            /** Job Id */
+            job_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "job.changed";
         };
         /**
          * JobDesign
@@ -3673,6 +3904,28 @@ export interface components {
             /** Y Points */
             y_points?: ("back" | "front") | null;
         };
+        /** LocateRequest */
+        LocateRequest: {
+            /** @description Where the fiducial is. Empty: where the top camera is now. */
+            at?: components["schemas"]["Point"] | null;
+            /**
+             * Copy Id
+             * @description Its board copy, or empty for a fiducial on the panel.
+             */
+            copy_id?: string | null;
+            /** @description The job, saved or not. */
+            job: components["schemas"]["Job-Input"];
+            /**
+             * Ref
+             * @description The fiducial the top camera is centered on, such as FID1.
+             */
+            ref: string;
+            /**
+             * Rotation
+             * @description How far the panel is turned. Empty: the job's, or 0 if it has none.
+             */
+            rotation?: number | null;
+        };
         /** Location */
         Location: {
             /**
@@ -3862,6 +4115,12 @@ export interface components {
             nozzles: components["schemas"]["Nozzle"][];
             /** Outputs */
             outputs: components["schemas"]["Output"][];
+            /**
+             * Place Press
+             * @description How far below a part's top, resting on the board, the nozzle goes to place it (mm): a spring-loaded nozzle presses the part into paste or tape. 0 for a nozzle without the travel to spare.
+             * @default 0
+             */
+            place_press: number;
             /**
              * @description Where boards can go so that every nozzle can place anywhere on them: the
              *     nozzles' reach, all of them, within the staging plates (or the work area). Boards
@@ -4667,6 +4926,25 @@ export interface components {
             /** Slot Ids */
             slot_ids: string[];
         };
+        /**
+         * PartVision
+         * @description How the bottom camera is to see a part.
+         */
+        PartVision: {
+            /** @description The ring light's color and brightness; none: the usual. */
+            light: components["schemas"]["LightColor-Output"] | null;
+            /**
+             * Method
+             * @default auto
+             * @enum {string}
+             */
+            method: "auto" | "pads" | "outline";
+            /**
+             * Threshold
+             * @description Metal is what is brighter than this fraction of how bright the part looks; none: a fixed level.
+             */
+            threshold: number | null;
+        };
         /** PickAndPlaceRequest */
         PickAndPlaceRequest: {
             /**
@@ -4868,6 +5146,55 @@ export interface components {
             x: number;
             /** Y */
             y: number;
+        };
+        /**
+         * PlacementCheck
+         * @description Where the top camera found a part just placed, against where it was sent.
+         */
+        PlacementCheck: {
+            /**
+             * Checked
+             * @description Judged at all: false when the camera could not make the part out well enough to say (a gray ceramic capacitor on a board, say), so the run went on.
+             * @default true
+             */
+            checked: boolean;
+            /**
+             * Dx
+             * @description Machine X from where it was sent, mm.
+             */
+            dx: number;
+            /** Dy */
+            dy: number;
+            /** Ok */
+            ok: boolean;
+            /**
+             * On Pads
+             * @description How much of the part's metal ends lies over its pads: of each end, the share over its pad, and of the two the less, 0 to 1. None if the pads were not seen.
+             */
+            on_pads: number | null;
+            /**
+             * Pads Dx
+             * @description Machine X of the pads from where the board's fit puts them, mm: far off, the board has moved. None if the pads were not seen.
+             */
+            pads_dx: number | null;
+            /** Pads Dy */
+            pads_dy: number | null;
+            /**
+             * Picture
+             * @description A picture of it is kept (GET /api/v1/run/checks/{index}).
+             * @default false
+             */
+            picture: boolean;
+            /**
+             * Score
+             * @description How well the chip's pattern matched, -1 to 1.
+             */
+            score: number;
+            /**
+             * Turn
+             * @description Degrees from the angle asked for.
+             */
+            turn: number;
         };
         /** PlacementState */
         PlacementState: {
@@ -5158,7 +5485,7 @@ export interface components {
              * Reason
              * @enum {string}
              */
-            reason: "manual" | "run";
+            reason: "manual" | "run" | "train";
             /**
              * Recording
              * @description True while it is still recording.
@@ -5238,6 +5565,8 @@ export interface components {
         };
         /** RunItem */
         RunItem: {
+            /** @description Where the top camera found the part after placing it. */
+            check: components["schemas"]["PlacementCheck"] | null;
             /** Copy Id */
             copy_id: string | null;
             /**
@@ -5315,6 +5644,12 @@ export interface components {
              * @description Nozzle height at the board's top, found by touch on a fiducial at the start of the run. Empty if not measured: the job's or the profile's is used.
              */
             board_z: number | null;
+            /**
+             * Check Placements
+             * @description Look at each part with the top camera once placed, pausing on a bad one.
+             * @default false
+             */
+            check_placements: boolean;
             /** @description The step under way. Kept when the run pauses on a problem, to show where it stopped; empty between batches and when the run ends. */
             current: components["schemas"]["picnicplace__job__run__RunStep"] | null;
             /**
@@ -5332,6 +5667,12 @@ export interface components {
             held: {
                 [key: string]: number;
             };
+            /**
+             * Interrupted
+             * @description The core stopped in the middle of this run (a restart, a crash, a power cut) and read it back from disk when it started again. Cleared on resume.
+             * @default false
+             */
+            interrupted: boolean;
             /** Job Id */
             job_id: string;
             /**
@@ -5369,6 +5710,7 @@ export interface components {
              * Format: date-time
              */
             started_at: string;
+            stats: components["schemas"]["RunStats"];
             /**
              * Status
              * @enum {string}
@@ -5380,6 +5722,60 @@ export interface components {
              */
             stop_requested: boolean;
         };
+        /**
+         * RunStats
+         * @description What went wrong how often in a run, to tell how well it went.
+         */
+        RunStats: {
+            /**
+             * Alignments
+             * @description Parts the bottom camera looked for.
+             * @default 0
+             */
+            alignments: number;
+            /**
+             * Bad Placements
+             * @description Checked placements off their target, turned, or not found.
+             * @default 0
+             */
+            bad_placements: number;
+            /**
+             * Checked
+             * @description Placements checked with the top camera.
+             * @default 0
+             */
+            checked: number;
+            /**
+             * Empty Picks
+             * @description Picks that came up without a part.
+             * @default 0
+             */
+            empty_picks: number;
+            /**
+             * Failed Alignments
+             * @description Parts the bottom camera could not find (discarded).
+             * @default 0
+             */
+            failed_alignments: number;
+            /**
+             * Picks
+             * @description Picks tried.
+             * @default 0
+             */
+            picks: number;
+            /**
+             * Placed
+             * @description Parts placed.
+             * @default 0
+             */
+            placed: number;
+            /**
+             * Unsure
+             * @description Checked placements the camera could not make out well enough to judge.
+             * @default 0
+             */
+            unsure: number;
+        };
         /** SerialPort */
         SerialPort: {
             /** Device */
@@ -5390,7 +5786,7 @@ export interface components {
              */
             label: string;
         };
-        ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
+        ServerEvent: components["schemas"]["HelloEvent"] | components["schemas"]["MachineStateEvent"] | components["schemas"]["PresenceEvent"] | components["schemas"]["PresenceLostEvent"] | components["schemas"]["LeaseEvent"] | components["schemas"]["OperationEvent"] | components["schemas"]["JobChangedEvent"] | components["schemas"]["PongEvent"] | components["schemas"]["ErrorEvent"];
         /** SetupChoice */
         SetupChoice: {
             /** Cameras */
@@ -5567,6 +5963,11 @@ export interface components {
         };
         /** StartRequest */
         StartRequest: {
+            /**
+             * Check Placements
+             * @description Look at each two-terminal chip with the top camera once placed, pausing on one off its target, turned, or not there. Empty: the config's choice.
+             */
+            check_placements?: boolean | null;
             /** Job Id */
             job_id: string;
             /**
@@ -5754,7 +6155,7 @@ export interface components {
             at?: components["schemas"]["Point"] | null;
             /**
              * Which
-             * @description The first part; the last part of the first row (sets the step along a row); or the last part of the last row (sets the step from row to row).
+             * @description The first part; the last part of the first row (sets the step along a row, and on a strip whose tape's pitch the library gives, how many parts it holds); or the last part of the last row (sets the step from row to row).
              * @enum {string}
              */
             which: "first" | "row_end" | "last";
@@ -5789,6 +6190,63 @@ export interface components {
              * @description The nozzles to measure. Empty: those whose tip has no height yet.
              */
             nozzle_ids?: string[] | null;
+        };
+        /** TrainRequest */
+        TrainRequest: {
+            /** Nozzle Id */
+            nozzle_id: string;
+            /** Pick Correction */
+            pick_correction?: ("top" | "bottom" | "off" | "auto") | null;
+            /**
+             * Slot Id
+             * @description A feeder slot, or a strip or tray on the bed (T1, ...).
+             */
+            slot_id: string;
+        };
+        /** TrainedPart */
+        TrainedPart: {
+            /**
+             * Approved
+             * @description The operator saw the footprint line up with the part, the right way round; alignment uses a trained part's settings only once approved, or found in a run.
+             * @default false
+             */
+            approved: boolean;
+            /**
+             * Candidates
+             * @description The best ways tried, best first.
+             */
+            candidates: components["schemas"]["Candidate"][];
+            /**
+             * Found In Run
+             * @description Found during a run, by training the part it then placed or by looking at it other ways: used from then on, before it is approved.
+             * @default false
+             */
+            found_in_run: boolean;
+            /** Message */
+            message: string;
+            /** Nozzle */
+            nozzle: string;
+            /** Part Id */
+            part_id: string;
+            /**
+             * Recording
+             * @description The recording of the training.
+             */
+            recording: string | null;
+            /** Tip */
+            tip: string | null;
+            /**
+             * Trained At
+             * Format: date-time
+             */
+            trained_at: string;
+            /**
+             * Tried
+             * @description How many ways of seeing it were tried.
+             * @default 0
+             */
+            tried: number;
+            vision: components["schemas"]["PartVision"];
         };
         /**
          * VacuumLevels
@@ -5979,7 +6437,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "scanning" | "finding_fiducials" | "measuring_board" | "finding_feeder" | "picking" | "aligning" | "placing";
+            action: "scanning" | "finding_fiducials" | "measuring_board" | "finding_feeder" | "picking" | "aligning" | "placing" | "checking";
             /**
              * Index
              * @description The placement, for stage 'item'.
@@ -7408,6 +7866,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    job_locate_api_v1_jobs_locate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineLocation-Output"];
+                };
+            };
+            /** @description The machine is not homed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The job has no such fiducial. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -9190,6 +9690,47 @@ export interface operations {
             };
         };
     };
+    park_api_v1_machine_park_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     pause_api_v1_machine_pause_post: {
         parameters: {
             query?: never;
@@ -9755,6 +10296,170 @@ export interface operations {
             };
         };
     };
+    train_api_v1_placement_train_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trained_parts_api_v1_placement_trained_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrainedPart"][];
+                };
+            };
+        };
+    };
+    forget_trained_api_v1_placement_trained__part_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_trained_api_v1_placement_trained__part_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrainedPart"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trained_image_api_v1_placement_trained__part_id__images__name__get: {
+        parameters: {
+            query?: {
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                part_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_presence_api_v1_presence_get: {
         parameters: {
             query?: never;
@@ -10081,6 +10786,38 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_picture_api_v1_run_checks__index__get: {
+        parameters: {
+            query?: {
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

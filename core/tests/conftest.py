@@ -22,7 +22,8 @@ TEST_PROFILE = Path(__file__).parent / "profiles" / "test-machine.toml"
 def fast_config(**overrides: Any) -> Config:
     """A config for the test machine, with a fast simulator and short presence timers."""
     data: dict[str, Any] = {
-        "machine": {"sim_time_scale": 100.0, "profile": str(TEST_PROFILE)},
+        # No training on first picks unless a test asks: it takes many frames.
+        "machine": {"sim_time_scale": 100.0, "profile": str(TEST_PROFILE), "train_new": "off"},
         "presence": {"grace_period_s": 0.2, "heartbeat_timeout_s": 5.0},
         "data": {"dir": tempfile.mkdtemp(prefix="picnicplace-test-")},
     }
@@ -93,13 +94,14 @@ class Session:
     def state(self) -> dict[str, Any]:
         return self.client.get("/api/v1/machine").json()
 
-    def wait(self, response: httpx.Response) -> dict[str, Any]:
+    def wait(self, response: httpx.Response, limit: int = 500) -> dict[str, Any]:
         """Wait for the operation a 202 response started, and return it finished. Sends a
         heartbeat first, as the Studio does, so a test of several operations stays
-        connected."""
+        connected. ``limit``: events to read before giving up, for a long operation."""
         assert response.status_code == 202, response.json()
         self.ws.send_json({"type": "ping"})
-        return receive_until(self.ws, operation_done(response.json()["id"]))["operation"]
+        done = operation_done(response.json()["id"])
+        return receive_until(self.ws, done, limit)["operation"]
 
     def home(self) -> None:
         assert self.wait(self.post("/api/v1/machine/home"))["status"] == "succeeded"

@@ -2,6 +2,7 @@ import {
   Check,
   Circle,
   CircleAlert,
+  Eye,
   LoaderCircle,
   Minus,
   RefreshCw,
@@ -9,8 +10,9 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { mediaUrl } from "../api/client";
 import type { RunItem, RunState } from "../api/types";
-import { focusIndex, runSteps, type RunStepRow } from "../runSteps";
+import { focusIndex, padsMoved, runSteps, type RunStepRow } from "../runSteps";
 
 /**
  * A run's steps as a checklist, from the moment it is planned: each one checked off as
@@ -27,6 +29,9 @@ export function RunSteps({
   large = false,
   canSignal = false,
   onSkip,
+  onLook,
+  looking = null,
+  canLook = false,
 }: {
   items: RunItem[];
   /** The run of this job, if one has been started. */
@@ -39,6 +44,11 @@ export function RunSteps({
   canSignal?: boolean;
   /** Offer to skip placements (and put skipped ones back). */
   onSkip?: (item: RunItem, skip: boolean) => void;
+  /** Offer to look at each placement with the top camera, its footprint drawn over it. */
+  onLook?: (item: RunItem) => void;
+  /** The placement being looked at, by index. */
+  looking?: number | null;
+  canLook?: boolean;
 }) {
   const all = runSteps(items, run, fiducials, hasBus);
   const focus = focusIndex(all);
@@ -48,6 +58,9 @@ export function RunSteps({
 
   useFollow(list, focusKey, around === undefined);
   const fit = useFit(list, rows.length, large);
+  const [enlarged, setEnlarged] = useState<RunItem | null>(null);
+  const picture = (item: RunItem) =>
+    mediaUrl(`/api/v1/run/checks/${item.index}`, { at: run?.started_at ?? "" });
 
   return (
     <ol className={`run-steps${large ? " run-steps-large" : ""}`} ref={list} style={fit}>
@@ -68,11 +81,43 @@ export function RunSteps({
           <StepIcon row={r} running={run?.status === "running"} size={large ? 20 : 14} />
           <span className="run-step-label">{r.label}</span>
           <span className="run-step-detail">{r.detail}</span>
+          {r.item?.check &&
+            (!r.item.check.ok || padsMoved(r.item.check) != null) &&
+            r.item.check.picture && (
+              <button
+                type="button"
+                className="run-step-thumb"
+                title={`${r.item.ref} as the top camera saw it: click to enlarge`}
+                onClick={() => setEnlarged(r.item ?? null)}
+              >
+                <img src={picture(r.item)} alt={`${r.item.ref} where it landed`} />
+              </button>
+            )}
+          {r.item && onLook && (
+            <LookButton
+              item={r.item}
+              active={r.item.index === looking}
+              disabled={!canLook}
+              onLook={onLook}
+            />
+          )}
           {run && r.item && onSkip && (
             <SkipButton item={r.item} run={run} canSignal={canSignal} onSkip={onSkip} />
           )}
         </li>
       ))}
+      {enlarged && (
+        <li className="run-check-view" onClick={() => setEnlarged(null)}>
+          <figure>
+            <img src={picture(enlarged)} alt={`${enlarged.ref} where it landed`} />
+            <figcaption>
+              <strong>{enlarged.ref}</strong>: where it was sent (orange), where it landed
+              (magenta), and its pads as found (green). Nudge it onto its pads, then resume.
+              Click to close.
+            </figcaption>
+          </figure>
+        </li>
+      )}
     </ol>
   );
 }
@@ -196,6 +241,35 @@ function StepIcon({ row, running, size }: { row: RunStepRow; running: boolean; s
     default:
       return <Circle size={size} className="run-step-icon" aria-label="to do" />;
   }
+}
+
+function LookButton({
+  item,
+  active,
+  disabled,
+  onLook,
+}: {
+  item: RunItem;
+  active: boolean;
+  disabled: boolean;
+  onLook: (item: RunItem) => void;
+}) {
+  const label = active
+    ? `Stop drawing ${item.ref}'s footprint on the camera`
+    : `Look at ${item.ref} with the top camera, its footprint drawn over it`;
+  return (
+    <button
+      type="button"
+      className={active ? "icon-button active" : "icon-button"}
+      disabled={disabled && !active}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      onClick={() => onLook(item)}
+    >
+      <Eye size={14} aria-hidden />
+    </button>
+  );
 }
 
 function SkipButton({

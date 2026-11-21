@@ -72,6 +72,31 @@ def test_home_then_move(client: TestClient) -> None:
         assert client.get(f"/api/v1/operations/{op_id}").json()["status"] == "succeeded"
 
 
+def test_park_moves_the_head_out_of_the_way(client: TestClient) -> None:
+    """Park raises the nozzles and goes to the park location; with none set, to the back
+    of the travel."""
+    with connect(client) as s:
+        assert s.post("/api/v1/machine/park").json()["code"] == "not_homed"
+        s.home()
+        s.move(X=100, Y=50)
+        op = s.wait(s.post("/api/v1/machine/park"))
+        assert op["status"] == "succeeded", op
+        profile = client.app.state.ctx.machine.profile  # type: ignore[attr-defined]
+        park = next((loc for loc in profile.locations if loc.kind == "park"), None)
+        state = s.state()
+        if park is not None:
+            assert op["message"] == f"The head moved to the {park.label.lower()}."
+            assert (state["position"]["X"], state["position"]["Y"]) == pytest.approx(
+                (park.position.x, park.position.y)
+            )
+        else:
+            y = next(a for a in profile.axes if a.name == "Y")
+            assert op["message"] == "The head moved to the back (no park location is set)."
+            assert state["position"]["Y"] == pytest.approx(y.max if profile.y_sign > 0 else y.min)
+        for nozzle in profile.nozzles:
+            assert state["position"][nozzle.z_axis] == pytest.approx(0)
+
+
 def test_move_rejects_bad_targets(client: TestClient) -> None:
     with connect(client) as s:
         s.home()

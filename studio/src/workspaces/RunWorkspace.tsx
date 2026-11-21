@@ -1,5 +1,6 @@
 import {
   Crosshair,
+  Eye,
   Hand,
   LocateFixed,
   Pause,
@@ -7,6 +8,7 @@ import {
   RefreshCw,
   Square,
   StepForward,
+  TriangleAlert,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
@@ -23,6 +25,7 @@ import type {
   JobSummary,
   PickCorrection,
   RunItem,
+  RunState,
 } from "../api/types";
 import { CameraView } from "../components/CameraView";
 import { FixedFeederPanel } from "../components/FixedFeederPanel";
@@ -31,6 +34,7 @@ import { Panel } from "../components/Panel";
 import { PickCorrectionSelect } from "../components/PickCorrection";
 import { RunSteps } from "../components/RunSteps";
 import { Placeholder } from "../components/Placeholder";
+import { useFootprint } from "../useFootprint";
 
 /**
  * Run a saved job: check it against the machine and its feeders, then place it. This is
@@ -53,6 +57,7 @@ export function RunWorkspace() {
   const [skipBlocked, setSkipBlocked] = useState(false);
   const [record, setRecord] = useState(false);
   const [stepMode, setStepMode] = useState(false);
+  const [checkPlaced, setCheckPlaced] = useState<boolean | null>(null);
   const [boardCheck, setBoardCheck] = useState<BoardCheck | null>(null);
   const [checking, setChecking] = useState(0);
 
@@ -127,6 +132,7 @@ export function RunWorkspace() {
           pick_correction: correction,
           record,
           step: stepMode,
+          check_placements: checkPlaced,
         },
       }),
     );
@@ -165,12 +171,56 @@ export function RunWorkspace() {
   };
 
   const paused = current?.status === "paused";
+  // Why the run paused, kept in view however far the list is scrolled, until hidden.
+  const [hiddenError, setHiddenError] = useState<string | null>(null);
+  const alert = paused && current?.error && current.error !== hiddenError ? current.error : null;
+  const pausedAt = current?.current?.index;
+  const pausedItem = pausedAt !== undefined && pausedAt !== null ? items[pausedAt] : undefined;
+  // Paused on a pick: the feeder it picks from is what to look at, not the placement.
+  const pausedPick = current?.current?.action === "picking" ? pausedItem?.slot_id : null;
+  const pickAt = (() => {
+    if (!pausedPick || !feeders) return null;
+    const slot = feeders.slots.find((x) => x.slot.id === pausedPick);
+    if (slot) return { label: slot.slot.label, at: slot.pick };
+    const fixed = feeders.fixed.find((f) => f.id === pausedPick);
+    return fixed?.next ? { label: fixed.id, at: fixed.next } : null;
+  })();
+  const lookAtPick = () => {
+    if (!pickAt || !topCamera) return;
+    setLooking(null);
+    const target = { X: pickAt.at.x - topCamera.position.x, Y: pickAt.at.y - topCamera.position.y };
+    void act(() => api.POST("/api/v1/machine/move", { body: { position: target } }));
+  };
   const startable = !current || current.status === "finished" || current.status === "stopped";
   // While paused, the fiducials the run found, to look at before going on.
   const pausedFix = paused && current?.fix?.fiducials.length ? current.fix : null;
   const errors = shownPlan?.issues.filter((i) => i.severity === "error") ?? [];
   const cautions = shownPlan?.issues.filter((i) => i.severity === "warning") ?? [];
   const topCamera = description?.cameras.find((c) => c.looking === "down");
+  // Where the top camera is now, to draw a placement's footprint on its picture.
+  const topAt =
+    topCamera && machine?.position.X !== undefined && machine.position.Y !== undefined
+      ? {
+          x: machine.position.X + topCamera.position.x,
+          y: machine.position.Y + topCamera.position.y,
+        }
+      : undefined;
+
+  // The placement being looked at with the top camera, its footprint drawn over it: where
+  // the job's place puts it, before the run's fiducial fit.
+  const [looking, setLooking] = useState<{ job: string; item: RunItem } | null>(null);
+  const lookingItem = looking && looking.job === chosen ? looking.item : null;
+  const lookFootprint = useFootprint(lookingItem?.footprint_id);
+  const look = (item: RunItem) => {
+    if (lookingItem?.index === item.index) {
+      setLooking(null);
+      return;
+    }
+    setLooking({ job: chosen, item });
+    if (!topCamera) return;
+    const target = { X: item.x - topCamera.position.x, Y: item.y - topCamera.position.y };
+    void act(() => api.POST("/api/v1/machine/move", { body: { position: target } }));
+  };
 
   return (
     <div className="workspace">
@@ -239,6 +289,20 @@ export function RunWorkspace() {
                   onChange={(e) => setStepMode(e.target.checked)}
                 />
                 Start in step mode: pause once the board is found, before the first part
+              </label>
+              <label
+                className="check"
+                title={
+                  "Look at each two-terminal chip with the top camera once placed, and pause " +
+                  "if it landed off its target, turned, or is not there"
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={checkPlaced ?? false}
+                  onChange={(e) => setCheckPlaced(e.target.checked)}
+                />
+                Check each part with the top camera once placed
               </label>
               {blocked > 0 && (
                 <label className="check">
@@ -408,6 +472,21 @@ export function RunWorkspace() {
             title={topCamera.label}
             info={cameras?.find((c) => c.id === topCamera.id)}
             fieldOfView={topCamera.field_of_view.x}
+            footprints={
+              lookingItem && lookFootprint
+                ? [
+                    {
+                      footprint: lookFootprint,
+                      x: lookingItem.x,
+                      y: lookingItem.y,
+                      angle: lookingItem.rotation,
+                      title: `${lookingItem.ref}: where the job puts it, pin 1 in red`,
+                    },
+                  ]
+                : undefined
+            }
+            at={topAt}
+            orientation={description}
           />
         )}
       </aside>
@@ -432,6 +511,65 @@ export function RunWorkspace() {
                 {current.error ?? current.message}
               </p>
             )}
+            {alert && (
+              <div className="run-alert" role="alertdialog" aria-label="Why the run paused">
+                <p className="run-alert-title">
+                  <TriangleAlert size={18} aria-hidden />
+                  Paused
+                </p>
+                <p className="run-alert-text">{alert}</p>
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className="button primary"
+                    disabled={!canMove}
+                    onClick={() => void resume("/api/v1/run/resume")}
+                  >
+                    <Play size={16} aria-hidden />
+                    Resume
+                  </button>
+                  {pickAt ? (
+                    <button
+                      type="button"
+                      className="button"
+                      disabled={!canMove || !topCamera}
+                      title="Move the top camera over the pocket it picks from"
+                      onClick={lookAtPick}
+                    >
+                      <Eye size={16} aria-hidden />
+                      Look at {pickAt.label}
+                    </button>
+                  ) : (
+                    pausedItem && (
+                      <button
+                        type="button"
+                        className="button"
+                        disabled={!canMove || !topCamera}
+                        title="Move the top camera over it, its footprint drawn on the picture"
+                        onClick={() => look(pausedItem)}
+                      >
+                        <Eye size={16} aria-hidden />
+                        Look at {pausedItem.ref}
+                      </button>
+                    )
+                  )}
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={!canSignal}
+                    title="End the run here; what is placed stays placed"
+                    onClick={() => void signal("/api/v1/run/stop")}
+                  >
+                    <Square size={16} aria-hidden />
+                    Stop
+                  </button>
+                  <button type="button" className="button" onClick={() => setHiddenError(alert)}>
+                    Hide
+                  </button>
+                </div>
+              </div>
+            )}
+            {current && current.stats.picks > 0 && <RunStatsLine stats={current.stats} />}
             {paused &&
               Object.entries(current.held).map(([nozzle, index]) => (
                 <div key={nozzle} className="button-row run-held">
@@ -461,6 +599,9 @@ export function RunWorkspace() {
               large
               canSignal={canSignal}
               onSkip={(item, value) => void skip(item, value)}
+              onLook={look}
+              looking={lookingItem?.index ?? null}
+              canLook={canMove && !!topCamera}
             />
           </div>
         ) : (
@@ -521,4 +662,24 @@ function sources(ids: string[]): string {
     ...fixed,
   ];
   return parts.join(", ");
+}
+
+/** How the run went: picks, finding parts on the bottom camera, and placements checked. */
+function RunStatsLine({ stats }: { stats: RunState["stats"] }) {
+  const parts = [
+    `${stats.picks} picks` + (stats.empty_picks ? `, ${stats.empty_picks} came up empty` : ""),
+    `${stats.alignments} found by the bottom camera` +
+      (stats.failed_alignments ? `, ${stats.failed_alignments} not found (discarded)` : ""),
+  ];
+  if (stats.checked) {
+    parts.push(
+      `${stats.checked} placements checked` +
+        (stats.bad_placements ? `, ${stats.bad_placements} off target` : ", all on target") +
+        (stats.unsure ? `, ${stats.unsure} could not be made out` : ""),
+    );
+  }
+  const trouble = stats.empty_picks + stats.failed_alignments + stats.bad_placements > 0;
+  return (
+    <p className={`run-stats${trouble ? " text-warn" : " text-muted"}`}>{parts.join(" · ")}</p>
+  );
 }

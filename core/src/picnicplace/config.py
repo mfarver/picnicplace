@@ -17,6 +17,7 @@ from picnicplace.machine.profile import (
     merge_profile_data,
     profile_data,
 )
+from picnicplace.training import TrainNew
 
 
 class _Section(BaseModel):
@@ -116,6 +117,14 @@ class DataConfig(_Section):
         return self.dir.expanduser() / "wizard.json"
 
     @property
+    def trained_parts_path(self) -> Path:
+        return self.dir.expanduser() / "trained-parts.json"
+
+    @property
+    def trained_frames_dir(self) -> Path:
+        return self.dir.expanduser() / "trained-parts"
+
+    @property
     def tips_path(self) -> Path:
         return self.dir.expanduser() / "nozzle-tips.json"
 
@@ -175,14 +184,45 @@ class MachineConfig(_Section):
             "learned unless this is 'off'."
         ),
     )
+    place_press: float | None = Field(
+        default=None,
+        ge=0,
+        le=1.0,
+        description=(
+            "How far (mm) to press a part into the board's paste or tape when placing it: "
+            "the nozzle goes this far below the part's top, resting on the board. Empty: "
+            "the profile's (a LumenPnP's spring-loaded nozzles: 0.3)."
+        ),
+    )
+    check_placements: bool = Field(
+        default=False,
+        description=(
+            "Look at each two-terminal chip with the top camera once a run has placed it, "
+            "and pause the run if it landed off its target, turned, or is not there. A run "
+            "can ask either way."
+        ),
+    )
+    train_new: TrainNew = Field(
+        default="multi-pad",
+        description=(
+            "Which parts a run trains on their first pick, when they have no training: the "
+            "part is held over the bottom camera under every light and way of looking, the "
+            "best is kept for it (used from then on, waiting for approval in the Trained "
+            "parts panel), and the part is placed, not discarded. 'multi-pad': parts with "
+            "three or more pads (transistors, regulators, ICs); 'all'; 'off'. Whatever the "
+            "choice, a part no way of looking sees is trained before it is given up."
+        ),
+    )
     sniff_heights: bool = Field(
         default=True,
         description=(
             "Find heights by touch during runs and picks: a nozzle, with suction on, steps "
             "down until the vacuum seals. The board's top on one of its fiducials at the "
             "start of each run, and the top of the parts in each feeder, strip, and tray on "
-            "the first pick from it (kept with that feeder and part). Off: the job's or the "
-            "profile's board height, and the profile's or the setup's pick heights."
+            "the first pick from it (kept with that feeder and part); a strip with no pick "
+            "height is searched for from safe Z. Off: the job's or the profile's board "
+            "height, and the profile's or the setup's pick heights (a strip with none is not "
+            "used)."
         ),
     )
     sim_time_scale: float = Field(
@@ -208,6 +248,14 @@ class MachineConfig(_Section):
             "Simulator only: how far a job's board really is from where the job puts it, "
             "as X and Y in mm and a turn in degrees about its front-left corner. Fiducial "
             "alignment finds and corrects it."
+        ),
+    )
+    sim_board_bump: tuple[int, float, float] | None = Field(
+        default=None,
+        description=(
+            "Simulator only: once this many parts are placed in a run, the job's board slides "
+            "by X and Y mm, with the parts on it, as a real board knocked by the parts pressed "
+            "onto its tape did. Checking placements finds its pads moved."
         ),
     )
     sim_top_camera_scale: float = Field(
@@ -259,9 +307,9 @@ class MachineConfig(_Section):
     sim_bottom_washed_out: bool = Field(
         default=False,
         description=(
-            "Simulator only: parts held over the bottom camera look overexposed, one even "
-            "white, so no metal shows to fit their pads to (as an 0603 did on a real "
-            "LumenPnP at full white)."
+            "Simulator only: parts held over the bottom camera are white chips, overexposed "
+            "under a full light, so no metal shows to fit their pads to until the light is "
+            "turned down (as an 0603's outline was all that showed on a real LumenPnP)."
         ),
     )
     sim_bottom_camera_flipped: bool = Field(
@@ -335,6 +383,21 @@ class MachineConfig(_Section):
             "Simulator only: how many of its next picks each nozzle drops as it lifts, by "
             "nozzle ID: it seals on the part, then loses it on the way up, as a worn tip "
             "might. A pick checks the part is still held once the vacuum has settled."
+        ),
+    )
+    sim_place_shift: dict[str, tuple[float, float]] = Field(
+        default_factory=dict[str, tuple[float, float]],
+        description=(
+            "Simulator only: how far (X, Y mm) each part a nozzle places lands from where it "
+            "was let go, by nozzle ID, as a part dragged as the nozzle lifts would."
+        ),
+    )
+    sim_sticks_on_release: dict[str, int] = Field(
+        default_factory=dict[str, int],
+        description=(
+            "Simulator only: how many of its next parts each nozzle keeps when its suction "
+            "goes off, by nozzle ID, as a part stuck to a tip would: the part-off check after "
+            "placing finds it still there."
         ),
     )
     sim_datum_height_error: float = Field(

@@ -17,6 +17,40 @@ export interface RunStepRow {
   item?: RunItem;
 }
 
+type Check = NonNullable<RunItem["check"]>;
+
+/** Pads found further than this from where the board's fit puts them: the board moved (the
+ * core's ``CHECK_PADS_MOVED_MM``). */
+const PADS_MOVED_MM = 0.4;
+
+/** How far a checked part's pads were from where the board's fit put them, in mm, if they
+ * were seen and that is far enough to say the board moved. */
+export function padsMoved(c: Check): number | null {
+  if (c.pads_dx == null || c.pads_dy == null) return null;
+  const off = Math.hypot(c.pads_dx, c.pads_dy);
+  return off > PADS_MOVED_MM ? off : null;
+}
+
+/** Where a checked part landed, after "placed by N1": on its pads (if they were seen) or
+ * from where it was sent, and how it is turned. */
+function checkDetail(c: Check): string {
+  // Matched too poorly to judge (a gray ceramic capacitor on a board, say): not checked.
+  if (!c.checked) return ", not checked: the camera could not make it out";
+  const t = Math.round(c.turn * 10) / 10 || 0; // never "-0.0"
+  const turn = `${t >= 0 ? "+" : ""}${t.toFixed(1)}°`;
+  let text: string;
+  if (c.on_pads != null) {
+    const share = `${Math.round(c.on_pads * 100)}% on its pads`;
+    text = c.ok ? `, ${share}, ${turn}` : `, only ${share}, ${turn}: look at it`;
+  } else {
+    const off = Math.hypot(c.dx, c.dy).toFixed(2);
+    text = c.ok ? `, ${off} mm off, ${turn}` : `, landed ${off} mm off, ${turn}: look at it`;
+  }
+  const moved = padsMoved(c);
+  if (moved != null) text += `; its pads were ${moved.toFixed(2)} mm off: the board moved`;
+  return text;
+}
+
 const ACTION: Record<NonNullable<RunState["current"]>["action"], string> = {
   scanning: "scanning",
   finding_fiducials: "finding fiducials",
@@ -25,6 +59,7 @@ const ACTION: Record<NonNullable<RunState["current"]>["action"], string> = {
   picking: "picking",
   aligning: "aligning",
   placing: "placing",
+  checking: "checking where it landed",
 };
 
 /** "slot 3" for a feeder slot, the ID for a strip or tray. */
@@ -93,12 +128,15 @@ export function runSteps(
     const current = at?.stage === "item" && at.index === item.index;
     const nozzle = nozzleOf.get(item.index);
     let detail: string;
-    if (current) {
+    // A part checked once placed says where it landed, even while the run is paused on it.
+    if (current && !(item.status === "placed" && item.check)) {
       const on = at.action === "placing" ? " with" : " on";
       detail = ACTION[at.action] + (at.nozzle ? `${on} ${at.nozzle}` : "");
     } else if (nozzle) detail = `on ${nozzle}`;
     else if (item.status === "placed") {
       detail = `placed${item.nozzle ? ` by ${item.nozzle}` : ""}`;
+      const c = item.check;
+      if (c) detail += checkDetail(c);
     }
     else if (item.status === "pending") {
       detail = `${item.part_id ?? "no part number"}, ${sourceName(item.slot_id)}`;

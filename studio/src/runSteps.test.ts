@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RunItem, RunState } from "./api/types";
-import { focusIndex, runSteps } from "./runSteps";
+import { focusIndex, padsMoved, runSteps } from "./runSteps";
 
 function item(
   index: number,
@@ -88,6 +88,113 @@ describe("runSteps", () => {
     expect(rows[2]).toMatchObject({ held: true, current: false, detail: "on N1" });
     expect(rows[3]).toMatchObject({ current: true, problem: false, detail: "picking on N2" });
     expect(focusIndex(rows)).toBe(3);
+  });
+
+  it("says where a checked part landed", () => {
+    // Its pads not seen: where it landed from where it was sent.
+    const unseen = { on_pads: null, pads_dx: null, pads_dy: null, checked: true };
+    const good = { dx: 0.03, dy: -0.04, turn: 1.2, score: 0.9, ok: true, picture: true, ...unseen };
+    const bad = { dx: -0.12, dy: 0.41, turn: 9, score: 0.8, ok: false, picture: true, ...unseen };
+    const square = { ...good, turn: -0.04 };
+    const items = [
+      item(0, "R1", "placed", { nozzle: "N1", check: bad }),
+      item(1, "R2", "placed", { nozzle: "N2", check: good }),
+      item(2, "R3", "placed", { nozzle: "N2", check: square }),
+    ];
+    const rows = runSteps(items, run(items, {}), 0, false);
+    expect(rows[1]).toMatchObject({
+      detail: "placed by N1, landed 0.43 mm off, +9.0°: look at it",
+    });
+    expect(rows[2]).toMatchObject({ detail: "placed by N2, 0.05 mm off, +1.2°" });
+    expect(rows[3]).toMatchObject({ detail: "placed by N2, 0.05 mm off, +0.0°" });
+  });
+
+  it("says how much of a checked part is on its pads, and when the board moved", () => {
+    const pads = { pads_dx: 0.02, pads_dy: -0.03 };
+    const good = {
+      dx: 0.03,
+      dy: -0.04,
+      turn: 0.5,
+      score: 0.9,
+      ok: true,
+      checked: true,
+      picture: true,
+    };
+    const onPads = { ...good, ...pads, on_pads: 0.98 };
+    // The board moved: its pads more than 0.4 mm from where its fiducials put them.
+    const moved = { ...good, on_pads: 0.97, pads_dx: 0.2, pads_dy: 0.4 };
+    const items = [
+      item(0, "R1", "placed", { nozzle: "N1", check: onPads }),
+      item(1, "R2", "placed", {
+        nozzle: "N2",
+        check: { ...good, ...pads, on_pads: 0.23, turn: -3, ok: false },
+      }),
+      item(2, "R3", "placed", {
+        nozzle: "N1",
+        check: { ...good, on_pads: 0.72, pads_dx: -0.02, pads_dy: 0.45, ok: false },
+      }),
+      item(3, "R4", "placed", { nozzle: "N2", check: moved }),
+    ];
+    const rows = runSteps(items, run(items, {}), 0, false);
+    expect(rows[1]).toMatchObject({ detail: "placed by N1, 98% on its pads, +0.5°" });
+    expect(rows[2]).toMatchObject({
+      detail: "placed by N2, only 23% on its pads, -3.0°: look at it",
+    });
+    expect(rows[3]).toMatchObject({
+      detail:
+        "placed by N1, only 72% on its pads, +0.5°: look at it; its pads were 0.45 mm off: " +
+        "the board moved",
+    });
+    expect(rows[4]).toMatchObject({
+      detail: "placed by N2, 97% on its pads, +0.5°; its pads were 0.45 mm off: the board moved",
+    });
+    expect(padsMoved(onPads)).toBeNull();
+    expect(padsMoved(moved)).toBeCloseTo(0.447, 3);
+    // Pads a little off the fit, as a machine's own error leaves them, are not a moved board.
+    expect(padsMoved({ ...good, on_pads: 0.9, pads_dx: -0.1, pads_dy: -0.2 })).toBeNull();
+  });
+
+  it("says when a part could not be made out to check", () => {
+    const unsure = {
+      dx: 0,
+      dy: 0,
+      turn: 0,
+      score: 0.44,
+      ok: true,
+      checked: false,
+      picture: true,
+      on_pads: null,
+      pads_dx: null,
+      pads_dy: null,
+    };
+    const items = [item(0, "C10", "placed", { nozzle: "N1", check: unsure })];
+    expect(runSteps(items, run(items, {}), 0, false)[1]).toMatchObject({
+      detail: "placed by N1, not checked: the camera could not make it out",
+    });
+  });
+
+  it("says where a part landed while the run is paused on it", () => {
+    const bad = {
+      dx: 0.32,
+      dy: 0.12,
+      turn: -0.5,
+      score: 0.8,
+      ok: false,
+      checked: true,
+      picture: true,
+      on_pads: null,
+      pads_dx: null,
+      pads_dy: null,
+    };
+    const items = [item(0, "R2", "placed", { nozzle: "N2", check: bad })];
+    const paused = run(items, {
+      status: "paused",
+      current: { stage: "item", action: "checking", index: 0, nozzle: "N2" },
+    });
+    expect(runSteps(items, paused, 0, false)[1]).toMatchObject({
+      current: true,
+      detail: "placed by N2, landed 0.34 mm off, -0.5°: look at it",
+    });
   });
 
   it("shows the board's top once it is found by touch", () => {

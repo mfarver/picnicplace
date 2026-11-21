@@ -37,41 +37,61 @@ consecutive picks come from the same tape.
 **Problems.** A pick that comes up empty is tried again, feeding the next part, up to
 ``PICK_ATTEMPTS`` times. A part bottom vision cannot find goes to the discard bin, and
 its placement is tried again later; with no discard location, the run parks the head and
-pauses for the operator to take the part off and say so (Part removed). Anything else
-pauses the run, with the parts already picked left on their nozzles: fix the cause, then
-resume, or skip the placement. An empty strip or tray pauses the run too, with the head
+pauses for the operator to take the part off and say so (Part removed). A feeder
+problem on one nozzle's pick (nothing picked after the tries, a pocket or strip it cannot
+use) lets the other nozzles pick, places every part held, and then pauses for it. Anything
+else pauses the run at once, with the parts already picked left on their nozzles: fix the
+cause, then resume, or skip the placement. An empty strip or tray pauses the run too, with the head
 moved to the park position out of the operator's way: refill it, mark it refilled, and
 resume. Pausing and stopping take effect after the batch in progress; a step resumes a
 paused run for one batch.
 
+A pause that asks the operator to do something (a problem, or the Pause button) parks the
+head out of the way first, as the end of a run does (finished or stopped, for the board to
+come off); the eye button on a placement's line brings the camera back
+over it. A step's pause leaves the head where it is.
+
 **Progress.** The run state says which step is under way (scanning the feeders, finding
 the board, or finding a feeder's fiducial, picking, aligning, or placing one item), and
-keeps it when a problem pauses the run, so the Studio can show where it stopped.
+keeps it when a problem pauses the run, so the Studio can show where it stopped. It is
+written to disk after every batch and every change, and read back when the core starts:
+a run the core stopped in the middle of comes back paused and marked interrupted. The
+machine must be homed again, and the nozzles may still hold parts, so the operator clears
+them first; resuming finds the board's fiducials again, then goes on with what is left.
 """
 
 import asyncio
 import logging
 import math
+import re
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
+import cv2
 from pydantic import Field, computed_field
 
 from picnicplace.calibration import current, run_issues
+from picnicplace.camera.source import Image
 from picnicplace.camera.synthetic import BoardScene
 from picnicplace.feeders.service import FeederService, FeedersState, rotate
 from picnicplace.feeders.setup import PickCorrection
+from picnicplace.job.footprint_check import footprint_mismatch
 from picnicplace.job.layout import Issue, MachinePlacement, layout
 from picnicplace.job.models import Job
 from picnicplace.job.revision import JobFileError, PartsSource
 from picnicplace.job.store import JobStore
 from picnicplace.library import Library, Part, Tape
+from picnicplace.library.models import Footprint
 from picnicplace.machine.errors import (
     FeederEmptyError,
+    FeederError,
     InvalidTargetError,
     MachineBusyError,
     MachineError,
+    UntrainableError,
     VisionError,
 )
 from picnicplace.machine.profile import MachineProfile, Point, Rect
@@ -79,11 +99,26 @@ from picnicplace.machine.service import MachineService
 from picnicplace.machine.sniff import floor_message, sniff
 from picnicplace.placement import MispickError, PlacementService
 from picnicplace.schemas import Operation, WireModel
+from picnicplace.storage import write_atomic
+from picnicplace.vision.placed import (
+    FoundPads,
+    PlacedChip,
+    Polygon,
+    check_picture,
+    chip_ends,
+    chip_offset,
+    image_turn,
+    on_pads,
+)
 
 log = logging.getLogger(__name__)
 
 PICK_ATTEMPTS = 3
 ALIGN_ATTEMPTS = 2
+UNTRAINABLE = "skipped: training found no way of seeing its part"
+"""How a placement's note begins when its part could not be trained in the run: it and the
+part's other placements are skipped, not picked again (each pick would cost a part and see
+no more). The operator may un-skip them once the part is trained."""
 """Times a part may be discarded for bottom vision before its placement fails."""
 MAX_FIDUCIALS = 3
 FIDUCIAL_SEARCH_MM = 3.0
@@ -99,6 +134,43 @@ SIM_DECOY_SIZE = 0.7
 FIDUCIAL_RESIDUAL_MM = 0.25
 """Fiducials found further than this from the fit mean the board, or one of them, is
 not where the job says: the run stops before placing anything."""
+CHECK_OFF_MM = 0.25
+"""Checking placements: a part found further than this from where it was sent (when its
+pads cannot be seen; else ``CHECK_ON_PADS``)..."""
+CHECK_TURN = 10.0
+"""...or turned more than this many degrees from the angle asked for..."""
+CHECK_SCORE = 0.5
+"""...or not found (the pattern matched worse than this) pauses the run, to be looked at:
+a real 0603 that landed 0.43 mm along its length, one end lifted, would have stood up when
+soldered."""
+CHECK_UNSURE = 0.35
+"""A part matched worse than ``CHECK_SCORE`` but at least this well is not judged: on a real
+LumenPnP (2026-11-20) gray ceramic capacitors sitting squarely on their pads matched 0.42 to
+0.5 (black resistors 0.6 to 0.7), and the run paused after each. Such a placement is marked
+not checked, and the run goes on."""
+CHECK_ON_PADS = 0.75
+"""A part with less than this of either metal end over its pad pauses the run. On a real
+0603 (2026-11-19), one 0.3 mm along its length from its pads had 23% of an end on its pad,
+and one 0.3 mm across, 72%; those well placed had 97% or more."""
+CHECK_PADS_SCORE = 0.6
+"""The pads' shape must match the bright copper this well (0 to 1) to be judged by; real
+0603 pads matched 0.8 to 0.9."""
+CHECK_PADS_MOVED_MM = 0.4
+"""Pads found further than this from where the board's fit puts them mean the board has
+moved since its fiducials were found: the run pauses, and finds them again on resume. On a
+real board knocked by the parts pressed into its tape, the pads were 0.2 to 0.33 mm off;
+but on a real LumenPnP (2026-11-20), pads on a board that never moved (its fiducials found
+again eight times, each time within 0.01 mm of the last) were up to 0.33 mm off too, the
+machine's own error from place to place: lower than this, the pause is a false alarm.
+The pads are looked for no more than about 0.5 mm from where they should be."""
+
+
+TIP_HOLE_FIT = 0.75
+"""A nozzle tip suits a part when its hole is no wider than this share of the part's
+narrower side, so the hole lies well inside the part's top; of the tips that suit it, the
+one with the largest hole holds it best. On a real LumenPnP (2026-11-20), an N08 tip (0.8 mm
+hole) on 0603 capacitors (0.8 mm wide) sealed on the tape beside them and lifted nothing,
+while the N045 picked every 0603."""
 
 
 class RunError(MachineError):
@@ -125,6 +197,65 @@ class RunItem(WireModel):
     note: str = Field(default="", description="Why it is blocked, skipped, or failed.")
     nozzle: str | None = Field(default=None, description="The nozzle that placed it.")
     discards: int = Field(default=0, description="Parts discarded after bottom vision failed.")
+    check: "PlacementCheck | None" = Field(
+        default=None, description="Where the top camera found the part after placing it."
+    )
+
+
+class PlacementCheck(WireModel):
+    """Where the top camera found a part just placed, against where it was sent."""
+
+    dx: float = Field(description="Machine X from where it was sent, mm.")
+    dy: float
+    turn: float = Field(description="Degrees from the angle asked for.")
+    score: float = Field(description="How well the chip's pattern matched, -1 to 1.")
+    on_pads: float | None = Field(
+        default=None,
+        description=(
+            "How much of the part's metal ends lies over its pads: of each end, the share "
+            "over its pad, and of the two the less, 0 to 1. None if the pads were not seen."
+        ),
+    )
+    pads_dx: float | None = Field(
+        default=None,
+        description=(
+            "Machine X of the pads from where the board's fit puts them, mm: far off, the "
+            "board has moved. None if the pads were not seen."
+        ),
+    )
+    pads_dy: float | None = None
+    ok: bool
+    checked: bool = Field(
+        default=True,
+        description=(
+            "Judged at all: false when the camera could not make the part out well enough "
+            "to say (a gray ceramic capacitor on a board, say), so the run went on."
+        ),
+    )
+    picture: bool = Field(
+        default=False,
+        description="A picture of it is kept (GET /api/v1/run/checks/{index}).",
+    )
+
+
+class RunStats(WireModel):
+    """What went wrong how often in a run, to tell how well it went."""
+
+    picks: int = Field(default=0, description="Picks tried.")
+    empty_picks: int = Field(default=0, description="Picks that came up without a part.")
+    alignments: int = Field(default=0, description="Parts the bottom camera looked for.")
+    failed_alignments: int = Field(
+        default=0, description="Parts the bottom camera could not find (discarded)."
+    )
+    placed: int = Field(default=0, description="Parts placed.")
+    checked: int = Field(default=0, description="Placements checked with the top camera.")
+    unsure: int = Field(
+        default=0,
+        description="Checked placements the camera could not make out well enough to judge.",
+    )
+    bad_placements: int = Field(
+        default=0, description="Checked placements off their target, turned, or not found."
+    )
 
 
 class PartNeed(WireModel):
@@ -207,6 +338,7 @@ StepAction = Literal[
     "picking",
     "aligning",
     "placing",
+    "checking",
 ]
 
 
@@ -239,6 +371,11 @@ class RunState(WireModel):
     pause_requested: bool = False
     stop_requested: bool = False
     pick_correction: PickCorrection = "top"
+    check_placements: bool = Field(
+        default=False,
+        description="Look at each part with the top camera once placed, pausing on a bad one.",
+    )
+    stats: RunStats = Field(default_factory=RunStats)
     """How picks are kept centered (see the config's machine.pick_correction)."""
     located: list[str] = Field(
         default_factory=list[str],
@@ -256,6 +393,13 @@ class RunState(WireModel):
         description=(
             "The step under way. Kept when the run pauses on a problem, to show where it "
             "stopped; empty between batches and when the run ends."
+        ),
+    )
+    interrupted: bool = Field(
+        default=False,
+        description=(
+            "The core stopped in the middle of this run (a restart, a crash, a power cut) "
+            "and read it back from disk when it started again. Cleared on resume."
         ),
     )
     started_at: datetime
@@ -280,6 +424,48 @@ def machine_angle(profile: MachineProfile, view: float) -> float:
     a = math.radians(view)
     x, y = profile.x_sign * math.cos(a), profile.y_sign * math.sin(a)
     return round(math.degrees(math.atan2(y, x)), 6) + 0.0
+
+
+def part_width(footprint: Footprint | None) -> float | None:
+    """A part's narrower side seen from above: its body's, or else its pads' extent."""
+    if footprint is None:
+        return None
+    if footprint.body is not None:
+        return min(footprint.body.x, footprint.body.y)
+    if not footprint.pads:
+        return None
+    xs: list[float] = []
+    ys: list[float] = []
+    for pad in footprint.pads:
+        across = round(pad.rotation / 90) % 2 == 1
+        w, h = (pad.height, pad.width) if across else (pad.width, pad.height)
+        xs += [pad.x - w / 2, pad.x + w / 2]
+        ys += [pad.y - h / 2, pad.y + h / 2]
+    return min(max(xs) - min(xs), max(ys) - min(ys))
+
+
+def tip_nozzles(
+    nozzles: list[str], part: Part | None, library: PartsSource | None, profile: MachineProfile
+) -> list[str]:
+    """Of ``nozzles``, the ones to pick ``part`` with, by the tips fitted: those whose hole
+    suits it (``TIP_HOLE_FIT``), and of those the largest hole. All of them when a tip or
+    the part's size is not known, or when no tip suits it."""
+    footprint = library.find_footprint(part.footprint_id) if library and part else None
+    width = part_width(footprint)
+    if width is None:
+        return nozzles
+    holes: dict[str, float] = {}
+    for nozzle_id in nozzles:
+        nozzle = next((n for n in profile.nozzles if n.id == nozzle_id), None)
+        tip = profile.nozzle_tip(nozzle.tip) if nozzle is not None else None
+        if tip is None or tip.inner_diameter is None:
+            return nozzles
+        holes[nozzle_id] = tip.inner_diameter
+    fit = {n: h for n, h in holes.items() if h <= TIP_HOLE_FIT * width}
+    if not fit:
+        return nozzles
+    best = max(fit.values())
+    return [n for n, h in fit.items() if h == best]
 
 
 def _inside(rect: Rect, x: float, y: float) -> bool:
@@ -314,6 +500,12 @@ def _slot_order(slot_id: str | None) -> int:
     return 2_000_000
 
 
+def _ref_order(ref: str) -> tuple[str, int, str]:
+    """C2 before C10."""
+    match = re.fullmatch(r"([^\d]*)(\d+)(.*)", ref)
+    return (ref, 0, "") if match is None else (match[1], int(match[2]), match[3])
+
+
 def _source(slot_id: str) -> str:
     return f"slot {slot_id}" if slot_id.isdigit() else slot_id
 
@@ -325,6 +517,7 @@ def plan_job(
     feeders: FeedersState,
     library: PartsSource | None,
     revision: int | None = None,
+    sniff_heights: bool = False,
 ) -> JobPlan:
     result = layout(job, profile)
     issues = [i for i in result.issues if not (i.ref and i.severity == "warning")]
@@ -347,6 +540,19 @@ def plan_job(
             problem = "its part has no tape data, so the parts' angle is not known"
         elif f.feeder.pick_height is None and profile.board_height is None:
             problem = "it has no pick height"
+        elif f.feeder.pick_height is None and f.feeder.kind == "strip" and not sniff_heights:
+            problem = (
+                "it has no pick height (set one in the Feeders workspace, or turn on "
+                "sniff_heights in the config to find it by touch)"
+            )
+        elif f.feeder.pick_height is None and f.feeder.kind == "strip":
+            issues.append(
+                Issue(
+                    severity="warning",
+                    message=f"{f.id} has no pick height: its first pick searches down from "
+                    "safe Z for its parts' top, which is slow; setting the height is quicker",
+                )
+            )
         if problem:
             issues.append(Issue(severity="warning", message=f"{f.id} is not used: {problem}"))
             continue
@@ -363,7 +569,16 @@ def plan_job(
                 "click Set discard here)",
             )
         )
-    if not feeders.scanned and profile.feeder_bus is not None:
+    if feeders.restored:
+        issues.append(
+            Issue(
+                severity="warning",
+                message="the feeders have not been scanned since the core started: the slots "
+                "are as the last scan found them. The run scans them again first; scan now to "
+                "see any you moved since",
+            )
+        )
+    elif not feeders.scanned and profile.feeder_bus is not None:
         issues.append(
             Issue(severity="warning", message="the feeders have not been scanned since start")
         )
@@ -376,6 +591,8 @@ def plan_job(
         return parts[part_id]
 
     items: list[RunItem] = []
+    by_tip: set[str] = set()
+    """Placements left to fewer nozzles by the tips fitted (``tip_nozzles``)."""
     fiducials: list[MachinePlacement] = []
     for p in result.placements:
         if p.kind == "fiducial":
@@ -410,7 +627,9 @@ def plan_job(
                         if _inside(r, p.x, p.y) and all(_inside(r, q.x, q.y) for q in picks)
                     ]
                     if ok:
-                        slot_id, nozzles = sid, ok
+                        slot_id, nozzles = sid, tip_nozzles(ok, what, library, profile)
+                        if len(nozzles) < len(ok):
+                            by_tip.add(p.ref + (p.copy_id or ""))
                         break
                 if slot_id is None:
                     note = "no nozzle reaches both the place and a feeder holding its part"
@@ -452,7 +671,35 @@ def plan_job(
         refs = [f"{i.ref}{f' (board {i.copy_id})' if i.copy_id else ''}" for i in affected]
         shown = ", ".join(refs[:6]) + (f", and {len(refs) - 6} more" if len(refs) > 6 else "")
         issues.append(Issue(severity="error", message=f"{note}: {shown}", ref=affected[0].ref))
-    one_nozzle = [i for i in items if i.status == "pending" and len(i.nozzles) < len(reach)]
+
+    def key(i: RunItem) -> str:
+        return i.ref + (i.copy_id or "")
+
+    one_nozzle = [
+        i
+        for i in items
+        if i.status == "pending" and len(i.nozzles) < len(reach) and key(i) not in by_tip
+    ]
+    tipped: dict[str, int] = {}
+    for i in items:
+        if i.status == "pending" and key(i) in by_tip:
+            names: list[str] = []
+            for nozzle_id in i.nozzles:
+                nozzle = next(n for n in profile.nozzles if n.id == nozzle_id)
+                names.append(f"{nozzle.label.lower()} ({nozzle.tip})")
+            shown = " or ".join(names)
+            tipped[shown] = tipped.get(shown, 0) + 1
+    if tipped:
+        each = "; ".join(f"{n} only on the {where}" for where, n in tipped.items())
+        issues.append(
+            Issue(
+                severity="warning",
+                message=(
+                    f"by the tips fitted, some parts are picked by one nozzle: {each}. A tip "
+                    "suits a part when its hole lies well inside the part's top"
+                ),
+            )
+        )
     if one_nozzle:
         issues.append(
             Issue(
@@ -481,6 +728,32 @@ def plan_job(
                     f"{' and more' if len(turned) > 6 else ''}: they are placed as if it "
                     "were 0 degrees. Give each part its tape in the Parts workspace."
                 ),
+            )
+        )
+    # Parts whose footprint is not the board's where they go.
+    mismatched: dict[tuple[str, str, str], list[RunItem]] = {}
+    for item in items:
+        what = part(item.part_id) if item.status != "skipped" and item.part_id else None
+        if library is None or what is None or what.footprint_id == item.footprint_id:
+            continue
+        why = footprint_mismatch(
+            library.find_footprint(item.footprint_id), library.find_footprint(what.footprint_id)
+        )
+        if why is not None:
+            mismatched.setdefault((what.id, item.footprint_id, why), []).append(item)
+    for (part_id, board_footprint, why), affected in mismatched.items():
+        what = part(part_id)
+        refs = sorted({i.ref for i in affected}, key=_ref_order)
+        shown = ", ".join(refs[:6]) + (f", and {len(refs) - 6} more" if len(refs) > 6 else "")
+        issues.append(
+            Issue(
+                severity="warning",
+                message=(
+                    f"{part_id}'s footprint {what.footprint_id if what else '?'} is not the "
+                    f"board's {board_footprint} at {shown}: {why}. Check the part number, or "
+                    "the part's footprint in the Parts workspace"
+                ),
+                ref=affected[0].ref,
             )
         )
     # Feeders whose tape width does not match their part's tape.
@@ -598,23 +871,37 @@ class JobRunner:
         """The run's parts, footprints, and tapes: its revision's copy of them."""
         self._active = False
         self._step = False
+        self._refit = False
+        """A check found the board moved: find its fiducials again before going on."""
         self._picked: set[str] = set()
         """Slots, strips, and trays picked from in this run, since the feeders were
         scanned."""
         self._board_check: BoardCheck | None = None
         self._recording: str | None = None
+        self._record_wanted = False
+        """The run being resumed was recorded before the core restarted: record it again."""
         """The flight recording this runner started for the run, if any."""
         self.record_runs = False
         """Record every run (from the config)."""
         self.sniff_board = False
         """Find the board's top by touch on a fiducial at the start of each run (from the
         config)."""
+        self.check_placements = False
+        """Look at each part with the top camera once placed (from the config)."""
+        self.checks_dir: Path | None = None
+        """Where pictures of the current run's checked placements are kept."""
+        self.run_path: Path | None = None
+        """Where the run is kept, to come back after the core restarts (``restore``)."""
         self._sim_error = sim_board_error if feeders.sim_parts is not None else None
         self.sim_decoys = False
         """In the simulator, print a round silkscreen mark smaller than each fiducial
         where the job expects the fiducial, nearer the camera's center than the fiducial
         itself (which is off by the board's error): a fiducial finder that takes the
         nearest round blob is fooled by it, as one was by a label's "D" on a real board."""
+        self.sim_board_bump: tuple[int, float, float] | None = None
+        """In the simulator, once this many parts are placed in a run, the board slides by
+        (X, Y) mm with the parts on it, as one knocked by the parts pressed onto it did."""
+        self._sim_bumped = False
         self._sim_board: BoardScene | None = None
         self._sim_fix: BoardFix | None = None
         if self._sim_error is not None:
@@ -625,6 +912,66 @@ class JobRunner:
         if run is not None and not self._active:
             self._forget_removed(run)
         return run
+
+    def restore(self) -> None:
+        """Read back the run kept in ``run_path``, if any. One the core stopped in the
+        middle of comes back paused and interrupted: the machine must be homed again, its
+        nozzles may still hold parts, and resuming finds the board again first."""
+        path = self.run_path
+        if path is None or not path.is_file():
+            return
+        try:
+            run = RunState.model_validate_json(path.read_text())
+        except (OSError, ValueError) as e:
+            log.warning("could not read the last run from %s: %s", path, e)
+            return
+        if run.status in ("running", "paused"):
+            items = run.plan.items
+            notes: list[str] = []
+            held = [
+                f"{items[i].ref} on {n}" for n, i in sorted(run.held.items()) if 0 <= i < len(items)
+            ]
+            if held:
+                notes.append(f"the nozzles held parts ({', '.join(held)})")
+            step = run.current
+            if (
+                step is not None
+                and step.action == "placing"
+                and step.index is not None
+                and 0 <= step.index < len(items)
+                and items[step.index].status == "pending"
+            ):
+                notes.append(
+                    f"it stopped while placing {items[step.index].ref}: if that part is on "
+                    "the board, skip its placement"
+                )
+            run.status = "paused"
+            run.interrupted = True
+            run.fix = None
+            run.board_z = None
+            run.located = []
+            run.held = {}
+            run.current = None
+            self._record_wanted = run.recording is not None
+            run.recording = None
+            run.pause_requested = run.stop_requested = False
+            run.message = f"interrupted: {self._summary(run)}"
+            run.error = (
+                "the core stopped in the middle of this run"
+                + (f"; {'; '.join(notes)}" if notes else "")
+                + ". Take any parts off the nozzles by hand, home the machine, then resume: "
+                "the run finds the board's fiducials again and places what is left."
+            )
+        self._run = run
+
+    def _save(self) -> None:
+        """Keep the run on disk, to come back after a restart."""
+        if self.run_path is None or self._run is None:
+            return
+        try:
+            write_atomic(self.run_path, self._run.model_dump_json())
+        except OSError as e:
+            log.warning("could not keep the run on disk: %s", e)
 
     def _forget_removed(self, run: RunState) -> None:
         """Forget the parts taken off their nozzles (discarded, or by hand) while paused:
@@ -649,7 +996,15 @@ class JobRunner:
 
     def _plan(self, job_id: str, revision: int | None) -> tuple[Job, PartsSource | None, JobPlan]:
         job, parts, number = self._resolve(job_id, revision)
-        plan = plan_job(job_id, job, self._machine.profile, self._feeders.state(), parts, number)
+        plan = plan_job(
+            job_id,
+            job,
+            self._machine.profile,
+            self._feeders.state(),
+            parts,
+            number,
+            sniff_heights=self.sniff_board,
+        )
         aligns = any(i.status == "pending" for i in plan.items)
         for severity, message in run_issues(current(self._machine, self._feeders), aligns):
             plan.issues.append(Issue(severity=severity, message=message))
@@ -676,9 +1031,11 @@ class JobRunner:
         record: bool = False,
         step: bool = False,
         revision: int | None = None,
+        check_placements: bool | None = None,
     ) -> Operation:
         """Start a run. With ``step``, it pauses once the board is found, before the first
-        part, and each step then places one batch."""
+        part, and each step then places one batch. ``check_placements``: look at each part
+        once placed (default: the config's)."""
         if self._active:
             raise MachineBusyError("a job is running: pause or stop it first")
         job, parts, plan = self._plan(job_id, revision)
@@ -711,10 +1068,18 @@ class JobRunner:
             plan=plan,
             fix=None,
             pick_correction=pick_correction or self._placement.pick_correction,
+            check_placements=self.check_placements
+            if check_placements is None
+            else check_placements,
             started_at=datetime.now(UTC),
         )
         self._run.pause_requested = step
         self._step = step
+        self._refit = False
+        self._sim_bumped = False
+        if self.checks_dir is not None and self.checks_dir.is_dir():
+            for old in self.checks_dir.glob("*.jpg"):
+                old.unlink(missing_ok=True)
         self._picked = set()
         if self._sim_error is not None:
             self._load_sim_board(job, parts)
@@ -728,6 +1093,7 @@ class JobRunner:
             self._run.recording = info.id
             self._recording = info.id
         recorder.event("run.start", run=self._run)
+        self._save()
         return self._start_task()
 
     def check_board(self, job_id: str, revision: int | None = None) -> Operation:
@@ -774,17 +1140,61 @@ class JobRunner:
         run = self._need_run()
         if run.status != "paused":
             raise RunError(f"the run is {run.status}, not paused")
+        if self._job is None:
+            # Read back after a restart: the job comes from its revision again.
+            try:
+                job, parts, _ = self._resolve(run.job_id, run.plan.revision)
+            except InvalidTargetError as e:
+                raise RunError(f"the run's job cannot be read: {e}") from e
+            self._job, self._parts = job, parts
+            if self._sim_error is not None:
+                self._load_sim_board(job, parts)
+        # The tips fitted may have changed while paused (or a run read back after a
+        # restart was planned before the tips counted): each pending part goes to the
+        # nozzles whose tips suit it.
+        for item in run.plan.items:
+            if item.status == "pending" and item.part_id:
+                part = self._parts.find_part(item.part_id) if self._parts else None
+                item.nozzles = tip_nozzles(item.nozzles, part, self._parts, self._machine.profile)
+        error = run.error
         run.status = "running"
         run.error = None
         run.pause_requested = False
         self._step = step
-        return self._start_task()
+        try:
+            op = self._start_task()
+        except MachineError:
+            run.error = error
+            raise
+        run.interrupted = False
+        self._record_again(run)
+        self._save()
+        return op
+
+    def _record_again(self, run: RunState) -> None:
+        """On resuming a run that is not being recorded (read back after a restart, or its
+        recording stopped while paused), start one if the config records every run or the
+        run was recorded before: a run's later part is kept as well as its start."""
+        recorder = self._machine.recorder
+        active = recorder.active
+        if active is not None and active.id == self._recording:
+            return
+        if not (self.record_runs or self._record_wanted):
+            return
+        if not recorder.available or active is not None:
+            return
+        name = self._job.name if self._job is not None else run.name
+        info = recorder.start(f"run {name} (resumed)", "run", run.job_id)
+        run.recording = self._recording = info.id
+        self._record_wanted = False
+        recorder.event("run.resume", run=run)
 
     def pause(self) -> RunState:
         run = self._need_run()
         if run.status == "running":
             run.pause_requested = True
             run.message = "pausing after the parts on the nozzles are placed"
+            self._save()
         return run
 
     def stop(self) -> RunState:
@@ -813,9 +1223,14 @@ class JobRunner:
             if run.current is not None and run.current.index == index:
                 run.current = None
         elif not skip and (
-            item.status == "failed" or (item.status == "skipped" and item.note == operator)
+            item.status == "failed"
+            or (
+                item.status == "skipped"
+                and (item.note == operator or item.note.startswith(UNTRAINABLE))
+            )
         ):
             item.status, item.note, item.discards = "pending", "", 0
+        self._save()
         return run
 
     def _need_run(self) -> RunState:
@@ -845,6 +1260,7 @@ class JobRunner:
         if self._recording is not None and active is not None and active.id == self._recording:
             recorder.stop(message)
         self._recording = None
+        self._save()
 
     # --- The run itself ----------------------------------------------------------------
 
@@ -864,8 +1280,17 @@ class JobRunner:
                 if run.board_z is not None:
                     found = f"{found}; {run.message}"
                 run.current = None
+            elif self._refit:
+                # The board moved since its fiducials were found. Its top is where it was,
+                # and a nozzle may hold a part, so its height is not touched again.
+                run.message = "finding the board's fiducials again: it moved"
+                run.current = RunStep(stage="board", action="finding_fiducials")
+                run.fix = await self._find_board(run)
+                self._refit = False
+                run.current = None
             while True:
                 if run.stop_requested:
+                    await self._park()
                     self._finish(run, "stopped", f"stopped: {self._summary(run)}")
                     return run.message or ""
                 if run.pause_requested:
@@ -879,27 +1304,40 @@ class JobRunner:
                         )
                     else:
                         run.message = f"paused: {self._summary(run)}"
+                        if not self._step:
+                            # The Pause button: out of the operator's way. A step's pause
+                            # leaves the head over the parts just placed.
+                            run.message += await self._park()
+                    self._save()
                     return run.message
                 found = None
                 batch = self._next_batch(run)
                 if not batch:
+                    # Done: the head out of the way, for the board to come off.
+                    await self._park()
                     self._finish(run, "finished", f"finished: {self._summary(run)}")
                     return run.message or ""
                 await self._do_batch(run, batch)
                 run.current = None
                 if self._step:
                     run.pause_requested = True
+                self._save()
         except MachineError as e:
             run.status, run.error = "paused", str(e)
             run.pause_requested = False
             self._machine.recorder.event("run.paused", error=str(e), code=e.code)
-            if isinstance(e, FeederEmptyError):
+            if isinstance(e, (FeederEmptyError, RunError)):
+                # A pause for the operator to act: out of their way. Other errors (the
+                # machine itself failing) leave the head where it is.
                 run.error += await self._park()
-                if run.stop_requested:
-                    self._finish(run, "stopped", f"stopped: {self._summary(run)}")
-                raise FeederEmptyError(run.error) from e
             if run.stop_requested:
                 self._finish(run, "stopped", f"stopped: {self._summary(run)}")
+            else:
+                self._save()
+            if isinstance(e, FeederEmptyError):
+                raise FeederEmptyError(run.error) from e
+            if isinstance(e, RunError):
+                raise RunError(run.error) from e
             raise
         except asyncio.CancelledError:
             run.status, run.error = "paused", "cancelled"
@@ -913,7 +1351,20 @@ class JobRunner:
             counts[item.status] = counts.get(item.status, 0) + 1
         order = ("placed", "pending", "failed", "blocked", "skipped")
         names = {"pending": "to go"}
-        return ", ".join(f"{counts[k]} {names.get(k, k)}" for k in order if counts.get(k))
+        text = ", ".join(f"{counts[k]} {names.get(k, k)}" for k in order if counts.get(k))
+        st = run.stats
+        trouble: list[str] = []
+        if st.empty_picks:
+            trouble.append(f"{st.empty_picks} of {st.picks} picks came up empty")
+        if st.failed_alignments:
+            trouble.append(
+                f"the bottom camera could not find {st.failed_alignments} of {st.alignments} parts"
+            )
+        if st.bad_placements:
+            trouble.append(f"{st.bad_placements} of {st.checked} checked placements were off")
+        if st.unsure:
+            trouble.append(f"{st.unsure} placements could not be made out to check")
+        return text + (f" ({'; '.join(trouble)})" if trouble else "")
 
     async def _rescan(self, run: RunState) -> None:
         """Scan the feeders, and take each placement still to do from wherever its part is
@@ -925,7 +1376,14 @@ class JobRunner:
         await self._feeders.scan()
         run.located = []
         self._picked = set()
-        plan = plan_job(run.job_id, job, self._machine.profile, self._feeders.state(), self._parts)
+        plan = plan_job(
+            run.job_id,
+            job,
+            self._machine.profile,
+            self._feeders.state(),
+            self._parts,
+            sniff_heights=self.sniff_board,
+        )
         now = {(i.copy_id, i.ref): i for i in plan.items}
         lost: list[str] = []
         for item in run.plan.items:
@@ -1106,36 +1564,27 @@ class JobRunner:
         job = self._job
         assert job is not None and run.fix is not None
         items = run.plan.items
-        for nozzle_id, index in batch.items():
+        # A feeder problem on one nozzle's pick (nothing picked, a pocket or a strip it
+        # cannot use): the other nozzles still pick, and every part held is placed before
+        # the run pauses for it, so none waits on a nozzle while the feeder is seen to.
+        failed: MachineError | None = None
+        failed_step: RunStep | None = None
+        for nozzle_id, index in list(batch.items()):
             if nozzle_id in run.held:
                 continue
             item = items[index]
             nozzle = self._machine.nozzle(nozzle_id)
             assert item.slot_id is not None
-            await self._locate_feeder(run, item.slot_id, index)
-            run.message = f"{nozzle_id} picking {item.ref} from {_source(item.slot_id)}"
-            run.current = RunStep(stage="item", action="picking", index=index, nozzle=nozzle_id)
-            for attempt in range(1, PICK_ATTEMPTS + 1):
-                try:
-                    await self._placement.pick(
-                        item.slot_id,
-                        nozzle,
-                        True,
-                        run.pick_correction,
-                        first=item.slot_id not in self._picked,
-                    )
-                    self._picked.add(item.slot_id)
-                    break
-                except MispickError as e:
-                    if attempt == PICK_ATTEMPTS:
-                        where = _source(item.slot_id)
-                        item.note = f"picked nothing {PICK_ATTEMPTS} times from {where}"
-                        raise RunError(
-                            f"{item.ref}: {e} ({PICK_ATTEMPTS} tries). Check the feeder, "
-                            "then resume to try again, or skip the placement."
-                        ) from e
+            try:
+                await self._pick_item(run, item, index, nozzle_id)
+            except (RunError, FeederError) as e:
+                failed, failed_step = e, run.current
+                del batch[nozzle_id]
+                continue
             run.held[nozzle_id] = index
             item.note = ""
+        if failed is not None and not run.held:
+            raise failed
 
         for nozzle_id in list(batch):
             index = batch[nozzle_id]
@@ -1146,16 +1595,20 @@ class JobRunner:
             nozzle = self._machine.nozzle(nozzle_id)
             run.message = f"{nozzle_id} aligning {item.ref}"
             run.current = RunStep(stage="item", action="aligning", index=index, nozzle=nozzle_id)
+            run.stats.alignments += 1
             try:
-                await self._placement.align(nozzle)
+                # Turned to its place angle first, as it will be placed.
+                await self._placement.align(nozzle, item.rotation + run.fix.angle)
             except VisionError as e:
+                run.stats.failed_alignments += 1
+                if isinstance(e, UntrainableError):
+                    self._skip_untrainable(run, item, index, e)
                 if not self._placement.can_discard():
                     item.discards += 1
                     item.note = f"bottom vision failed ({e}): take the part off {nozzle_id}"
-                    parked = await self._park()
                     raise RunError(
-                        f"{item.ref}: {e}, and there is no discard location to drop it in."
-                        f"{parked} Take whatever is on {nozzle_id} off it (it may be empty), "
+                        f"{item.ref}: {e}, and there is no discard location to drop it in. "
+                        f"Take whatever is on {nozzle_id} off it (it may be empty), "
                         "click Part removed, and resume to pick it again, or skip the "
                         "placement. Set a discard location (Calibration panel, Machine "
                         "workspace), and the run will do this itself."
@@ -1164,7 +1617,10 @@ class JobRunner:
                 del run.held[nozzle_id]
                 del batch[nozzle_id]
                 item.discards += 1
-                if item.discards >= ALIGN_ATTEMPTS:
+                if isinstance(e, UntrainableError):
+                    item.status = "skipped"
+                    item.note = f"{UNTRAINABLE} ({e}): train it (Placement panel), then un-skip"
+                elif item.discards >= ALIGN_ATTEMPTS:
                     item.status = "failed"
                     item.note = f"bottom vision failed {item.discards} times: {e}"
                 else:
@@ -1180,26 +1636,284 @@ class JobRunner:
             await self._placement.place(nozzle, target, item.rotation + run.fix.angle, board)
             del run.held[nozzle_id]
             item.status, item.note, item.nozzle = "placed", "", nozzle_id
+            run.stats.placed += 1
             self._machine.recorder.event("run.placed", ref=item.ref, index=index, at=target)
+            if run.check_placements:
+                run.message = f"checking {item.ref}"
+                run.current = RunStep(
+                    stage="item", action="checking", index=index, nozzle=nozzle_id
+                )
+                await self._check_placed(run, item, target, item.rotation + run.fix.angle)
+            self._bump_sim_board(run)
+        if failed is not None:
+            # The parts held are placed: now the pick that failed, where it stopped.
+            run.current = failed_step
+            raise failed
+
+    def _skip_untrainable(
+        self, run: RunState, item: RunItem, index: int, error: UntrainableError
+    ) -> None:
+        """Skip the other placements of a part training could not see, not held: picking
+        each would cost a part."""
+        for i, other in enumerate(run.plan.items):
+            if (
+                i != index
+                and other.part_id == item.part_id
+                and other.status == "pending"
+                and i not in run.held.values()
+            ):
+                other.status = "skipped"
+                other.note = (
+                    f"{UNTRAINABLE} (at {item.ref}): train it (Placement panel), then un-skip"
+                )
+        self._machine.recorder.event("run.untrainable", part=item.part_id, ref=item.ref)
+        log.warning("%s: %s; its placements are skipped", item.part_id, error)
+
+    async def _pick_item(self, run: RunState, item: RunItem, index: int, nozzle_id: str) -> None:
+        """Pick ``item``'s part with ``nozzle_id``, trying again (feeding the next part)
+        after an empty pick, up to ``PICK_ATTEMPTS`` times."""
+        assert item.slot_id is not None
+        nozzle = self._machine.nozzle(nozzle_id)
+        await self._locate_feeder(run, item.slot_id, index)
+        run.message = f"{nozzle_id} picking {item.ref} from {_source(item.slot_id)}"
+        run.current = RunStep(stage="item", action="picking", index=index, nozzle=nozzle_id)
+        for attempt in range(1, PICK_ATTEMPTS + 1):
+            run.stats.picks += 1
+            # After a miss, a pick that looks first does not feed: the camera sees whether
+            # the part is still in its pocket (tried again) or gone (then it feeds), so a
+            # part the nozzle failed to take is not fed past and lost.
+            looks = run.pick_correction in ("top", "auto")
+            try:
+                await self._placement.pick(
+                    item.slot_id,
+                    nozzle,
+                    attempt == 1 or not looks,
+                    run.pick_correction,
+                    first=item.slot_id not in self._picked,
+                )
+                self._picked.add(item.slot_id)
+                return
+            except MispickError as e:
+                run.stats.empty_picks += 1
+                if attempt == PICK_ATTEMPTS:
+                    where = _source(item.slot_id)
+                    item.note = f"picked nothing {PICK_ATTEMPTS} times from {where}"
+                    raise RunError(
+                        f"{item.ref}: {e} ({PICK_ATTEMPTS} tries). Check the feeder, "
+                        "then resume to try again, or skip the placement."
+                    ) from e
+
+    async def _check_placed(
+        self, run: RunState, item: RunItem, target: Point, rotation: float
+    ) -> None:
+        """Look at a part just placed with the top camera, keep where it was found with the
+        item, and pause the run if it is off its pads, turned, or not there
+        (``CHECK_ON_PADS``, ``CHECK_TURN``, ``CHECK_SCORE``; ``CHECK_OFF_MM`` from where it
+        was sent when the pads cannot be seen), or if its pads are not where the board's
+        fit puts them (``CHECK_PADS_MOVED_MM``): the board has moved, and the run finds it
+        again on resume. Only two-terminal chips with a body are looked for
+        (``vision.placed``); others are left unchecked."""
+        footprint = self._parts.find_footprint(item.footprint_id) if self._parts else None
+        if footprint is None or len(footprint.pads) != 2 or footprint.body is None:
+            return
+        machine = self._machine
+        camera = machine.top_camera()
+        await machine.move_camera_to(target.x, target.y)
+        frame = await machine.frame(camera.id)
+        h, w = frame.image.shape[:2]
+        mm_x, mm_y = camera.field_of_view.x / w, camera.field_of_view.y / h
+        body = footprint.body
+        length, width = max(body.x, body.y), min(body.x, body.y)
+        # The chip's long axis in the machine, then as the picture shows it.
+        along = rotation + (90.0 if body.y > body.x else 0.0)
+        ax, ay = machine.image_to_machine(camera, 1.0, 0.0)
+        bx, by = machine.image_to_machine(camera, 0.0, 1.0)
+        det = ax * by - bx * ay
+        a = math.radians(along)
+        mx, my = math.cos(a), math.sin(a)
+        right, down = (by * mx - bx * my) / det, (-ay * mx + ax * my) / det
+        expected = image_turn(right, down)
+        found: PlacedChip | None = await machine.recorder.vision(
+            "find_placed_chip",
+            frame.image,
+            mm_x,
+            mm_y,
+            length,
+            width,
+            expected,
+            camera=camera.id,
+            position=dict(machine.driver.position),
+            ref=item.ref,
+        )
+        run.stats.checked += 1
+        good = found is not None and found.score >= CHECK_SCORE
+
+        def to_image(x: float, y: float) -> tuple[float, float]:
+            """Machine mm as mm right and down in the picture."""
+            return (by * x - bx * y) / det, (-ay * x + ax * y) / det
+
+        # The footprint's pads where the board's fit puts them, about the picture's middle.
+        expected_pads: list[Polygon] = []
+        for pad in footprint.pads:
+            corners: list[tuple[float, float]] = []
+            for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+                corner = rotate(Point(x=sx * pad.width / 2, y=sy * pad.height / 2), pad.rotation)
+                p = rotate(Point(x=pad.x + corner.x, y=pad.y + corner.y), rotation)
+                corners.append(to_image(p.x, p.y))
+            expected_pads.append(corners)
+        pads: FoundPads | None = await machine.recorder.vision(
+            "find_board_pads",
+            frame.image,
+            mm_x,
+            mm_y,
+            expected_pads,
+            camera=camera.id,
+            position=dict(machine.driver.position),
+            ref=item.ref,
+        )
+        seen = pads is not None and pads.score >= CHECK_PADS_SCORE
+        found_pads = (
+            [[(x + pads.dx, y + pads.dy) for x, y in pad] for pad in expected_pads]
+            if pads is not None and seen
+            else None
+        )
+        picture = self._save_check(
+            item.index,
+            check_picture(
+                frame.image,
+                mm_x,
+                mm_y,
+                length,
+                width,
+                expected,
+                found if good else None,
+                found_pads,
+            ),
+        )
+        if found is not None and not good and found.score >= CHECK_UNSURE:
+            # Not made out well enough to judge: say so, and go on.
+            run.stats.unsure += 1
+            item.check = PlacementCheck(
+                dx=0.0,
+                dy=0.0,
+                turn=0.0,
+                score=round(found.score, 2),
+                ok=True,
+                checked=False,
+                picture=picture,
+            )
+            machine.recorder.event("run.checked", ref=item.ref, check=item.check)
+            return
+        if found is None or not good:
+            run.stats.bad_placements += 1
+            item.check = PlacementCheck(
+                dx=0.0,
+                dy=0.0,
+                turn=0.0,
+                score=found.score if found else -1.0,
+                ok=False,
+                picture=picture,
+            )
+            raise RunError(
+                f"{item.ref}: the top camera did not find it where it was placed: look at "
+                "it (it may have moved, stood up, or come away with the nozzle), fix or "
+                "remove it, and resume"
+            )
+        r, d = chip_offset(found, w, h, mm_x, mm_y)
+        dx, dy = machine.image_to_machine(camera, r, d)
+        f = math.radians(found.angle)
+        fx, fy = machine.image_to_machine(camera, math.cos(f), -math.sin(f))
+        turn = (math.degrees(math.atan2(fy, fx)) - along + 90.0) % 180.0 - 90.0
+        turn = round(turn, 1) + 0.0  # never "-0.0"
+        off = math.hypot(dx, dy)
+        share: float | None = None
+        moved: tuple[float, float] | None = None
+        if pads is not None and found_pads is not None:
+            share = on_pads(chip_ends(found, w, h, mm_x, mm_y, length, width), found_pads)
+            moved = machine.image_to_machine(camera, pads.dx, pads.dy)
+            ok = share >= CHECK_ON_PADS and abs(turn) <= CHECK_TURN
+        else:
+            ok = off <= CHECK_OFF_MM and abs(turn) <= CHECK_TURN
+        item.check = PlacementCheck(
+            dx=round(dx, 3),
+            dy=round(dy, 3),
+            turn=turn,
+            score=round(found.score, 2),
+            on_pads=round(share, 2) if share is not None else None,
+            pads_dx=round(moved[0], 3) if moved is not None else None,
+            pads_dy=round(moved[1], 3) if moved is not None else None,
+            ok=ok,
+            picture=picture,
+        )
+        machine.recorder.event("run.checked", ref=item.ref, check=item.check)
+        if not ok:
+            run.stats.bad_placements += 1
+        wrong: list[str] = []
+        if share is not None and share < CHECK_ON_PADS:
+            wrong.append(f"with only {share:.0%} of an end on its pad")
+        if abs(turn) > CHECK_TURN:
+            wrong.append(f"turned {turn:+.1f} degrees")
+        if moved is not None and math.hypot(*moved) > CHECK_PADS_MOVED_MM:
+            # The next parts would land off their pads too: find the board again first.
+            self._refit = True
+            part = (
+                f"{item.ref} itself is on its pads"
+                if ok
+                else f"{item.ref} landed {' and '.join(wrong)}: fix or remove it"
+            )
+            raise RunError(
+                f"the board seems to have moved: {item.ref}'s pads are "
+                f"{math.hypot(*moved):.2f} mm from where its fiducials put them (X "
+                f"{moved[0]:+.2f}, Y {moved[1]:+.2f}). {part}. Make sure the board is held "
+                "firmly, then resume: the run finds the fiducials again before going on"
+            )
+        if not ok and share is not None:
+            raise RunError(
+                f"{item.ref} landed {' and '.join(wrong)}: look at it (it may stand up when "
+                "soldered), fix or remove it, and resume"
+            )
+        if not ok:
+            raise RunError(
+                f"{item.ref} landed {off:.2f} mm from where it was sent (X {dx:+.2f}, Y "
+                f"{dy:+.2f}), turned {turn:+.1f} degrees: look at it (off its pads, it may "
+                "stand up when soldered), fix or remove it, and resume"
+            )
+
+    def _save_check(self, index: int, picture: Image) -> bool:
+        """Keep a checked placement's picture, for the operator; False if there is
+        nowhere to keep it, or it could not be saved."""
+        if self.checks_dir is None:
+            return False
+        try:
+            self.checks_dir.mkdir(parents=True, exist_ok=True)
+            ok, data = cv2.imencode(".jpg", picture, [cv2.IMWRITE_JPEG_QUALITY, 90])
+            if not ok:
+                return False
+            (self.checks_dir / f"{index}.jpg").write_bytes(data.tobytes())
+        except OSError as e:
+            log.warning("could not keep the picture of a checked placement: %s", e)
+            return False
+        return True
+
+    def check_picture_path(self, index: int) -> Path | None:
+        """Where the picture of the current run's checked placement ``index`` is, if
+        kept."""
+        run = self._run
+        if self.checks_dir is None or run is None:
+            return None
+        items = run.plan.items
+        if not 0 <= index < len(items) or items[index].check is None:
+            return None
+        path = self.checks_dir / f"{index}.jpg"
+        return path if path.is_file() else None
 
     async def _park(self) -> str:
-        """Move the head out of the way of an operator refilling a strip or tray: to the
-        park location, or else to the back of its travel. Says where it went, for the
-        run's message; a move that fails is reported, not raised, so the pause stands."""
-        profile = self._machine.profile
-        park = next((loc for loc in profile.locations if loc.kind == "park"), None)
-        if park is not None:
-            target = {"X": park.position.x, "Y": park.position.y}
-            where = f"the {park.label.lower()}"
-        else:
-            y = next((a for a in profile.axes if a.name == "Y"), None)
-            if y is None:
-                return ""
-            target = {"Y": y.max if profile.y_sign > 0 else y.min}
-            where = "the back (no park location is set)"
+        """Move the head out of the way of an operator who must do something (refill a
+        strip, fix a placement): to the park location, or else to the back of its travel.
+        Says where it went, for the run's message; a move that fails is reported, not
+        raised, so the pause stands."""
         try:
-            await self._machine.raise_nozzles()
-            await self._machine.move_axes(target)
+            where = await self._machine.park()
         except MachineError as e:
             log.warning("could not park the head: %s", e)
             return f" The head could not move out of the way ({e}): mind it."
@@ -1245,6 +1959,25 @@ class JobRunner:
         self._sim_board = BoardScene(
             outline=outline, fiducials=tuple(fiducials), pads=tuple(pads), marks=tuple(marks)
         )
+
+    def _bump_sim_board(self, run: RunState) -> None:
+        """Slide the simulated board by ``sim_board_bump``, once its count of parts is
+        placed: the parts on it go with it."""
+        bump = self.sim_board_bump
+        sim = self._feeders.sim_parts
+        if bump is None or self._sim_bumped or self._sim_error is None or self._job is None:
+            return
+        count, bx, by = bump
+        if run.stats.placed < count or sim is None:
+            return
+        self._sim_bumped = True
+        dx, dy, angle = self._sim_error
+        self._sim_error = (dx + bx, dy + by, angle)
+        self._load_sim_board(self._job, self._parts)
+        sim.placed[:] = [
+            p if p.shape.disc is not None else replace(p, x=p.x + bx, y=p.y + by)
+            for p in sim.placed
+        ]
 
     def sim_target(self, item: RunItem) -> tuple[Point, float] | None:
         """Where the simulated board really wants an item's part, and at what angle."""

@@ -144,6 +144,89 @@ def test_a_tray_higher_than_its_pick_height_is_found_by_touch() -> None:
         assert feeders.part_top("T1") is None
 
 
+def strip(**update: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "label": "8 mm holder",
+        "kind": "strip",
+        "part_id": "EX-C0805-1U",
+        "first": {"x": 150, "y": 250},
+        "step": {"x": -4, "y": 0},
+        "columns": 10,
+    }
+    return base | update
+
+
+def test_teaching_a_strips_last_part_counts_its_parts(lumen: TestClient) -> None:  # noqa: F811
+    """A strip's tape gives its pitch: the first and last parts, centered by eye, give
+    how many parts it holds and the step from one to the next."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        move_to_bed(lumen, s, "EX-C0805-1U", strip(columns=1))
+        teach = "/api/v1/feeders/fixed/T1/teach"
+        assert s.put(teach, {"which": "first", "at": {"x": 150.1, "y": 250}}).status_code == 200
+        # Seven 4 mm pockets on, a little off by eye.
+        r = s.put(teach, {"which": "row_end", "at": {"x": 122.2, "y": 250.1}})
+        assert r.status_code == 200, r.json()
+        feeder = r.json()["feeder"]
+        assert feeder["columns"] == 8 and r.json()["remaining"] == 8
+        assert feeder["step"] == pytest.approx({"x": -3.9857, "y": 0.0143}, abs=1e-4)
+
+        # Halfway between pockets, or on the first part again: refused, nothing changed.
+        r = s.put(teach, {"which": "row_end", "at": {"x": 140.1, "y": 250}})
+        assert r.status_code == 422 and "2.50 pockets of 4 mm" in r.json()["detail"], r.json()
+        r = s.put(teach, {"which": "row_end", "at": {"x": 150.3, "y": 250}})
+        assert r.status_code == 422 and "less than one pocket" in r.json()["detail"], r.json()
+        assert lumen.get("/api/v1/feeders").json()["fixed"][0]["feeder"]["columns"] == 8
+
+
+def test_a_strip_with_no_pick_height_is_searched_for_from_safe_z() -> None:
+    """The strip's holder lifts its tape 3 mm above where its parts would lie on the
+    board's plane, and no pick height is set: going to that plane's height would press
+    into them. The first pick steps down from safe Z until it seals on the part's top,
+    and keeps that height for the next picks."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_part_height_error": 3.0},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        move_to_bed(client, s, "EX-C0805-1U", strip())
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        warnings = [i["message"] for i in plan["issues"] if i["severity"] == "warning"]
+        assert any(w.startswith("T1 has no pick height: its first pick searches") for w in warnings)
+
+        op = ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "T1", "nozzle_id": "N1"})))
+        assert "no pick height set: found the part's top at Z" in op["message"], op["message"]
+        ctx = client.app.state.ctx  # type: ignore[attr-defined]
+        feeders = ctx.feeders
+        part = ctx.library.find_part("EX-C0805-1U")
+        board = ctx.machine.profile.board_height
+        assert feeders.part_top("T1") == pytest.approx(board + part.height + 3.0, abs=0.3)
+        assert feeders.sim_parts.crashes == []
+
+        op = ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "T1", "nozzle_id": "N2"})))
+        assert "by touch" not in op["message"], op["message"]
+
+
+def test_a_strip_with_no_pick_height_is_not_used_without_sniffing() -> None:
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sniff_heights": False},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        move_to_bed(client, s, "EX-C0805-1U", strip())
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        warnings = [i["message"] for i in plan["issues"] if i["severity"] == "warning"]
+        assert "T1 is not used: it has no pick height (set one in the Feeders workspace" in (
+            " ".join(warnings)
+        )
+        op = s.wait(s.post("/api/v1/placement/pick", {"slot_id": "T1", "nozzle_id": "N1"}))
+        assert op["status"] == "failed"
+        assert op["error"].startswith("T1 (8 mm holder) has no pick height: set one"), op
+        assert client.get("/api/v1/feeders").json()["fixed"][0]["remaining"] == 10
+
+
 def empty_tray_run(client: TestClient, s: Session) -> dict[str, Any]:
     """Run the demo job with C1's part from a tray that is empty: the run pauses."""
     set_up(client, s)
@@ -166,7 +249,8 @@ def empty_tray_run(client: TestClient, s: Session) -> dict[str, Any]:
     assert op["status"] == "failed"
     assert op["error"].startswith("T1 (SOIC tray) is empty after 2 parts: refill it")
     run = client.get("/api/v1/run").json()
-    assert run["status"] == "paused" and run["placed"] == 2
+    # The other nozzle's part is placed before the run pauses: none waits on a nozzle.
+    assert run["status"] == "paused" and run["placed"] == 3 and run["held"] == {}
     assert run["error"] == op["error"]
     return op
 

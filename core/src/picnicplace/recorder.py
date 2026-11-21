@@ -48,7 +48,8 @@ from picnicplace.vision.fiducial import find_circle, find_circles, find_hole
 from picnicplace.vision.focus import sharpness
 from picnicplace.vision.pads import fit_pads
 from picnicplace.vision.part import find_part
-from picnicplace.vision.tape import loose_parts, pocket_darkness
+from picnicplace.vision.placed import find_board_pads, find_placed_chip
+from picnicplace.vision.tape import loose_parts, pocket_darkness, pocket_ends
 from picnicplace.vision.token import find_opening
 
 log = logging.getLogger(__name__)
@@ -60,11 +61,14 @@ VISION_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "find_circle": find_circle,
     "find_circles": find_circles,
     "find_hole": find_hole,
-    "find_opening": find_opening,
     "loose_parts": loose_parts,
     "pocket_darkness": pocket_darkness,
+    "pocket_ends": pocket_ends,
+    "find_opening": find_opening,
     "find_part": find_part,
     "fit_pads": fit_pads,
+    "find_placed_chip": find_placed_chip,
+    "find_board_pads": find_board_pads,
     "sharpness": sharpness,
 }
 """The vision functions a recording can hold calls of, by name, for replaying them."""
@@ -78,7 +82,7 @@ _ID = re.compile(r"^\d{8}-\d{6}(-[a-z0-9-]+)?$")
 class RecordingInfo(WireModel):
     id: str
     label: str
-    reason: Literal["manual", "run"]
+    reason: Literal["manual", "run", "train"]
     job_id: str | None = None
     started_at: datetime
     ended_at: datetime | None = None
@@ -147,7 +151,10 @@ class FlightRecorder:
         return self._root is not None
 
     def start(
-        self, label: str, reason: Literal["manual", "run"] = "manual", job_id: str | None = None
+        self,
+        label: str,
+        reason: Literal["manual", "run", "train"] = "manual",
+        job_id: str | None = None,
     ) -> RecordingInfo:
         if self._root is None:
             raise RecorderError("recordings need a data directory")
@@ -265,6 +272,21 @@ class FlightRecorder:
                 **context,
             )
         return result
+
+    async def frame(self, image: np.ndarray, camera: str, name: str, **context: Any) -> None:
+        """Keep a frame in the active recording, if any, with what it shows."""
+        rec = self._current
+        if rec is None:
+            return
+        self._frame_count += 1
+        path: str | None = f"frames/{self._frame_count:05d}-{camera}-{name}.png"
+        try:
+            await asyncio.to_thread(_write_png, rec.folder / str(path), image)
+            rec.info.frames += 1
+        except (OSError, cv2.error) as e:
+            log.warning("could not save a frame with the recording: %s", e)
+            path = None
+        self.event("frame", camera=camera, frame=path, **context)
 
     async def _follow_bus(self, bus: EventBus, sub: Subscription) -> None:
         try:

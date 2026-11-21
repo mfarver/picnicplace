@@ -119,8 +119,12 @@ APPROACH_SPEED = 10.0
 
 VACUUM_POLL_S = 0.05
 VACUUM_STEADY = 0.002
-"""A vacuum reading that changes less than this (as a fraction of its sensor's range)
-from one poll to the next has settled."""
+"""A vacuum reading that changes less than this (as a fraction of its sensor's range)..."""
+VACUUM_STEADY_S = 0.3
+"""...for this long has settled. Not from one poll to the next: a LumenPnP's sensor
+updates about every 0.1 s in steps of 65,536 counts, so two polls can agree while the
+vacuum is still rising. With an N045's small hole it rose for 0.6 s in open air, and an
+open reading taken at 0.3 s made the first step of a touch read as a seal."""
 
 
 def _open_px(min_diameter_px: float) -> int:
@@ -271,6 +275,10 @@ class MachineService:
             else tuple((n.id, n.tip) for n in self._profile.nozzles if n.tip is not None),
             runout=tuple(
                 (n, round(x, 4), round(y, 4)) for n, (x, y) in self._driver.scene_runout.items()
+            ),
+            lights=tuple(
+                (k, (c.red, c.green, c.blue, c.brightness))
+                for k, c in sorted(self._driver.light_colors.items())
             ),
         )
 
@@ -701,15 +709,19 @@ class MachineService:
             work = warned
         return self._start_operation(kind, work)
 
-    async def frame(self, camera_id: str, settle: bool = True) -> Frame:
-        """A frame taken now (after the camera's settle time, if asked)."""
+    async def frame(
+        self, camera_id: str, settle: bool = True, light: LightColor | None = None
+    ) -> Frame:
+        """A frame taken now (after the camera's settle time, if asked), with the camera's
+        light set to ``light`` if given (a part trained to be seen so), else to its usual
+        color."""
         camera = next((c for c in self._profile.cameras if c.id == camera_id), None)
         if camera is None:
             raise VisionError(f"no camera {camera_id!r}")
         if self._grab is None:
             raise VisionError("the cameras are not available")
         if settle:
-            await self._light_for(camera)
+            await self._light_for(camera, light)
             await asyncio.sleep(camera.settle_s)
         frame = await self._grab(camera_id, time.time(), FRAME_WAIT_S)
         if frame is None:
@@ -777,6 +789,33 @@ class MachineService:
                 await self.move_axes({nozzle.z_axis: nozzle.z_sign * (raw + APPROACH_MM)}, speed)
             speed = APPROACH_SPEED if speed is None else min(speed, APPROACH_SPEED)
         await self.move_axes({nozzle.z_axis: nozzle.z_sign * raw}, speed)
+
+    async def park(self) -> str:
+        """Raise the nozzles and move the head out of the operator's way: to the park
+        location, or else to the back of its travel. For use inside an operation. Says
+        where it went."""
+        profile = self._profile
+        park = next((loc for loc in profile.locations if loc.kind == "park"), None)
+        if park is not None:
+            target = {"X": park.position.x, "Y": park.position.y}
+            where = f"the {park.label.lower()}"
+        else:
+            y = next((a for a in profile.axes if a.name == "Y"), None)
+            if y is None:
+                return "nowhere: the machine has no Y axis"
+            target = {"Y": y.max if profile.y_sign > 0 else y.min}
+            where = "the back (no park location is set)"
+        await self.raise_nozzles()
+        await self.move_axes(target)
+        return where
+
+    def start_park(self) -> Operation:
+        """Park the head (``park``) as an operation."""
+
+        async def work() -> str:
+            return f"The head moved to {await self.park()}."
+
+        return self.start_task("park", work)
 
     async def raise_nozzles(self) -> None:
         await self.move_axes({axis: TRAVEL_HEIGHT for axis in sorted(self._z_axes)})
@@ -856,16 +895,20 @@ class MachineService:
         span = abs(sensor.range.max - sensor.range.min)
         loop = asyncio.get_running_loop()
         start = loop.time()
+        steady_s = max(2 * VACUUM_POLL_S, VACUUM_STEADY_S / self._driver.time_scale)
         await asyncio.sleep(least_s)
+        since: float | None = None  # when the reading last changed
         last: float | None = None
         while True:
             await self._driver.refresh_input(sensor.id)
             value = self.vacuum_reading(nozzle)
-            if value is not None and last is not None and abs(value - last) <= VACUUM_STEADY * span:
+            now = loop.time()
+            if value is None or last is None or abs(value - last) > VACUUM_STEADY * span:
+                since, last = now, value
+            elif since is not None and now - since >= steady_s:
                 return value
-            if loop.time() - start >= most_s:
+            if now - start >= most_s:
                 return value
-            last = value
             await asyncio.sleep(VACUUM_POLL_S)
 
     def vacuum_reading(self, nozzle: Nozzle) -> float | None:
@@ -874,19 +917,25 @@ class MachineService:
             return None
         return float(value)
 
-    async def _light_for(self, camera: Camera) -> None:
-        """Vision needs the camera's light: switch it on if it is off, and leave it on
-        (switching it for every look would flicker through a run). The caller then waits
-        the camera's settle time, which lets the picture brighten."""
+    async def light_for(self, camera: Camera, want: LightColor | None = None) -> None:
+        """Set a camera's light for vision (``_light_for``)."""
+        await self._light_for(camera, want)
+
+    async def _light_for(self, camera: Camera, want: LightColor | None = None) -> None:
+        """Vision needs the camera's light: set it to ``want`` (a part's own light), else
+        to the config's color for the camera, else white; and leave it on (switching it
+        for every look would flicker through a run). The caller then waits the camera's
+        settle time, which lets the picture brighten."""
         light = camera.light_output
         if light is None:
             return
-        want = self.camera_lights.get(camera.id)
-        if want is not None:
-            # The config's color for this camera, unless it is already so.
-            if not self._driver.outputs.get(light) or self._driver.light_colors.get(light) != want:
-                await self._driver.set_light(light, want)
-        elif not self._driver.outputs.get(light):
+        want = want or self.camera_lights.get(camera.id)
+        now = self._driver.light_colors.get(light)
+        if want is not None and want != WHITE:
+            if not self._driver.outputs.get(light) or now != want:
+                await self.set_light(light, want)
+        elif not self._driver.outputs.get(light) or (now is not None and now != WHITE):
+            # Back to plain white after a part's own light.
             await self._driver.set_output(light, True)
 
     def image_to_machine(

@@ -504,6 +504,16 @@ class MachineProfile(ProfileModel):
             "give its own."
         ),
     )
+    place_press: float = Field(
+        default=0.0,
+        ge=0,
+        le=1.0,
+        description=(
+            "How far below a part's top, resting on the board, the nozzle goes to place it "
+            "(mm): a spring-loaded nozzle presses the part into paste or tape. 0 for a "
+            "nozzle without the travel to spare."
+        ),
+    )
     feeder_bus: Literal["photon"] | None = Field(
         default=None,
         description="The feeders' bus: 'photon' for Opulo's Photon feeders over RS-485.",

@@ -130,6 +130,10 @@ class SimulatorDriver(MotionDriver):
         self._slips: dict[str, float] = {}
         self.drops_on_lift: dict[str, int] = {}
         """How many of its next picks each nozzle drops once lifted, by ID."""
+        self.sticks_on_release: dict[str, int] = {}
+        """How many of its next parts each nozzle keeps when its suction goes off, by ID,
+        as a part stuck to a tip would; it lets go the time after."""
+        self._stuck: set[str] = set()
         """Nozzles holding a disc they cannot lift, by ID: the tip's height as it sealed."""
         self.surface_at: Callable[[float, float], float | None] | None = None
         self.datum_seal_press = 0.0
@@ -316,6 +320,7 @@ class SimulatorDriver(MotionDriver):
         await self.set_output(output_id, color.brightness > 0)
         if color.brightness > 0:
             self._light_colors[output_id] = color
+            self._notify()
 
     def _height(self, nozzle: Nozzle) -> float:
         real_z = self._position[nozzle.z_axis] + self._z_slip.get(nozzle.z_axis, 0.0)
@@ -367,6 +372,15 @@ class SimulatorDriver(MotionDriver):
         for n in self._profile.nozzles:
             sealed_at = self._slips.get(n.id)
             slipped = sealed_at is not None and self._tip(n) > sealed_at + SLIP_LIFT_MM
+            if not self._suction(n) and not slipped and self._held[n.id]:
+                if self.sticks_on_release.get(n.id, 0) > 0 and n.id not in self._stuck:
+                    self.sticks_on_release[n.id] -= 1
+                    self._stuck.add(n.id)
+                if n.id in self._stuck:
+                    self._sealed[n.id] = self._first_touch[n.id] = False
+                    continue
+            if self._suction(n):
+                self._stuck.discard(n.id)
             if not self._suction(n) or slipped:
                 self._slips.pop(n.id, None)
                 if self._held[n.id]:

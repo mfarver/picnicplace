@@ -158,6 +158,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `vision/fiducial.py` | Finds round marks: homing and board fiducials, feeder fiducials, sprocket holes |
 | `vision/tape.py` | Paper tape: whether a pocket holds a part, and parts lying loose on the tape |
 | `vision/part.py` | The metal mask (bright, not yellowish plastic, no specks), and one box around everything bright about the nozzle: the part's outline, which bottom vision finds first |
+| `vision/placed.py` | Finds a two-terminal chip where it was just placed, from above (a dark body between two bright caps, matched by normalized correlation over positions and turns), and the board's pads under it (the footprint's pads slid over the bright copper), and how much of the chip's ends lie on them: the run's placement check |
 | `vision/pads.py` | Fits a footprint's pads to the metal in a bottom camera frame, for parts whose pads are off their body's center or whose body is as bright as their leads (started from the outline's angle whenever a footprint has two pads or more, and fitted both ways round when its pads are not symmetric) |
 | `vision/token.py` | Finds the calibration token's opening, by its gold copper in the blue channel, and tells a token from a paper disc |
 | `vision/focus.py` | How sharp part of a frame is, for finding a camera's focus |
@@ -179,12 +180,14 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `feeders/service.py` | The feeder service: scanning, feeding, where to pick, fiducial calibration, pocket finding, strips and trays, pick learning |
 | `feeders/pocket.py` | Where the pocket is, from the sprocket holes seen; of two about as near, which to take |
 | `feeders/rails.py` | Fitting a feeder rail to the feeder fiducials found on it |
-| `placement.py` | Pick, align (outline, then pads, or the outline alone when no metal shows: a white chip's body), and place one part; pick correction (top or bottom camera) |
+| `placement.py` | Pick, align (outline, then pads, or the outline alone when no metal shows: a white chip's body; a trained part as trained), train, and place one part; pick correction (top or bottom camera) |
+| `training.py` | Training how the bottom camera sees a part: the lights, thresholds and turns tried, how a way of seeing it is scored, the trained parts kept (to be approved), and the approval pictures with the footprint drawn over and beside the part |
 | `simparts.py` | The simulator's parts: which nozzle holds what, where placed parts landed (and how far they fell), the calibration disc, and crashes: a tip pressed into a part, or a part into the board. Part tops come from the feeders' tapes, strips, and trays, and board tops from the staging plates, each off by the config's simulator errors |
 | `board/` | Boards and panels, and reading them from KiCad (`kicad.py`, with a small S-expression reader) and KiKit panels |
 | `job/models.py`, `job/store.py` | Jobs (a board or panel on the machine) and their files, with their published revisions and this machine's setup for each |
 | `job/revision.py` | Job revisions: the design and a copy of the library entries it uses, the job file, and its hash |
-| `job/layout.py` | Where a job's placements land on the machine, and what the machine cannot reach |
+| `job/footprint_check.py` | Whether a part's footprint fits the board's where it goes: the same pads, or turned, moved, or different |
+| `job/layout.py` | Where a job's placements land on the machine, what the machine cannot reach, and the place from a fiducial under the camera |
 | `job/run.py` | Running a job's published revision: the planner (also the dry run), board alignment, batches, pause, step, resume, stop, refills |
 
 ### The data directory
@@ -200,6 +203,8 @@ The core keeps the owner's data in one folder (`data.dir` in the config; by defa
 | `setups/` | One JSON file per job: where this machine has its panel on the bed, and the board's height | `job/store.py` |
 | `captures/` | Frames saved with the Capture panel | `capture.py` |
 | `recordings/` | Flight recordings | `recorder.py` |
+| `run-checks/` | Pictures of the current run's checked placements | `job/run.py` |
+| `trained-parts.json`, `trained-parts/` | Trained parts, and their pictures | `training.py` |
 | `bring-up.json` | Progress through the bring-up checklist | `bringup.py` |
 | `wizard.json` | The setup wizard's pages the owner confirmed or skipped | `wizard.py` |
 | `machine-setup.json` | The setup wizard's choices: the machine, its serial port and cameras, and the last probe | `machine_setup.py` |
@@ -240,8 +245,9 @@ client. Useful pieces:
 | `components/` | Panels and controls used by the workspaces; `machine/` holds the machine view (the overhead map and head inset), `wizard/` the setup wizard (a panel over the map) and the calibration banner, `job/` and `library/` their own pieces |
 | `api/schema.ts` | **Generated** TypeScript types for the whole API (`make api`); never edit by hand |
 | `api/types.ts` | Short names for the generated types |
-| `tape.ts`, `runSteps.ts` | Pure logic with unit tests: tape geometry, fit check, pin-1 quadrant, and table-cell parsing; a run's step list |
-| `cameraMarks.ts` | Marks drawn on a top camera's picture where vision found something (the pick pocket, loose parts), placed from machine coordinates as the head moves |
+| `tape.ts`, `runSteps.ts`, `fiducials.ts` | Pure logic with unit tests: tape geometry, fit check, pin-1 quadrant, and table-cell parsing; a run's step list; the fiducials a job can be placed from |
+| `cameraMarks.ts` | Marks drawn on a top camera's picture where vision found something (the pick pocket, loose parts), and footprints drawn where a part should lie (a placement, a pick), placed from machine coordinates as the head moves |
+| `useFootprint.ts` | A library footprint by ID, fetched once a session |
 | `mjpeg.ts` | Reads a camera's MJPEG stream with `fetch`, so leaving a view closes its connection (an `<img>` can hold it open and use up the browser's six connections to the core) |
 | `api/client.ts` | The typed REST client (`api.GET("/api/v1/...")`) |
 | `api/core.ts`, `api/CoreProvider.tsx` | The event socket and the live state it feeds: machine state, operations, presence, the lease |

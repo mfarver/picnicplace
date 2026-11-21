@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from picnicplace.api.context import Context, require
 from picnicplace.auth import Permission
-from picnicplace.job.layout import JobLayout, find_location, layout
+from picnicplace.job.layout import JobLayout, find_location, layout, location_from_fiducial
 from picnicplace.job.models import Job, JobSetup, MachineLocation
 from picnicplace.job.revision import JobFileError, JobRevision, load, make_revision
 from picnicplace.job.store import (
@@ -20,7 +20,9 @@ from picnicplace.job.store import (
     RevisionSummary,
     job_id_for,
 )
-from picnicplace.schemas import ErrorResponse, WireModel
+from picnicplace.machine.errors import NotHomedError
+from picnicplace.machine.profile import Point
+from picnicplace.schemas import ErrorResponse, JobChangedEvent, WireModel
 
 router = APIRouter(
     prefix="/api/v1/jobs", tags=["jobs"], dependencies=[Depends(require(Permission.VIEW))]
@@ -83,6 +85,48 @@ def job_find_location(ctx: Context, job: Job) -> MachineLocation:
     return location
 
 
+class LocateRequest(WireModel):
+    job: Job = Field(description="The job, saved or not.")
+    ref: str = Field(description="The fiducial the top camera is centered on, such as FID1.")
+    copy_id: str | None = Field(
+        default=None, description="Its board copy, or empty for a fiducial on the panel."
+    )
+    rotation: float | None = Field(
+        default=None,
+        description="How far the panel is turned. Empty: the job's, or 0 if it has none.",
+    )
+    at: Point | None = Field(
+        default=None, description="Where the fiducial is. Empty: where the top camera is now."
+    )
+
+
+@router.post(
+    "/locate",
+    responses={
+        409: {"model": ErrorResponse, "description": "The machine is not homed."},
+        422: {"model": ErrorResponse, "description": "The job has no such fiducial."},
+    },
+)
+def job_locate(ctx: Context, body: LocateRequest) -> MachineLocation:
+    """Where the job's panel is on the bed, from one of its fiducials: by default, the one
+    the top camera is centered on now. Nothing is saved: the job's location is set when
+    it is saved. The run's board check then finds every fiducial and fits the board."""
+    at = body.at
+    if at is None:
+        if not ctx.machine.state.homed:
+            raise NotHomedError("home the machine first, so the camera's position is known")
+        at = ctx.machine.camera_position()
+    turn = body.rotation
+    if turn is None:
+        turn = body.job.location.rotation if body.job.location else 0.0
+    try:
+        return location_from_fiducial(
+            body.job, ctx.machine.profile, body.ref, body.copy_id, at, turn
+        )
+    except ValueError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from e
+
+
 @router.get("/{job_id}", responses=NOT_FOUND)
 def get_job(store: Store, job_id: str) -> Job:
     """A job's working copy, with this machine's setup for it (location, board height)."""
@@ -93,10 +137,11 @@ def get_job(store: Store, job_id: str) -> Job:
 
 
 @router.put("/{job_id}", dependencies=[CanEdit])
-def put_job(store: Store, job_id: str, job: Job) -> Job:
+async def put_job(ctx: Context, store: Store, job_id: str, job: Job) -> Job:
     """Save a job's working copy, creating or replacing it. Its location and board height
     are kept as this machine's setup for the job, not in the job."""
     store.put(_checked(job_id), job)
+    ctx.bus.publish(JobChangedEvent(job_id=job_id))
     return job
 
 
@@ -106,9 +151,10 @@ def put_job(store: Store, job_id: str, job: Job) -> Job:
     responses=NOT_FOUND,
     dependencies=[CanEdit],
 )
-def delete_job(store: Store, job_id: str) -> None:
+async def delete_job(ctx: Context, store: Store, job_id: str) -> None:
     if not store.delete(_checked(job_id)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"no job {job_id!r}")
+    ctx.bus.publish(JobChangedEvent(job_id=job_id))
 
 
 # --- This machine's setup ----------------------------------------------------------------
@@ -130,10 +176,11 @@ def get_setup(store: Store, job_id: str) -> JobSetup:
 @router.put(
     "/{job_id}/setup", responses=NOT_FOUND, dependencies=[Depends(require(Permission.MOTION))]
 )
-def put_setup(store: Store, job_id: str, setup: JobSetup) -> JobSetup:
+async def put_setup(ctx: Context, store: Store, job_id: str, setup: JobSetup) -> JobSetup:
     """Set where the job's panel sits on this machine, and the board's height. Works for a
     job loaded from a file too, which has no working copy."""
     store.put_setup(_existing(store, job_id), setup)
+    ctx.bus.publish(JobChangedEvent(job_id=job_id))
     return setup
 
 
@@ -174,7 +221,9 @@ class PublishRequest(BaseModel):
     },
     dependencies=[CanEdit],
 )
-def publish_revision(ctx: Context, store: Store, job_id: str, body: PublishRequest) -> JobRevision:
+async def publish_revision(
+    ctx: Context, store: Store, job_id: str, body: PublishRequest
+) -> JobRevision:
     """Publish the job's working copy as its next revision, with a copy of every part,
     footprint, and tape it uses from the library. A revision never changes afterward."""
     job = store.get(_checked(job_id))
@@ -192,6 +241,7 @@ def publish_revision(ctx: Context, store: Store, job_id: str, body: PublishReque
         store.add_revision(revision)
     except RevisionConflict as e:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=f"{e}: try again") from e
+    ctx.bus.publish(JobChangedEvent(job_id=job_id))
     return revision
 
 

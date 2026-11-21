@@ -243,7 +243,8 @@ class RefillRequest(WireModel):
 class TeachPartRequest(WireModel):
     which: Literal["first", "row_end", "last"] = Field(
         description=(
-            "The first part; the last part of the first row (sets the step along a row); "
+            "The first part; the last part of the first row (sets the step along a row, "
+            "and on a strip whose tape's pitch the library gives, how many parts it holds); "
             "or the last part of the last row (sets the step from row to row)."
         )
     )

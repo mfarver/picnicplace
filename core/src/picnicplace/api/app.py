@@ -219,6 +219,7 @@ def create_app(
         ctx.runner.record_runs = config.recorder.record_runs
         ctx.placement.sniff_heights = config.machine.sniff_heights
         ctx.placement.place_press = config.machine.place_press
+        ctx.placement.train_new = config.machine.train_new
         ctx.runner.sniff_board = config.machine.sniff_heights
         ctx.runner.check_placements = config.machine.check_placements
         ctx.runner.sim_board_bump = config.machine.sim_board_bump

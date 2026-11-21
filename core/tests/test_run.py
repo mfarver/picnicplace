@@ -570,6 +570,9 @@ def test_without_a_discard_location_the_operator_takes_the_part_off(lumen: TestC
             return await vision(name, *args, **kwargs)
 
         recorder.vision = blind_for_now
+        # Not trained either (training would see it: it looks without the recorder).
+        placement = lumen.app.state.ctx.placement  # type: ignore[attr-defined]
+        placement._may_train = lambda part_id: False  # type: ignore[method-assign]
         op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
         blind["on"] = False
         assert op["status"] == "failed"
@@ -597,6 +600,51 @@ def test_without_a_discard_location_the_operator_takes_the_part_off(lumen: TestC
         stats = lumen.get("/api/v1/run").json()["stats"]
         assert (stats["alignments"], stats["failed_alignments"]) == (5, 1)
         assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
+
+
+def test_a_part_training_cannot_see_is_skipped_not_picked_again() -> None:
+    """A new IC is trained on its first pick; when training finds no way of seeing it and
+    no other look does either, the part is discarded and its placements skipped (each
+    pick would cost a part and see no more), and the run goes on with the rest. They may
+    be un-skipped once the part is trained."""
+    from picnicplace.placement import PlacementError
+
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.2", "train_new": "multi-pad"},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        placement = client.app.state.ctx.placement  # type: ignore[attr-defined]
+        recorder = client.app.state.ctx.machine.recorder  # type: ignore[attr-defined]
+        vision = recorder.vision
+        trainings: list[str] = []
+
+        async def cannot_train(nozzle: Any, load: Any, part: Any, *args: Any) -> Any:
+            trainings.append(part.id)
+            raise PlacementError(f"training found no way of seeing {part.id} in every frame")
+
+        async def mcu_unseen(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name in ("find_part", "fit_pads") and kwargs.get("part") == "EX-MCU-8":
+                return None
+            return await vision(name, *args, **kwargs)
+
+        placement._train_held = cannot_train  # type: ignore[method-assign]
+        recorder.vision = mcu_unseen
+        op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
+        assert op["message"].startswith("finished: 3 placed"), op["message"]
+        assert trainings == ["EX-MCU-8"]
+        run = client.get("/api/v1/run").json()
+        mcu = [i for i in run["plan"]["items"] if i["part_id"] == "EX-MCU-8"]
+        assert mcu and all(i["status"] == "skipped" for i in mcu)
+        assert all(i["note"].startswith("skipped: training found no way") for i in mcu)
+        assert sum(i["discards"] for i in mcu) == 1
+        assert run["stats"]["picks"] == 4  # three chips, and the MCU once
+
+        r = s.put(f"/api/v1/run/items/{mcu[0]['index']}", {"skip": False})
+        assert r.status_code == 200, r.json()
+        item = client.get("/api/v1/run").json()["plan"]["items"][mcu[0]["index"]]
+        assert item["status"] == "pending"
 
 
 def test_run_a_job_on_a_lumenpnp_v4_2() -> None:

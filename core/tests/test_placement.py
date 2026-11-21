@@ -27,6 +27,17 @@ def lumen() -> Iterator[TestClient]:
         yield c
 
 
+@pytest.fixture
+def lumen_patient() -> Iterator[TestClient]:
+    """A LumenPnP whose client may go quiet for longer: training takes many frames."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_home_error": (0.3, -0.2)},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as c:
+        yield c
+
+
 def feeders(client: TestClient) -> FeederService:
     return client.app.state.ctx.feeders  # type: ignore[attr-defined,no-any-return]
 
@@ -641,8 +652,8 @@ def test_a_part_not_seen_the_usual_way_is_looked_for_other_ways(
     training later found several of them under another light (green, by its outline; blue,
     by its pads). Before giving a part up, alignment tries other lights and ways of looking,
     the part still over the camera, and keeps one only if two frames agree. Here the usual
-    look sees nothing: the part is found another way, placed, and that way is tried first for
-    the part from then on."""
+    look sees nothing: the part is found another way and placed, and that way is kept for
+    the part, waiting for approval, and used from then on."""
     import picnicplace.placement as placement_module
 
     with connect(lumen) as s:
@@ -660,31 +671,100 @@ def test_a_part_not_seen_the_usual_way_is_looked_for_other_ways(
         op = ok(s.wait(s.post("/api/v1/placement/pick-and-place", body)))
         first = placement_module.RESCUE_WAYS[0]
         assert "The usual look saw nothing; it was found under" in op["message"], op
-        assert "train the part" in op["message"]
+        assert "Kept for RC0805-1K, waiting for approval" in op["message"]
         landed = placed(lumen)[-1]
         assert (landed.x, landed.y) == pytest.approx((200.0, 260.0), abs=0.05)
-        assert service._rescued["RC0805-1K"] == first  # type: ignore[attr-defined]
+        trained = s.client.get("/api/v1/placement/trained").json()
+        assert [(t["part_id"], t["approved"], t["found_in_run"]) for t in trained] == [
+            ("RC0805-1K", False, True)
+        ]
+        assert trained[0]["vision"] == first.model_dump(mode="json")
+        r = s.client.get("/api/v1/placement/trained/RC0805-1K/images/overlay")
+        assert r.status_code == 200
 
         # The next part of it is looked at that way from the start, and seen at once.
         body = {**body, "x": 210.0}
         op = ok(s.wait(s.post("/api/v1/placement/pick-and-place", body)))
         assert "The usual look saw nothing" not in op["message"]
+        assert "Seen as trained" in op["message"]
+
+
+def test_a_part_seen_no_quick_way_is_trained_and_placed_not_discarded(
+    lumen_patient: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Neither the usual look nor the other quick ways see the part: alignment trains with
+    the part it holds, and places it by what training found, rather than discard it (the
+    dearer parts were the ones that needed training on a first real board). What was found
+    is kept, waiting for approval, and used from then on."""
+    with connect(lumen_patient) as s:
+        set_up(lumen_patient, s)
+        service = lumen_patient.app.state.ctx.placement  # type: ignore[attr-defined]
+        real = service._measure  # type: ignore[attr-defined]
+        calls = {"n": 0}
+
+        async def misses_first(*args: Any, **kwargs: Any) -> Any:
+            calls["n"] += 1
+            return None if calls["n"] == 1 else await real(*args, **kwargs)
+
+        async def nothing(*args: Any, **kwargs: Any) -> Any:
+            return None
+
+        monkeypatch.setattr(service, "_measure", misses_first)
+        monkeypatch.setattr(service, "_rescue", nothing)
+        body = {"slot_id": "1", "nozzle_id": "N1", "x": 200.0, "y": 260.0, "rotation": 30.0}
+        op = ok(s.wait(s.post("/api/v1/placement/pick-and-place", body), limit=50000))
+        assert "Trained RC0805-1K" in op["message"], op["message"]
+        assert "Kept for RC0805-1K, waiting for approval" in op["message"]
+        landed = placed(lumen_patient)[-1]
+        assert (landed.x, landed.y) == pytest.approx((200.0, 260.0), abs=0.08)
+        assert angle_error(landed.angle, 30.0) < 1.0
+        assert s.client.get("/api/v1/placement").json()["loads"] == []
+        trained = s.client.get("/api/v1/placement/trained").json()
+        assert [(t["approved"], t["found_in_run"]) for t in trained] == [(False, True)]
+        assert trained[0]["tried"] > 10
+
+
+def test_a_new_part_is_trained_on_its_first_pick(lumen_patient: TestClient) -> None:
+    """With the config's train_new, a part with no training is trained on its first pick,
+    with the part it then places; later picks of it use what was found."""
+    with connect(lumen_patient) as s:
+        set_up(lumen_patient, s)
+        service = lumen_patient.app.state.ctx.placement  # type: ignore[attr-defined]
+        service.train_new = "multi-pad"
+        body = {"slot_id": "1", "nozzle_id": "N1", "x": 200.0, "y": 260.0, "rotation": 0.0}
+        op = ok(s.wait(s.post("/api/v1/placement/pick-and-place", body)))
+        assert "Trained" not in op["message"]  # two pads: not a multi-pad part
+        assert s.client.get("/api/v1/placement/trained").json() == []
+
+        service.train_new = "all"
+        r = s.post("/api/v1/placement/pick-and-place", {**body, "x": 210.0})
+        op = ok(s.wait(r, limit=50000))
+        assert "Trained RC0805-1K" in op["message"], op["message"]
+        assert "Seen as trained" in op["message"]
+        landed = placed(lumen_patient)[-1]
+        assert (landed.x, landed.y) == pytest.approx((210.0, 260.0), abs=0.08)
+        trained = s.client.get("/api/v1/placement/trained").json()
+        assert [(t["approved"], t["found_in_run"]) for t in trained] == [(False, True)]
+
+        op = ok(s.wait(s.post("/api/v1/placement/pick-and-place", {**body, "x": 220.0})))
+        assert "Trained" not in op["message"] and "Seen as trained" in op["message"]
 
 
 def test_a_part_no_way_of_looking_sees_is_given_up(
-    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+    lumen_patient: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Nothing seen the usual way nor any other: the part is given up, saying both were
     tried."""
-    with connect(lumen) as s:
-        set_up(lumen, s)
-        service = lumen.app.state.ctx.placement  # type: ignore[attr-defined]
+    with connect(lumen_patient) as s:
+        set_up(lumen_patient, s)
+        service = lumen_patient.app.state.ctx.placement  # type: ignore[attr-defined]
 
         async def blind(*args: Any, **kwargs: Any) -> Any:
             return None
 
         monkeypatch.setattr(service, "_measure", blind)
         ok(s.wait(s.post("/api/v1/placement/pick", {"slot_id": "1", "nozzle_id": "N1"})))
-        op = s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"}))
+        op = s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"}), limit=50000)
         assert op["status"] == "failed"
         assert "nor under other lights and ways of looking" in op["error"], op
+        assert "Training it: training found no way of seeing" in op["error"], op

@@ -40,7 +40,8 @@ function image(part: TrainedPart, name: string): string {
 /**
  * Parts trained on this machine: how the bottom camera sees each best, with the part's
  * footprint drawn over it and beside it for the operator to approve. Alignment uses a
- * trained part's settings only once approved.
+ * trained part's settings once approved, or at once if a run found them (by training the part
+ * it then placed, or by looking at it other ways when the usual look saw nothing).
  */
 export function TrainedPartsPanel({ canControl }: { canControl: boolean }) {
   const { status, operations } = useCore();
@@ -86,13 +87,21 @@ export function TrainedPartsPanel({ canControl }: { canControl: boolean }) {
           <h3 className="trained-title">
             {p.part_id}{" "}
             <span className={p.approved ? "badge-ok" : "badge-warn"}>
-              {p.approved ? "Approved" : "Waiting for approval"}
+              {p.approved
+                ? "Approved"
+                : p.found_in_run
+                  ? "Found in a run, in use, waiting for approval"
+                  : "Waiting for approval"}
             </span>
           </h3>
           {!p.approved && (
             <p className="note">
               Check that the footprint lines up with the part, pin 1 (red) where the part's
-              marking says, then approve. Until then it is seen the usual way.
+              marking says, then approve.{" "}
+              {p.found_in_run
+                ? "A run found this when nothing else saw the part, and uses it already; " +
+                  "Forget it if the footprint does not line up."
+                : "Until then it is seen the usual way."}
             </p>
           )}
           <div className="trained-images">

@@ -16,8 +16,15 @@ a part whose pads are not symmetric (a SOT-23's) is chosen a way that fits its p
 any does, since an outline cannot say which way round it is.
 
 What was chosen is kept for the part on this machine (its camera and light are its own),
-in the data directory, and alignment uses it from then on. The part is then dropped in
-the discard.
+in the data directory, and alignment uses it once the operator approves it. Trained from
+the Placement panel, the part is then dropped in the discard.
+
+A run trains a part too, with the part it is about to place, which it then places: on the
+first pick of a part with no training (``TrainNew``), and when the usual look and the
+other ways (``RESCUE_WAYS``) saw nothing. What a run found, by training or another way of
+looking, is kept the same way, waiting for approval, and used from then on before it is
+approved (``TrainedPart.found_in_run``): it saw the part when nothing else did, and an
+expensive part need not be thrown away to learn how to see it.
 """
 
 import itertools
@@ -40,6 +47,10 @@ from picnicplace.schemas import WireModel
 from picnicplace.storage import write_atomic
 
 Method = Literal["auto", "pads", "outline"]
+TrainNew = Literal["off", "multi-pad", "all"]
+"""Which parts a run trains on their first pick, when they have no training: 'multi-pad',
+parts with three or more pads (transistors, regulators, ICs: the dearer parts, and those
+the usual look most often misses); 'all'; or 'off'."""
 """How bottom vision finds a part: 'auto', its outline and then its pads, or the outline
 alone when no metal shows; 'pads', only by fitting its pads; 'outline', only by its
 outline."""
@@ -190,7 +201,14 @@ class TrainedPart(WireModel):
         default=False,
         description=(
             "The operator saw the footprint line up with the part, the right way round; "
-            "alignment uses a trained part's settings only once approved."
+            "alignment uses a trained part's settings only once approved, or found in a run."
+        ),
+    )
+    found_in_run: bool = Field(
+        default=False,
+        description=(
+            "Found during a run, by training the part it then placed or by looking at it "
+            "other ways: used from then on, before it is approved."
         ),
     )
 
@@ -234,9 +252,10 @@ class TrainedPartStore:
         return self._get().parts.get(part_id)
 
     def vision(self, part_id: str | None) -> PartVision | None:
-        """A part's approved settings, if any."""
+        """How to see a part, if it has been trained: its settings once approved, or
+        found in a run (used before approval)."""
         trained = self.get(part_id) if part_id else None
-        return trained.vision if trained and trained.approved else None
+        return trained.vision if trained and (trained.approved or trained.found_in_run) else None
 
     def approve(self, part_id: str) -> TrainedPart | None:
         with self._lock:

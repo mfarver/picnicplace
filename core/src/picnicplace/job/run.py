@@ -91,6 +91,7 @@ from picnicplace.machine.errors import (
     InvalidTargetError,
     MachineBusyError,
     MachineError,
+    UntrainableError,
     VisionError,
 )
 from picnicplace.machine.profile import MachineProfile, Point, Rect
@@ -114,6 +115,10 @@ log = logging.getLogger(__name__)
 
 PICK_ATTEMPTS = 3
 ALIGN_ATTEMPTS = 2
+UNTRAINABLE = "skipped: training found no way of seeing its part"
+"""How a placement's note begins when its part could not be trained in the run: it and the
+part's other placements are skipped, not picked again (each pick would cost a part and see
+no more). The operator may un-skip them once the part is trained."""
 """Times a part may be discarded for bottom vision before its placement fails."""
 MAX_FIDUCIALS = 3
 FIDUCIAL_SEARCH_MM = 3.0
@@ -1218,7 +1223,11 @@ class JobRunner:
             if run.current is not None and run.current.index == index:
                 run.current = None
         elif not skip and (
-            item.status == "failed" or (item.status == "skipped" and item.note == operator)
+            item.status == "failed"
+            or (
+                item.status == "skipped"
+                and (item.note == operator or item.note.startswith(UNTRAINABLE))
+            )
         ):
             item.status, item.note, item.discards = "pending", "", 0
         self._save()
@@ -1592,6 +1601,8 @@ class JobRunner:
                 await self._placement.align(nozzle, item.rotation + run.fix.angle)
             except VisionError as e:
                 run.stats.failed_alignments += 1
+                if isinstance(e, UntrainableError):
+                    self._skip_untrainable(run, item, index, e)
                 if not self._placement.can_discard():
                     item.discards += 1
                     item.note = f"bottom vision failed ({e}): take the part off {nozzle_id}"
@@ -1606,7 +1617,10 @@ class JobRunner:
                 del run.held[nozzle_id]
                 del batch[nozzle_id]
                 item.discards += 1
-                if item.discards >= ALIGN_ATTEMPTS:
+                if isinstance(e, UntrainableError):
+                    item.status = "skipped"
+                    item.note = f"{UNTRAINABLE} ({e}): train it (Placement panel), then un-skip"
+                elif item.discards >= ALIGN_ATTEMPTS:
                     item.status = "failed"
                     item.note = f"bottom vision failed {item.discards} times: {e}"
                 else:
@@ -1635,6 +1649,25 @@ class JobRunner:
             # The parts held are placed: now the pick that failed, where it stopped.
             run.current = failed_step
             raise failed
+
+    def _skip_untrainable(
+        self, run: RunState, item: RunItem, index: int, error: UntrainableError
+    ) -> None:
+        """Skip the other placements of a part training could not see, not held: picking
+        each would cost a part."""
+        for i, other in enumerate(run.plan.items):
+            if (
+                i != index
+                and other.part_id == item.part_id
+                and other.status == "pending"
+                and i not in run.held.values()
+            ):
+                other.status = "skipped"
+                other.note = (
+                    f"{UNTRAINABLE} (at {item.ref}): train it (Placement panel), then un-skip"
+                )
+        self._machine.recorder.event("run.untrainable", part=item.part_id, ref=item.ref)
+        log.warning("%s: %s; its placements are skipped", item.part_id, error)
 
     async def _pick_item(self, run: RunState, item: RunItem, index: int, nozzle_id: str) -> None:
         """Pick ``item``'s part with ``nozzle_id``, trying again (feeding the next part)

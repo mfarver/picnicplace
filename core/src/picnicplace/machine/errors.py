@@ -98,6 +98,12 @@ class VisionError(MachineError):
     code = "vision_failed"
 
 
+class UntrainableError(VisionError):
+    """Bottom vision saw no held part, and training with the part found no way of seeing
+    it: picking another will not do better until the part is trained, or its footprint
+    fixed."""
+
+
 class FeederError(MachineError):
     """A feeder did not answer, or answered with a failure."""
 

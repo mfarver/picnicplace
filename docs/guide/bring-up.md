@@ -295,7 +295,9 @@ effect at once. The reset button next to one forgets it.
       goes to the discard. In the **Trained parts** panel, check that the footprint drawn
       over the part lines up with it, and that pin 1 (red) is where the part's marking
       says, beside it; then **Approve**. From then on, aligning that part uses the light
-      and the way of seeing it that held steadiest.
+      and the way of seeing it that held steadiest. A run trains parts too, with the part
+      it then places rather than discards (see section 10); what it finds shows here as
+      **Found in a run, in use**, waiting for approval.
 
       ![The Trained parts panel: a part waiting for approval, its footprint drawn over it and beside it](../images/studio-trained.jpg){ .pp-screenshot width="300" }
 - [ ] Center the top camera on a spot on the board, click the crosshair button to use
@@ -454,14 +456,27 @@ twice is still tried anyway. On the board, the check after placing often cannot 
 out well enough to judge: it marks it **not checked** and goes on, rather than pausing.
 Look over those by eye.
 
-**New parts: train them first.** Before a run, train the bottom camera on each part it
-has not placed before, especially leadless ICs (QFN, WSON) and leaded parts: Machine
-workspace, **Placement** panel, choose the feeder and a nozzle, **Train**, and approve the
-outline drawn over the part. A part the usual look does not see is looked for under other
-lights and ways before it is discarded; the message names the way that found it, and the
-run tries that way first for the part from then on. Train such a part, so it is seen at
-once. A part discarded even so ("saw no part ... nor under other lights and ways of
-looking") needs training before the run goes on.
+**New parts are trained as they are placed.** The parts that needed training on the first
+board were the dear ones (leadless ICs such as a WSON, leaded ICs, SOT-23s), and training
+from the Placement panel costs a part: it goes to the discard. A run now trains with the
+part it is about to place, and then places it:
+
+- on the first pick of a part with three or more pads and no training (the config's
+  `train_new`: `"multi-pad"`, the default; `"all"`; or `"off"`), which adds a minute or so
+  per new part;
+- whatever `train_new` says, when neither the usual look nor the quicker other lights and
+  ways of looking see the part, and the vacuum says something is held.
+
+What training finds, or a quicker way that saw the part, is kept for the part, used from
+then on, and shown in the **Trained parts** panel (Machine workspace) as **Found in a run,
+in use**: check the footprint drawn over the part there and **Approve** it, or **Forget**
+it if pin 1 is wrong. If training's pads show the part turned from the tape's angle, the
+run pauses with the part still on the nozzle: check the tape, approve the training if the
+footprint lines up, and resume. A part is discarded only when no way of looking, training
+included, sees it ("saw no part ... nor under other lights and ways of looking. Training
+it: ..."). Then that placement and the part's other placements are **skipped**, not picked
+again (each pick would cost another part), and the run goes on with the rest. Check the
+part's footprint, train it from the Placement panel, and un-skip them.
 
 **Footprints for the machine.** The bottom camera looks for the part the footprint
 describes. A KiCad footprint's F.Fab layer must show the body only, not the leads; its

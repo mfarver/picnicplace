@@ -6206,7 +6206,7 @@ export interface components {
         TrainedPart: {
             /**
              * Approved
-             * @description The operator saw the footprint line up with the part, the right way round; alignment uses a trained part's settings only once approved.
+             * @description The operator saw the footprint line up with the part, the right way round; alignment uses a trained part's settings only once approved, or found in a run.
              * @default false
              */
             approved: boolean;
@@ -6215,6 +6215,12 @@ export interface components {
              * @description The best ways tried, best first.
              */
             candidates: components["schemas"]["Candidate"][];
+            /**
+             * Found In Run
+             * @description Found during a run, by training the part it then placed or by looking at it other ways: used from then on, before it is approved.
+             * @default false
+             */
+            found_in_run: boolean;
             /** Message */
             message: string;
             /** Nozzle */

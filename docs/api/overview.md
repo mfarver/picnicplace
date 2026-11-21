@@ -103,7 +103,7 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/placement/pick`, `…/align`, `…/place` | Pick from a feeder slot; find the part on the bottom camera; place it at a location and angle |
 | `POST /api/v1/placement/pick-and-place`, `…/discard`, `…/release` | All three steps at once; drop a held part in the discard bin; a part was taken off its nozzle by hand (suction off, part forgotten) |
 | `POST /api/v1/placement/train` | Pick a part, try every light and way of seeing it over the bottom camera at four turns, keep the steadiest for the part (to be approved), take its approval pictures, and drop it in the discard. Needs control |
-| `GET /api/v1/placement/trained` | Parts trained on this machine: how each is seen, whether approved, and the best ways tried |
+| `GET /api/v1/placement/trained` | Parts trained on this machine: how each is seen, whether approved or found in a run (used before approval), and the best ways tried |
 | `GET /api/v1/placement/trained/{part_id}/images/{name}` | A trained part's picture: `overlay` (its footprint over it), `beside` (its footprint beside it), or `light-NN` (under each light tried). Takes the token as a query parameter too, for `<img>` tags |
 | `POST /api/v1/placement/trained/{part_id}/approve`, `DELETE …/trained/{part_id}` | Approve what training found, so alignment uses it; or forget it. Need control |
 | `POST /api/v1/run/plan` | A dry run of a job's published revision (its newest, or one given): each placement's feeder and nozzles, and what blocks any |

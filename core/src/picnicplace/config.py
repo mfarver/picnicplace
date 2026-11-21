@@ -17,6 +17,7 @@ from picnicplace.machine.profile import (
     merge_profile_data,
     profile_data,
 )
+from picnicplace.training import TrainNew
 
 
 class _Section(BaseModel):
@@ -199,6 +200,17 @@ class MachineConfig(_Section):
             "Look at each two-terminal chip with the top camera once a run has placed it, "
             "and pause the run if it landed off its target, turned, or is not there. A run "
             "can ask either way."
+        ),
+    )
+    train_new: TrainNew = Field(
+        default="multi-pad",
+        description=(
+            "Which parts a run trains on their first pick, when they have no training: the "
+            "part is held over the bottom camera under every light and way of looking, the "
+            "best is kept for it (used from then on, waiting for approval in the Trained "
+            "parts panel), and the part is placed, not discarded. 'multi-pad': parts with "
+            "three or more pads (transistors, regulators, ICs); 'all'; 'off'. Whatever the "
+            "choice, a part no way of looking sees is trained before it is given up."
         ),
     )
     sniff_heights: bool = Field(

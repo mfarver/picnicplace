@@ -50,6 +50,7 @@ from picnicplace.machine.errors import (
     InvalidTargetError,
     MachineError,
     NoSprocketHolesError,
+    UntrainableError,
     VisionError,
 )
 from picnicplace.machine.profile import Camera, LightColor, Location, Nozzle, Point
@@ -71,6 +72,7 @@ from picnicplace.training import (
     PartVision,
     TrainedPart,
     TrainedPartStore,
+    TrainNew,
     approval_images,
     describe_light,
     describe_threshold,
@@ -191,6 +193,18 @@ class Look:
     """Pad fit residual, or outline size error (mm)."""
     complete: bool
     """Every pad found, or the outline matched the footprint."""
+
+
+@dataclass(frozen=True)
+class _Training:
+    """What training found for a held part, the part back at the angle it started at."""
+
+    best: Candidate
+    candidates: list[Candidate]
+    usable: int
+    view: "_View"
+    image: Image
+    look: "Look | None"
 
 
 @dataclass(frozen=True)
@@ -403,9 +417,11 @@ class PlacementService:
         self._look: dict[str, tuple[int, str]] = {}
         """Auto correction: by slot or strip ID, how many more picks to look at with the
         top camera first, and why."""
-        self._rescued: dict[str, PartVision] = {}
-        """By part ID, a way of seeing it found when the usual one saw nothing
-        (``RESCUE_WAYS``): tried first for that part from then on, until the core stops."""
+        self.train_new: TrainNew = "off"
+        """Which parts alignment trains on their first pick, with no training (from the
+        config)."""
+        self._training_tried: set[str] = set()
+        """Parts alignment has trained (or tried to) since the core started: not again."""
 
     def state(self) -> PlacementState:
         return PlacementState(
@@ -1060,8 +1076,12 @@ class PlacementService:
         part = library.find_part(load.part_id) if library and load.part_id else None
         height = part.height if part is not None and part.height is not None else 0.0
         trained = self.trained.vision(load.part_id)
-        rescued = self._rescued.get(load.part_id or "") if trained is None else None
-        way = trained or rescued
+        first = ""
+        untrained = False  # training was tried here and found no way of seeing it
+        if trained is None and part is not None and self._trains_first(part, library):
+            trained, first = await self._train_in_run(nozzle, load, part, library, camera)
+            untrained = trained is None
+        way = trained
 
         turn = None
         if place_angle is not None:
@@ -1100,14 +1120,39 @@ class PlacementService:
             # camera, each kept only if two frames agree.
             other = await self._rescue(camera, view, nozzle_at, expected, vision, way)
             if other is not None:
-                look, way = other
+                look, way, seen_in = other
                 method = way.method
-                if load.part_id:
-                    self._rescued[load.part_id] = way
                 found_other = (
                     f" The usual look saw nothing; it was found under "
-                    f"{describe_light(way.light)}, by its {look.method}: train the part "
-                    "(Placement panel) to see it so from the start."
+                    f"{describe_light(way.light)}, by its {look.method}."
+                    + self._keep_rescued(part, nozzle, way, view, seen_in, look)
+                )
+        if (
+            look is None
+            and part is not None
+            and self._may_train(part.id)
+            and (await self._machine.holds_after_lift(nozzle, 0.5))[0] is not False
+        ):
+            # Nothing else saw it, and something is held: train with this part, and place
+            # it by what training found rather than discard it to learn how to see it.
+            await self._machine.raise_nozzles()
+            learned_way, found_other = await self._train_in_run(nozzle, load, part, library, camera)
+            untrained = learned_way is None
+            if learned_way is not None:
+                way, method = learned_way, learned_way.method
+                await self._machine.move_nozzle_over(
+                    nozzle, camera.position.x, camera.position.y, turn
+                )
+                await self._machine.lower_nozzle(nozzle, camera.focus_height + height)
+                frame = await self._machine.frame(camera.id, light=way.light)
+                nozzle_at = self._machine.nozzle_position(nozzle)
+                nozzle_angle = self._machine.nozzle_angle(nozzle)
+                expected = nozzle_angle + load.angle
+                threshold = BRIGHT
+                if way.threshold is not None:
+                    threshold = bright_level(frame.image, view.search, way.threshold)
+                look = await self._measure(
+                    view, frame.image, nozzle_at, expected, vision, threshold, method
                 )
         again = ""
         if look is not None and place_angle is not None:
@@ -1141,10 +1186,12 @@ class PlacementService:
             # vacuum could not tell: auto correction looks first next time.
             self._look[load.slot_id] = (1, "after the bottom camera saw no part")
             how = " the way it was trained to (train the part again if this repeats)"
-            raise VisionError(
+            error = UntrainableError if untrained else VisionError
+            raise error(
                 f"the {camera.label.lower()} saw no part on {nozzle.id}"
                 + (how if trained is not None else "")
                 + ", nor under other lights and ways of looking"
+                + ((first or found_other) and f".{(first or found_other).rstrip('.')}")
             )
         center, angle = look.center, look.angle
         offset = rotate(Point(x=center.x - nozzle_at.x, y=center.y - nozzle_at.y), -nozzle_angle)
@@ -1157,8 +1204,9 @@ class PlacementService:
         return (
             f"{nozzle.id} holds its part {math.hypot(offset.x, offset.y):.2f} mm off center "
             f"and turned {wrap(angle - expected):+.1f} degrees from the tape's angle."
-            f"{again}{found_other}{look.note}"
-            f"{' Seen as trained.' if trained is not None else ''}{learned}"
+            f"{first}{again}{found_other}{look.note}"
+            f"{' Seen as trained.' if trained is not None and not found_other else ''}"
+            f"{learned}"
         )
 
     async def _rescue(
@@ -1169,10 +1217,10 @@ class PlacementService:
         expected: float,
         vision: _Vision,
         tried: PartVision | None,
-    ) -> "tuple[Look, PartVision] | None":
+    ) -> "tuple[Look, PartVision, Image] | None":
         """Look for a held part the usual way did not see, other ways (``RESCUE_WAYS``),
         the nozzle still: the first that finds it in two frames running, at the same place
-        and angle, and the way. None if none does."""
+        and angle, the way, and the last frame. None if none does."""
         output = next(
             (o for o in self._machine.profile.outputs if o.id == camera.light_output), None
         )
@@ -1186,8 +1234,10 @@ class PlacementService:
             ):
                 continue
             looks: list[Look] = []
+            image: Image | None = None
             for _ in range(2):
                 frame = await self._machine.frame(camera.id, light=light)
+                image = frame.image
                 threshold = (
                     bright_level(frame.image, view.search, way.threshold)
                     if way.threshold is not None
@@ -1207,7 +1257,8 @@ class PlacementService:
                 and abs(wrap(a.angle - b.angle)) <= RESCUE_AGREE_DEG
             ):
                 self._machine.recorder.event("align.rescued", vision=way)
-                return b, way
+                assert image is not None
+                return b, way, image
         return None
 
     async def train(self, slot_id: str, nozzle: Nozzle, how: PickCorrection) -> str:
@@ -1232,10 +1283,32 @@ class PlacementService:
         await self.pick(slot_id, nozzle, True, how)
         load = self._load(nozzle)
         camera = self._bottom_camera()
-        assert camera.focus_height is not None
         library = self._library()
         part = library.find_part(load.part_id) if library and load.part_id else None
-        assert part is not None and part.height is not None
+        assert part is not None
+        result = await self._train_held(nozzle, load, part, library, camera)
+        discarded = await self.discard(nozzle)
+        message = (
+            f"{self._trained_message(part, result)} Approve it in the Studio, where its "
+            f"footprint is drawn over it, before it is used. {discarded}"
+        )
+        self.trained.put(self._trained_part(part, nozzle, result, message, recording))
+        return message
+
+    async def _train_held(
+        self,
+        nozzle: Nozzle,
+        load: NozzleLoad,
+        part: Part,
+        library: Library | None,
+        camera: Camera,
+    ) -> _Training:
+        """Find how the bottom camera sees the part on ``nozzle`` best: every light and way
+        of seeing it, over four turns (``picnicplace.training``). The part is left at the
+        angle it started at, the nozzle raised, and the approval pictures saved. Raises
+        PlacementError if no way saw it in every frame."""
+        assert camera.focus_height is not None
+        height = part.height if part.height is not None else 0.0
         footprint = _footprint(part, library)
         output = next(
             (o for o in self._machine.profile.outputs if o.id == camera.light_output), None
@@ -1244,7 +1317,7 @@ class PlacementService:
             list(lights_to_try(output.colored)) if output is not None else [None]
         )
         await self._machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y)
-        await self._machine.lower_nozzle(nozzle, camera.focus_height + part.height)
+        await self._machine.lower_nozzle(nozzle, camera.focus_height + height)
         base = self._machine.nozzle_angle(nozzle)
         shots: list[_Shot] = []
         view: _View | None = None
@@ -1303,7 +1376,10 @@ class PlacementService:
         finally:
             await self._machine.light_for(camera)
             await self._machine.raise_nozzles()
-        discarded = await self.discard(nozzle)
+        return _Training(best, candidates, len(usable), view, frame.image, look)
+
+    def _trained_message(self, part: Part, result: _Training) -> str:
+        best = result.best
         vision = best.vision
         how_seen = "by fitting its pads" if vision.method == "pads" else "by its outline"
         flip = (
@@ -1312,31 +1388,141 @@ class PlacementService:
             if best.flipped
             else ""
         )
-        message = (
+        return (
             f"Trained {part.id}: {describe_light(vision.light)}, {how_seen}, with "
             f"{describe_threshold(vision.threshold)}. Over {len(TURNS)} turns and "
             f"{best.frames} frames its angle on the nozzle held within "
             f"{best.angle_spread or 0.0:.2f} degrees and its place within "
-            f"{best.offset_spread or 0.0:.3f} mm; {len(usable)} of {len(candidates)} ways of "
-            f"seeing it found it every time.{flip} Approve it in the Studio, where its "
-            f"footprint is drawn over it, before it is used. {discarded}"
+            f"{best.offset_spread or 0.0:.3f} mm; {result.usable} of "
+            f"{len(result.candidates)} ways of seeing it found it every time.{flip}"
         )
+
+    def _trained_part(
+        self,
+        part: Part,
+        nozzle: Nozzle,
+        result: _Training,
+        message: str,
+        recording: str | None,
+        found_in_run: bool = False,
+    ) -> TrainedPart:
+        return TrainedPart(
+            part_id=part.id,
+            vision=result.best.vision,
+            trained_at=now(),
+            nozzle=nozzle.id,
+            tip=nozzle.tip,
+            message=message,
+            candidates=sorted(
+                result.candidates, key=lambda c: (c.score is None, c.score or 0.0, -c.seen)
+            )[:KEPT_CANDIDATES],
+            tried=len(result.candidates),
+            recording=recording,
+            found_in_run=found_in_run,
+        )
+
+    def _trains_first(self, part: Part, library: Library | None) -> bool:
+        """Whether alignment trains this part before its first look (``train_new``)."""
+        if self.train_new == "off" or not self._may_train(part.id):
+            return False
+        if self.trained.get(part.id) is not None:
+            return False  # trained already, waiting for approval
+        if self.train_new == "all":
+            return True
+        footprint = _footprint(part, library)
+        return footprint is not None and len(footprint.pads) >= 3
+
+    def _may_train(self, part_id: str) -> bool:
+        """Alignment trains a part once per core start, and never over approved training."""
+        trained = self.trained.get(part_id)
+        return part_id not in self._training_tried and not (trained and trained.approved)
+
+    async def _train_in_run(
+        self,
+        nozzle: Nozzle,
+        load: NozzleLoad,
+        part: Part,
+        library: Library | None,
+        camera: Camera,
+    ) -> tuple[PartVision | None, str]:
+        """Train with the part on ``nozzle``, which is then placed, and keep what was found
+        (``found_in_run``: used from now on, waiting for approval). The way found, and what
+        to say of it; no way, if training found none (the part is then looked at as
+        usual). Raises PlacementError, the part kept on the nozzle, if its pads show it
+        turned from the tape's angle: the operator is to look before it is placed."""
+        self._training_tried.add(part.id)
+        recorder = self._machine.recorder
+        try:
+            result = await self._train_held(nozzle, load, part, library, camera)
+        except PlacementError as e:
+            recorder.event("align.trained", part=part.id, error=str(e))
+            log.warning("training %s during alignment: %s", part.id, e)
+            return None, f" Training it: {e}."
+        recording = recorder.active.id if recorder.active is not None else None
+        message = self._trained_message(part, result)
+        recorder.event("align.trained", part=part.id, vision=result.best.vision)
+        if result.best.flipped:
+            # Not used until approved: which way round it is, is the operator's to say.
+            self.trained.put(
+                self._trained_part(part, nozzle, result, message, recording, found_in_run=False)
+            )
+            raise PlacementError(
+                f"{message} {part.id} stays on {nozzle.id}: check the tape, and approve the "
+                "training (Trained parts panel) if pin 1 is where the part's marking says, "
+                "then resume; or take the part off and click Part removed"
+            )
+        kept = (
+            f"{message} Found while placing it, and used from now on; approve it in the "
+            "Trained parts panel, where its footprint is drawn over it."
+        )
+        self.trained.put(
+            self._trained_part(part, nozzle, result, kept, recording, found_in_run=True)
+        )
+        return result.best.vision, f" {message} Kept for {part.id}, waiting for approval."
+
+    def _keep_rescued(
+        self,
+        part: Part | None,
+        nozzle: Nozzle,
+        way: PartVision,
+        view: "_View",
+        image: Image,
+        look: "Look",
+    ) -> str:
+        """Keep a way of seeing a part found when the usual one saw nothing, waiting for
+        approval and used from now on, unless the part has approved training."""
+        if part is None:
+            return ""
+        existing = self.trained.get(part.id)
+        if existing is not None and existing.approved:
+            return " Its approved training did not see it: train it again if this repeats."
+        footprint = view.footprint
+        if footprint is not None:
+            self._approval_images(part.id, view, image, nozzle, look, footprint)
+        how_seen = "by fitting its pads" if look.method == "pads" else "by its outline"
+        message = (
+            f"Found during a run, when the usual look saw nothing: {describe_light(way.light)}, "
+            f"{how_seen}, with {describe_threshold(way.threshold)}. Used from now on; approve "
+            "it here, or train the part to try every way of seeing it."
+        )
+        recorder = self._machine.recorder
         self.trained.put(
             TrainedPart(
                 part_id=part.id,
-                vision=vision,
+                vision=way,
                 trained_at=now(),
                 nozzle=nozzle.id,
                 tip=nozzle.tip,
                 message=message,
-                candidates=sorted(
-                    candidates, key=lambda c: (c.score is None, c.score or 0.0, -c.seen)
-                )[:KEPT_CANDIDATES],
-                tried=len(candidates),
-                recording=recording,
+                candidates=[
+                    Candidate(vision=way, seen=2, frames=2, fit=look.fit, flipped=look.flipped)
+                ],
+                tried=len(RESCUE_WAYS) + 1,
+                recording=recorder.active.id if recorder.active is not None else None,
+                found_in_run=True,
             )
         )
-        return message
+        return f" Kept for {part.id}, waiting for approval (Trained parts panel)."
 
     async def _judge(
         self,

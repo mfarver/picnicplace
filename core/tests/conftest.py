@@ -22,7 +22,8 @@ TEST_PROFILE = Path(__file__).parent / "profiles" / "test-machine.toml"
 def fast_config(**overrides: Any) -> Config:
     """A config for the test machine, with a fast simulator and short presence timers."""
     data: dict[str, Any] = {
-        "machine": {"sim_time_scale": 100.0, "profile": str(TEST_PROFILE)},
+        # No training on first picks unless a test asks: it takes many frames.
+        "machine": {"sim_time_scale": 100.0, "profile": str(TEST_PROFILE), "train_new": "off"},
         "presence": {"grace_period_s": 0.2, "heartbeat_timeout_s": 5.0},
         "data": {"dir": tempfile.mkdtemp(prefix="picnicplace-test-")},
     }

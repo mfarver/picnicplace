@@ -101,6 +101,13 @@ pick_correction = "top"
 # is searched for from safe height. Off: the job's or the profile's board height, and the
 # profile's or the setup's pick heights (a strip with none is not used).
 sniff_heights = true
+# Train parts on their first pick in a run, when they have no training: the part is held
+# over the bottom camera under every light and way of looking (a minute or so), the best is
+# kept for it (used from then on, waiting for approval in the Trained parts panel), and the
+# part is then placed, not discarded. "multi-pad": parts with three or more pads
+# (transistors, regulators, ICs); "all"; "off". Whatever this says, a part no way of
+# looking sees is trained, with the part held, before it is given up.
+train_new = "multi-pad"
 
 # How far (mm) placing presses a part into the board's paste or tape: the nozzle goes this
 # far below the part's top. Default: the profile's (0.3 on a LumenPnP, whose nozzles are

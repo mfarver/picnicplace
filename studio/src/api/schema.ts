@@ -4913,17 +4913,43 @@ export interface components {
         };
         /**
          * PartNeed
-         * @description One part number the job uses, and the feeders loaded with it.
+         * @description One part number the job uses, and the feeders loaded with it: a line of the load
+         *     list, with what it takes to find the reel and a feeder for it.
          */
         PartNeed: {
             /** Count */
             count: number;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Footprint Id */
+            footprint_id: string | null;
+            /**
+             * Manufacturer
+             * @default
+             */
+            manufacturer: string;
             /** Part Id */
             part_id: string | null;
             /** Problem */
             problem: string | null;
+            /**
+             * Refs
+             * @description Its references on the board, in order.
+             */
+            refs: string[];
             /** Slot Ids */
             slot_ids: string[];
+            /** @description The tape it comes in, if known. */
+            tape: components["schemas"]["Tape-Output"] | null;
+            /**
+             * Value
+             * @description Its value: the board's, else the library's.
+             * @default
+             */
+            value: string;
         };
         /**
          * PartVision

@@ -481,6 +481,13 @@ class MachineConfig(_Section):
             "calibrating the nozzle offsets. None: there is none."
         ),
     )
+    sim_calibration_token: tuple[float, float] | None = Field(
+        default=None,
+        description=(
+            "Simulator only: where (X, Y in mm) a calibration token lies on the bed: a 5 mm "
+            "white disc, 0.86 mm thick, with a 2.5 mm gold opening. None: there is none."
+        ),
+    )
     sim_paper: tuple[float, float, float] | None = Field(
         default=None,
         description=(

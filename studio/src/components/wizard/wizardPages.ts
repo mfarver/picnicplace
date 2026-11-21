@@ -28,13 +28,13 @@ export const STOP_TEXT: Record<0 | 1 | 2 | 3, StopText> = {
       "redoes them all.",
   },
   2: {
-    title: "Paper disc on the datum board",
+    title: "Token on the datum board",
     ask:
-      "Fit a small tip on each nozzle (a different one on each is fine: the N045 and the " +
-      "N08, say). Punch a small paper disc (a hole punch is right) and lay it flat on the " +
-      "datum board, clear of the center dot.",
+      "Fit the N045 on one nozzle and the N08 on the other. Lay a calibration token flat " +
+      "on the datum board, opening up, clear of the center dot. Without a token, a small " +
+      "paper disc from a hole punch will do.",
     runs:
-      "The top camera finds the disc. Each nozzle touches the datum board to find its " +
+      "The top camera finds the token by its opening (or the paper disc). Each nozzle touches the datum board to find its " +
       "height, then picks up the disc, turns it and sets it down three times, measuring its " +
       "vacuum on the way. About a minute per nozzle. For a tip fitted since, too big for " +
       "the disc, lay a square of plain paper (25 mm or so) on the datum board instead: " +

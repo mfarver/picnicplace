@@ -1,13 +1,14 @@
 """Calibrating the nozzle offsets (spec §7.7, line 6): where each nozzle really is from
 the top camera.
 
-A small round disc, such as one punched from paper, lies on the datum board. The top
-camera finds it; a nozzle picks it up where the camera found it, turns it, and sets it
-down; the camera finds it again. A nozzle exactly where its offset says turns the disc
-about the disc's own center, and the disc stays put. A nozzle off by ``e`` turns it about
-a point ``e`` from its center, which moves the disc by ``(I - R) e``, ``R`` being the
-turn. Several turns give ``e`` by least squares, which averages out how unevenly the disc
-is let go; what is left over says how well they agree.
+A small round disc, such as one punched from paper or the calibration token (a 5 mm
+round PCB, docs/hardware/calibration-token.md), lies on the datum board. The top camera
+finds it, and a token by its opening; a nozzle picks it up where the camera found it,
+turns it, and sets it down; the camera finds it again. A nozzle exactly where its offset
+says turns the disc about the disc's own center, and the disc stays put. A nozzle off by
+``e`` turns it about a point ``e`` from its center, which moves the disc by ``(I - R) e``,
+``R`` being the turn. Several turns give ``e`` by least squares, which averages out how
+unevenly the disc is let go; what is left over says how well they agree.
 
 What is found is the nozzle's turning axis, which is what placing needs: a part is
 turned about it.
@@ -75,6 +76,15 @@ SNIFF_BELOW_MM = 1.5
 """...and stops, with nothing found, this far below it (or at the bottom of travel)."""
 PAPER_MM = 0.1
 """A paper disc's thickness, when the request gives none."""
+TOKEN_OPENING_MM = 2.5
+"""The calibration token's opening: bare copper in the middle of its top, where a tip
+seals and whose center the top camera finds."""
+TOKEN_RIM_MM = 0.5
+"""A tip seals on the token only with this much bare copper all round its face, clear of
+the step where the mask begins: an N045 (1.0 mm) or an N08 (1.5 mm), not an N14 (2.7)."""
+TOKEN_THICKNESS_MM = 0.9
+"""The token's thickness, when the request gives none: 0.8 mm board, with its copper and
+mask on top and its raised dots below."""
 HELD_SETTLE_S = 1.0
 """How long the vacuum is given to settle while holding the disc, for its level."""
 VACUUM_GAP_MIN = 0.05
@@ -293,6 +303,30 @@ async def find_disc(machine: MachineService, near: Point, diameter: float | None
     return at
 
 
+async def find_token(machine: MachineService, disc: Point, size: float | None) -> Point | None:
+    """With the top camera centered on a disc, where its opening is if it is the
+    calibration token; None for a disc with none, such as paper."""
+    return await machine.locate_opening(disc, size or DISC_DIAMETER_MM[0], TOKEN_OPENING_MM)
+
+
+async def find_again(
+    machine: MachineService, near: Point, diameter: float | None, token: float | None
+) -> Point:
+    """Center the top camera on the disc near a point, and return where it is: for the
+    token (``token``: how big it looks), its opening's center, which its mask sets, where
+    its routed outline can carry a tab's stub round with it as it turns."""
+    at = await find_disc(machine, near, diameter)
+    if token is None:
+        return at
+    opening = await machine.locate_opening(at, token, TOKEN_OPENING_MM)
+    if opening is None:
+        raise VisionError(
+            f"the top camera found the token at ({at.x:.2f}, {at.y:.2f}) but not its "
+            "opening: check it lies flat, opening up, and the top light"
+        )
+    return opening
+
+
 async def disc_size(machine: MachineService) -> float | None:
     """How big the disc the top camera is centered on looks, in mm; None if unseen."""
     marks = await machine.locate_round_marks(*DISC_DIAMETER_MM, through_lines=True)
@@ -301,49 +335,67 @@ async def disc_size(machine: MachineService) -> float | None:
     return near.diameter if near else None
 
 
-def tips_for_disc(machine: MachineService, disc: float) -> list[str]:
-    """The profile's tips small enough to seal on a disc, smallest first."""
+def largest_tip(disc: float, token: bool) -> float:
+    """The largest tip face (mm) that seals on a disc this size, or on the token: within
+    its opening, with bare copper all round."""
+    if token:
+        return TOKEN_OPENING_MM - 2 * TOKEN_RIM_MM
+    return disc - 2 * DISC_RIM_MM
+
+
+def tips_for_disc(machine: MachineService, room: float) -> list[str]:
+    """The profile's tips with faces up to ``room`` mm across, smallest first."""
     fit = [
         t
         for t in machine.profile.nozzle_tips
-        if t.outer_diameter is not None and t.outer_diameter <= disc - 2 * DISC_RIM_MM
+        if t.outer_diameter is not None and t.outer_diameter <= room
     ]
     return [t.id for t in sorted(fit, key=lambda t: t.outer_diameter or 0.0)]
 
 
-def too_big(machine: MachineService, nozzle: Nozzle, disc: float) -> NozzleTip | None:
-    """The tip on a nozzle, if it is too big to seal on the disc."""
+def too_big(machine: MachineService, nozzle: Nozzle, room: float) -> NozzleTip | None:
+    """The tip on a nozzle, if its face is more than ``room`` mm across."""
     tip = machine.profile.nozzle_tip(nozzle.tip)
     if tip is None or tip.outer_diameter is None:
         return None
-    return tip if tip.outer_diameter > disc - 2 * DISC_RIM_MM else None
+    return tip if tip.outer_diameter > room else None
 
 
-async def fit_disc_tips(machine: MachineService, nozzles: list[Nozzle], disc: float | None) -> bool:
-    """Before any nozzle touches the disc: if a tip is too big to seal on it, bring the
-    head to the front and ask for small tips, until they fit. Says whether tips changed."""
-    if disc is None:
+async def fit_disc_tips(
+    machine: MachineService, nozzles: list[Nozzle], disc: float | None, token: bool = False
+) -> bool:
+    """Before any nozzle touches the disc (or token): if a tip is too big to seal on it,
+    bring the head to the front and ask for small tips, until they fit. Says whether tips
+    changed."""
+    if disc is None and not token:
         return False
+    room = largest_tip(disc or 0.0, token)
+    what = "the token" if token else f"the {disc:.1f} mm disc"
     changed = False
-    while big := [(n, t) for n in nozzles if (t := too_big(machine, n, disc)) is not None]:
-        choices = tips_for_disc(machine, disc)
+    while big := [(n, t) for n in nozzles if (t := too_big(machine, n, room)) is not None]:
+        choices = tips_for_disc(machine, room)
         if not choices:
             nozzle, tip = big[0]
             raise NozzleOffsetError(
                 f"{nozzle.label}'s {tip.id} tip is {tip.outer_diameter:g} mm across, too big "
-                f"to seal on the {disc:.1f} mm disc, and this machine's profile has no smaller "
-                "tip: use a bigger disc"
+                f"to seal on {what}, and this machine's profile has no smaller tip"
+                + ("" if token else ": use a bigger disc")
             )
         which = ", ".join(f"{n.label.lower()}'s {t.id} ({t.outer_diameter:g} mm)" for n, t in big)
+        need = (
+            f"A tip must sit inside the token's {TOKEN_OPENING_MM:g} mm opening, with "
+            f"{TOKEN_RIM_MM:g} mm of bare copper all round, to seal on it"
+            if token
+            else f"A tip needs {DISC_RIM_MM:g} mm of paper all round to seal on {what}"
+        )
         await machine.change_tips(
             [TipChangeNozzle(nozzle_id=n.id, fitted=n.tip, choices=choices) for n in nozzles],
-            "Fit small tips for the disc",
-            f"A tip needs {DISC_RIM_MM:g} mm of paper all round to seal on the {disc:.1f} mm "
-            f"disc, too little for {which}. Fit one of {', '.join(choices)} on each nozzle "
-            "(a different one on each is fine: a LumenPnP comes with one of each), then say "
-            "which tip is on each.",
-            "Each nozzle then finds the disc's height and measures its offset, with the tip "
-            "it has now.",
+            "Fit small tips for the token" if token else "Fit small tips for the disc",
+            f"{need}: too little room for {which}. Fit one of {', '.join(choices)} on each "
+            "nozzle (a different one on each is fine: a LumenPnP comes with one of each), "
+            "then say which tip is on each.",
+            f"Each nozzle then finds {'the token' if token else 'the disc'}'s height and measures "
+            "its offset, with the tip it has now.",
         )
         changed = True
     return changed
@@ -372,9 +424,9 @@ async def turn_disc(
         await machine.suction(nozzle, False)
         await machine.raise_nozzles()
         raise NozzleOffsetError(
-            f"{nozzle.label} did not seal on {what} at height {height:g}: check it lies flat "
-            "(a punched disc often curls at its edge), and that the nozzle tip is fitted and "
-            "clear"
+            f"{nozzle.label} did not seal on {what} at height {height:g}: check it lies flat"
+            + (" (a punched disc often curls at its edge)" if what == "the disc" else "")
+            + ", and that the nozzle tip is fitted and clear"
         )
     await asyncio.sleep(PICK_DWELL_S)
     # The first millimeter slowly, so the disc is not torn off before the seal holds it.
@@ -460,25 +512,33 @@ async def calibrate_nozzle(
     diameter: float | None,
     height: float,
     level: float | None = None,
+    token: float | None = None,
 ) -> tuple[NozzleFix, Point, float | None]:
     """Measure one nozzle's offset with the disc found at ``disc``, taking the disc as
-    held at vacuum reading ``level`` (default: the nozzle's threshold). Returns where the
-    disc was left, and the vacuum reading holding it, too."""
+    held at vacuum reading ``level`` (default: the nozzle's threshold). ``token``: the
+    disc is the calibration token, this big, found by its opening. Returns where the disc
+    was left, and the vacuum reading holding it, too."""
+    what = "the token" if token is not None else "the disc"
     moves: list[tuple[float, Point]] = []
     readings: list[float] = []
     for turn in TURNS:
-        reading = await turn_disc(machine, nozzle, disc, turn, height, level)
+        reading = await turn_disc(machine, nozzle, disc, turn, height, level, what)
         if reading is not None:
             readings.append(reading)
-        after = await find_disc(machine, disc, diameter)
+        after = await find_again(machine, disc, diameter, token)
         moves.append((turn, Point(x=after.x - disc.x, y=after.y - disc.y)))
         disc = after
     ex, ey, spread = solve(moves)
     if spread > SPREAD_LIMIT_MM:
+        hint = (
+            "Check the token lies flat, opening up, with nothing under it, and that the tip "
+            "is pushed fully on"
+            if token is not None
+            else "Try a lighter, flatter disc"
+        )
         raise NozzleOffsetError(
-            f"the disc moved unevenly under {nozzle.label} (the turns disagree by "
-            f"{spread:.2f} mm): it may be slipping on the nozzle, or not lying flat. Try a "
-            "lighter, flatter disc"
+            f"{what} moved unevenly under {nozzle.label} (the turns disagree by "
+            f"{spread:.2f} mm): it may be slipping on the nozzle, or not lying flat. {hint}"
         )
     fix = NozzleFix(nozzle, nozzle.offset.x + ex, nozzle.offset.y + ey, spread)
     return fix, disc, sum(readings) / len(readings) if readings else None
@@ -620,7 +680,6 @@ def nozzle_offsets_work(
         raise InvalidTargetError("no nozzles to calibrate")
     machine.top_camera()
     _datum(machine)
-    disc_thickness = PAPER_MM if thickness is None else thickness
     tips = {n.id: n.tip for n in nozzles}
 
     async def work() -> str:
@@ -649,7 +708,17 @@ def nozzle_offsets_work(
         else:
             disc = await find_disc(machine, machine.camera_position(), diameter)
             size = diameter or await disc_size(machine)
-        if await fit_disc_tips(machine, nozzles, size):
+        # The calibration token is told by its opening, and found by it from now on.
+        opening = await find_token(machine, disc, size)
+        token = (size or DISC_DIAMETER_MM[0]) if opening is not None else None
+        if opening is not None:
+            disc = opening
+        what = "the token" if token is not None else "the disc"
+        if thickness is not None:
+            disc_thickness = thickness
+        else:
+            disc_thickness = TOKEN_THICKNESS_MM if token is not None else PAPER_MM
+        if await fit_disc_tips(machine, nozzles, size, token is not None):
             # Fitting them applied each tip's own offset: measure afresh, as above.
             for n in nozzles:
                 n.z_offset = 0.0
@@ -669,7 +738,7 @@ def nozzle_offsets_work(
             else:
                 try:
                     heights[nozzle.id] = await sniff_disc(
-                        machine, nozzle, disc, disc_thickness, measure
+                        machine, nozzle, disc, disc_thickness, measure, what
                     )
                 except DiscLifted:
                     known = known_height(machine, nozzle)
@@ -679,7 +748,7 @@ def nozzle_offsets_work(
                     heights[nozzle.id] = raw - nozzle.z_offset
                     lifted[nozzle.id] = source
             # Touching it can shift the disc (paper clings to the tip as it lifts): look again.
-            disc = await find_disc(machine, disc, diameter)
+            disc = await find_again(machine, disc, diameter, token)
             # Until its levels are known, the disc is held at a reading halfway to sealed.
             level = (
                 measure.open + (measure.sealed - measure.open) / 2
@@ -693,13 +762,14 @@ def nozzle_offsets_work(
                 diameter,
                 heights[nozzle.id] + disc_thickness - DISC_PRESS_MM,
                 level,
+                token,
             )
             if board is None and nozzle.id not in lifted:
                 # On bare board a small tip's seal is weak for its first 0.1 mm (a real
                 # N08 rose 46% as far as holding the disc), not a leak pressed shut.
-                check_seal(nozzle, measure, held, heights[nozzle.id] + disc_thickness)
+                check_seal(nozzle, measure, held, heights[nozzle.id] + disc_thickness, what)
             fixes.append(fix)
-            found = vacuum_levels(machine, nozzle, measure, held)
+            found = vacuum_levels(machine, nozzle, measure, held, what)
             if found is not None:
                 levels[nozzle.id] = found
 
@@ -721,7 +791,7 @@ def nozzle_offsets_work(
                 f"{with_tip(n)}: ({fix.x:.3f}, {fix.y:.3f}), {off:.2f} mm from the profile's, "
                 f"touching the datum board at Z {raw:.2f}"
                 + (
-                    f" (the disc jumped up to the tip before it touched, so its height is "
+                    f" ({what} jumped up to the tip before it touched, so its height is "
                     f"{lifted[n.id]})"
                     if n.id in lifted
                     else ""
@@ -730,7 +800,13 @@ def nozzle_offsets_work(
         values[DISC_X], values[DISC_Y] = disc.x, disc.y
         machine.disc_seen = disc
         spread = max(f.spread for f in fixes)
-        message = f"{'; '.join(parts)}. The disc's turns agreed within {spread:.3f} mm."
+        found_by = ", found by its opening," if token is not None else ""
+        message = (
+            f"{'; '.join(parts)}. {what[0].upper()}{what[1:]}'s turns{found_by} agreed within "
+            f"{spread:.3f} mm."
+        )
+        if token is None and thickness is None:
+            message += " No token opening was seen, so the disc was taken for paper, 0.1 mm thick."
         machine.calibration.record("nozzle_offsets", message, values)
         if levels:
             record_vacuum(machine, levels)

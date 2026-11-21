@@ -50,6 +50,7 @@ from picnicplace.vision.pads import fit_pads
 from picnicplace.vision.part import find_part
 from picnicplace.vision.placed import find_board_pads, find_placed_chip
 from picnicplace.vision.tape import loose_parts, pocket_darkness, pocket_ends
+from picnicplace.vision.token import find_opening
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ VISION_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "loose_parts": loose_parts,
     "pocket_darkness": pocket_darkness,
     "pocket_ends": pocket_ends,
+    "find_opening": find_opening,
     "find_part": find_part,
     "fit_pads": fit_pads,
     "find_placed_chip": find_placed_chip,

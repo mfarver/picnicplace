@@ -4,7 +4,7 @@ the config."""
 from collections.abc import Callable
 from typing import Literal
 
-from picnicplace.camera.device import DeviceCamera
+from picnicplace.camera.device import ControlSettings, DeviceCamera
 from picnicplace.camera.hub import CameraHub
 from picnicplace.camera.synthetic import SceneState, SyntheticCamera
 from picnicplace.config import CameraConfig, Config
@@ -122,4 +122,5 @@ def _device(settings: CameraConfig) -> DeviceCamera:
         flip_x=settings.flip_x,
         flip_y=settings.flip_y,
         rotation=settings.rotation,
+        controls=ControlSettings(settings.exposure_ms, settings.gain, settings.white_balance),
     )

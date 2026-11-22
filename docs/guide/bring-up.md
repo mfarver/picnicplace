@@ -462,6 +462,13 @@ height is the nozzle height at the top of its parts: the holder's surface plus t
 part's height, not the board's. Once a strip's first part is found by touch, its height
 is kept.
 
+**Dim frames.** The top camera came set to a short fixed exposure (7.8 ms, no gain), and
+black tape was nearly black in its frames: half the pixels darker than 8 of 255. Its white
+balance, fixed at 4000 K, made the white ring light look blue. On Linux, set each camera's
+`exposure_ms`, `gain` and `white_balance` in the config (try values first with
+`PUT /api/v1/cameras/top/controls`, which keeps them until the core restarts), and check
+that paper tape does not wash out at the exposure black tape needs.
+
 **Black tape.** The top camera finds a pocket from the sprocket holes, and could not see
 them in black tape, either because a feeder's sprocket teeth filled them or because the
 tape lay black on a dark holder (strip holders cover part of the holes too). The pick then

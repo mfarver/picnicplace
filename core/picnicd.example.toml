@@ -175,6 +175,14 @@ max_mb = 5000              # and at most this many megabytes of them; older ones
 # flip_x = true
 # flip_y = true
 # rotation = 0.37            # degrees counterclockwise, after flips
+# # Exposure, gain and white balance, on Linux (each left as the camera is when unset);
+# # try values live with PUT /api/v1/cameras/top/controls, then keep them here. Longer
+# # exposure is brighter: black tape and dark parts need more than paper. Over a frame's
+# # time (33 ms at 30 fps) the camera may slow down. A LumenPnP's cameras come at
+# # 7.8 ms, gain 0, and 4000 K, which makes their white ring lights look blue.
+# exposure_ms = 15            # or "auto"
+# gain = 0                    # the camera's own units: 0 to 100 on a LumenPnP's
+# white_balance = 5600        # kelvin, or "auto"
 #
 # [cameras.bottom]
 # source = "device"

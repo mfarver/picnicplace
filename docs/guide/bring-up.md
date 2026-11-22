@@ -313,7 +313,9 @@ effect at once. The reset button next to one forgets it.
       says, beside it; then **Approve**. From then on, aligning that part uses the light
       and the way of seeing it that held steadiest. A run trains parts too, with the part
       it then places rather than discards (see section 10); what it finds shows here as
-      **Found in a run, in use**, waiting for approval.
+      **Found in a run, in use**, waiting for approval. Approved parts move to a closed
+      **Approved** list in the panel, by name; open one to look at it again or **Forget**
+      it, so it is trained afresh (after changing the lights or the bottom camera, say).
 
       ![The Trained parts panel: a part waiting for approval, its footprint drawn over it and beside it](../images/studio-trained.jpg){ .pp-screenshot width="300" }
 - [ ] Center the top camera on a spot on the board, click the crosshair button to use
@@ -464,6 +466,13 @@ nothing searches once more, 1 mm deeper, which covers some of it.
 height is the nozzle height at the top of its parts: the holder's surface plus the
 part's height, not the board's. Once a strip's first part is found by touch, its height
 is kept.
+
+**Dim frames.** The top camera came set to a short fixed exposure (7.8 ms, no gain), and
+black tape was nearly black in its frames: half the pixels darker than 8 of 255. Its white
+balance, fixed at 4000 K, made the white ring light look blue. On Linux, set each camera's
+`exposure_ms`, `gain` and `white_balance` in the config (try values first with
+`PUT /api/v1/cameras/top/controls`, which keeps them until the core restarts), and check
+that paper tape does not wash out at the exposure black tape needs.
 
 **Black tape.** The top camera finds a pocket from the sprocket holes, and could not see
 them in black tape, either because a feeder's sprocket teeth filled them or because the

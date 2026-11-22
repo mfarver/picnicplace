@@ -1,6 +1,7 @@
 """Camera endpoints, hubs, sources, and the synthetic renderers."""
 
 import asyncio
+import os
 
 import cv2
 import numpy as np
@@ -9,13 +10,15 @@ from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
 from picnicplace.camera import hub as hub_module
-from picnicplace.camera.device import DeviceCamera
+from picnicplace.camera.device import ControlSettings, DeviceCamera
 from picnicplace.camera.hub import CameraHub
 from picnicplace.camera.source import Image
 from picnicplace.camera.synthetic import BottomRenderer, SceneState, TopRenderer, render_size
+from picnicplace.camera.v4l2 import CID_EXPOSURE_ABSOLUTE, CID_GAIN, CID_WHITE_BALANCE_TEMPERATURE
 from picnicplace.machine.profile import load_profile
 
 from .conftest import TEST_PROFILE, fast_config
+from .test_v4l2 import FakeControls
 
 TOKEN = "correct-horse-battery-staple"
 
@@ -173,6 +176,45 @@ def test_device_camera_reports_open_failure() -> None:
         await source.stop()
 
     asyncio.run(asyncio.wait_for(scenario(), 10))
+
+
+def test_device_camera_sets_its_exposure_each_time_it_opens() -> None:
+    """The config's exposure, gain and white balance are set when the camera opens; one
+    set while it streams is kept for the next time it opens."""
+    camera = FakeControls()
+
+    def devnull(_device: str) -> int:
+        return os.open(os.devnull, os.O_RDONLY)
+
+    async def scenario() -> None:
+        source = DeviceCamera(
+            "0",
+            1920,
+            1080,
+            30,
+            opener=lambda _d: _FakeCapture(frames=50),  # type: ignore[arg-type,return-value]
+            controls=ControlSettings(exposure_ms=30, gain=10, white_balance=5600),
+            device_opener=devnull,
+            ioctl=camera,
+        )
+        await source.start()
+        assert await source.next_frame(0, 2.0) is not None
+        assert camera.value(CID_EXPOSURE_ABSOLUTE) == 300
+        assert camera.value(CID_GAIN) == 10
+        assert camera.value(CID_WHITE_BALANCE_TEMPERATURE) == 5600
+        now = await asyncio.to_thread(source.set_controls, ControlSettings(exposure_ms=12.5))
+        assert now.exposure is not None and now.exposure.value == 125
+        assert now.gain is not None and now.gain.value == 10
+        await source.stop()
+        assert source.controls_error is None
+
+    asyncio.run(asyncio.wait_for(scenario(), 10))
+
+
+def test_a_simulated_camera_has_no_exposure_to_set(client: TestClient) -> None:
+    r = client.get("/api/v1/cameras/top/controls")
+    assert r.status_code == 409
+    assert "not a real camera" in r.json()["detail"]
 
 
 # --- Synthetic rendering: features land where the geometry says ---------------------------

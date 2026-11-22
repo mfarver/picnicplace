@@ -125,6 +125,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cameras/{camera_id}/controls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Controls
+         * @description A real camera's exposure, gain and white balance (on Linux).
+         */
+        get: operations["get_controls_api_v1_cameras__camera_id__controls_get"];
+        /**
+         * Set Controls
+         * @description Set a real camera's exposure, gain or white balance now (on Linux), until the core
+         *     restarts; the config file's ``exposure_ms``, ``gain`` and ``white_balance`` keep them.
+         */
+        put: operations["set_controls_api_v1_cameras__camera_id__controls_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cameras/{camera_id}/snapshot.jpg": {
         parameters: {
             query?: never;
@@ -2704,6 +2729,44 @@ export interface components {
              */
             rotation: number;
         };
+        /**
+         * CameraControlsInfo
+         * @description A real camera's exposure, gain and white balance now, and what each can be set to;
+         *     null where the camera has no such setting.
+         */
+        CameraControlsInfo: {
+            /**
+             * Exposure Auto
+             * @description The camera sets its own exposure.
+             */
+            exposure_auto: boolean | null;
+            /** @description Exposure time, milliseconds. */
+            exposure_ms: components["schemas"]["ControlRange"] | null;
+            gain: components["schemas"]["ControlRange"] | null;
+            /** @description White balance, kelvin. */
+            white_balance: components["schemas"]["ControlRange"] | null;
+            /** White Balance Auto */
+            white_balance_auto: boolean | null;
+        };
+        /**
+         * CameraControlsRequest
+         * @description What to set; what is left out stays as it is. Kept until the core restarts: put
+         *     the values that work in the config file to keep them.
+         */
+        CameraControlsRequest: {
+            /**
+             * Exposure Ms
+             * @description Exposure time in milliseconds, or 'auto'.
+             */
+            exposure_ms?: number | "auto" | null;
+            /** Gain */
+            gain?: number | null;
+            /**
+             * White Balance
+             * @description White balance in kelvin, or 'auto'.
+             */
+            white_balance?: number | "auto" | null;
+        };
         /** CameraDevice */
         CameraDevice: {
             /**
@@ -2889,6 +2952,17 @@ export interface components {
              * @enum {string}
              */
             kind: "footprint" | "tape" | "part";
+        };
+        /** ControlRange */
+        ControlRange: {
+            /** Default */
+            default: number;
+            /** Maximum */
+            maximum: number;
+            /** Minimum */
+            minimum: number;
+            /** Value */
+            value: number;
         };
         /** ErrorEvent */
         ErrorEvent: {
@@ -6851,6 +6925,135 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_controls_api_v1_cameras__camera_id__controls_get: {
+        parameters: {
+            query?: {
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraControlsInfo"];
+                };
+            };
+            /** @description No such camera. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not a camera with settings to set. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The camera refused the setting. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The camera is off or failing. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    set_controls_api_v1_cameras__camera_id__controls_put: {
+        parameters: {
+            query?: {
+                /** @description API token, for clients that cannot send headers. */
+                token?: string | null;
+            };
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CameraControlsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraControlsInfo"];
+                };
+            };
+            /** @description No such camera. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not a camera with settings to set. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The camera refused the setting. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The camera is off or failing. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

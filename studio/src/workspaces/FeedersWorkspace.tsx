@@ -292,6 +292,15 @@ export function FeedersWorkspace() {
           />
         )}
 
+        <JogPanel
+          description={description}
+          machine={machine}
+          canMove={canMove}
+          onJog={ctl.jog}
+          onSafeZ={safeZ}
+          onPark={park}
+        />
+
         <Panel title="Feeder bus">
           {state?.bus ? (
             <>
@@ -438,15 +447,6 @@ export function FeedersWorkspace() {
             canLook={canMove && !!machine?.homed}
           />
         )}
-
-        <JogPanel
-          description={description}
-          machine={machine}
-          canMove={canMove}
-          onJog={ctl.jog}
-          onSafeZ={safeZ}
-          onPark={park}
-        />
       </aside>
 
       <div className="canvas feeders-canvas">

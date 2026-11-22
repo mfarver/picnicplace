@@ -68,6 +68,7 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/presence` | Connected clients |
 | `GET /api/v1/cameras` | Cameras and whether they are streaming, including the config's monitor cameras (`monitor`) |
 | `GET /api/v1/cameras/{id}/snapshot.jpg` | One JPEG frame |
+| `GET`, `PUT /api/v1/cameras/{id}/controls` | A real camera's exposure (milliseconds, or `auto`), gain and white balance (kelvin, or `auto`), with their ranges; set them now, until the core restarts (on Linux). Setting needs control |
 | `GET /api/v1/cameras/{id}/stream.mjpg` | A live MJPEG stream |
 | `GET`, `PUT`, `DELETE /api/v1/library/parts/{id}` | Parts (and `GET /library/parts` to list) |
 | `GET`, `PUT`, `DELETE /api/v1/library/footprints/{id}` | Footprints (and `GET /library/footprints`) |

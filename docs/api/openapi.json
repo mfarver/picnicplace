@@ -751,6 +751,127 @@
         "title": "CameraChoice",
         "type": "object"
       },
+      "CameraControlsInfo": {
+        "description": "A real camera's exposure, gain and white balance now, and what each can be set to;\nnull where the camera has no such setting.",
+        "properties": {
+          "exposure_auto": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The camera sets its own exposure.",
+            "title": "Exposure Auto"
+          },
+          "exposure_ms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ControlRange"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exposure time, milliseconds."
+          },
+          "gain": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ControlRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "white_balance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ControlRange"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "White balance, kelvin."
+          },
+          "white_balance_auto": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "White Balance Auto"
+          }
+        },
+        "required": [
+          "exposure_auto",
+          "exposure_ms",
+          "gain",
+          "white_balance_auto",
+          "white_balance"
+        ],
+        "title": "CameraControlsInfo",
+        "type": "object"
+      },
+      "CameraControlsRequest": {
+        "description": "What to set; what is left out stays as it is. Kept until the core restarts: put\nthe values that work in the config file to keep them.",
+        "properties": {
+          "exposure_ms": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "const": "auto",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exposure time in milliseconds, or 'auto'.",
+            "title": "Exposure Ms"
+          },
+          "gain": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gain"
+          },
+          "white_balance": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "const": "auto",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "White balance in kelvin, or 'auto'.",
+            "title": "White Balance"
+          }
+        },
+        "title": "CameraControlsRequest",
+        "type": "object"
+      },
       "CameraDevice": {
         "properties": {
           "device": {
@@ -1127,6 +1248,34 @@
           "incoming"
         ],
         "title": "Conflict",
+        "type": "object"
+      },
+      "ControlRange": {
+        "properties": {
+          "default": {
+            "title": "Default",
+            "type": "number"
+          },
+          "maximum": {
+            "title": "Maximum",
+            "type": "number"
+          },
+          "minimum": {
+            "title": "Minimum",
+            "type": "number"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "value",
+          "minimum",
+          "maximum",
+          "default"
+        ],
+        "title": "ControlRange",
         "type": "object"
       },
       "ErrorEvent": {
@@ -9539,6 +9688,224 @@
           }
         ],
         "summary": "Capture Image",
+        "tags": [
+          "cameras"
+        ]
+      }
+    },
+    "/api/v1/cameras/{camera_id}/controls": {
+      "get": {
+        "description": "A real camera's exposure, gain and white balance (on Linux).",
+        "operationId": "get_controls_api_v1_cameras__camera_id__controls_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "camera_id",
+            "required": true,
+            "schema": {
+              "title": "Camera Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraControlsInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such camera."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not a camera with settings to set."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The camera refused the setting."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The camera is off or failing."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Controls",
+        "tags": [
+          "cameras"
+        ]
+      },
+      "put": {
+        "description": "Set a real camera's exposure, gain or white balance now (on Linux), until the core\nrestarts; the config file's ``exposure_ms``, ``gain`` and ``white_balance`` keep them.",
+        "operationId": "set_controls_api_v1_cameras__camera_id__controls_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "camera_id",
+            "required": true,
+            "schema": {
+              "title": "Camera Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "API token, for clients that cannot send headers.",
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "API token, for clients that cannot send headers.",
+              "title": "Token"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraControlsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraControlsInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such camera."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not a camera with settings to set."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The camera refused the setting."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The camera is off or failing."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Controls",
         "tags": [
           "cameras"
         ]

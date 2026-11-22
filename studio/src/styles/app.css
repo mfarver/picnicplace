@@ -3175,6 +3175,47 @@ code,
   margin-top: var(--space-2);
 }
 
+.trained-part + .trained-approved {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.trained-approved > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.trained-approved-list {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trained-approved-list > li + li {
+  margin-top: var(--space-2);
+}
+
+.trained-approved-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.trained-approved-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
 /* --- Checked placements -------------------------------------------------------------- */
 
 .run-step-thumb {

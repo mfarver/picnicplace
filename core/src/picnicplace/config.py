@@ -586,6 +586,37 @@ class CameraConfig(_Section):
             "look washed out at full white. Unset: full white."
         ),
     )
+    exposure_ms: float | Literal["auto"] | None = Field(
+        default=None,
+        description=(
+            "A Linux (V4L2) camera's exposure time in milliseconds, or 'auto' for the "
+            "camera's own. Longer is brighter: black tape and dark parts need more than "
+            "paper. Over a frame's time (33 ms at 30 fps) the camera may slow down. "
+            "Unset: as the camera is."
+        ),
+    )
+    gain: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "A Linux camera's gain, in its own units (0 to 100 on a LumenPnP's cameras): "
+            "brighter, and noisier, without a longer exposure. Unset: as the camera is."
+        ),
+    )
+    white_balance: int | Literal["auto"] | None = Field(
+        default=None,
+        description=(
+            "A Linux camera's white balance in kelvin, or 'auto'. A LumenPnP's cameras "
+            "come set to 4000 K, which makes their white ring lights look blue. Unset: as "
+            "the camera is."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _positive_exposure(self) -> Self:
+        if isinstance(self.exposure_ms, float | int) and self.exposure_ms <= 0:
+            raise ValueError("exposure_ms must be more than 0, or 'auto'")
+        return self
 
     @model_validator(mode="after")
     def _device_needs_path(self) -> Self:

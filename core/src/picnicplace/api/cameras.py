@@ -1,4 +1,5 @@
-"""Camera endpoints: list, JPEG snapshot, and MJPEG stream (spec section 6.5).
+"""Camera endpoints: list, JPEG snapshot, MJPEG stream (spec section 6.5), and a real
+camera's exposure, gain and white balance.
 
 Browsers cannot add headers to ``<img>`` requests, so these endpoints also accept the
 token as a ``token`` query parameter, like the event socket. Streams do not count as
@@ -8,17 +9,19 @@ presence: watching video alone does not enable motion.
 import asyncio
 import time
 from collections.abc import AsyncIterator
-from typing import Annotated
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import Field
 
-from picnicplace.api.context import Context, require
+from picnicplace.api.context import Context, require, require_control
 from picnicplace.auth import Permission, Principal
+from picnicplace.camera.device import ControlSettings, DeviceCamera
 from picnicplace.camera.hub import CameraHub
 from picnicplace.camera.source import Frame
+from picnicplace.camera.v4l2 import CameraControls, Control
 from picnicplace.capture import CaptureInfo
 from picnicplace.machine.errors import MachineError, VisionError
 from picnicplace.schemas import CameraInfo, ErrorResponse, WireModel
@@ -79,6 +82,112 @@ class CaptureRequest(WireModel):
         default_factory=list[str], description="Cameras to capture. Empty: every camera on."
     )
     label: str = Field(default="", max_length=200, description="What the frame shows.")
+
+
+class ControlRange(WireModel):
+    value: float
+    minimum: float
+    maximum: float
+    default: float
+
+
+class CameraControlsInfo(WireModel):
+    """A real camera's exposure, gain and white balance now, and what each can be set to;
+    null where the camera has no such setting."""
+
+    exposure_auto: bool | None = Field(description="The camera sets its own exposure.")
+    exposure_ms: ControlRange | None = Field(description="Exposure time, milliseconds.")
+    gain: ControlRange | None
+    white_balance_auto: bool | None
+    white_balance: ControlRange | None = Field(description="White balance, kelvin.")
+
+
+class CameraControlsRequest(WireModel):
+    """What to set; what is left out stays as it is. Kept until the core restarts: put
+    the values that work in the config file to keep them."""
+
+    exposure_ms: Annotated[float, Field(gt=0)] | Literal["auto"] | None = Field(
+        default=None, description="Exposure time in milliseconds, or 'auto'."
+    )
+    gain: int | None = Field(default=None, ge=0)
+    white_balance: int | Literal["auto"] | None = Field(
+        default=None, description="White balance in kelvin, or 'auto'."
+    )
+
+
+def _range(control: Control | None, scale: float = 1.0) -> ControlRange | None:
+    if control is None:
+        return None
+    return ControlRange(
+        value=control.value * scale,
+        minimum=control.minimum * scale,
+        maximum=control.maximum * scale,
+        default=control.default * scale,
+    )
+
+
+def _controls_info(c: CameraControls) -> CameraControlsInfo:
+    return CameraControlsInfo(
+        exposure_auto=c.exposure_auto,
+        exposure_ms=_range(c.exposure, 0.1),
+        gain=_range(c.gain),
+        white_balance_auto=c.white_balance_auto,
+        white_balance=_range(c.white_balance),
+    )
+
+
+CONTROLS_ERRORS: dict[int | str, dict[str, Any]] = {
+    **NOT_FOUND,
+    **UNAVAILABLE,
+    409: {"model": ErrorResponse, "description": "Not a camera with settings to set."},
+    422: {"model": ErrorResponse, "description": "The camera refused the setting."},
+}
+
+
+def _device_camera(ctx: Context, camera_id: str) -> DeviceCamera:
+    source = _hub(ctx, camera_id).source
+    if not isinstance(source, DeviceCamera):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"camera {camera_id!r} is not a real camera: it has no exposure to set",
+        )
+    return source
+
+
+def _refused(camera_id: str, error: OSError) -> HTTPException:
+    reason = error.strerror or (str(error.args[0]) if error.args else str(error))
+    return HTTPException(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=f"camera {camera_id!r}: {reason} (on Linux, its settings are set through V4L2)",
+    )
+
+
+@router.get("/{camera_id}/controls", responses=CONTROLS_ERRORS)
+async def get_controls(ctx: Context, camera_id: str) -> CameraControlsInfo:
+    """A real camera's exposure, gain and white balance (on Linux)."""
+    camera = _device_camera(ctx, camera_id)
+    try:
+        return _controls_info(await asyncio.to_thread(camera.read_controls))
+    except OSError as e:
+        raise _refused(camera_id, e) from e
+
+
+@router.put(
+    "/{camera_id}/controls",
+    responses=CONTROLS_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def set_controls(
+    ctx: Context, camera_id: str, body: CameraControlsRequest
+) -> CameraControlsInfo:
+    """Set a real camera's exposure, gain or white balance now (on Linux), until the core
+    restarts; the config file's ``exposure_ms``, ``gain`` and ``white_balance`` keep them."""
+    camera = _device_camera(ctx, camera_id)
+    settings = ControlSettings(body.exposure_ms, body.gain, body.white_balance)
+    try:
+        return _controls_info(await asyncio.to_thread(camera.set_controls, settings))
+    except OSError as e:
+        raise _refused(camera_id, e) from e
 
 
 @router.get("/captures")

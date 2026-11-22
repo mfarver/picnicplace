@@ -113,3 +113,15 @@ def test_running_the_simulator_without_a_config_says_so(
     cli.main(argv)
     err = capsys.readouterr().err
     assert ("SIMULATOR, not a real machine" in err) is warned
+
+
+def test_a_cameras_exposure_is_milliseconds_or_auto() -> None:
+    camera = {"source": "device", "device": "/dev/video0"}
+    config = Config.model_validate(
+        {"cameras": {"top": {**camera, "exposure_ms": 15, "gain": 4, "white_balance": "auto"}}}
+    )
+    top = config.cameras["top"]
+    assert (top.exposure_ms, top.gain, top.white_balance) == (15, 4, "auto")
+    assert Config.model_validate({"cameras": {"top": {**camera, "exposure_ms": "auto"}}})
+    with pytest.raises(ValidationError, match="exposure_ms must be more than 0"):
+        Config.model_validate({"cameras": {"top": {**camera, "exposure_ms": 0}}})

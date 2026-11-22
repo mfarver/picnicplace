@@ -3,19 +3,32 @@
 On Linux the device is a path, ideally a stable one under ``/dev/v4l/by-id/`` so the top
 and bottom cameras never swap after a reboot. A number selects a camera by index, which is
 handy on macOS during development.
+
+On Linux, its exposure, gain and white balance can be set (``exposure_ms``, ``gain``,
+``white_balance``): each time the camera opens, and while it streams.
 """
 
 import asyncio
+import fcntl
 import logging
+import os
 import sys
 import threading
 import time
 from collections.abc import Callable
-from typing import Protocol
+from dataclasses import dataclass
+from typing import Literal, Protocol
 
 import cv2
 
 from picnicplace.camera.source import CameraSource, Image
+from picnicplace.camera.v4l2 import (
+    CameraControls,
+    Ioctl,
+    open_device,
+    read_controls,
+    write_controls,
+)
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +76,23 @@ class Orientation:
         return image
 
 
+@dataclass
+class ControlSettings:
+    """What a camera's exposure, gain and white balance are set to; None: as it is."""
+
+    exposure_ms: float | Literal["auto"] | None = None
+    gain: int | None = None
+    white_balance: int | Literal["auto"] | None = None
+
+    def merged(self, other: "ControlSettings") -> "ControlSettings":
+        """These settings, with what ``other`` sets taking their place."""
+        return ControlSettings(
+            other.exposure_ms if other.exposure_ms is not None else self.exposure_ms,
+            other.gain if other.gain is not None else self.gain,
+            other.white_balance if other.white_balance is not None else self.white_balance,
+        )
+
+
 class DeviceCamera(CameraSource):
     kind = "device"
 
@@ -77,8 +107,16 @@ class DeviceCamera(CameraSource):
         flip_x: bool = False,
         flip_y: bool = False,
         rotation: float = 0.0,
+        controls: ControlSettings | None = None,
+        device_opener: Callable[[str], int] = open_device,
+        ioctl: Ioctl = fcntl.ioctl,
     ) -> None:
         super().__init__()
+        self._controls = controls or ControlSettings()
+        self._device_opener = device_opener
+        self._ioctl = ioctl
+        self.controls_error: str | None = None
+        """Why the camera's settings could not be set when it last opened, if so."""
         self._orient = Orientation(flip_x, flip_y, rotation)
         self._device = device
         self._requested = (width, height)
@@ -143,7 +181,45 @@ class DeviceCamera(CameraSource):
             int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or self._requested[1],
         )
         log.info("camera %s open at %dx%d", self._device, *self._size)
+        if self._controls != ControlSettings():
+            try:
+                self._write(self._controls)
+                self.controls_error = None
+            except OSError as e:
+                self.controls_error = f"camera {self._device}: {_reason(e)}"
+                log.warning("%s", self.controls_error)
         return cap
+
+    def read_controls(self) -> CameraControls:
+        """Its exposure, gain and white balance now. Raises OSError if they cannot be
+        read (not a Linux camera)."""
+        fd = self._device_opener(self._device)
+        try:
+            return read_controls(fd, self._ioctl)
+        finally:
+            os.close(fd)
+
+    def set_controls(self, settings: ControlSettings) -> CameraControls:
+        """Set its exposure, gain or white balance now, and each time it opens again (until
+        the core restarts); what is not given is left as it is. Raises OSError, saying why,
+        if the camera refuses."""
+        self._write(settings)
+        self._controls = self._controls.merged(settings)
+        return self.read_controls()
+
+    def _write(self, settings: ControlSettings) -> None:
+        fd = self._device_opener(self._device)
+        try:
+            exposure = settings.exposure_ms
+            write_controls(
+                fd,
+                self._ioctl,
+                exposure=exposure if exposure in (None, "auto") else round(float(exposure) * 10),
+                gain=settings.gain,
+                white_balance=settings.white_balance,
+            )
+        finally:
+            os.close(fd)
 
     def _read_frames(self, cap: Capture) -> None:
         failures = 0
@@ -169,3 +245,8 @@ class DeviceCamera(CameraSource):
         if self.error != message:
             log.warning("%s", message)
         self.error = message
+
+
+def _reason(error: OSError) -> str:
+    """What an OSError says, without its error number."""
+    return error.strerror or (str(error.args[0]) if error.args else str(error))

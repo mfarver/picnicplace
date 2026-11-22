@@ -310,7 +310,9 @@ effect at once. The reset button next to one forgets it.
       says, beside it; then **Approve**. From then on, aligning that part uses the light
       and the way of seeing it that held steadiest. A run trains parts too, with the part
       it then places rather than discards (see section 10); what it finds shows here as
-      **Found in a run, in use**, waiting for approval.
+      **Found in a run, in use**, waiting for approval. Approved parts move to a closed
+      **Approved** list in the panel, by name; open one to look at it again or **Forget**
+      it, so it is trained afresh (after changing the lights or the bottom camera, say).
 
       ![The Trained parts panel: a part waiting for approval, its footprint drawn over it and beside it](../images/studio-trained.jpg){ .pp-screenshot width="300" }
 - [ ] Center the top camera on a spot on the board, click the crosshair button to use

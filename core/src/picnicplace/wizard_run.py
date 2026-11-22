@@ -6,8 +6,9 @@ Start skips the steps already done and still good (homing, if homed; visual homi
 done since homing); Run again redoes them. Stop 1, with a hand on the power switch: home
 (unless homed), visual homing, the top
 camera's scale, the bottom camera, naming the tip on each nozzle by camera, and the
-feeders (scanned, and their rails calibrated). Stop 2, with a paper disc on the datum
-board: find the disc, and measure each nozzle's offset, height and vacuum levels.
+feeders (scanned, and their rails calibrated). Stop 2, with the calibration token (or a
+paper disc) on the datum board: find it, and measure each nozzle's offset, height and
+vacuum levels.
 
 Each step's progress is kept on the wizard (``Wizard.run``), so any Studio can show it as
 it runs. Stop (``MachineService.request_stop``) ends the run before its next move,

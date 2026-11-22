@@ -72,6 +72,7 @@ sim_time_scale = 1.0       # Simulator and fake firmware: 10 runs ten times fast
 # sim_calibration_disc = [217.0, 94.5]
 # sim_empty_pockets = { "2" = 3 }   # slot 2's reel starts with 3 empty pockets (its leader)
 # sim_parts_turned = { "3" = 180.0 } # slot 3's parts sit turned half way in their tape
+# sim_calibration_token = [217.0, 94.5]   # the calibration token, found by its opening
 # sim_paper = [240.0, 106.0, 25.0]   # a sheet of paper (X, Y, size), for tip heights
 # Simulator: a board's top on the staging plates, and the tops of parts in feeders,
 # strips, and trays, off the profile's or the setup's heights (mm, up positive), to try
@@ -145,6 +146,13 @@ record_runs = false        # Record every job run (a run can also ask for it), a
                            # when a run resumes after the core restarts.
 keep = 10                  # Keep at most this many recordings,
 max_mb = 5000              # and at most this many megabytes of them; older ones go.
+
+# The control panel, if one is fitted (docs/hardware/control-panel.md): a touchscreen on
+# the machine, on its native USB port. Find its stable path with:
+# ls /dev/serial/by-id/ (it is "usb-Espressif_USB_JTAG_serial_debug_unit_...-if00").
+# The core opens it again whenever it is plugged in.
+[panel]
+# port = "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_XX:XX:XX:XX:XX:XX-if00"
 
 # Cameras, by ID from the machine profile ("top" and "bottom" on the LumenPnP). Cameras
 # left out are simulated with the simulator and fake-marlin drivers, and off otherwise.

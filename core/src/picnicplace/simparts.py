@@ -25,6 +25,9 @@ class PartShape:
     disc: float | None = None
     """A round disc of this diameter, such as a punched paper disc for calibrating the
     nozzle offsets. A disc can be picked up again where it lies."""
+    opening: float | None = None
+    """A round opening of this diameter in the middle of a disc's top, with gold copper
+    in it: the calibration token's."""
     height: float | None = None
     """How tall the part is, where known: where a held part's bottom is."""
 
@@ -56,6 +59,9 @@ SIM_DISC_DIAMETER_MM = 6.0
 """The simulator's calibration disc: a paper punch's, about a quarter inch."""
 SIM_DISC_THICKNESS_MM = 0.1
 """...and paper's thickness."""
+SIM_TOKEN = (5.0, 2.5, 0.86)
+"""The simulator's calibration token: its diameter, its opening, and its thickness, a
+little less than the core takes it to be."""
 
 DISC_PRESS_LIMIT_MM = 1.5
 """A paper disc may be pressed this far (it gives, and so does the nozzle) before it is a

@@ -1314,7 +1314,8 @@ export interface paths {
         /**
          * Calibrate Nozzle Offsets
          * @description Measure each nozzle's offset from the top camera with a small disc (punched paper,
-         *     or a small round PCB) on the datum board, the top camera centered over it. Each nozzle
+         *     or the calibration token, found by its opening) on the datum board, the top camera
+         *     centered over it. Each nozzle
          *     sniffs for the board's height (steps down with suction on until the vacuum seals),
          *     then picks the disc up, turns it, and sets it down three times; how the disc moves
          *     gives where the nozzle turns. The result is kept (the calibration checklist) and used
@@ -4533,7 +4534,7 @@ export interface components {
             disc_diameter?: number | null;
             /**
              * Disc Thickness
-             * @description The disc's thickness in mm. Empty: paper's, 0.1.
+             * @description The disc's thickness in mm. Empty: paper's, 0.1, or the calibration token's, 0.9.
              */
             disc_thickness?: number | null;
             /**
@@ -5711,7 +5712,7 @@ export interface components {
             redo: boolean;
             /**
              * Stop
-             * @description 1: everything the machine can do with a hand on the power switch (homing, visual homing, the cameras, naming the tips, the feeders). 2: with a paper disc on the datum board, each nozzle's offset, height and vacuum levels.
+             * @description 1: everything the machine can do with a hand on the power switch (homing, visual homing, the cameras, naming the tips, the feeders). 2: with the calibration token (or a paper disc) on the datum board, each nozzle's offset, height and vacuum levels.
              * @enum {integer}
              */
             stop: 1 | 2;
@@ -6427,7 +6428,7 @@ export interface components {
             status: "done" | "todo" | "stale" | "skipped" | "not_needed" | "not_built";
             /**
              * Stop
-             * @description Which of the wizard's stops does it: 0 choosing the machine; 1 with a hand on the power switch; 2 with a paper disc on the datum board; 3 checking the discard and park spots.
+             * @description Which of the wizard's stops does it: 0 choosing the machine; 1 with a hand on the power switch; 2 with the calibration token (or a paper disc) on the datum board; 3 checking the discard and park spots.
              * @enum {integer}
              */
             stop: 0 | 1 | 2 | 3;

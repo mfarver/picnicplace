@@ -414,6 +414,35 @@ def test_holes_not_seen_as_round_marks_are_found_by_their_rims(
         assert pocket["across"] == pytest.approx(0.0, abs=0.05)
 
 
+def test_one_rim_alone_is_not_taken_for_a_hole(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On a real strip the camera looked on the wrong side of the tape, and the rim search
+    found a round letter on the part next to it, near where holes should be: one rim is
+    not enough to find a pocket from."""
+    with connect(lumen) as s:
+        s.home()
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+
+        async def no_marks(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        rotation = slot_state(s, "26")["slot"]["rotation"]
+
+        async def one_rim(*args: Any, **kwargs: Any) -> list[Point]:
+            # Right on the hole line, where a hole could be.
+            here = machine.camera_position()
+            off = rotate(Point(x=2.0, y=3.5), rotation)
+            return [Point(x=here.x + off.x, y=here.y + off.y)]
+
+        monkeypatch.setattr(machine, "locate_circles", no_marks)
+        monkeypatch.setattr(machine, "locate_rims", one_rim)
+        op = s.wait(s.post("/api/v1/feeders/slots/26/pocket"))
+        assert op["status"] == "failed"
+        assert "no sprocket holes found" in op["error"]
+
+
 def test_holes_must_be_a_sprocket_pitch_apart() -> None:
     """A rim search finds round things on the hole line that are not holes: those not a
     whole sprocket pitch from the rest are left out."""

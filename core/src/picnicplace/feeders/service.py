@@ -1381,7 +1381,13 @@ class FeederService:
             # Black tape, or a strip's holder over the holes: look for their rims instead.
             rims = await self._machine.locate_rims(SPROCKET_DIAMETER, SPROCKET_PITCH * 0.6)
             by_rims = fix_from(rims)
-            if by_rims is not None and (fix is None or by_rims.holes > fix.holes):
+            # A rim alone may be anything round near the hole line (on a real strip, a
+            # letter on the part beside it): rims count only as two or more holes.
+            if (
+                by_rims is not None
+                and by_rims.holes >= MIN_HOLES
+                and (fix is None or by_rims.holes > fix.holes)
+            ):
                 fix, seen = by_rims, rims
         if fix is None:
             raise NoSprocketHolesError(f"{label}: no sprocket holes found near the pick location")

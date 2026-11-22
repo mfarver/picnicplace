@@ -10,7 +10,7 @@ import pytest
 
 from picnicplace.camera.source import Image
 from picnicplace.feeders.pocket import choose_pocket, pocket_choices, pocket_from_holes
-from picnicplace.vision.fiducial import find_circles
+from picnicplace.vision.fiducial import find_circles, find_rims
 from picnicplace.vision.tape import holds_part, loose_parts, pocket_darkness, pocket_ends
 
 FRAMES = Path(__file__).parent / "data" / "vision"
@@ -172,3 +172,53 @@ def test_a_gray_capacitor_is_told_from_an_empty_pocket(
     # Looked for across the part instead, its ends would fall on the pocket's dark sides.
     across = pocket_ends(image, u, v, BODY, CAP_MM_PER_PX, OUTLINE, 90.0)
     assert across is not None and across < 0.85
+
+
+BLACK_MM_PER_PX = 20.343605377340026 / 1920
+BLACK_PICK = (760.0, 540.0)
+"""The pick location in the black tape frames: columns 200 to 1399 of 1920 x 1080 frames
+taken there."""
+BLACK_LINE = 5.5
+"""12 mm tape: the hole line is 5.5 mm from the pockets, to the picture's left."""
+
+
+@pytest.mark.parametrize(
+    ("name", "pocket"),
+    [
+        # The pocket's middle (mm down the picture from the pick location, give or take
+        # whole sprocket pitches): from the hole in the middle of an empty pocket, or
+        # judged from the part and the pocket's walls.
+        ("black-tape-empty", 1.08),
+        ("black-tape-run", 1.75),
+        ("black-tape-8mm-pitch", 0.21),
+        ("black-tape-qfn", -0.34),
+        ("black-strip", 0.12),
+    ],
+)
+def test_holes_in_black_tape_are_found_by_their_rims(name: str, pocket: float) -> None:
+    """Black 12 mm tape on a LumenPnP's Photon feeders, and in a strip on its bed: the
+    holes do not stand out as round marks (the feeder's tooth shows bright in each, in a
+    dark ring that merges with the tape), but their rims do, and the pocket found from
+    them is within 0.25 mm of where it is."""
+    image = _frame(name)
+    mm, (u, v) = BLACK_MM_PER_PX, BLACK_PICK
+
+    def tape(x: float, y: float) -> tuple[float, float]:
+        """Along the tape (down the picture) and across it (toward the holes, left)."""
+        return (y - v) * mm, (u - x) * mm
+
+    rims = find_rims(image, HOLE / mm, 0.6 * PITCH / mm)
+    fix = pocket_from_holes([tape(c.x, c.y) for c in rims], BLACK_LINE, 8.0)
+    assert fix is not None and fix.holes >= 2
+    assert abs(fix.across) < 0.25
+    off = (fix.along - pocket + PITCH / 2) % PITCH - PITCH / 2
+    assert abs(off) < 0.25, (fix, off)
+
+
+@pytest.mark.parametrize("name", ["black-tape-empty", "black-tape-run", "black-strip"])
+def test_holes_in_black_tape_are_not_seen_as_round_marks(name: str) -> None:
+    """Why the rims are looked for: as round marks, fewer than two holes are found."""
+    image = _frame(name)
+    mm, (u, _) = BLACK_MM_PER_PX, BLACK_PICK
+    marks = find_circles(image, HOLE * 0.7 / mm, HOLE * 1.3 / mm)
+    assert len([c for c in marks if abs((u - c.x) * mm - BLACK_LINE) < 1.0]) < 2

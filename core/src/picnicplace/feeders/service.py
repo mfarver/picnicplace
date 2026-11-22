@@ -20,7 +20,12 @@ from pydantic import Field
 
 from picnicplace.camera.synthetic import TapeScene
 from picnicplace.feeders.photon import PhotonBus
-from picnicplace.feeders.pocket import choose_pocket, pocket_choices, pocket_from_holes
+from picnicplace.feeders.pocket import (
+    PocketFix,
+    choose_pocket,
+    pocket_choices,
+    pocket_from_holes,
+)
 from picnicplace.feeders.rails import fit_rail, residual
 from picnicplace.feeders.setup import (
     FeederAssignment,
@@ -73,6 +78,9 @@ POCKET_KEEP_OUT_MM = 0.4
 pocket: the pocket's own walls are darker than the paper."""
 HOLE_KEEP_OUT_MM = 0.25
 """...nor this far round each sprocket hole."""
+MIN_HOLES = 2
+"""Sprocket holes found as round marks, fewer than this, are looked for again by their
+rims: one hole alone may be something else on the hole line."""
 
 RAIL_SEARCH_ACROSS_MM = (7.0, 14.0, 21.0)
 """Searching for a rail's end fiducial, the camera also looks this far to either side of
@@ -1360,11 +1368,21 @@ class FeederService:
         await self._machine.move_camera_to(pick.x + look.x, pick.y + look.y)
         low, high = SPROCKET_DIAMETER * 0.7, SPROCKET_DIAMETER * 1.3
         seen = await self._machine.locate_circles(low, high)
-        holes = [
-            (q.x, q.y)
-            for q in (rotate(Point(x=p.x - pick.x, y=p.y - pick.y), -rotation) for p in seen)
-        ]
-        fix = pocket_from_holes(holes, line, pitch)
+
+        def fix_from(marks: list[Point]) -> PocketFix | None:
+            holes = [
+                (q.x, q.y)
+                for q in (rotate(Point(x=p.x - pick.x, y=p.y - pick.y), -rotation) for p in marks)
+            ]
+            return pocket_from_holes(holes, line, pitch)
+
+        fix = fix_from(seen)
+        if fix is None or fix.holes < MIN_HOLES:
+            # Black tape, or a strip's holder over the holes: look for their rims instead.
+            rims = await self._machine.locate_rims(SPROCKET_DIAMETER, SPROCKET_PITCH * 0.6)
+            by_rims = fix_from(rims)
+            if by_rims is not None and (fix is None or by_rims.holes > fix.holes):
+                fix, seen = by_rims, rims
         if fix is None:
             raise NoSprocketHolesError(f"{label}: no sprocket holes found near the pick location")
         along, part, loose = fix.along, None, []

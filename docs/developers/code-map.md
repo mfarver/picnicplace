@@ -155,7 +155,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | Module | What it does |
 |---|---|
 | `camera/` | Camera sources (`device.py` for real cameras, `synthetic.py` for the simulator's rendered views), a hub per camera that shares frames among viewers, and `v4l2.py`, which asks a Linux camera what formats, sizes, and frame rates it can send (for the probe) |
-| `vision/fiducial.py` | Finds round marks: homing and board fiducials, feeder fiducials, sprocket holes |
+| `vision/fiducial.py` | Finds round marks: homing and board fiducials, feeder fiducials, sprocket holes (by their rims, where they do not stand out) |
 | `vision/tape.py` | Paper tape: whether a pocket holds a part, and parts lying loose on the tape |
 | `vision/part.py` | The metal mask (bright, not yellowish plastic, no specks), and one box around everything bright about the nozzle: the part's outline, which bottom vision finds first |
 | `vision/placed.py` | Finds a two-terminal chip where it was just placed, from above (a dark body between two bright caps, matched by normalized correlation over positions and turns), and the board's pads under it (the footprint's pads slid over the bright copper), and how much of the chip's ends lie on them: the run's placement check |
@@ -178,7 +178,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `feeders/photon.py`, `feeders/sim.py` | The Photon feeder protocol (RS-485), and simulated Photon feeders |
 | `feeders/setup.py` | The owner's feeder setup (`feeders.json`): parts in feeders, rail and slot calibrations, strips and trays, what the bottom camera learned |
 | `feeders/service.py` | The feeder service: scanning, feeding, where to pick, fiducial calibration, pocket finding, strips and trays, pick learning |
-| `feeders/pocket.py` | Where the pocket is, from the sprocket holes seen; of two about as near, which to take |
+| `feeders/pocket.py` | Where the pocket is, from the sprocket holes seen (those a whole sprocket pitch apart); of two about as near, which to take |
 | `feeders/rails.py` | Fitting a feeder rail to the feeder fiducials found on it |
 | `placement.py` | Pick, align (outline, then pads, or the outline alone when no metal shows: a white chip's body; a trained part as trained), train, and place one part; pick correction (top or bottom camera) |
 | `training.py` | Training how the bottom camera sees a part: the lights, thresholds and turns tried, how a way of seeing it is scored, the trained parts kept (to be approved), and the approval pictures with the footprint drawn over and beside the part |

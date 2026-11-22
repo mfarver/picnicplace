@@ -388,6 +388,41 @@ def test_vision_finds_the_drifted_pocket(lumen: TestClient) -> None:
         assert pocket["at"]["x"] == pytest.approx(pick.x, abs=0.05)
 
 
+def test_holes_not_seen_as_round_marks_are_found_by_their_rims(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Black tape on a real LumenPnP's feeders: each hole shows the feeder's bright tooth
+    in a dark ring that merges with the tape, so no hole stands out as a round mark. Their
+    rims still show, and the pocket is found from them as well as from the marks."""
+    with connect(lumen) as s:
+        s.home()
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+
+        async def no_marks(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        monkeypatch.setattr(machine, "locate_circles", no_marks)
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        pick = true_pick(slot_state(s, "26"))
+        s.put("/api/v1/feeders/slots/26/pick", {"at": {"x": pick.x, "y": pick.y}})
+        for _ in range(10):
+            succeeded(s.wait(s.post("/api/v1/feeders/slots/26/feed", {})))
+        op = succeeded(s.wait(s.post("/api/v1/feeders/slots/26/pocket")))
+        assert "sprocket holes" in op["message"] and "(from 1 " not in op["message"], op
+        pocket = slot_state(s, "26")["pocket"]
+        assert pocket["along"] == pytest.approx(0.4, abs=0.05), op
+        assert pocket["across"] == pytest.approx(0.0, abs=0.05)
+
+
+def test_holes_must_be_a_sprocket_pitch_apart() -> None:
+    """A rim search finds round things on the hole line that are not holes: those not a
+    whole sprocket pitch from the rest are left out."""
+    holes = [(2.0, 3.5), (-2.0, 3.5), (6.0, 3.5), (0.7, 3.6)]
+    fix = pocket_from_holes(holes, 3.5, 4.0)
+    assert fix is not None and fix.holes == 3
+    assert fix.along == pytest.approx(0.0, abs=1e-9)
+
+
 def test_a_simulated_pick_takes_the_part_from_its_pocket(lumen: TestClient) -> None:
     feeders = service(lumen)
     parts = feeders.sim_parts

@@ -391,6 +391,7 @@ def test_tape_whose_sprocket_holes_cannot_be_seen_is_picked_where_the_setup_says
             return []
 
         monkeypatch.setattr(machine, "locate_circles", no_circles)
+        monkeypatch.setattr(machine, "locate_rims", no_circles)
         body = {
             "slot_id": "1",
             "nozzle_id": "N1",

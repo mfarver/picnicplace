@@ -451,10 +451,12 @@ is kept.
 **Black tape.** The top camera finds a pocket from the sprocket holes, and could not see
 them in black tape, either because a feeder's sprocket teeth filled them or because the
 tape lay black on a dark holder (strip holders cover part of the holes too). The pick then
-goes where the feeder's setup says. For each slot of black tape, center the camera on a
-part in the pick pocket and click **Pick is here** (Feeders workspace). Tape with an 8 mm
-pitch has a pocket at every second hole: check a part, not a gap, sits at the pick point,
-and if not, move the tape on one hole.
+went where the feeder's setup says. The core now looks for the holes' rims when it cannot
+see the holes themselves, and finds them in black tape and in strips; a strip whose holder
+covers half of each hole may still show too little. Where no holes are found, center the
+camera on a part in the pick pocket and click **Pick is here** (Feeders workspace). Tape
+with an 8 mm pitch has a pocket at every second hole: check a part, not a gap, sits at the
+pick point, and if not, move the tape on one hole.
 
 **Gray capacitors.** A gray ceramic capacitor's body is no darker than an empty pocket's
 floor; the pocket check now looks for its bright metal ends too, and a pocket seen empty

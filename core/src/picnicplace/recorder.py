@@ -44,7 +44,7 @@ from pydantic import BaseModel, Field
 from picnicplace import __version__
 from picnicplace.events import EventBus, Subscription, SubscriptionOverflowError
 from picnicplace.schemas import WireModel
-from picnicplace.vision.fiducial import find_circle, find_circles, find_hole
+from picnicplace.vision.fiducial import find_circle, find_circles, find_hole, find_rims
 from picnicplace.vision.focus import sharpness
 from picnicplace.vision.pads import fit_pads
 from picnicplace.vision.part import find_part
@@ -61,6 +61,7 @@ VISION_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "find_circle": find_circle,
     "find_circles": find_circles,
     "find_hole": find_hole,
+    "find_rims": find_rims,
     "loose_parts": loose_parts,
     "pocket_darkness": pocket_darkness,
     "pocket_ends": pocket_ends,

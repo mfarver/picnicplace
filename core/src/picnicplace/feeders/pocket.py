@@ -37,6 +37,23 @@ def _wrap(value: float, period: float) -> float:
     return value - period * math.floor(value / period + 0.5)
 
 
+PITCH_TOLERANCE_MM = 0.5
+"""Holes on the hole line that are not a whole sprocket pitch apart, within this, are not
+all holes: a rim search also finds round things that happen to lie on the line."""
+
+
+def _on_pitch(line: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """The most holes on the line that are whole sprocket pitches apart."""
+    best: list[tuple[float, float]] = []
+    for x0, _ in line:
+        agree = [
+            (x, y) for x, y in line if abs(_wrap(x - x0, SPROCKET_PITCH)) <= PITCH_TOLERANCE_MM
+        ]
+        if len(agree) > len(best):
+            best = agree
+    return best
+
+
 def pocket_from_holes(
     holes: list[tuple[float, float]], pocket_line: float, pitch: float
 ) -> PocketFix | None:
@@ -46,7 +63,7 @@ def pocket_from_holes(
     (x along the feed, y across it toward the holes). With the tape exactly in place a
     pocket is at (0, 0) and the holes at (2 + 4k, F).
     """
-    line = [(x, y) for x, y in holes if abs(y - pocket_line) <= ACROSS_TOLERANCE_MM]
+    line = _on_pitch([(x, y) for x, y in holes if abs(y - pocket_line) <= ACROSS_TOLERANCE_MM])
     if not line:
         return None
     across = median(y for _, y in line) - pocket_line

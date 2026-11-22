@@ -50,6 +50,7 @@ from picnicplace.machine.service import MachineService
 from picnicplace.machine.tips import TipStore
 from picnicplace.machine_setup import SetupStore, setup_facts
 from picnicplace.operations import OperationManager
+from picnicplace.panel import PanelLink
 from picnicplace.placement import PlacementService
 from picnicplace.presence import PresenceTracker
 from picnicplace.recorder import FlightRecorder
@@ -57,6 +58,7 @@ from picnicplace.schemas import ClientMessage, ErrorResponse, ServerEvent
 from picnicplace.simparts import (
     SIM_DISC_DIAMETER_MM,
     SIM_DISC_THICKNESS_MM,
+    SIM_TOKEN,
     PartShape,
     PlacedPart,
 )
@@ -190,6 +192,11 @@ def create_app(
                     0.0,
                 )
             )
+        token = config.machine.sim_calibration_token
+        if token is not None and ctx.feeders.sim_parts is not None:
+            d, opening, thick = SIM_TOKEN
+            shape = PartShape(disc=d, opening=opening, height=thick)
+            ctx.feeders.sim_parts.placed.append(PlacedPart(shape, token[0], token[1], 0.0))
         paper = config.machine.sim_paper
         if paper is not None and ctx.feeders.sim_parts is not None:
             ctx.feeders.sim_parts.placed.append(
@@ -228,9 +235,22 @@ def create_app(
         ctx.runner.restore()
         recorder.snapshot = recording_routes.snapshot_builder(ctx, jobs.get)
         await machine.start()
+        if config.panel.port:
+            ctx.panel = PanelLink.serial(
+                config.panel.port,
+                machine=machine,
+                lease=lease,
+                presence=presence,
+                bus=bus,
+                runner=lambda: ctx.runner,
+            )
+            ctx.panel.start()
         try:
             yield
         finally:
+            if ctx.panel is not None:
+                await ctx.panel.stop()
+                ctx.panel = None
             recorder.stop("the core stopped")
             ctx.library.close()
             ctx.library = None

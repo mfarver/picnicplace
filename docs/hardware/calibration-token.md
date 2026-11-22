@@ -65,6 +65,22 @@ Lay a token on the datum board's bare area, opening up, and start stop 2 with th
 on one nozzle and the N08 on the other. One token is enough; keep the rest for when it
 is lost or worn.
 
-Finding the token by its opening, and taking the N045 and N08 for this stop, are
-planned. Until then, stop 2 looks for a round disc 4 to 12 mm across, as it does for a
-paper punch.
+- **Finding it:** stop 2 looks for a round disc 4 to 12 mm across, as it does for a paper
+  punch, then looks for an opening in its middle: a round 2.5 mm across, dark in the
+  camera's blue channel where the white mask round it is bright. A disc with one is the
+  token, and from then on it is found by the opening's center, which the mask sets,
+  rather than by its routed outline, which a tab's stub can pull aside as it turns.
+- **Tips:** a tip must sit inside the opening with 0.5 mm of bare copper all round, so
+  only faces up to 1.5 mm fit: on a LumenPnP, the N045 and N08. Any other tip is asked to
+  be changed before anything goes down.
+- **Heights:** small tips still take their height from bare solder mask on the datum
+  board. The token is taken as 0.9 mm thick for picking it up, which presses the tip
+  1 mm into its spring, so a token a little thinner or thicker does not matter.
+- **Not yet tried on a real machine:** the opening is found in the simulator and on drawn
+  images. Real ENIG may look brighter under the top light than drawn. If the token is
+  not told from paper, the run carries on as for a paper disc, 0.1 mm thick, and its
+  result says so. With the N045 and N08 the heights are still right, as they come from
+  the bare board; a bigger tip would take the token's top for paper's, 0.8 mm too high.
+
+Searching the PicnicPlace datum's token box first waits for the datum to be made: the
+core does not yet know which datum board a machine has.

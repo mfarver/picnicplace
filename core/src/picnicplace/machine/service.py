@@ -1077,6 +1077,34 @@ class MachineService:
         here = self.camera_position()
         return Point(x=here.x + dx, y=here.y + dy)
 
+    async def locate_opening(self, disc: Point, diameter: float, opening: float) -> Point | None:
+        """Find the calibration token's opening in the disc the top camera sees at ``disc``,
+        ``diameter`` mm across: the opening's machine position, or None if the disc has
+        none (paper, say)."""
+        camera = self.top_camera()
+        frame = await self.frame(camera.id)
+        h, w = frame.image.shape[:2]
+        mm_per_px = camera.field_of_view.x / w
+        here = self.camera_position()
+        right, down = self._profile.machine_to_image(disc.x - here.x, disc.y - here.y)
+        found = await self.recorder.vision(
+            "find_opening",
+            frame.image,
+            w / 2 + right / mm_per_px,
+            h / 2 + down / mm_per_px,
+            diameter / mm_per_px,
+            opening / mm_per_px,
+            camera=camera.id,
+            position=dict(self._driver.position),
+            mm_per_px=mm_per_px,
+        )
+        if found is None:
+            return None
+        dx, dy = self._profile.image_to_machine(
+            (found.x - w / 2) * mm_per_px, (found.y - h / 2) * mm_per_px
+        )
+        return Point(x=here.x + dx, y=here.y + dy)
+
     # --- Checks --------------------------------------------------------------------------
 
     def _check_can_actuate(self) -> None:

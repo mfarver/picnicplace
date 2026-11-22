@@ -302,7 +302,12 @@ class NozzleOffsetsRequest(WireModel):
         default=None, gt=0, le=20, description="The disc's diameter in mm. Empty: 2 to 12 mm."
     )
     disc_thickness: float | None = Field(
-        default=None, ge=0, le=5, description="The disc's thickness in mm. Empty: paper's, 0.1."
+        default=None,
+        ge=0,
+        le=5,
+        description=(
+            "The disc's thickness in mm. Empty: paper's, 0.1, or the calibration token's, 0.9."
+        ),
     )
 
 
@@ -315,7 +320,8 @@ class NozzleOffsetsRequest(WireModel):
 )
 async def calibrate_nozzle_offsets(ctx: Context, body: NozzleOffsetsRequest) -> Operation:
     """Measure each nozzle's offset from the top camera with a small disc (punched paper,
-    or a small round PCB) on the datum board, the top camera centered over it. Each nozzle
+    or the calibration token, found by its opening) on the datum board, the top camera
+    centered over it. Each nozzle
     sniffs for the board's height (steps down with suction on until the vacuum seals),
     then picks the disc up, turns it, and sets it down three times; how the disc moves
     gives where the nozzle turns. The result is kept (the calibration checklist) and used

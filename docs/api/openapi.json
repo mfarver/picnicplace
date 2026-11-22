@@ -4822,7 +4822,7 @@
                 "type": "null"
               }
             ],
-            "description": "The disc's thickness in mm. Empty: paper's, 0.1.",
+            "description": "The disc's thickness in mm. Empty: paper's, 0.1, or the calibration token's, 0.9.",
             "title": "Disc Thickness"
           },
           "nozzle_ids": {
@@ -7076,7 +7076,7 @@
             "type": "boolean"
           },
           "stop": {
-            "description": "1: everything the machine can do with a hand on the power switch (homing, visual homing, the cameras, naming the tips, the feeders). 2: with a paper disc on the datum board, each nozzle's offset, height and vacuum levels.",
+            "description": "1: everything the machine can do with a hand on the power switch (homing, visual homing, the cameras, naming the tips, the feeders). 2: with the calibration token (or a paper disc) on the datum board, each nozzle's offset, height and vacuum levels.",
             "enum": [
               1,
               2
@@ -8673,7 +8673,7 @@
             "type": "string"
           },
           "stop": {
-            "description": "Which of the wizard's stops does it: 0 choosing the machine; 1 with a hand on the power switch; 2 with a paper disc on the datum board; 3 checking the discard and park spots.",
+            "description": "Which of the wizard's stops does it: 0 choosing the machine; 1 with a hand on the power switch; 2 with the calibration token (or a paper disc) on the datum board; 3 checking the discard and park spots.",
             "enum": [
               0,
               1,
@@ -13813,7 +13813,7 @@
     },
     "/api/v1/machine/nozzle-offsets": {
       "post": {
-        "description": "Measure each nozzle's offset from the top camera with a small disc (punched paper,\nor a small round PCB) on the datum board, the top camera centered over it. Each nozzle\nsniffs for the board's height (steps down with suction on until the vacuum seals),\nthen picks the disc up, turns it, and sets it down three times; how the disc moves\ngives where the nozzle turns. The result is kept (the calibration checklist) and used\nfrom then on.",
+        "description": "Measure each nozzle's offset from the top camera with a small disc (punched paper,\nor the calibration token, found by its opening) on the datum board, the top camera\ncentered over it. Each nozzle\nsniffs for the board's height (steps down with suction on until the vacuum seals),\nthen picks the disc up, turns it, and sets it down three times; how the disc moves\ngives where the nozzle turns. The result is kept (the calibration checklist) and used\nfrom then on.",
         "operationId": "calibrate_nozzle_offsets_api_v1_machine_nozzle_offsets_post",
         "parameters": [
           {

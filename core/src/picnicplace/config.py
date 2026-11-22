@@ -481,6 +481,13 @@ class MachineConfig(_Section):
             "calibrating the nozzle offsets. None: there is none."
         ),
     )
+    sim_calibration_token: tuple[float, float] | None = Field(
+        default=None,
+        description=(
+            "Simulator only: where (X, Y in mm) a calibration token lies on the bed: a 5 mm "
+            "white disc, 0.86 mm thick, with a 2.5 mm gold opening. None: there is none."
+        ),
+    )
     sim_paper: tuple[float, float, float] | None = Field(
         default=None,
         description=(
@@ -621,12 +628,24 @@ class RecorderConfig(_Section):
     )
 
 
+class PanelConfig(_Section):
+    port: str | None = Field(
+        default=None,
+        description=(
+            "The control panel's serial device, if one is fitted: its native USB port, "
+            "such as /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_...-if00. "
+            "The core opens it again whenever it appears."
+        ),
+    )
+
+
 class Config(_Section):
     server: ServerConfig = Field(default_factory=ServerConfig)
     presence: PresenceConfig = Field(default_factory=PresenceConfig)
     data: DataConfig = Field(default_factory=DataConfig)
     machine: MachineConfig = Field(default_factory=MachineConfig)
     recorder: RecorderConfig = Field(default_factory=RecorderConfig)
+    panel: PanelConfig = Field(default_factory=PanelConfig)
     cameras: dict[str, CameraConfig] = Field(
         default_factory=dict[str, CameraConfig],
         description=(

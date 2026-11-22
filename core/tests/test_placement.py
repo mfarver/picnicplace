@@ -392,6 +392,8 @@ def test_tape_whose_sprocket_holes_cannot_be_seen_is_picked_where_the_setup_says
 
         monkeypatch.setattr(machine, "locate_circles", no_circles)
         monkeypatch.setattr(machine, "locate_rims", no_circles)
+        feeders = lumen.app.state.ctx.feeders  # type: ignore[attr-defined]
+        monkeypatch.setattr(feeders, "_holes_by_rhythm", no_circles)
         body = {
             "slot_id": "1",
             "nozzle_id": "N1",

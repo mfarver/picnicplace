@@ -327,6 +327,9 @@ class FeederService:
         self._errors: dict[str, str] = {}
         self._scanned = False
         self._pockets: dict[str, PocketCheck] = {}
+        self._strips_turned: set[str] = set()
+        """Strips whose sprocket holes were found on the other side from the one their
+        pick order says (laid the other way round), until the core restarts."""
 
         self._sim = simulated
         self._sim_full: dict[int, bool] = {}
@@ -1252,17 +1255,29 @@ class FeederService:
         width = tape.width if tape and tape.width else 8.0
         pitch = math.hypot(f.step.x, f.step.y) or DEFAULT_PITCH
         line = _pocket_line_for(width)
-        # Look at the holes: on wide tape they are out of view from the pocket.
-        check = await self._find_pocket(
-            self.fixed_label(fixed_id),
-            at,
-            _strip_direction(f),
-            line,
-            pitch,
-            look_across=line,
-            body=self._paper_body(self.fixed_part(f)),
-        )
-        check = self._with_outline(check, self.fixed_part(f), _strip_direction(f))
+        direction = _strip_direction(f)
+        turned = fixed_id in self._strips_turned
+
+        async def look(turn: bool) -> PocketCheck:
+            # Look at the holes: on wide tape they are out of view from the pocket. A
+            # strip laid the other way round has them on the other side, with the pockets
+            # in the same places (each pocket is halfway between two holes).
+            return await self._find_pocket(
+                self.fixed_label(fixed_id),
+                at,
+                direction + (180.0 if turn else 0.0),
+                line,
+                pitch,
+                look_across=line,
+                body=self._paper_body(self.fixed_part(f)),
+            )
+
+        try:
+            check = await look(turned)
+        except NoSprocketHolesError:
+            check = await look(not turned)
+            self._strips_turned.symmetric_difference_update({fixed_id})
+        check = self._with_outline(check, self.fixed_part(f), direction)
         self._pockets[fixed_id] = check
         return check
 

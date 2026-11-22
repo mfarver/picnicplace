@@ -661,9 +661,12 @@ correction. Implementations:
     real LumenPnP's Photon feeders each hole shows the feeder's bright tooth in a dark ring
     that merges with the tape, and a strip's holder can cover part of a hole: neither is a
     round mark, but enough of each rim shows (on real frames, the pocket found within 0.2 mm
-    of the hole in an empty pocket's middle). Where no holes can be seen at all, the pick
-    goes where the feeder's setup or the strip's teaching says, and the bottom camera finds
-    the part on the nozzle as for every pick.
+    of the hole in an empty pocket's middle); rims count only as two or more holes, as one
+    may be a round letter on a part. A strip's holes are looked for on the side its pick
+    order says, and, if none are there, on the other (a strip laid the other way round, as
+    one was on a real machine), that side then remembered until the core restarts. Where
+    no holes can be seen at all, the pick goes where the feeder's setup or the strip's
+    teaching says, and the bottom camera finds the part on the nozzle as for every pick.
   - In paper tape, with the part's body known from its footprint, the same picture also
     says whether the pocket holds a part, and whether any part lies loose on the tape (as
     0603 resistors did on a real LumenPnP, jumping out as the cover tape was peeled). A

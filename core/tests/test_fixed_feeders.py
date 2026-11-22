@@ -6,12 +6,14 @@ use the demo board from ``test_run``, with one part moved from its Photon feeder
 strip or tray.
 """
 
+from dataclasses import replace
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
+from picnicplace.camera.synthetic import TapeScene
 from picnicplace.feeders.setup import FixedFeeder
 from picnicplace.machine.profile import Point
 from tests.conftest import Session, connect, fast_config, put_taped
@@ -122,6 +124,45 @@ def test_a_wide_part_from_a_strip(lumen: TestClient) -> None:  # noqa: F811
         ok(s.wait(s.post("/api/v1/feeders/fixed/T1/pocket")))
         pocket = lumen.get("/api/v1/feeders").json()["fixed"][0]["pocket"]
         assert (pocket["along"], pocket["across"]) == pytest.approx((0.15, -0.1), abs=0.05)
+
+
+def test_a_strip_laid_the_other_way_round_has_its_holes_found_on_the_other_side(
+    lumen: TestClient,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A strip's sprocket holes are looked for on the side its pick order says; on a real
+    machine one strip was laid the other way round, its holes on the other side. They are
+    looked for there too, and that side is remembered."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        library = lumen.app.state.ctx.library  # type: ignore[attr-defined]
+        mcu = library.find_part("EX-MCU-8")
+        put_taped(library, mcu, "embossed", 24.0, 12.0, library.tape_of(mcu).rotation)
+        strip = {
+            "label": "24 mm holder",
+            "kind": "strip",
+            "part_id": "EX-MCU-8",
+            "first": {"x": 150, "y": 250},
+            "step": {"x": -12, "y": 0},
+            "columns": 5,
+        }
+        move_to_bed(lumen, s, "EX-MCU-8", strip)
+        feeders = lumen.app.state.ctx.feeders  # type: ignore[attr-defined]
+        build = feeders._build_strips  # pyright: ignore[reportPrivateUsage]
+
+        def turned() -> list[TapeScene]:
+            return [replace(t, rotation=t.rotation + 180.0) for t in build()]
+
+        monkeypatch.setattr(feeders, "_build_strips", turned)
+        feeders._invalidate()  # pyright: ignore[reportPrivateUsage]
+        for _ in range(2):
+            op = ok(s.wait(s.post("/api/v1/feeders/fixed/T1/pocket")))
+            assert "(from 1 " not in op["message"], op
+            # The simulated strip is 0.15 mm right of and 0.1 mm in front of where it was
+            # taught.
+            at = lumen.get("/api/v1/feeders").json()["fixed"][0]["pocket"]["at"]
+            assert (at["x"], at["y"]) == pytest.approx((150.15, 249.9), abs=0.05)
+        assert "T1" in feeders._strips_turned  # pyright: ignore[reportPrivateUsage]
 
 
 def test_a_tray_higher_than_its_pick_height_is_found_by_touch() -> None:

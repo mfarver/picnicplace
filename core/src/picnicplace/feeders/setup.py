@@ -150,6 +150,11 @@ class RailPoint(_Model):
     basis: Literal["found", "taught"] = Field(
         description="Found by searching, or the operator centered the camera on it."
     )
+    z: float | None = Field(
+        default=None,
+        description="Nozzle height at the top of the feeder's nose, touched on the fiducial "
+        "with a nozzle; None if it was not touched or did not seal.",
+    )
 
 
 class RailCalibration(_Model):
@@ -165,6 +170,21 @@ class RailCalibration(_Model):
     angle: float = Field(default=0.0, description="Degrees counterclockwise.")
     scale: float = 1.0
     fitted: bool = Field(default=False, description="Whether enough points were found to fit.")
+
+    def slope(self) -> float | None:
+        """How much higher the rail is per millimeter along it, from the touched point
+        nearest its first slot to the one farthest from it; None unless two were touched,
+        some way apart."""
+        touched = sorted(
+            ((int(k), p) for k, p in self.points.items() if p.z is not None and k.isdigit()),
+            key=lambda kp: kp[0],
+        )
+        if len(touched) < 2:
+            return None
+        a, b = touched[0][1], touched[-1][1]
+        assert a.z is not None and b.z is not None
+        run = math.hypot(b.found.x - a.found.x, b.found.y - a.found.y)
+        return (b.z - a.z) / run if run > 1.0 else None
 
     def apply(self, p: Point) -> Point:
         if not self.fitted:

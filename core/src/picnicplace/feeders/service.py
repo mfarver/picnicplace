@@ -55,6 +55,7 @@ from picnicplace.machine.errors import (
 from picnicplace.machine.profile import FeederBank, Nozzle, Point
 from picnicplace.machine.service import MachineService
 from picnicplace.machine.simulator import SimulatorDriver
+from picnicplace.machine.sniff import SniffError, sniff
 from picnicplace.operations import OperationManager
 from picnicplace.schemas import Operation, WireModel
 from picnicplace.simparts import PartShape, SimulatedParts
@@ -81,6 +82,15 @@ real rail was 17 mm across from its profile's place."""
 RAIL_SEARCH_ALONG_MM = 5.0
 """And this far along the rail. A fiducial found more than half a slot along the rail
 from where it was expected may be the next feeder's, so it is not taken."""
+SIM_NOSE_RISE_MM = 2.0
+"""In the simulator, how far a feeder's nose stands above its parts' tops."""
+SIM_NOSE_RADIUS_MM = 3.0
+"""...and how far round its fiducial it is flat, for a nozzle to seal on."""
+NOSE_SEARCH_MM = 3.0
+"""Calibrating rails, the first feeder nose is searched for from safe Z to the bottom of
+the nozzle's travel; each after, only this far either side of the last found (the noses
+on one machine lie within a millimeter or two), so a fiducial that does not seal does not
+drive the nozzle to the bottom of its travel again."""
 RAIL_SEARCH_RADIUS_MM = 5.0
 """How far from each frame's center a fiducial is looked for: within the top camera's
 view."""
@@ -297,6 +307,9 @@ class FeederService:
         """Simulated rails: how far each bank really is from the profile, by bank ID: a
         shift (x, y) in mm and a turn in degrees about its first slot."""
         self.sim_part_height_error = 0.0
+        self.sim_rail_heights: dict[str, tuple[float, float]] = {}
+        """Simulated rails: how much higher than the profile says each bank really is at
+        its first slot and at its last, by bank ID; in between, in proportion."""
         self.sim_parts_turned: dict[str, float] = {}
         """Simulated feeders: degrees each slot's parts really sit turned in their tape from
         what the library says (a reel of SOT-23s turned 180, say), by slot ID."""
@@ -337,6 +350,10 @@ class FeederService:
                 )
                 self.sim_parts = parts
                 driver.pick_source = parts.pick
+                plain = driver.surface_at
+                driver.surface_at = lambda x, y: (
+                    self._sim_nose_at(x, y) or (plain(x, y) if plain is not None else None)
+                )
                 driver.on_drop = parts.drop
                 driver.rim_at = parts.rim_at
                 machine.scene_parts = parts.scene
@@ -857,6 +874,8 @@ class FeederService:
         async def work() -> str:
             notes: list[str] = []
             missing: list[str] = []
+            untouched: list[str] = []
+            near: float | None = None
             for bank, ends in plans:
                 points: dict[str, RailPoint] = {}
                 for slot in ends:
@@ -869,7 +888,12 @@ class FeederService:
                         self._errors[slot.id] = "feeder fiducial not found near its rail place"
                         continue
                     self._errors.pop(slot.id, None)
-                    points[slot.id] = RailPoint(expected=expected, found=found, basis="found")
+                    z, why = await self._touch_nose(slot, found, near)
+                    if z is None:
+                        untouched.append(f"{why} the fiducial at {slot.label.lower()}")
+                    else:
+                        near = z
+                    points[slot.id] = RailPoint(expected=expected, found=found, basis="found", z=z)
                 notes.append(self._fit(bank, points))
             self._store.save()
             message = " ".join(notes)
@@ -877,6 +901,12 @@ class FeederService:
                 message += (
                     f" No feeder fiducial was found at {', '.join(missing)}: jog the camera "
                     "onto it and use Fiducial is here."
+                )
+            if untouched:
+                message += (
+                    f" The rail's height is not known where {'; '.join(untouched)}. If it "
+                    "did not seal, check the feeder's nose is clean and the nozzle's tip is "
+                    "clear, and calibrate again."
                 )
             return message
 
@@ -902,8 +932,11 @@ class FeederService:
             self._errors.pop(slot.id, None)
             rail = self._store.setup.rails.get(bank.id)
             points = dict(rail.points) if rail else {}
+            known = [p.z for r in self._store.setup.rails.values() for p in r.points.values()]
+            near = next((z for z in known if z is not None), None)
+            z, _ = await self._touch_nose(slot, found, near)
             points[slot.id] = RailPoint(
-                expected=self._expected_fiducial(slot), found=found, basis="taught"
+                expected=self._expected_fiducial(slot), found=found, basis="taught", z=z
             )
             message = self._fit(bank, points)
             self._store.save()
@@ -947,9 +980,64 @@ class FeederService:
         return (
             f"{bank.label} placed: {moved:.2f} mm from the profile's place, turned "
             f"{rail.angle:+.2f} degrees, slots {abs(stretch):.2f}% "
-            f"{'farther apart' if stretch >= 0 else 'closer'}. Its slots' corrections were "
-            "cleared: calibrate them again."
+            f"{'farther apart' if stretch >= 0 else 'closer'}.{self._level_note(rail)} Its "
+            "slots' corrections were cleared: calibrate them again."
         )
+
+    def _level_note(self, rail: RailCalibration) -> str:
+        """The rail's height where its feeders' noses were touched, for the operator."""
+        labels = {s.id: s.label.lower() for s in self._slots}
+        touched = sorted(
+            ((int(k), k, p.z) for k, p in rail.points.items() if p.z is not None and k.isdigit())
+        )
+        if not touched:
+            return ""
+        heights = ", ".join(f"Z {z:.2f} at {labels.get(k, k)}" for _, k, z in touched)
+        slope = rail.slope()
+        if slope is None:
+            return f" Feeder nose touched at {heights}."
+        return (
+            f" Feeder noses at {heights}: {abs(slope) * 100:.2f} mm per 100 mm "
+            f"{'higher' if slope > 0 else 'lower'} toward {labels.get(touched[-1][1])}."
+        )
+
+    async def _touch_nose(
+        self, slot: Slot, at: Point, near: float | None
+    ) -> tuple[float | None, str]:
+        """Sniff down onto a feeder's fiducial, at ``at``, with the first nozzle that reaches
+        it (a height holds for every nozzle), for the height of the feeder's nose: from
+        safe Z to the bottom of the nozzle's travel, or, with a nose already found at
+        ``near``, within ``NOSE_SEARCH_MM`` of it. Returns the height, or None and why."""
+        profile = self._machine.profile
+        reach = profile.nozzle_reach
+        nozzle = next(
+            (
+                n
+                for n in profile.nozzles
+                if (r := reach.get(n.id)) is not None
+                and r.x_min <= at.x <= r.x_max
+                and r.y_min <= at.y <= r.y_max
+            ),
+            None,
+        )
+        if nozzle is None:
+            return None, "no nozzle reaches"
+        axis = profile.axis(nozzle.z_axis)
+        lowest = (axis.min if nozzle.z_sign == 1 else -axis.max) - nozzle.z_offset
+        if near is None:
+            start, floor = profile.safe_z, lowest
+        else:
+            start = min(profile.safe_z, near + NOSE_SEARCH_MM)
+            floor = max(lowest, near - NOSE_SEARCH_MM)
+        what = f"the nose of the feeder in {slot.label.lower()}"
+        try:
+            z = await sniff(
+                self._machine, nozzle, at, floor, above=start - floor, below=0.0, what=what
+            )
+        except SniffError as e:
+            log.warning("%s: not touched: %s", slot.label, e)
+            return None, f"{nozzle.label.lower()} could not touch ({e})"
+        return z, "" if z is not None else f"{nozzle.label.lower()} did not seal on"
 
     def _clear_bank(self, bank: FeederBank) -> None:
         for slot in self._nominal:
@@ -1572,6 +1660,26 @@ class FeederService:
         nominal = self._nominal[slot.number - 1]
         return nominal.rotation + self.sim_rail_errors.get(nominal.bank, (0.0, 0.0, 0.0))[2]
 
+    def _sim_rail_rise(self, slot: Slot) -> float:
+        """How much higher than the profile says a simulated slot really is."""
+        first, last = self.sim_rail_heights.get(slot.bank, (0.0, 0.0))
+        mine = [s.number for s in self._nominal if s.bank == slot.bank]
+        span = max(mine) - min(mine)
+        return first + (last - first) * (slot.number - min(mine)) / span if span else first
+
+    def _sim_nose_at(self, x: float, y: float) -> float | None:
+        """The top of a simulated feeder's nose under (x, y), if one is there: flat round
+        its fiducial, ``SIM_NOSE_RISE_MM`` above its parts' tops."""
+        self._scene_tapes()
+        by_address = {s.address: s for s in self._nominal if s.address is not None}
+        for address, tape in self._tape_at.items():
+            slot = by_address.get(address)
+            if slot is None or tape.fiducial is None or tape.top is None:
+                continue
+            if math.hypot(x - tape.fiducial[0], y - tape.fiducial[1]) <= SIM_NOSE_RADIUS_MM:
+                return tape.top + SIM_NOSE_RISE_MM
+        return None
+
     def _tape_under(self, x: float, y: float) -> tuple[int, TapeScene, float, float] | None:
         """The feeder whose pocket is under (x, y): its address, tape, and the pocket's
         true center."""
@@ -1711,7 +1819,7 @@ class FeederService:
                     if footprint is not None
                     else (),
                     part_height=part.height if part is not None else None,
-                    top=bank.pick_height + self.sim_part_height_error
+                    top=bank.pick_height + self.sim_part_height_error + self._sim_rail_rise(slot)
                     if bank.pick_height is not None
                     else None,
                     fiducial=(pick.x + fid.x, pick.y + fid.y),

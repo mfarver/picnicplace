@@ -590,3 +590,51 @@ def test_a_slot_fix_is_kept_with_its_feeder(lumen: TestClient) -> None:
         want = true_pick(state)
         assert state["calibration"]["feeder"] == state["feeder"]["uuid"]
         assert (state["pick"]["x"], state["pick"]["y"]) == pytest.approx((want.x, want.y), abs=0.05)
+
+
+def test_calibrating_a_rail_touches_its_end_feeders_for_its_level() -> None:
+    """A rail 0.7 mm lower at its first slot than at its last, as on a real LumenPnP: the
+    nozzle touches each end feeder's fiducial, from safe Z for the first (no part heights
+    are known yet) and near that for the next, for the feeders' noses' heights."""
+    with rails_client() as client, connect(client) as s:
+        feeders = service(client)
+        feeders.sim_rail_heights = {"front": (-0.7, 0.0), "back": (0.0, -0.4)}
+        s.home()
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        op = succeeded(s.wait(s.post("/api/v1/feeders/rails/calibrate", {})))
+        message = op["message"]
+        assert "mm per 100 mm higher toward slot 25" in message, message
+        assert "mm per 100 mm lower toward slot 50" in message, message
+        rails = {r["bank"]: r["calibration"] for r in client.get("/api/v1/feeders").json()["rails"]}
+        front, back = rails["front"]["points"], rails["back"]["points"]
+        profile = feeders.bank(feeders.slot("1")).pick_height
+        assert profile is not None
+        # The simulator's noses stand 2 mm above their parts' tops; a sniff finds one
+        # within a step or two (it seals a little pressed in).
+        assert front["1"]["z"] == pytest.approx(profile + 2.0 - 0.7, abs=0.25)
+        assert front["25"]["z"] - front["1"]["z"] == pytest.approx(0.7, abs=0.15)
+        assert back["50"]["z"] - back["26"]["z"] == pytest.approx(-0.4, abs=0.15)
+
+
+def test_a_feeder_nose_that_does_not_seal_leaves_its_height_unknown() -> None:
+    """No surface to seal on at slot 25's fiducial: the rail is still placed by its
+    fiducials, its height there is not known, and the operator is told."""
+    with rails_client() as client, connect(client) as s:
+        feeders = service(client)
+        s.home()
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        touch = feeders._sim_nose_at  # pyright: ignore[reportPrivateUsage]
+        far = feeders.slot("25").pick.x
+
+        def nose(x: float, y: float) -> float | None:
+            return None if abs(x - far) < 40 else touch(x, y)
+
+        feeders._sim_nose_at = nose  # pyright: ignore[reportPrivateUsage]
+        op = succeeded(s.wait(s.post("/api/v1/feeders/rails/calibrate", {"bank_ids": ["front"]})))
+        message = op["message"]
+        assert message.startswith("Front rail placed:"), message
+        assert "did not seal on the fiducial at slot 25" in message, message
+        assert "Feeder nose touched at Z" in message, message
+        rails = {r["bank"]: r["calibration"] for r in client.get("/api/v1/feeders").json()["rails"]}
+        points = rails["front"]["points"]
+        assert points["1"]["z"] is not None and points["25"]["z"] is None

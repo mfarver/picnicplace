@@ -66,6 +66,8 @@ log = logging.getLogger(__name__)
 
 DEFAULT_PITCH = 4.0
 """Feed distance when neither the feeder nor its part says: the most common pitch."""
+PROFILE_TAPE_WIDTH = 8.0
+"""The tape width the profile's feeder pick locations are for."""
 
 FIDUCIAL_SEARCH_MM = 3.0
 
@@ -383,7 +385,11 @@ class FeederService:
     def pick(self, slot: Slot) -> Point:
         cal = self.calibration(slot)
         if cal is None:
-            return slot.pick
+            # The profile's pick location is for 8 mm tape; wider tape's pockets lie
+            # farther from the sprocket holes, on the same feeder.
+            line, _ = self._pocket_line(slot)
+            wider = rotate(Point(x=0, y=_pocket_line_for(PROFILE_TAPE_WIDTH) - line), slot.rotation)
+            return Point(x=slot.pick.x + wider.x, y=slot.pick.y + wider.y)
         return Point(x=slot.pick.x + cal.correction.x, y=slot.pick.y + cal.correction.y)
 
     def state(self) -> FeedersState:
@@ -662,11 +668,11 @@ class FeederService:
 
     # --- Fiducials -----------------------------------------------------------------------
 
-    def _fiducial_vector(self, slot: Slot, offset: Point) -> Point:
+    def _fiducial_vector(self, slot: Slot, offset: Point, width: float | None = None) -> Point:
         """From a slot's pick location to its feeder's fiducial, in machine coordinates.
         The offset is measured across from the sprocket holes, so the tape's pocket line
-        is added to make it relative to the pocket."""
-        line, _ = self._pocket_line(slot)
+        is added to make it relative to the pocket: the tape's in the slot, or ``width``'s."""
+        line = _pocket_line_for(width) if width is not None else self._pocket_line(slot)[0]
         return rotate(Point(x=offset.x, y=offset.y + line), slot.rotation)
 
     def _fiducial_size(self, bank: FeederBank) -> tuple[float, float]:
@@ -824,11 +830,14 @@ class FeederService:
         return bank
 
     def _expected_fiducial(self, slot: Slot) -> Point:
-        """Where the profile's rail puts a slot's feeder fiducial."""
+        """Where the profile's rail puts a slot's feeder fiducial. The fiducial is on the
+        feeder, at the same place on 8 mm and 12 mm feeders: only the tape's pockets move.
+        The profile's pick locations are for 8 mm tape, so that is the width used, whatever
+        the slot holds."""
         nominal = self._nominal[slot.number - 1]
         offset, _ = self.fiducial_offset(self._banks[nominal.bank])
         assert offset is not None
-        turned = self._fiducial_vector(nominal, offset)
+        turned = self._fiducial_vector(nominal, offset, PROFILE_TAPE_WIDTH)
         return Point(x=nominal.pick.x + turned.x, y=nominal.pick.y + turned.y)
 
     def _need_fiducial_offset(self, bank: FeederBank) -> None:
@@ -1794,6 +1803,10 @@ class FeederService:
             offset = bank.fiducial_offset or SIM_FIDUCIAL_OFFSET
             line = _pocket_line_for(width)
             turn = self._sim_true_rotation(slot)
+            # The feeder and its fiducial are where an 8 mm feeder's would be; wider tape's
+            # pockets lie farther from the sprocket holes.
+            wider = rotate(Point(x=0, y=_pocket_line_for(PROFILE_TAPE_WIDTH) - line), turn)
+            pick = Point(x=pick.x + wider.x, y=pick.y + wider.y)
             fid = rotate(Point(x=offset.x, y=offset.y + line), turn)
             side = rotate(Point(x=0, y=SIM_FIDUCIAL_MARKS), turn)
             marks = tuple(

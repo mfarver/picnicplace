@@ -337,10 +337,18 @@ def test_teach_measure_fiducial_and_calibrate(lumen: TestClient) -> None:
             ), slot_id
 
 
+def wider_pocket(slot: dict[str, Any], line: float) -> Point:
+    """Where the simulator really put the pockets of tape whose pocket line is ``line``:
+    the feeder is where an 8 mm one would be, and its pockets lie farther from the holes."""
+    pick = true_pick(slot)
+    off = rotate(Point(x=0, y=3.5 - line), slot["slot"]["rotation"])
+    return Point(x=pick.x + off.x, y=pick.y + off.y)
+
+
 def test_calibrating_a_12mm_feeder(lumen: TestClient) -> None:
     """The fiducial is fixed relative to the sprocket holes, so on 12 mm tape (pockets
-    5.5 mm from the holes, not 3.5) it is 2 mm closer to the pocket line; calibration
-    must allow for that."""
+    5.5 mm from the holes, not 3.5) the pocket line is 2 mm farther from it; the pick
+    location allows for that before calibration and after."""
     library = lumen.app.state.ctx.library  # type: ignore[attr-defined]
     add_part(lumen)
     put_taped(library, Part(id="BIG-12", footprint_id="R0603"), "embossed", 12, 8, 0)
@@ -349,10 +357,14 @@ def test_calibrating_a_12mm_feeder(lumen: TestClient) -> None:
         succeeded(s.wait(s.post("/api/v1/feeders/scan")))
         uuid = slot_state(s, "4")["feeder"]["uuid"]
         s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": "BIG-12"})
+        before = slot_state(s, "4")
+        want = wider_pocket(before, 5.5)
+        got = (before["pick"]["x"], before["pick"]["y"])
+        assert math.hypot(got[0] - want.x, got[1] - want.y) < 0.8, (got, want)
         succeeded(s.wait(s.post("/api/v1/feeders/calibrate", {"slot_ids": ["4", "5"]})))
         for slot_id in ("4", "5"):
             state = slot_state(s, slot_id)
-            want = true_pick(state)
+            want = wider_pocket(state, 5.5) if slot_id == "4" else true_pick(state)
             assert (state["pick"]["x"], state["pick"]["y"]) == pytest.approx(
                 (want.x, want.y), abs=0.05
             ), slot_id
@@ -504,6 +516,34 @@ def test_rails_are_found_from_their_end_feeders() -> None:
         assert r.status_code == 200
         assert next(x for x in r.json()["rails"] if x["bank"] == "front")["calibration"] is None
         assert slot_state(s, "13")["calibration"] is None
+
+
+def test_a_12mm_feeder_at_a_rails_end_places_the_rail_as_an_8mm_one_would() -> None:
+    """As on a real LumenPnP: slot 1 holds a 12 mm feeder. Its fiducial is where an 8 mm
+    feeder's would be (only its pockets lie farther from it), so the rail comes out its
+    true length and the slots between are where they are, not up to 2 mm off."""
+    with rails_client() as client, connect(client) as s:
+        library = client.app.state.ctx.library  # type: ignore[attr-defined]
+        add_part(client)
+        put_taped(library, Part(id="BIG-12", footprint_id="R0603"), "embossed", 12, 8, 0)
+        s.home()
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        uuid = slot_state(s, "1")["feeder"]["uuid"]
+        s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": "BIG-12"})
+        succeeded(s.wait(s.post("/api/v1/feeders/rails/calibrate", {"bank_ids": ["front"]})))
+        rails = {r["bank"]: r["calibration"] for r in client.get("/api/v1/feeders").json()["rails"]}
+        # The end feeders' own errors (up to 0.5 mm) over the 378 mm rail.
+        assert rails["front"]["scale"] == pytest.approx(1.0, abs=0.002)
+        for number in (13, 25):
+            pick, _ = sim_truth(client, number)
+            state = slot_state(s, str(number))
+            got = (state["pick"]["x"], state["pick"]["y"])
+            assert math.hypot(got[0] - pick.x, got[1] - pick.y) < 0.8, (number, got, pick)
+        first = slot_state(s, "1")
+        pick, _ = sim_truth(client, 1)
+        off = rotate(Point(x=0, y=3.5 - 5.5), first["slot"]["rotation"])
+        got = (first["pick"]["x"], first["pick"]["y"])
+        assert math.hypot(got[0] - pick.x - off.x, got[1] - pick.y - off.y) < 0.8, got
 
 
 def test_a_rail_far_off_is_found_past_loose_tape() -> None:

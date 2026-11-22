@@ -59,6 +59,8 @@ describe("the load list", () => {
   it("names a tape by width, kind and pitch", () => {
     expect(tapeLabel(need("A", ["1"]).tape)).toBe("8 mm paper, 4 mm pitch");
     expect(tapeLabel(null)).toBe("");
+    const guess = { ...need("A", ["1"]).tape!, id: "8mm-paper-p4-r90-guessed" };
+    expect(tapeLabel(guess)).toBe("8 mm paper, 4 mm pitch (guessed)");
   });
 
   it("writes CSV with quoted fields", () => {

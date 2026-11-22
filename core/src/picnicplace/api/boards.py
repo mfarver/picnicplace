@@ -86,7 +86,7 @@ def import_kicad(
             warnings += panel_warnings
     except (SexprError, ValueError) as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    document = LibraryDocument(footprints=result.footprints, parts=result.parts)
+    document = LibraryDocument(footprints=result.footprints, tapes=result.tapes, parts=result.parts)
     report: ImportReport | None = None
     if body.add_to_library:
         if Permission.CONFIG not in principal.permissions:

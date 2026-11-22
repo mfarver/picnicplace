@@ -499,9 +499,21 @@ again (each pick would cost another part), and the run goes on with the rest. Ch
 part's footprint, train it from the Placement panel, and un-skip them.
 
 **Footprints for the machine.** The bottom camera looks for the part the footprint
-describes. A KiCad footprint's F.Fab layer must show the body only, not the leads; its
-pads are the board's land pattern, larger than the part's own terminals. The plan warns
-when a part's footprint is not the board's.
+describes. A KiCad footprint's F.Fab layer should show the body only, not the leads; its
+pads are the board's land pattern, larger than the part's own terminals. Footprints made
+by vendor tools often draw each lead on F.Fab too: the import now leaves out what lies
+over most of the pads, takes the body from the rest, and says so in its warnings (the five
+footprints the first board met come out at their datasheet bodies). Fix your own copies
+anyway, so other tools read them right. The plan warns when a part's footprint is not the
+board's.
+
+**Tapes from footprints.** A part new to the library is given the tape parts on its
+footprint usually come in (EIA-481): an 0603 resistor 8 mm paper at 4 mm, a SOT-23 8 mm
+embossed at 4 mm, a SOIC-8 12 mm embossed at 8 mm, and others by their name or body size.
+It is a guess, marked so ("(guessed)" in the Parts workspace and the load list), and the
+plan names each part whose tape is still one: check the width, pitch and which way round
+the parts lie against the reel, and give the part its real tape. Which way round is
+guessed only for resistors, capacitors and inductors.
 
 **Tips.** Say which tip is on each nozzle. The plan sends each part to the nozzle whose tip
 suits it (0603s to the N045, larger parts to the N08) and lists how many go to each.

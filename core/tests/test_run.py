@@ -269,6 +269,52 @@ def test_check_needs_fiducials_and_a_location(lumen: TestClient) -> None:
         assert r.status_code == 409 and "no location" in r.json()["detail"]
 
 
+def test_a_part_loaded_while_paused_is_placed_on_resume(lumen: TestClient) -> None:
+    """A part no feeder holds at the start is blocked, and the run places the rest. Loaded
+    while the run is paused, its placements are planned again on resume, and placed. The
+    plan's parts list is the load list: what each part is, its tape, and its references."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        slot = next(
+            x for x in s.client.get("/api/v1/feeders").json()["slots"] if x["slot"]["id"] == "1"
+        )
+        uuid = slot["feeder"]["uuid"]
+        r = s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": None})
+        assert r.status_code == 200, r.json()
+
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        need = {n["part_id"]: n for n in plan["parts"]}
+        missing = need["EX-C0805-1U"]
+        assert missing["problem"] == "no feeder holds EX-C0805-1U" and missing["slot_ids"] == []
+        assert plan["parts"][0]["problem"] is not None  # what is missing comes first
+        chip = need["EX-R0603-10K"]
+        assert chip["refs"] and chip["refs"] == sorted(chip["refs"])
+        assert chip["footprint_id"] and chip["tape"]["width"] == 8 and chip["tape"]["pitch"] == 4
+        assert chip["slot_ids"] == ["2"]
+
+        body = {"job_id": "demo", "skip_blocked": True, "step": True}
+        ok(s.wait(s.post("/api/v1/run/start", body)))
+        run = lumen.get("/api/v1/run").json()
+        blocked = [i for i in run["plan"]["items"] if i["status"] == "blocked"]
+        assert {i["note"] for i in blocked} == {
+            "no feeder holds EX-C0805-1U",
+            "EX-SWITCH-1 has no height in the parts library",
+        }
+
+        r = s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": "EX-C0805-1U"})
+        assert r.status_code == 200, r.json()
+        op = ok(s.wait(s.post("/api/v1/run/resume")))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        run = lumen.get("/api/v1/run").json()
+        capacitor = [i for i in run["plan"]["items"] if i["part_id"] == "EX-C0805-1U"]
+        assert capacitor and all(i["status"] == "placed" for i in capacitor)
+        need = {n["part_id"]: n for n in run["plan"]["parts"]}
+        assert need["EX-C0805-1U"]["problem"] is None
+        assert need["EX-C0805-1U"]["slot_ids"] == ["1"]
+        assert not any("EX-C0805-1U" in i["message"] for i in run["plan"]["issues"])
+        assert check_landed(lumen, run) == 4
+
+
 def test_start_in_step_mode(lumen: TestClient) -> None:
     """Started in step mode, the run finds the board and pauses before the first part;
     each step places one batch, and resume places the rest."""

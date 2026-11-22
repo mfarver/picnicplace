@@ -259,12 +259,21 @@ class RunStats(WireModel):
 
 
 class PartNeed(WireModel):
-    """One part number the job uses, and the feeders loaded with it."""
+    """One part number the job uses, and the feeders loaded with it: a line of the load
+    list, with what it takes to find the reel and a feeder for it."""
 
     part_id: str | None
     count: int
     slot_ids: list[str]
     problem: str | None = None
+    refs: list[str] = Field(
+        default_factory=list[str], description="Its references on the board, in order."
+    )
+    value: str = Field(default="", description="Its value: the board's, else the library's.")
+    description: str = ""
+    manufacturer: str = ""
+    footprint_id: str | None = None
+    tape: Tape | None = Field(default=None, description="The tape it comes in, if known.")
 
 
 class FiducialCheck(WireModel):
@@ -510,6 +519,20 @@ def _source(slot_id: str) -> str:
     return f"slot {slot_id}" if slot_id.isdigit() else slot_id
 
 
+def blocked_issues(items: list[RunItem]) -> list[Issue]:
+    """One issue per reason placements are blocked, naming the placements it affects."""
+    blocked: dict[str, list[RunItem]] = {}
+    for item in items:
+        if item.status == "blocked":
+            blocked.setdefault(item.note, []).append(item)
+    issues: list[Issue] = []
+    for note, affected in blocked.items():
+        refs = [f"{i.ref}{f' (board {i.copy_id})' if i.copy_id else ''}" for i in affected]
+        shown = ", ".join(refs[:6]) + (f", and {len(refs) - 6} more" if len(refs) > 6 else "")
+        issues.append(Issue(severity="error", message=f"{note}: {shown}", ref=affected[0].ref))
+    return issues
+
+
 def plan_job(
     job_id: str,
     job: Job,
@@ -662,15 +685,7 @@ def plan_job(
     for n, item in enumerate(items):
         item.index = n
 
-    # One issue per problem, naming the placements it affects.
-    blocked: dict[str, list[RunItem]] = {}
-    for item in items:
-        if item.status == "blocked":
-            blocked.setdefault(item.note, []).append(item)
-    for note, affected in blocked.items():
-        refs = [f"{i.ref}{f' (board {i.copy_id})' if i.copy_id else ''}" for i in affected]
-        shown = ", ".join(refs[:6]) + (f", and {len(refs) - 6} more" if len(refs) > 6 else "")
-        issues.append(Issue(severity="error", message=f"{note}: {shown}", ref=affected[0].ref))
+    issues += blocked_issues(items)
 
     def key(i: RunItem) -> str:
         return i.ref + (i.copy_id or "")
@@ -788,6 +803,7 @@ def plan_job(
             )
         )
 
+    values = {p.ref: p.value for p in job.board.placements if p.value}
     needs: dict[str | None, PartNeed] = {}
     for item in items:
         if item.status == "skipped":
@@ -795,11 +811,25 @@ def plan_job(
         need = needs.get(item.part_id)
         if need is None:
             slots = [sid for sid, _ in loaded.get(item.part_id or "", [])]
-            need = PartNeed(part_id=item.part_id, count=0, slot_ids=slots)
+            what = part(item.part_id) if item.part_id else None
+            need = PartNeed(
+                part_id=item.part_id,
+                count=0,
+                slot_ids=slots,
+                value=values.get(item.ref) or (what.name if what else ""),
+                description=what.description if what else "",
+                manufacturer=what.manufacturer if what else "",
+                footprint_id=item.footprint_id,
+                tape=library.tape_of(what) if library and what else None,
+            )
             needs[item.part_id] = need
         need.count += 1
+        if item.ref not in need.refs:
+            need.refs.append(item.ref)
         if item.status == "blocked" and need.problem is None:
             need.problem = item.note
+    for need in needs.values():
+        need.refs.sort(key=_ref_order)
     return JobPlan(
         job_id=job_id,
         revision=revision,
@@ -1149,6 +1179,7 @@ class JobRunner:
             self._job, self._parts = job, parts
             if self._sim_error is not None:
                 self._load_sim_board(job, parts)
+        self._unblock(run)
         # The tips fitted may have changed while paused (or a run read back after a
         # restart was planned before the tips counted): each pending part goes to the
         # nozzles whose tips suit it.
@@ -1170,6 +1201,53 @@ class JobRunner:
         self._record_again(run)
         self._save()
         return op
+
+    def _unblock(self, run: RunState) -> int:
+        """Plan the run's blocked placements again, as the machine is now: a feeder, strip,
+        or tray loaded while paused (or a part added to the revision's library) lets them be
+        placed. How many were unblocked."""
+        blocked = [i for i in run.plan.items if i.status == "blocked"]
+        if not blocked:
+            return 0
+        try:
+            fresh = self._plan(run.job_id, run.plan.revision)[2]
+        except (InvalidTargetError, MachineError) as e:
+            log.warning("could not plan the blocked placements again: %s", e)
+            return 0
+        before = blocked_issues(run.plan.items)
+        now = {(i.ref, i.copy_id): i for i in fresh.items}
+        unblocked: list[str] = []
+        for item in blocked:
+            again = now.get((item.ref, item.copy_id))
+            if again is None:
+                continue
+            if again.status == "pending":
+                item.slot_id, item.nozzles = again.slot_id, again.nozzles
+                item.status, item.note = "pending", ""
+                unblocked.append(item.ref)
+            elif again.status == "blocked":
+                item.note = again.note
+        if unblocked:
+            # Where each part is now loaded; a part is a problem while any of it is blocked.
+            fresh_parts = {n.part_id: n for n in fresh.parts}
+            for need in run.plan.parts:
+                if need.part_id in fresh_parts:
+                    need.slot_ids = fresh_parts[need.part_id].slot_ids
+                need.problem = next(
+                    (
+                        i.note
+                        for i in run.plan.items
+                        if i.part_id == need.part_id and i.status == "blocked"
+                    ),
+                    None,
+                )
+            run.plan.parts.sort(key=lambda n: (n.problem is None, n.part_id or ""))
+            run.plan.issues = [i for i in run.plan.issues if i not in before] + blocked_issues(
+                run.plan.items
+            )
+            self._machine.recorder.event("run.unblocked", refs=unblocked)
+            log.info("resuming: %d blocked placements can now be placed", len(unblocked))
+        return len(unblocked)
 
     def _record_again(self, run: RunState) -> None:
         """On resuming a run that is not being recorded (read back after a restart, or its

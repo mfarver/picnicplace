@@ -5614,11 +5614,32 @@
         "type": "object"
       },
       "PartNeed": {
-        "description": "One part number the job uses, and the feeders loaded with it.",
+        "description": "One part number the job uses, and the feeders loaded with it: a line of the load\nlist, with what it takes to find the reel and a feeder for it.",
         "properties": {
           "count": {
             "title": "Count",
             "type": "integer"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "footprint_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Footprint Id"
+          },
+          "manufacturer": {
+            "default": "",
+            "title": "Manufacturer",
+            "type": "string"
           },
           "part_id": {
             "anyOf": [
@@ -5642,19 +5663,50 @@
             ],
             "title": "Problem"
           },
+          "refs": {
+            "description": "Its references on the board, in order.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Refs",
+            "type": "array"
+          },
           "slot_ids": {
             "items": {
               "type": "string"
             },
             "title": "Slot Ids",
             "type": "array"
+          },
+          "tape": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Tape-Output"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The tape it comes in, if known."
+          },
+          "value": {
+            "default": "",
+            "description": "Its value: the board's, else the library's.",
+            "title": "Value",
+            "type": "string"
           }
         },
         "required": [
           "part_id",
           "count",
           "slot_ids",
-          "problem"
+          "problem",
+          "refs",
+          "value",
+          "description",
+          "manufacturer",
+          "footprint_id",
+          "tape"
         ],
         "title": "PartNeed",
         "type": "object"

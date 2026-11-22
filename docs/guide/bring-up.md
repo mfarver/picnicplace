@@ -332,6 +332,13 @@ effect at once. The reset button next to one forgets it.
       feeders: each placement's feeder and nozzles, and what blocks any of them (no part
       number, no height, no feeder holding the part, tape too wide for the feeders, or
       out of reach). Fix what you can; tick **Place the rest** to leave out the others.
+      The **Load list** panel is what to put on the machine: every part the job uses,
+      with its value, footprint, tape (width, kind, pitch, so you know the feeder size),
+      references, how many, and where it is loaded, what is missing first and in red.
+      **Print** it (or save it as a PDF) to take to the shelf, or download it as **CSV**.
+      During a run it says how many of each part are left to place. A part loaded while
+      the run is paused is planned again on **Resume**: its blocked placements are placed
+      with the rest. (Start in step mode, or pause, to load parts you left out.)
       A warning also names any placement whose part's footprint is not the board's there,
       unless their pads are the same: different pads, or the same pads turned (pin 1 on
       another pad) or with the origin elsewhere, would place the part turned or off its

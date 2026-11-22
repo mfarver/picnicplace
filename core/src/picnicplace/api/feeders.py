@@ -234,6 +234,31 @@ async def forget(feeders: Feeders, feeder_id: str) -> FeedersState:
     return feeders.state()
 
 
+class ReelRequest(WireModel):
+    left: int | None = Field(
+        default=None,
+        ge=0,
+        description="Parts on the reel now (from its label); empty: do not count them.",
+    )
+    low: int | None = Field(
+        default=None, ge=0, description="Warn once this many or fewer are left; empty: never."
+    )
+
+
+@router.put(
+    "/feeders/assignments/{feeder_id}/reel",
+    tags=["feeders"],
+    dependencies=[Depends(require(Permission.JOB))],
+    responses={422: {"description": "Not a feeder ID."}},
+)
+async def set_reel(feeders: Feeders, feeder_id: str, body: ReelRequest) -> FeedersState:
+    """How many parts are on a feeder's reel, counted down by each feed from now, and the
+    level at which the Studio warns the operator that it is running low."""
+    _check_feeder_id(feeder_id)
+    feeders.set_reel(feeder_id.upper(), body.left, body.low)
+    return feeders.state()
+
+
 class RefillRequest(WireModel):
     picked: int = Field(
         default=0, ge=0, description="Parts already gone from the start of it. 0: it is full."

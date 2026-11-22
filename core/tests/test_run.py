@@ -269,6 +269,119 @@ def test_check_needs_fiducials_and_a_location(lumen: TestClient) -> None:
         assert r.status_code == 409 and "no location" in r.json()["detail"]
 
 
+def test_a_part_loaded_while_paused_is_placed_on_resume(lumen: TestClient) -> None:
+    """A part no feeder holds at the start is blocked, and the run places the rest. Loaded
+    while the run is paused, its placements are planned again on resume, and placed. The
+    plan's parts list is the load list: what each part is, its tape, and its references."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        slot = next(
+            x for x in s.client.get("/api/v1/feeders").json()["slots"] if x["slot"]["id"] == "1"
+        )
+        uuid = slot["feeder"]["uuid"]
+        r = s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": None})
+        assert r.status_code == 200, r.json()
+
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        need = {n["part_id"]: n for n in plan["parts"]}
+        missing = need["EX-C0805-1U"]
+        assert missing["problem"] == "no feeder holds EX-C0805-1U" and missing["slot_ids"] == []
+        assert plan["parts"][0]["problem"] is not None  # what is missing comes first
+        chip = need["EX-R0603-10K"]
+        assert chip["refs"] and chip["refs"] == sorted(chip["refs"])
+        assert chip["footprint_id"] and chip["tape"]["width"] == 8 and chip["tape"]["pitch"] == 4
+        assert chip["slot_ids"] == ["2"]
+
+        body = {"job_id": "demo", "skip_blocked": True, "step": True}
+        ok(s.wait(s.post("/api/v1/run/start", body)))
+        run = lumen.get("/api/v1/run").json()
+        blocked = [i for i in run["plan"]["items"] if i["status"] == "blocked"]
+        assert {i["note"] for i in blocked} == {
+            "no feeder holds EX-C0805-1U",
+            "EX-SWITCH-1 has no height in the parts library",
+        }
+
+        r = s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": "EX-C0805-1U"})
+        assert r.status_code == 200, r.json()
+        op = ok(s.wait(s.post("/api/v1/run/resume")))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        run = lumen.get("/api/v1/run").json()
+        capacitor = [i for i in run["plan"]["items"] if i["part_id"] == "EX-C0805-1U"]
+        assert capacitor and all(i["status"] == "placed" for i in capacitor)
+        need = {n["part_id"]: n for n in run["plan"]["parts"]}
+        assert need["EX-C0805-1U"]["problem"] is None
+        assert need["EX-C0805-1U"]["slot_ids"] == ["1"]
+        assert not any("EX-C0805-1U" in i["message"] for i in run["plan"]["issues"])
+        assert check_landed(lumen, run) == 4
+
+
+def test_a_reel_is_counted_down_by_each_feed(lumen: TestClient) -> None:
+    """A Photon feeder's reel count, from its label, goes down by one part each feed (and
+    up for a feed back), is kept while the feeder holds the same part, and is warned of
+    in the plan when it has fewer parts left than the job places from it."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        slot = next(
+            x for x in s.client.get("/api/v1/feeders").json()["slots"] if x["slot"]["id"] == "2"
+        )
+        uuid = slot["feeder"]["uuid"]
+
+        r = s.put(f"/api/v1/feeders/assignments/{uuid}/reel", {"left": 1, "low": 1})
+        assert r.status_code == 200, r.json()
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        short = [i for i in plan["issues"] if "reel of EX-R0603-10K" in i["message"]]
+        assert len(short) == 1 and short[0]["severity"] == "warning", plan["issues"]
+        assert "has 1 parts left by its count, and the job places 2" in short[0]["message"]
+
+        assert s.put(f"/api/v1/feeders/assignments/{uuid}/reel", {"left": 5, "low": 3}).is_success
+        feed = "/api/v1/feeders/slots/2/feed"
+        for _ in range(2):
+            ok(s.wait(s.post(feed, {})))
+
+        def reel() -> tuple[int | None, int | None]:
+            slots = s.client.get("/api/v1/feeders").json()["slots"]
+            a = next(x for x in slots if x["slot"]["id"] == "2")["feeder"]["assignment"]
+            return a["reel_left"], a["reel_low"]
+
+        assert reel() == (3, 3)
+        ok(s.wait(s.post(feed, {"distance": -4.0})))
+        assert reel() == (4, 3)
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        assert not [i for i in plan["issues"] if "reel of" in i["message"]]
+
+        # Saving the same part keeps the count; another part is another reel.
+        body = {"part_id": "EX-R0603-10K"}
+        assert s.put(f"/api/v1/feeders/assignments/{uuid}", body).is_success
+        assert reel() == (4, 3)
+        assert s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": "EX-R0603-1K"}).is_success
+        assert reel() == (None, None)
+        assert s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": None}).is_success
+        r = s.put(f"/api/v1/feeders/assignments/{uuid}/reel", {"left": 5})
+        assert r.status_code == 422 and "holds no part" in r.json()["detail"], r.json()
+
+
+def test_the_plan_names_parts_whose_tape_is_guessed(lumen: TestClient) -> None:
+    """A tape guessed from the footprint at import is to be checked against the reel."""
+    from picnicplace.library.tape_rules import guessed_tape
+
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        library = lumen.app.state.ctx.library  # type: ignore[attr-defined]
+        part = library.find_part("EX-R0603-10K")
+        tape = guessed_tape(library.find_footprint(part.footprint_id))
+        assert tape is not None
+        library.put_tape(tape)
+        library.put_part(part.model_copy(update={"tape_id": tape.id}))
+        publish(s)
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        found = [i for i in plan["issues"] if "is guessed from its footprint" in i["message"]]
+        assert len(found) == 1 and found[0]["message"].startswith(
+            "the tape of EX-R0603-10K is guessed from its footprint"
+        ), plan["issues"]
+        need = next(n for n in plan["parts"] if n["part_id"] == "EX-R0603-10K")
+        assert need["tape"]["id"] == "8mm-paper-p4-r90-guessed"
+
+
 def test_start_in_step_mode(lumen: TestClient) -> None:
     """Started in step mode, the run finds the board and pauses before the first part;
     each step places one batch, and resume places the rest."""

@@ -16,9 +16,18 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { useDescription } from "../api/useDescription";
 import { useCameras } from "../api/useCameras";
+import { useAction } from "../api/useAction";
 import { useMachineControl } from "../api/useMachineControl";
 import { WidthSelect, WidthWarning } from "../components/TapeWidth";
-import type { FeedersState, MachineProfile, Part, RailState, SlotState, Tape } from "../api/types";
+import type {
+  FeederAssignment,
+  FeedersState,
+  MachineProfile,
+  Part,
+  RailState,
+  SlotState,
+  Tape,
+} from "../api/types";
 import { CameraView } from "../components/CameraView";
 import { pocketMarks, type CameraFootprint } from "../cameraMarks";
 import { FixedFeederDetail, type TeachWhich } from "../components/FixedFeederDetail";
@@ -532,6 +541,73 @@ function SlotOverlay({ slots, selected }: { slots: SlotState[]; selected: string
   );
 }
 
+/**
+ * How many parts are on a feeder's reel, counted down by each feed, and the level at which
+ * a popup warns that it is running low. Set from the reel's label when it is loaded.
+ */
+function ReelCount({
+  uuid,
+  assignment,
+  onSaved,
+}: {
+  uuid: string;
+  assignment: FeederAssignment | null;
+  onSaved: (state: FeedersState) => void;
+}) {
+  const [left, setLeft] = useState<number | null>(assignment?.reel_left ?? null);
+  const [low, setLow] = useState<number | null>(assignment?.reel_low ?? null);
+  const { run, pending: saving, error } = useAction();
+  // The count shown below is the live one; these are what the operator types.
+  const counted = assignment?.reel_left;
+  const held = !!assignment?.part_id;
+
+  const save = async () => {
+    const whole = (v: number | null) => (v == null ? null : Math.round(v));
+    const data = await run(() =>
+      api.PUT("/api/v1/feeders/assignments/{feeder_id}/reel", {
+        params: { path: { feeder_id: uuid } },
+        body: { left: whole(left), low: whole(low) },
+      }),
+    );
+    if (data) onSaved(data);
+  };
+
+  return (
+    <>
+      <h3 className="detail-heading">Reel</h3>
+      <div className="form-grid">
+        <Field label="Parts on reel">
+          <NumberInput value={left} min={0} onChange={setLeft} />
+        </Field>
+        <Field label="Warn at">
+          <NumberInput value={low} min={0} onChange={setLow} />
+        </Field>
+      </div>
+      <p className="text-muted note">
+        {counted == null
+          ? "Not counted. Enter the count from the reel's label: each feed takes one off."
+          : `${counted} left by its count${
+              assignment?.reel_low != null && counted <= assignment.reel_low
+                ? ", at or under its warning level"
+                : ""
+            }. Each feed takes one off; a popup warns at the level set.`}
+      </p>
+      {error && <p className="note note-danger">{error}</p>}
+      <div className="button-row">
+        <button
+          type="button"
+          className="button"
+          disabled={saving || !held}
+          title={held ? undefined : "Say which part the feeder holds first"}
+          onClick={() => void save()}
+        >
+          Save reel
+        </button>
+      </div>
+    </>
+  );
+}
+
 interface DetailProps {
   slot: SlotState;
   state: FeedersState;
@@ -667,6 +743,12 @@ function SlotDetail(p: DetailProps) {
               Identify
             </button>
           </div>
+          <ReelCount
+            key={`${feeder.uuid}:${feeder.assignment?.part_id ?? ""}`}
+            uuid={feeder.uuid}
+            assignment={feeder.assignment ?? null}
+            onSaved={p.onAssigned}
+          />
         </>
       ) : (
         <p className="text-muted">No feeder found here. Scan the feeder bus after adding one.</p>

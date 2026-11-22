@@ -32,7 +32,9 @@ def test_sexpr() -> None:
 def test_demo_board() -> None:
     result = read_kicad_pcb(DEMO.read_text(), "picnic-demo")
     board = result.board
-    assert result.warnings == []
+    # Only that tapes were guessed for the parts, which the library has none for yet.
+    assert len(result.warnings) == 1
+    assert result.warnings[0].startswith("tapes guessed from their footprints for 6 of 7 parts")
     assert (board.size.x, board.size.y) == SIZE and board.thickness == 1.6
     by_ref = {p.ref: p for p in board.placements}
     assert list(by_ref)[:4] == ["C1", "C2", "C3", "FID1"]  # natural order
@@ -68,6 +70,12 @@ def test_demo_board() -> None:
     assert parts["EX-SWITCH-1"].footprint_id == "SOT-23-6"
     assert parts["EX-SWITCH-1"].manufacturer == "Example Parts Co."
     assert "EX-R0603-1K" in parts  # the DNP part is still a part
+    # Each part on a footprint the tape rules know is given its usual tape, as a guess.
+    assert parts["EX-R0603-1K"].tape_id == "8mm-paper-p4-r90-guessed"
+    assert parts["EX-SWITCH-1"].tape_id == "8mm-embossed-p4-rna-guessed"
+    tapes = {t.id: t for t in result.tapes}
+    assert set(tapes) == {p.tape_id for p in parts.values() if p.tape_id}
+    assert all(t.basis == "estimated" for t in tapes.values())
 
 
 def test_pads_land_where_kicad_puts_them() -> None:
@@ -141,6 +149,11 @@ def test_import_endpoint(client: TestClient) -> None:
     assert len(result["board"]["placements"]) == 15
     assert "part:EX-SWITCH-1" in result["library_report"]["added"]
     assert client.get("/api/v1/library/footprints/SOT-23-6").status_code == 200
+    # Each new part comes with the tape guessed from its footprint.
+    assert "tape:8mm-embossed-p4-rna-guessed" in result["library_report"]["added"]
+    part = client.get("/api/v1/library/parts/EX-SWITCH-1")
+    assert part.status_code == 200, part.json()
+    assert part.json()["tape_id"] == "8mm-embossed-p4-rna-guessed", part.json()
 
     # Importing again changes nothing in the library.
     again = client.post("/api/v1/boards/import/kicad", json=body).json()["library_report"]

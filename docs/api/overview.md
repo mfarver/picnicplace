@@ -91,7 +91,8 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/feeders/slots/{id}/pocket` | Find the pick pocket from the tape's sprocket holes |
 | `POST /api/v1/feeders/slots/{id}/fiducial`, `POST /api/v1/feeders/calibrate` | Measure the feeder fiducial's offset; calibrate slots from their fiducials |
 | `POST /api/v1/feeders/rails/calibrate`, `POST /api/v1/feeders/slots/{id}/rail-fiducial`, `DELETE /api/v1/feeders/rails/{bank}` | Find where each feeder rail really is from its end feeders' fiducials (or one the operator centered the camera on); go back to the profile's place |
-| `PUT`, `DELETE /api/v1/feeders/assignments/{feeder_id}` | Which part a feeder holds |
+| `PUT`, `DELETE /api/v1/feeders/assignments/{feeder_id}` | Which part a feeder holds (its reel count is kept while the part stays the same) |
+| `PUT /api/v1/feeders/assignments/{feeder_id}/reel` | How many parts are on a feeder's reel (counted down by each feed) and the level to warn the operator at |
 | `POST /api/v1/feeders/fixed`; `PUT`, `DELETE …/fixed/{id}` | Strips and trays held on the bed (T1, T2, ...): add, change, remove |
 | `PUT /api/v1/feeders/fixed/{id}/teach` | Teach a strip or tray's first part, end of its first row, or last part (at the camera) |
 | `POST /api/v1/feeders/fixed/{id}/refill`, `…/pocket` | Mark it refilled; find a strip's next pocket from its sprocket holes |
@@ -107,7 +108,7 @@ generate a client from it, as the Studio does.
 | `GET /api/v1/placement/trained` | Parts trained on this machine: how each is seen, whether approved or found in a run (used before approval), and the best ways tried |
 | `GET /api/v1/placement/trained/{part_id}/images/{name}` | A trained part's picture: `overlay` (its footprint over it), `beside` (its footprint beside it), or `light-NN` (under each light tried). Takes the token as a query parameter too, for `<img>` tags |
 | `POST /api/v1/placement/trained/{part_id}/approve`, `DELETE …/trained/{part_id}` | Approve what training found, so alignment uses it; or forget it. Need control |
-| `POST /api/v1/run/plan` | A dry run of a job's published revision (its newest, or one given): each placement's feeder and nozzles, and what blocks any |
+| `POST /api/v1/run/plan` | A dry run of a job's published revision (its newest, or one given): each placement's feeder and nozzles, and what blocks any; its `parts` are the load list (each part's value, footprint, tape, references, and where it is loaded). Resuming a run plans its blocked placements again |
 | `POST /api/v1/run/start`, `…/pause`, `…/step`, `…/resume`, `…/stop`; `GET /api/v1/run` | Run a job (a feeder scan, board fiducials, then batches of pick, align, and place, each feeder's fiducial found on its first pick), optionally starting in step mode, and optionally checking each two-terminal chip with the top camera once placed (`check_placements`: pausing on one off its pads, turned, or not there, and when its pads show the board has moved, finding the board again on resume; where it was found, how much of it is on its pads, and where the pads were found are kept with each item); its progress, and `stats`: picks tried and how many came up empty, parts the bottom camera looked for and could not find, placements, and placements checked and how many were off their pads |
 | `GET /api/v1/run/checks/{index}` | The current run's checked placement (by plan item) as the top camera saw it: where it was sent (orange) and where it was found (magenta). Takes the token as a query parameter too, for `<img>` tags |
 | `POST /api/v1/run/check-board`; `GET /api/v1/run/board-check` | Find a job's board by its fiducials and fit it, placing nothing; the last check |

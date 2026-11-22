@@ -22,7 +22,8 @@ from dataclasses import dataclass, field
 
 from picnicplace.board.models import Board, Placement, Side, normalize_angle
 from picnicplace.board.sexpr import Node, parse
-from picnicplace.library.models import Footprint, Pad, Part, Size, with_pin1
+from picnicplace.library.models import Footprint, Pad, Part, Size, Tape, with_pin1
+from picnicplace.library.tape_rules import guessed_tape
 
 PART_FIELDS = ("MP", "MPN", "Manufacturer Part Number", "Manufacturer_Part_Number", "PN")
 """Footprint fields tried, in order, for the part ID."""
@@ -39,6 +40,8 @@ class KicadImport:
     footprints: list[Footprint]
     parts: list[Part]
     warnings: list[str] = field(default_factory=list[str])
+    tapes: list[Tape] = field(default_factory=list[Tape])
+    """Tapes guessed for the parts from their footprints (``tape_rules``)."""
 
 
 def _xy(node: Node | None) -> tuple[float, float, float]:
@@ -134,7 +137,6 @@ def library_footprint(
                 roundness=round(_roundness(pad, warnings, f"{ref} pad {pad.values[0]}"), 2),
             )
         )
-    body: Size | None = None
     fab = [
         shape
         for shape in fp.children
@@ -142,13 +144,15 @@ def library_footprint(
         and _layer(shape).endswith(".Fab")
         and shape.name != "fp_text"
     ]
-    points = [p for shape in fab for p in _points(shape)]
-    if points:
-        # Outline center lines: the drawn body, without the line width.
-        xs, ys = [p[0] for p in points], [p[1] for p in points]
-        w, h = max(xs) - min(xs), max(ys) - min(ys)
-        if w > 0 and h > 0:
-            body = Size(x=round(w, 3), y=round(h, 3))
+    body = _fab_body(fab, _pad_boxes(fp, orientation))
+    whole = _extent([p for shape in fab for p in _points(shape)])
+    if body is not None and whole is not None and _leads_left_out(whole, body):
+        warnings.append(
+            f"{ref}: footprint {footprint_id} draws its leads on F.Fab too, over its pads: "
+            f"its body is taken as {body.x:g} x {body.y:g} mm, not {whole.x:g} x {whole.y:g} "
+            "(the bottom camera looks for the body). In a footprint of your own, leave only "
+            "the body on F.Fab, so other tools read it so too"
+        )
     descr = fp.value("descr") or ""
     return Footprint(
         id=footprint_id,
@@ -158,6 +162,73 @@ def library_footprint(
         pads=with_pin1(pads),
         source=f"KiCad footprint {fp.values[0]}",
     )
+
+
+PAD_MARGIN_MM = 0.05
+"""A F.Fab line this close to a pad, or closer, is taken as lying over it."""
+LEADS_SHRINK_MM = 0.2
+"""Leads left out of a body that shrink it by more than this, either way, are warned of."""
+
+Box = tuple[float, float, float, float]
+
+
+def _pad_boxes(fp: Node, orientation: float) -> list[Box]:
+    """Each copper pad's bounding box, in the footprint's own frame (as F.Fab is drawn)."""
+    boxes: list[Box] = []
+    for pad in fp.all("pad"):
+        x, y, angle = _xy(pad.first("at"))
+        size = pad.floats("size")
+        if len(size) < 2:
+            continue
+        a = math.radians(angle - orientation)
+        c, sn = abs(math.cos(a)), abs(math.sin(a))
+        hw = (size[0] * c + size[1] * sn) / 2 + PAD_MARGIN_MM
+        hh = (size[0] * sn + size[1] * c) / 2 + PAD_MARGIN_MM
+        boxes.append((x - hw, y - hh, x + hw, y + hh))
+    return boxes
+
+
+def _extent(points: list[tuple[float, float]]) -> Size | None:
+    """The size of the box round ``points``: the drawn outline's center lines, without the
+    line width. None if it has no area."""
+    if not points:
+        return None
+    xs, ys = [p[0] for p in points], [p[1] for p in points]
+    w, h = max(xs) - min(xs), max(ys) - min(ys)
+    return Size(x=round(w, 3), y=round(h, 3)) if w > 0 and h > 0 else None
+
+
+LEAD_PADS = 4
+"""Leads are drawn over at least this many pads..."""
+LEAD_PAD_SHARE = 0.75
+"""...and over at least this share of them (an exposed pad may have none). A footprint
+with fewer, such as an inductor whose body's sides are drawn over its two pads, or a
+power transistor's tab over its large pad, is taken as drawn."""
+
+
+def _fab_body(fab: list[Node], pads: list[Box]) -> Size | None:
+    """The body drawn on F.Fab. Some footprints (those made by vendor tools, often) draw
+    each lead too, over its pad: when shapes lie wholly over most of the pads, as leads
+    do, they are left out, unless that would leave nothing."""
+
+    def pad_under(points: list[tuple[float, float]]) -> int | None:
+        for i, (x0, y0, x1, y1) in enumerate(pads):
+            if points and all(x0 <= x <= x1 and y0 <= y <= y1 for x, y in points):
+                return i
+        return None
+
+    shapes = [_points(shape) for shape in fab]
+    everything = _extent([p for points in shapes for p in points])
+    under = [pad_under(points) for points in shapes]
+    leads = {i for i in under if i is not None}
+    if len(leads) < LEAD_PADS or len(leads) < LEAD_PAD_SHARE * len(pads):
+        return everything
+    body = [p for points, i in zip(shapes, under, strict=True) if i is None for p in points]
+    return _extent(body) or everything
+
+
+def _leads_left_out(whole: Size, body: Size) -> bool:
+    return whole.x - body.x > LEADS_SHRINK_MM or whole.y - body.y > LEADS_SHRINK_MM
 
 
 def _same_pads(a: Footprint, b: Footprint) -> bool:
@@ -336,11 +407,29 @@ def read_kicad_pcb(
         placements=placements,
     )
     used = {p.footprint_id for p in placements}
+    # Each part's tape, guessed from its footprint until someone looks at the reel.
+    tapes: dict[str, Tape] = {}
+    guessed: list[str] = []
+    for part_id, part in parts.items():
+        footprint = footprints.get(part.footprint_id)
+        tape = guessed_tape(footprint) if footprint is not None else None
+        if tape is not None:
+            tapes[tape.id] = tape
+            parts[part_id] = part.model_copy(update={"tape_id": tape.id})
+            guessed.append(part_id)
+    if guessed:
+        warnings.append(
+            f"tapes guessed from their footprints for {len(guessed)} of {len(parts)} parts "
+            "(width, pitch, and for resistors, capacitors and inductors which way round; "
+            "parts already in the library keep theirs): check each against its reel in the "
+            "Parts workspace"
+        )
     return KicadImport(
         board=board,
         footprints=[footprints[k] for k in sorted(footprints) if k in used],
         parts=[parts[k] for k in sorted(parts)],
         warnings=warnings,
+        tapes=[tapes[k] for k in sorted(tapes)],
     )
 
 

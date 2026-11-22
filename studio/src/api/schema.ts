@@ -206,6 +206,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/feeders/assignments/{feeder_id}/reel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Reel
+         * @description How many parts are on a feeder's reel, counted down by each feed from now, and the
+         *     level at which the Studio warns the operator that it is running low.
+         */
+        put: operations["set_reel_api_v1_feeders_assignments__feeder_id__reel_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/feeders/calibrate": {
         parameters: {
             query?: never;
@@ -2917,6 +2938,16 @@ export interface components {
              */
             part_pitch?: number | null;
             /**
+             * Reel Left
+             * @description Parts left on the reel, counted down by each feed; empty: not counted. Set with the feeder's reel route, from the reel's label when it is loaded.
+             */
+            reel_left?: number | null;
+            /**
+             * Reel Low
+             * @description Warn the operator once this many parts or fewer are left; empty: never.
+             */
+            reel_low?: number | null;
+            /**
              * Tape Width
              * @description The width of tape this feeder takes, mm (8, 12, ...), if known. A part whose tape is another width is flagged: the wrong feeder, or the wrong tape.
              */
@@ -2944,6 +2975,16 @@ export interface components {
              * @description Distance from one part to the next. Empty: the part's tape pitch.
              */
             part_pitch: number | null;
+            /**
+             * Reel Left
+             * @description Parts left on the reel, counted down by each feed; empty: not counted. Set with the feeder's reel route, from the reel's label when it is loaded.
+             */
+            reel_left: number | null;
+            /**
+             * Reel Low
+             * @description Warn the operator once this many parts or fewer are left; empty: never.
+             */
+            reel_low: number | null;
             /**
              * Tape Width
              * @description The width of tape this feeder takes, mm (8, 12, ...), if known. A part whose tape is another width is flagged: the wrong feeder, or the wrong tape.
@@ -4935,17 +4976,43 @@ export interface components {
         };
         /**
          * PartNeed
-         * @description One part number the job uses, and the feeders loaded with it.
+         * @description One part number the job uses, and the feeders loaded with it: a line of the load
+         *     list, with what it takes to find the reel and a feeder for it.
          */
         PartNeed: {
             /** Count */
             count: number;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Footprint Id */
+            footprint_id: string | null;
+            /**
+             * Manufacturer
+             * @default
+             */
+            manufacturer: string;
             /** Part Id */
             part_id: string | null;
             /** Problem */
             problem: string | null;
+            /**
+             * Refs
+             * @description Its references on the board, in order.
+             */
+            refs: string[];
             /** Slot Ids */
             slot_ids: string[];
+            /** @description The tape it comes in, if known. */
+            tape: components["schemas"]["Tape-Output"] | null;
+            /**
+             * Value
+             * @description Its value: the board's, else the library's.
+             * @default
+             */
+            value: string;
         };
         /**
          * PartVision
@@ -5529,6 +5596,19 @@ export interface components {
             y_max: number;
             /** Y Min */
             y_min: number;
+        };
+        /** ReelRequest */
+        ReelRequest: {
+            /**
+             * Left
+             * @description Parts on the reel now (from its label); empty: do not count them.
+             */
+            left?: number | null;
+            /**
+             * Low
+             * @description Warn once this many or fewer are left; empty: never.
+             */
+            low?: number | null;
         };
         /** RefillRequest */
         RefillRequest: {
@@ -6972,6 +7052,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    set_reel_api_v1_feeders_assignments__feeder_id__reel_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feeder_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedersState"];
+                };
+            };
+            /** @description Not a feeder ID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

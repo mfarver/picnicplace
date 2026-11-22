@@ -235,6 +235,13 @@ effect at once. The reset button next to one forgets it.
 - [ ] Give each feeder its part, and the width of tape it takes (**Takes tape**), and feed
       one. Check it moves one part's pitch. A part whose tape is another width is flagged:
       it is in the wrong feeder, or its tape is wrong in the Parts workspace.
+- [ ] Optional, per reel: under **Reel**, enter **Parts on reel** from the reel's label and
+      a **Warn at** level, and **Save reel**. Each feed takes one part off the count (a
+      feed back adds one), and the count stays with the feeder, as the part does. When it
+      gets down to the level, a popup in the Studio says the reel is low (and again when
+      it should be empty), so the next reel is ready. The run's checks warn before a run
+      when a reel's count is less than the job places from it. Giving the feeder another
+      part clears the count: enter the new reel's.
 - [ ] **Calibrate rails** (under **Rails**): with feeders near both ends of each rail (the
       core uses the two farthest apart), it finds their fiducials and moves the rail's
       slots to where the rail really is. If it cannot find one, jog the camera onto that
@@ -335,6 +342,13 @@ effect at once. The reset button next to one forgets it.
       feeders: each placement's feeder and nozzles, and what blocks any of them (no part
       number, no height, no feeder holding the part, tape too wide for the feeders, or
       out of reach). Fix what you can; tick **Place the rest** to leave out the others.
+      The **Load list** panel is what to put on the machine: every part the job uses,
+      with its value, footprint, tape (width, kind, pitch, so you know the feeder size),
+      references, how many, and where it is loaded, what is missing first and in red.
+      **Print** it (or save it as a PDF) to take to the shelf, or download it as **CSV**.
+      During a run it says how many of each part are left to place. A part loaded while
+      the run is paused is planned again on **Resume**: its blocked placements are placed
+      with the rest. (Start in step mode, or pause, to load parts you left out.)
       A warning also names any placement whose part's footprint is not the board's there,
       unless their pads are the same: different pads, or the same pads turned (pin 1 on
       another pad) or with the origin elsewhere, would place the part turned or off its
@@ -491,9 +505,21 @@ again (each pick would cost another part), and the run goes on with the rest. Ch
 part's footprint, train it from the Placement panel, and un-skip them.
 
 **Footprints for the machine.** The bottom camera looks for the part the footprint
-describes. A KiCad footprint's F.Fab layer must show the body only, not the leads; its
-pads are the board's land pattern, larger than the part's own terminals. The plan warns
-when a part's footprint is not the board's.
+describes. A KiCad footprint's F.Fab layer should show the body only, not the leads; its
+pads are the board's land pattern, larger than the part's own terminals. Footprints made
+by vendor tools often draw each lead on F.Fab too: the import now leaves out what lies
+over most of the pads, takes the body from the rest, and says so in its warnings (the five
+footprints the first board met come out at their datasheet bodies). Fix your own copies
+anyway, so other tools read them right. The plan warns when a part's footprint is not the
+board's.
+
+**Tapes from footprints.** A part new to the library is given the tape parts on its
+footprint usually come in (EIA-481): an 0603 resistor 8 mm paper at 4 mm, a SOT-23 8 mm
+embossed at 4 mm, a SOIC-8 12 mm embossed at 8 mm, and others by their name or body size.
+It is a guess, marked so ("(guessed)" in the Parts workspace and the load list), and the
+plan names each part whose tape is still one: check the width, pitch and which way round
+the parts lie against the reel, and give the part its real tape. Which way round is
+guessed only for resistors, capacitors and inductors.
 
 **Tips.** Say which tip is on each nozzle. The plan sends each part to the nozzle whose tip
 suits it (0603s to the N045, larger parts to the N08) and lists how many go to each.

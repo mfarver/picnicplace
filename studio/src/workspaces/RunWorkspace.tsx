@@ -29,6 +29,7 @@ import type {
 } from "../api/types";
 import { CameraView } from "../components/CameraView";
 import { FixedFeederPanel } from "../components/FixedFeederPanel";
+import { LoadListPanel } from "../components/LoadListPanel";
 import { Field } from "../components/Form";
 import { Panel } from "../components/Panel";
 import { PickCorrectionSelect } from "../components/PickCorrection";
@@ -447,19 +448,11 @@ export function RunWorkspace() {
         )}
 
         {shownPlan && shownPlan.parts.length > 0 && (
-          <Panel title="Parts and feeders" collapseId="run-parts">
-            <ul className="item-list">
-              {shownPlan.parts.map((p) => (
-                <li key={p.part_id ?? "-"} className="run-row">
-                  <span className="item-id">{p.part_id ?? "no part number"}</span>
-                  <span className="text-muted">×{p.count}</span>
-                  <span className={p.problem ? "text-danger run-where" : "text-muted run-where"}>
-                    {p.slot_ids.length ? sources(p.slot_ids) : (p.problem ?? "no feeder")}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Panel>
+          <LoadListPanel
+            title={shownPlan.name}
+            parts={shownPlan.parts}
+            items={current && current.status !== "finished" ? current.plan.items : undefined}
+          />
         )}
 
         {feeders && feeders.fixed.length > 0 && (
@@ -651,17 +644,6 @@ function FiducialList({
       ))}
     </ul>
   );
-}
-
-/** "slots 3, 7 and T1": feeder slots by number, strips and trays by ID. */
-function sources(ids: string[]): string {
-  const slots = ids.filter((id) => /^\d+$/.test(id));
-  const fixed = ids.filter((id) => !/^\d+$/.test(id));
-  const parts = [
-    ...(slots.length ? [`slot${slots.length > 1 ? "s" : ""} ${slots.join(", ")}`] : []),
-    ...fixed,
-  ];
-  return parts.join(", ");
 }
 
 /** How the run went: picks, finding parts on the bottom camera, and placements checked. */

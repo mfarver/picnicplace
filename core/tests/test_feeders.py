@@ -414,6 +414,35 @@ def test_holes_not_seen_as_round_marks_are_found_by_their_rims(
         assert pocket["across"] == pytest.approx(0.0, abs=0.05)
 
 
+def test_holes_too_faint_for_round_marks_are_found_by_their_shape(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Black tape over a black strip holder on a real machine: the holes are plain to see
+    but too faint to stand out as round marks. Their shape, near the hole line, finds them,
+    along the tape and across it."""
+    with connect(lumen) as s:
+        s.home()
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+
+        async def nothing(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        monkeypatch.setattr(machine, "locate_circles", nothing)
+        monkeypatch.setattr(machine, "locate_rims", nothing)
+        feeders = lumen.app.state.ctx.feeders  # type: ignore[attr-defined]
+        monkeypatch.setattr(feeders, "_holes_by_rhythm", nothing)
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        pick = true_pick(slot_state(s, "26"))
+        s.put("/api/v1/feeders/slots/26/pick", {"at": {"x": pick.x, "y": pick.y + 0.3}})
+        for _ in range(10):
+            succeeded(s.wait(s.post("/api/v1/feeders/slots/26/feed", {})))
+        op = succeeded(s.wait(s.post("/api/v1/feeders/slots/26/pocket")))
+        assert "(from 1 " not in op["message"], op
+        pocket = slot_state(s, "26")["pocket"]
+        assert pocket["at"]["x"] == pytest.approx(pick.x, abs=0.05), op
+        assert pocket["at"]["y"] == pytest.approx(pick.y - 0.4, abs=0.05), op
+
+
 def test_holes_neither_marks_nor_rims_are_found_by_their_rhythm(
     lumen: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -428,6 +457,7 @@ def test_holes_neither_marks_nor_rims_are_found_by_their_rhythm(
             return []
 
         monkeypatch.setattr(machine, "locate_circles", nothing)
+        monkeypatch.setattr(lumen.app.state.ctx.feeders, "_holes_by_shape", nothing)  # type: ignore[attr-defined]
         monkeypatch.setattr(machine, "locate_rims", nothing)
         succeeded(s.wait(s.post("/api/v1/feeders/scan")))
         pick = true_pick(slot_state(s, "26"))
@@ -459,6 +489,7 @@ def test_a_rhythm_may_only_nudge_the_pocket(
             return [-1.0, 3.0]  # a pocket 1 mm along from the pick location
 
         monkeypatch.setattr(machine, "locate_circles", nothing)
+        monkeypatch.setattr(feeders, "_holes_by_shape", nothing)
         monkeypatch.setattr(machine, "locate_rims", nothing)
         monkeypatch.setattr(feeders, "_holes_by_rhythm", off_by_1mm)
         succeeded(s.wait(s.post("/api/v1/feeders/scan")))
@@ -494,6 +525,7 @@ def test_one_rim_alone_is_not_taken_for_a_hole(
         monkeypatch.setattr(machine, "locate_circles", no_marks)
         monkeypatch.setattr(machine, "locate_rims", one_rim)
         feeders = lumen.app.state.ctx.feeders  # type: ignore[attr-defined]
+        monkeypatch.setattr(feeders, "_holes_by_shape", no_marks)
         monkeypatch.setattr(feeders, "_holes_by_rhythm", no_rhythm)
         op = s.wait(s.post("/api/v1/feeders/slots/26/pocket"))
         assert op["status"] == "failed"

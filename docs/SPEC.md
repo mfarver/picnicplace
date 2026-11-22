@@ -664,7 +664,15 @@ correction. Implementations:
     vacuum tell, and only a pick that then fails says the feeder did not answer. A sniff for a
     part's top that finds nothing searches once more, 1 mm further down (a real LumenPnP's
     feeder rails were 0.6 to 0.9 mm lower at one end). Holes are looked for as round marks
-    first; where fewer than two are found, they are looked for again by their rims (a
+    first; where fewer than two are found, they are looked for by their shape: within 1 mm
+    of the hole line, places that match a dark (or bright) hole-sized disk in a ring of
+    tape, at least 0.6 of a perfect match, with tape both before and after along the line,
+    and in line with the likeliest one (within a tenth of a hole across). That needs no
+    particular brightness: on a real LumenPnP's strips of black tape in black and red
+    holders the holes were plain to see but too faint to be round marks; matched, 72 of 83
+    pockets gave two or more holes, and none disagreed with the rims; a hole cut through
+    by a strip's end, 0.2 mm off the line, is left out. Still fewer than two, they are
+    looked for again by their rims (a
     Hough transform for circles of the holes' size, on the frame with its contrast evened
     out), keeping those on the hole line a whole sprocket pitch apart. In black tape on a
     real LumenPnP's Photon feeders each hole shows the feeder's bright tooth in a dark ring
@@ -684,7 +692,10 @@ correction. Implementations:
     its holes on a known side; once its last part is taught, the top camera checks they are
     there, and says so if they are on the other side instead (one real strip was taught the
     wrong way round). Holes are never looked for on the other side to pick: another strip's
-    holes may lie there. Where no holes can be seen at all, the pick goes where the
+    holes may lie there. A cut strip ends half a pocket past its first part, so a view of
+    a pocket at either end may hold one hole and part of another (on a real strip, one and
+    a half): with fewer than two seen, the camera looks again half a pocket toward the
+    strip's middle. Where no holes can be seen at all, the pick goes where the
     feeder's setup or the strip's teaching says, and the bottom camera finds the part on
     the nozzle as for every pick.
   - In paper tape, with the part's body known from its footprint, the same picture also

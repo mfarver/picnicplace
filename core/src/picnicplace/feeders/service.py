@@ -78,6 +78,9 @@ POCKET_KEEP_OUT_MM = 0.4
 pocket: the pocket's own walls are darker than the paper."""
 HOLE_KEEP_OUT_MM = 0.25
 """...nor this far round each sprocket hole."""
+MATCH_SEARCH_MM = 1.0
+"""Holes matched by their shape are looked for up to this far either side of the hole
+line: as far as a hole may lie from it and still count (``pocket_from_holes``)."""
 RHYTHM_SEARCH_MM = 0.6
 """Holes are looked for by their rhythm this far either side of where the hole line should
 be: no further, as another tape's holes may lie beyond."""
@@ -1525,6 +1528,17 @@ class FeederService:
 
         fix = fix_from(seen)
         if fix is None or fix.holes < MIN_HOLES:
+            # Holes too faint to stand out (black tape over a black holder): their shape,
+            # looked for only near the hole line.
+            matched = await self._holes_by_shape(pick, rotation, line)
+            by_shape = fix_from(matched)
+            if (
+                by_shape is not None
+                and by_shape.holes >= MIN_HOLES
+                and (fix is None or by_shape.holes > fix.holes)
+            ):
+                fix, seen = by_shape, matched
+        if fix is None or fix.holes < MIN_HOLES:
             # Black tape, or a strip's holder over the holes: look for their rims instead.
             rims = await self._machine.locate_rims(SPROCKET_DIAMETER, SPROCKET_PITCH * 0.6)
             by_rims = fix_from(rims)
@@ -1553,6 +1567,43 @@ class FeederService:
                     for q in (rotate(Point(x=s, y=line), rotation) for s in along)
                 ]
         return fix, seen
+
+    async def _holes_by_shape(self, pick: Point, rotation: float, line: float) -> list[Point]:
+        """Sprocket holes found by their shape near the hole line (``match_holes``): their
+        machine positions."""
+        machine = self._machine
+        camera = machine.top_camera()
+        frame = await machine.frame(camera.id, settle=False)
+        image = frame.image
+        h, w = image.shape[:2]
+        mm = camera.field_of_view.x / w
+        here = machine.camera_position()
+
+        def pixel(s: float) -> tuple[float, float]:
+            q = rotate(Point(x=s, y=line), rotation)
+            right, down = machine.profile.machine_to_image(
+                pick.x + q.x - here.x, pick.y + q.y - here.y
+            )
+            return w / 2 + right / mm, h / 2 + down / mm
+
+        (x0, y0), (x1, y1) = pixel(0.0), pixel(1.0)
+        holes = await machine.recorder.vision(
+            "match_holes",
+            image,
+            (x0, y0),
+            math.degrees(math.atan2(y1 - y0, x1 - x0)),
+            SPROCKET_DIAMETER / mm,
+            MATCH_SEARCH_MM / mm,
+            SPROCKET_PITCH * 0.6 / mm,
+            camera=camera.id,
+            position=dict(machine.driver.position),
+            mm_per_px=mm,
+        )
+        out: list[Point] = []
+        for hole in holes:
+            dx, dy = machine.profile.image_to_machine((hole.x - w / 2) * mm, (hole.y - h / 2) * mm)
+            out.append(Point(x=here.x + dx, y=here.y + dy))
+        return out
 
     async def _holes_by_rhythm(self, pick: Point, rotation: float, line: float) -> list[float]:
         """Sprocket holes found by their rhythm along the hole line (``find_hole_rhythm``):

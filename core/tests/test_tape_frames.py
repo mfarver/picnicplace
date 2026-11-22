@@ -11,7 +11,7 @@ import pytest
 from picnicplace.camera.source import Image
 from picnicplace.feeders.pocket import choose_pocket, pocket_choices, pocket_from_holes
 from picnicplace.vision.fiducial import find_circles, find_rims
-from picnicplace.vision.sprockets import find_hole_rhythm
+from picnicplace.vision.sprockets import find_hole_rhythm, match_holes
 from picnicplace.vision.tape import holds_part, loose_parts, pocket_darkness, pocket_ends
 
 FRAMES = Path(__file__).parent / "data" / "vision"
@@ -270,3 +270,40 @@ def test_no_rhythm_where_there_are_no_holes(
     mm = BLACK_MM_PER_PX
     holes = find_hole_rhythm(image, line, angle, PITCH / mm, HOLE / mm, 0.6 / mm, 0.3 / mm)
     assert holes == []
+
+
+def test_faint_holes_at_a_strips_end_are_found_by_their_shape() -> None:
+    """Black tape over a black holder, by a strip's first part: two holes plain to see, 3.92
+    mm apart, but too faint to be round marks or rims. Their shape finds them, on the hole
+    line."""
+    image = _frame("strip-end-faint")
+    mm = BLACK_MM_PER_PX
+    holes = match_holes(image, STRIP_LINE, -90.0, HOLE / mm, 1.0 / mm, 0.6 * PITCH / mm)
+    assert len(holes) == 2, holes
+    assert all(abs(h.x - STRIP_LINE[0]) < 0.1 / mm for h in holes), holes
+    gap = abs(holes[0].y - holes[1].y) * mm
+    assert gap == pytest.approx(3.92, abs=0.05), holes
+    line = [c for c in find_circles(image, 1.05 / mm, 1.95 / mm) if abs(c.x - STRIP_LINE[0]) < 95]
+    rims = [c for c in find_rims(image, HOLE / mm, 0.6 * PITCH / mm) if abs(c.x - 600) < 95]
+    assert len(line) < 2 and len(rims) < 2
+
+
+def test_a_hole_cut_through_by_a_strips_end_is_not_taken() -> None:
+    """By a strip's last part, its end cuts through a hole: a dark half disk, off the line
+    of the whole holes (0.2 mm on a real machine), which would move the pocket."""
+    image = _frame("strip-end-cut-hole")
+    mm = BLACK_MM_PER_PX
+    holes = match_holes(image, STRIP_LINE, -90.0, HOLE / mm, 1.0 / mm, 0.6 * PITCH / mm)
+    assert [(round(h.x), round(h.y)) for h in holes] == [(604, 716)], holes
+
+
+@pytest.mark.parametrize(
+    ("name", "line", "angle"),
+    [("strip-holder-side", STRIP_LINE, 90.0), ("strip-rail", (599.75, 539.83), 88.21)],
+)
+def test_no_holes_matched_where_there_are_none(
+    name: str, line: tuple[float, float], angle: float
+) -> None:
+    """A strip's holder, its part, its machined rail and the bed: nothing hole-shaped."""
+    mm = BLACK_MM_PER_PX
+    assert match_holes(_frame(name), line, angle, HOLE / mm, 1.0 / mm, 0.6 * PITCH / mm) == []

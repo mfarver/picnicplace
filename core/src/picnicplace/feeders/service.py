@@ -78,6 +78,11 @@ POCKET_KEEP_OUT_MM = 0.4
 pocket: the pocket's own walls are darker than the paper."""
 HOLE_KEEP_OUT_MM = 0.25
 """...nor this far round each sprocket hole."""
+RHYTHM_SEARCH_MM = 0.6
+"""Holes are looked for by their rhythm this far either side of where the hole line should
+be: no further, as another tape's holes may lie beyond."""
+RHYTHM_BAND_MM = 0.3
+"""...in bands this wide along the line."""
 MIN_HOLES = 2
 """Sprocket holes found as round marks, fewer than this, are looked for again by their
 rims: one hole alone may be something else on the hole line."""
@@ -1404,6 +1409,16 @@ class FeederService:
                 and (fix is None or by_rims.holes > fix.holes)
             ):
                 fix, seen = by_rims, rims
+        if fix is None or fix.holes < MIN_HOLES:
+            # Holes half covered by a strip holder's rail: their rhythm along the line.
+            along = await self._holes_by_rhythm(pick, rotation, line)
+            by_rhythm = pocket_from_holes([(s, line) for s in along], line, pitch)
+            if by_rhythm is not None and (fix is None or by_rhythm.holes > fix.holes):
+                fix = by_rhythm
+                seen = [
+                    Point(x=pick.x + q.x, y=pick.y + q.y)
+                    for q in (rotate(Point(x=s, y=line), rotation) for s in along)
+                ]
         if fix is None:
             raise NoSprocketHolesError(f"{label}: no sprocket holes found near the pick location")
         along, part, loose = fix.along, None, []
@@ -1420,6 +1435,42 @@ class FeederService:
             part=part,
             loose=loose,
         )
+
+    async def _holes_by_rhythm(self, pick: Point, rotation: float, line: float) -> list[float]:
+        """Sprocket holes found by their rhythm along the hole line (``find_hole_rhythm``):
+        how far each is along the tape from the pick location, in mm. Not across: the
+        holes may be half covered."""
+        machine = self._machine
+        camera = machine.top_camera()
+        frame = await machine.frame(camera.id, settle=False)
+        image = frame.image
+        h, w = image.shape[:2]
+        mm = camera.field_of_view.x / w
+        here = machine.camera_position()
+
+        def pixel(s: float) -> tuple[float, float]:
+            q = rotate(Point(x=s, y=line), rotation)
+            right, down = machine.profile.machine_to_image(
+                pick.x + q.x - here.x, pick.y + q.y - here.y
+            )
+            return w / 2 + right / mm, h / 2 + down / mm
+
+        (x0, y0), (x1, y1) = pixel(0.0), pixel(1.0)
+        px_per_mm = math.hypot(x1 - x0, y1 - y0)
+        holes = await machine.recorder.vision(
+            "find_hole_rhythm",
+            image,
+            (x0, y0),
+            math.degrees(math.atan2(y1 - y0, x1 - x0)),
+            SPROCKET_PITCH * px_per_mm,
+            SPROCKET_DIAMETER * px_per_mm,
+            RHYTHM_SEARCH_MM * px_per_mm,
+            RHYTHM_BAND_MM * px_per_mm,
+            camera=camera.id,
+            position=dict(machine.driver.position),
+            mm_per_px=mm,
+        )
+        return [hole.along / px_per_mm for hole in holes]
 
     async def _look_at_tape(
         self,

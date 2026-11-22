@@ -662,7 +662,13 @@ correction. Implementations:
     that merges with the tape, and a strip's holder can cover part of a hole: neither is a
     round mark, but enough of each rim shows (on real frames, the pocket found within 0.2 mm
     of the hole in an empty pocket's middle); rims count only as two or more holes, as one
-    may be a round letter on a part. A strip's holes are looked for on the side its pick
+    may be a round letter on a part. Holes still not found are looked for by their rhythm:
+    in narrow bands along the hole line, up to 0.6 mm either side of it, the band darkening
+    most strongly every sprocket pitch is the one through the holes, and each dip at least
+    20 levels (of 255) darker than the tape halfway to the next is a hole, if the holes
+    found are about as dark as one another. That finds holes half covered by a strip
+    holder's rail (two real strips), but only along the tape: across, the pocket stays
+    where the strip was taught. A strip's holes are looked for on the side its pick
     order says, and, if none are there, on the other (a strip laid the other way round, as
     one was on a real machine), that side then remembered until the core restarts. Where
     no holes can be seen at all, the pick goes where the feeder's setup or the strip's

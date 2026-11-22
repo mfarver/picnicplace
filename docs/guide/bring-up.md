@@ -452,8 +452,9 @@ is kept.
 them in black tape, either because a feeder's sprocket teeth filled them or because the
 tape lay black on a dark holder (strip holders cover part of the holes too). The pick then
 went where the feeder's setup says. The core now looks for the holes' rims when it cannot
-see the holes themselves, and finds them in black tape and in strips; a strip whose holder
-covers half of each hole may still show too little. Where no holes are found, center the
+see the holes themselves, and finds them in black tape and in strips; where a strip's holder
+covers half of each hole, it finds them by the dark spots they make every 4 mm (the pocket
+is then found along the tape, and across it stays where the strip was taught). Where no holes are found, center the
 camera on a part in the pick pocket and click **Pick is here** (Feeders workspace). Tape
 with an 8 mm pitch has a pocket at every second hole: check a part, not a gap, sits at the
 pick point, and if not, move the tape on one hole.

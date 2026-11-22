@@ -11,6 +11,7 @@ import pytest
 from picnicplace.camera.source import Image
 from picnicplace.feeders.pocket import choose_pocket, pocket_choices, pocket_from_holes
 from picnicplace.vision.fiducial import find_circles, find_rims
+from picnicplace.vision.sprockets import find_hole_rhythm
 from picnicplace.vision.tape import holds_part, loose_parts, pocket_darkness, pocket_ends
 
 FRAMES = Path(__file__).parent / "data" / "vision"
@@ -222,3 +223,41 @@ def test_holes_in_black_tape_are_not_seen_as_round_marks(name: str) -> None:
     mm, (u, _) = BLACK_MM_PER_PX, BLACK_PICK
     marks = find_circles(image, HOLE * 0.7 / mm, HOLE * 1.3 / mm)
     assert len([c for c in marks if abs((u - c.x) * mm - BLACK_LINE) < 1.0]) < 2
+
+
+STRIP_LINE = (600.0, 540.0)
+"""The hole line runs down the middle of the strip frames (column 600), the camera
+centered on it there."""
+
+
+@pytest.mark.parametrize(
+    ("name", "first"),
+    [
+        # Where the holes are, mm down the picture from the frame's middle (judged: the
+        # holes' halves that show).
+        ("strip-half-holes", -2.04),
+        ("strip-half-holes-led", -2.0),
+    ],
+)
+def test_half_covered_holes_are_found_by_their_rhythm(name: str, first: float) -> None:
+    """Black tape in strips whose holder's rail covers half of every hole: the holes are
+    neither round marks nor much of a rim, but darken the hole line every 4 mm."""
+    image = _frame(name)
+    mm = BLACK_MM_PER_PX
+    holes = find_hole_rhythm(image, STRIP_LINE, 90.0, PITCH / mm, HOLE / mm, 0.6 / mm, 0.3 / mm)
+    assert len(holes) >= 2
+    for hole in holes:
+        off = (hole.along * mm - first + PITCH / 2) % PITCH - PITCH / 2
+        assert abs(off) < 0.2, (holes, off)
+    line = [c for c in find_circles(image, 1.05 / mm, 1.95 / mm) if abs(c.x - STRIP_LINE[0]) < 95]
+    rims = [c for c in find_rims(image, HOLE / mm, 0.6 * PITCH / mm) if abs(c.x - 600) < 95]
+    assert len(line) < 2 and len(rims) < 2
+
+
+def test_no_rhythm_where_there_are_no_holes() -> None:
+    """The other side of a strip: its holder, the part, and the bed beside it."""
+    image = _frame("strip-holder-side")
+    mm = BLACK_MM_PER_PX
+    assert (
+        find_hole_rhythm(image, STRIP_LINE, 90.0, PITCH / mm, HOLE / mm, 0.6 / mm, 0.3 / mm) == []
+    )

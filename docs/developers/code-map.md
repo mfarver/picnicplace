@@ -155,6 +155,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | Module | What it does |
 |---|---|
 | `camera/` | Camera sources (`device.py` for real cameras, `synthetic.py` for the simulator's rendered views), a hub per camera that shares frames among viewers, and `v4l2.py`, which asks a Linux camera what formats, sizes, and frame rates it can send (for the probe) |
+| `vision/sprockets.py` | Finds sprocket holes by their rhythm along the hole line, for holes half covered by a strip holder's rail |
 | `vision/fiducial.py` | Finds round marks: homing and board fiducials, feeder fiducials, sprocket holes (by their rims, where they do not stand out) |
 | `vision/tape.py` | Paper tape: whether a pocket holds a part, and parts lying loose on the tape |
 | `vision/part.py` | The metal mask (bright, not yellowish plastic, no specks), and one box around everything bright about the nozzle: the part's outline, which bottom vision finds first |

@@ -414,6 +414,33 @@ def test_holes_not_seen_as_round_marks_are_found_by_their_rims(
         assert pocket["across"] == pytest.approx(0.0, abs=0.05)
 
 
+def test_holes_neither_marks_nor_rims_are_found_by_their_rhythm(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A strip holder's rail over half of each hole on a real machine: no round marks, no
+    rims, but the hole line darkens every 4 mm. The pocket is found along the tape from
+    that; across, it stays where the setup says."""
+    with connect(lumen) as s:
+        s.home()
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+
+        async def nothing(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        monkeypatch.setattr(machine, "locate_circles", nothing)
+        monkeypatch.setattr(machine, "locate_rims", nothing)
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        pick = true_pick(slot_state(s, "26"))
+        s.put("/api/v1/feeders/slots/26/pick", {"at": {"x": pick.x, "y": pick.y}})
+        for _ in range(10):
+            succeeded(s.wait(s.post("/api/v1/feeders/slots/26/feed", {})))
+        op = succeeded(s.wait(s.post("/api/v1/feeders/slots/26/pocket")))
+        assert "(from 1 " not in op["message"], op
+        pocket = slot_state(s, "26")["pocket"]
+        assert pocket["along"] == pytest.approx(0.4, abs=0.1), op
+        assert pocket["across"] == 0.0
+
+
 def test_one_rim_alone_is_not_taken_for_a_hole(
     lumen: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -436,8 +463,13 @@ def test_one_rim_alone_is_not_taken_for_a_hole(
             off = rotate(Point(x=2.0, y=3.5), rotation)
             return [Point(x=here.x + off.x, y=here.y + off.y)]
 
+        async def no_rhythm(*args: Any, **kwargs: Any) -> list[float]:
+            return []
+
         monkeypatch.setattr(machine, "locate_circles", no_marks)
         monkeypatch.setattr(machine, "locate_rims", one_rim)
+        feeders = lumen.app.state.ctx.feeders  # type: ignore[attr-defined]
+        monkeypatch.setattr(feeders, "_holes_by_rhythm", no_rhythm)
         op = s.wait(s.post("/api/v1/feeders/slots/26/pocket"))
         assert op["status"] == "failed"
         assert "no sprocket holes found" in op["error"]

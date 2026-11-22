@@ -441,6 +441,31 @@ def test_holes_neither_marks_nor_rims_are_found_by_their_rhythm(
         assert pocket["across"] == 0.0
 
 
+def test_a_rhythm_may_only_nudge_the_pocket(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Holes found by their rhythm are the weakest evidence: along a strip holder's rail a
+    real machine found a rhythm that would have moved the pocket 1 mm. One that far off is
+    not used."""
+    with connect(lumen) as s:
+        s.home()
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+        feeders = lumen.app.state.ctx.feeders  # type: ignore[attr-defined]
+
+        async def nothing(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        async def off_by_1mm(*args: Any, **kwargs: Any) -> list[float]:
+            return [-1.0, 3.0]  # a pocket 1 mm along from the pick location
+
+        monkeypatch.setattr(machine, "locate_circles", nothing)
+        monkeypatch.setattr(machine, "locate_rims", nothing)
+        monkeypatch.setattr(feeders, "_holes_by_rhythm", off_by_1mm)
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        op = s.wait(s.post("/api/v1/feeders/slots/26/pocket"))
+        assert op["status"] == "failed" and "no sprocket holes found" in op["error"], op
+
+
 def test_one_rim_alone_is_not_taken_for_a_hole(
     lumen: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

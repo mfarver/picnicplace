@@ -23,7 +23,12 @@ from picnicplace.camera.source import Image
 MIN_DEPTH = 20.0
 """A dip is a hole if it is this much darker (of 255, with the frame's contrast evened
 out) than the tape halfway to the next hole. On real frames holes were 30 to 190 darker;
-where there were none, the deepest single dip was 16 (except other tapes' holes)."""
+where there were none, the deepest single dip was 16 (except other tapes' holes), but a
+holder's rail gave two of 22 and 25: see ``CLEAR``."""
+CLEAR = 2.5
+"""...and this many times as deep as the line's brightness usually varies away from the
+holes (its median absolute deviation): a holder's machined metal rail, where there were no
+holes, gave dips of 22 and 25 that were 2.1 times its variation; holes were 3.1 to 45."""
 EVEN = 0.6
 """The holes found must be about as dark as one another: the faintest at least this
 fraction as deep as the deepest."""
@@ -109,4 +114,12 @@ def find_hole_rhythm(
             holes.append(RhythmHole(float(x), depth))
     if len(holes) < MIN_HOLES or min(x.depth for x in holes) < EVEN * max(x.depth for x in holes):
         return []
+    away = np.ones_like(along, dtype=bool)
+    for hole in holes:
+        away &= np.abs(along - hole.along) > hole_px * 2 / 3
+    rest = profile[away]
+    if len(rest):
+        spread = float(np.median(np.abs(rest - np.median(rest))))
+        if min(x.depth for x in holes) < CLEAR * spread:
+            return []
     return holes

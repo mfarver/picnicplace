@@ -254,10 +254,19 @@ def test_half_covered_holes_are_found_by_their_rhythm(name: str, first: float) -
     assert len(line) < 2 and len(rims) < 2
 
 
-def test_no_rhythm_where_there_are_no_holes() -> None:
+@pytest.mark.parametrize(
+    ("name", "line", "angle"),
+    [
+        ("strip-holder-side", STRIP_LINE, 90.0),
+        # Along a holder's machined rail, which darkens here and there.
+        ("strip-rail", (599.75, 539.83), 88.21),
+    ],
+)
+def test_no_rhythm_where_there_are_no_holes(
+    name: str, line: tuple[float, float], angle: float
+) -> None:
     """The other side of a strip: its holder, the part, and the bed beside it."""
-    image = _frame("strip-holder-side")
+    image = _frame(name)
     mm = BLACK_MM_PER_PX
-    assert (
-        find_hole_rhythm(image, STRIP_LINE, 90.0, PITCH / mm, HOLE / mm, 0.6 / mm, 0.3 / mm) == []
-    )
+    holes = find_hole_rhythm(image, line, angle, PITCH / mm, HOLE / mm, 0.6 / mm, 0.3 / mm)
+    assert holes == []

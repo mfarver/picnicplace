@@ -83,6 +83,8 @@ RHYTHM_SEARCH_MM = 0.6
 be: no further, as another tape's holes may lie beyond."""
 RHYTHM_BAND_MM = 0.3
 """...in bands this wide along the line."""
+RHYTHM_MAX_SHIFT_MM = 0.75
+"""Holes found by their rhythm may move the pocket no further than this along the tape."""
 MIN_HOLES = 2
 """Sprocket holes found as round marks, fewer than this, are looked for again by their
 rims: one hole alone may be something else on the hole line."""
@@ -1448,7 +1450,13 @@ class FeederService:
             # Holes half covered by a strip holder's rail: their rhythm along the line.
             along = await self._holes_by_rhythm(pick, rotation, line)
             by_rhythm = pocket_from_holes([(s, line) for s in along], line, pitch)
-            if by_rhythm is not None and (fix is None or by_rhythm.holes > fix.holes):
+            # The weakest evidence: it may only nudge the pocket (a holder's rail gave a
+            # rhythm 1 mm off; real strips needed under 0.1 mm).
+            if (
+                by_rhythm is not None
+                and abs(by_rhythm.along) <= RHYTHM_MAX_SHIFT_MM
+                and (fix is None or by_rhythm.holes > fix.holes)
+            ):
                 fix = by_rhythm
                 seen = [
                     Point(x=pick.x + q.x, y=pick.y + q.y)

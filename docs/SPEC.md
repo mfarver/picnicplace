@@ -666,7 +666,9 @@ correction. Implementations:
     in narrow bands along the hole line, up to 0.6 mm either side of it, the band darkening
     most strongly every sprocket pitch is the one through the holes, and each dip at least
     20 levels (of 255) darker than the tape halfway to the next is a hole, if the holes
-    found are about as dark as one another. That finds holes half covered by a strip
+    found are about as dark as one another and clear of how much the line's brightness
+    varies elsewhere (a holder's machined rail darkened twice a pitch apart). As the
+    weakest evidence, it may move the pocket no more than 0.75 mm. That finds holes half covered by a strip
     holder's rail (two real strips), but only along the tape: across, the pocket stays
     where the strip was taught. A strip's first and last parts must be taught the way its
     tape feeds (the first is the part a feeder would bring to the pick first), which puts

@@ -15,7 +15,9 @@ Kept in the data directory as ``feeders.json``:
 - what the bottom camera has learned of each feeder's picks: how far its parts really
   lie from where the rest of the setup says, and how far off center its picks have been;
 - the top of the parts in each feeder, strip, and tray, found by sniffing on the first
-  pick from it (kept with that feeder and part).
+  pick from it (kept with that feeder and part);
+- how many parts are left on each Photon feeder's reel, if counted, and the level to warn
+  the operator at (kept with the feeder, as its reel goes with it).
 """
 
 import math
@@ -112,6 +114,19 @@ class FeederAssignment(_Model):
     )
     enabled: bool = True
     note: str = ""
+    reel_left: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Parts left on the reel, counted down by each feed; empty: not counted. Set with "
+            "the feeder's reel route, from the reel's label when it is loaded."
+        ),
+    )
+    reel_low: int | None = Field(
+        default=None,
+        ge=0,
+        description="Warn the operator once this many parts or fewer are left; empty: never.",
+    )
 
 
 class SlotCalibration(_Model):

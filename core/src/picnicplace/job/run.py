@@ -519,6 +519,32 @@ def _source(slot_id: str) -> str:
     return f"slot {slot_id}" if slot_id.isdigit() else slot_id
 
 
+def short_reels(items: list[RunItem], feeders: FeedersState) -> list[Issue]:
+    """A warning for each feeder whose reel, as counted, has fewer parts left than the
+    placements planned from it."""
+    needed: dict[str, int] = {}
+    for item in items:
+        if item.status == "pending" and item.slot_id is not None:
+            needed[item.slot_id] = needed.get(item.slot_id, 0) + 1
+    issues: list[Issue] = []
+    for s in feeders.slots:
+        a = s.feeder.assignment if s.feeder else None
+        n = needed.get(s.slot.id, 0)
+        if a is None or a.reel_left is None or n <= a.reel_left:
+            continue
+        issues.append(
+            Issue(
+                severity="warning",
+                message=(
+                    f"{s.slot.label}'s reel of {a.part_id} has {a.reel_left} parts left by its "
+                    f"count, and the job places {n} from it: load a fuller reel, or splice on "
+                    "more and set its count (Feeders workspace)"
+                ),
+            )
+        )
+    return issues
+
+
 def blocked_issues(items: list[RunItem]) -> list[Issue]:
     """One issue per reason placements are blocked, naming the placements it affects."""
     blocked: dict[str, list[RunItem]] = {}
@@ -686,6 +712,7 @@ def plan_job(
         item.index = n
 
     issues += blocked_issues(items)
+    issues += short_reels(items, feeders)
 
     def key(i: RunItem) -> str:
         return i.ref + (i.copy_id or "")

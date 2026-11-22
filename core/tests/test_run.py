@@ -315,6 +315,51 @@ def test_a_part_loaded_while_paused_is_placed_on_resume(lumen: TestClient) -> No
         assert check_landed(lumen, run) == 4
 
 
+def test_a_reel_is_counted_down_by_each_feed(lumen: TestClient) -> None:
+    """A Photon feeder's reel count, from its label, goes down by one part each feed (and
+    up for a feed back), is kept while the feeder holds the same part, and is warned of
+    in the plan when it has fewer parts left than the job places from it."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        slot = next(
+            x for x in s.client.get("/api/v1/feeders").json()["slots"] if x["slot"]["id"] == "2"
+        )
+        uuid = slot["feeder"]["uuid"]
+
+        r = s.put(f"/api/v1/feeders/assignments/{uuid}/reel", {"left": 1, "low": 1})
+        assert r.status_code == 200, r.json()
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        short = [i for i in plan["issues"] if "reel of EX-R0603-10K" in i["message"]]
+        assert len(short) == 1 and short[0]["severity"] == "warning", plan["issues"]
+        assert "has 1 parts left by its count, and the job places 2" in short[0]["message"]
+
+        assert s.put(f"/api/v1/feeders/assignments/{uuid}/reel", {"left": 5, "low": 3}).is_success
+        feed = "/api/v1/feeders/slots/2/feed"
+        for _ in range(2):
+            ok(s.wait(s.post(feed, {})))
+
+        def reel() -> tuple[int | None, int | None]:
+            slots = s.client.get("/api/v1/feeders").json()["slots"]
+            a = next(x for x in slots if x["slot"]["id"] == "2")["feeder"]["assignment"]
+            return a["reel_left"], a["reel_low"]
+
+        assert reel() == (3, 3)
+        ok(s.wait(s.post(feed, {"distance": -4.0})))
+        assert reel() == (4, 3)
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        assert not [i for i in plan["issues"] if "reel of" in i["message"]]
+
+        # Saving the same part keeps the count; another part is another reel.
+        body = {"part_id": "EX-R0603-10K"}
+        assert s.put(f"/api/v1/feeders/assignments/{uuid}", body).is_success
+        assert reel() == (4, 3)
+        assert s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": "EX-R0603-1K"}).is_success
+        assert reel() == (None, None)
+        assert s.put(f"/api/v1/feeders/assignments/{uuid}", {"part_id": None}).is_success
+        r = s.put(f"/api/v1/feeders/assignments/{uuid}/reel", {"left": 5})
+        assert r.status_code == 422 and "holds no part" in r.json()["detail"], r.json()
+
+
 def test_start_in_step_mode(lumen: TestClient) -> None:
     """Started in step mode, the run finds the board and pauses before the first part;
     each step places one batch, and resume places the rest."""

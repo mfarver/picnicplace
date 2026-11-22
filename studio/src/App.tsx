@@ -4,6 +4,7 @@ import { useCore } from "./api/core";
 import { useCoreCompatibility } from "./api/version";
 import { VersionBanner } from "./components/ErrorScreen";
 import { MachineAsks } from "./components/MachineAsks";
+import { ReelAlerts } from "./components/ReelAlerts";
 import { Placeholder } from "./components/Placeholder";
 import { Splash } from "./components/Splash";
 import { StatusBar } from "./components/StatusBar";
@@ -85,6 +86,7 @@ export function App() {
       <main className="main">{workspace.render()}</main>
       <StatusBar />
       {status === "open" && <MachineAsks />}
+      {status === "open" && <ReelAlerts />}
       {status === "unauthorized" && <TokenPrompt />}
       <Splash />
     </div>

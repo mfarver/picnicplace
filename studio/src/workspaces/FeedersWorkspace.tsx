@@ -215,6 +215,13 @@ export function FeedersWorkspace() {
     if (data) {
       await refresh();
       setNotice(`${id}: taught at the camera's position.`);
+      // A strip's last part says which way its tape feeds: check its sprocket holes are on
+      // that side, so one taught the wrong way round is caught now, not in a run.
+      if (which === "row_end" && data.feeder.kind === "strip" && data.feeder.rows === 1) {
+        void track(() =>
+          api.POST("/api/v1/feeders/fixed/{fixed_id}/check-holes", fixedPath(id)),
+        );
+      }
     }
   };
   const findStripPocket = (id: string) =>

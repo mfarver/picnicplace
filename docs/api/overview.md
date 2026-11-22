@@ -95,6 +95,7 @@ generate a client from it, as the Studio does.
 | `POST /api/v1/feeders/fixed`; `PUT`, `DELETE …/fixed/{id}` | Strips and trays held on the bed (T1, T2, ...): add, change, remove |
 | `PUT /api/v1/feeders/fixed/{id}/teach` | Teach a strip or tray's first part, end of its first row, or last part (at the camera) |
 | `POST /api/v1/feeders/fixed/{id}/refill`, `…/pocket` | Mark it refilled; find a strip's next pocket from its sprocket holes |
+| `POST /api/v1/feeders/fixed/{id}/check-holes` | Check a strip was taught the way its tape feeds: its sprocket holes beside its last part, on the side its first and last parts say (fails if they are on the other side). The Studio runs it after **Last part** |
 | `GET`, `POST /api/v1/recordings`; `POST …/stop` | Flight recordings: list them, start one, stop it |
 | `GET /api/v1/recordings/{id}/download`; `DELETE …/{id}` | One recording as a zip file; delete it |
 | `DELETE /api/v1/feeders/learned/{id}` | Forget what the bottom camera learned of a slot's, strip's, or tray's picks |

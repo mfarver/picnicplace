@@ -268,8 +268,11 @@ effect at once. The reset button next to one forgets it.
       part and click **First part**, then on the last part and click **Last part** (on a
       tray, also the end of the first row). On a strip whose tape's pitch the library
       gives, **Last part** also counts its parts, refusing if the two parts are not a whole
-      number of pockets apart. On a strip, **Find pocket** should land on
-      the next part. The map shows how many parts each one has left, and, once the part
+      number of pockets apart. On a strip, the first part must be the one at the end its
+      tape feeds from (the part a feeder would bring to the pick first), so its sprocket
+      holes are on the side PicnicPlace expects; after **Last part** the camera checks
+      they are, and says if the strip was taught the wrong way round. On a strip,
+      **Find pocket** should land on the next part. The map shows how many parts each one has left, and, once the part
       has a footprint (and, on a strip, its tape), draws them to scale: a strip's tape at
       its width with its sprocket holes, and each part's footprint as it lies, pin 1's pad
       and corner in red. Compare it with the top camera's view of the first part.

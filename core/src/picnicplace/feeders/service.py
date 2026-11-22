@@ -332,9 +332,6 @@ class FeederService:
         self._errors: dict[str, str] = {}
         self._scanned = False
         self._pockets: dict[str, PocketCheck] = {}
-        self._strips_turned: set[str] = set()
-        """Strips whose sprocket holes were found on the other side from the one their
-        pick order says (laid the other way round), until the core restarts."""
 
         self._sim = simulated
         self._sim_full: dict[int, bool] = {}
@@ -1261,30 +1258,68 @@ class FeederService:
         pitch = math.hypot(f.step.x, f.step.y) or DEFAULT_PITCH
         line = _pocket_line_for(width)
         direction = _strip_direction(f)
-        turned = fixed_id in self._strips_turned
-
-        async def look(turn: bool) -> PocketCheck:
-            # Look at the holes: on wide tape they are out of view from the pocket. A
-            # strip laid the other way round has them on the other side, with the pockets
-            # in the same places (each pocket is halfway between two holes).
-            return await self._find_pocket(
-                self.fixed_label(fixed_id),
-                at,
-                direction + (180.0 if turn else 0.0),
-                line,
-                pitch,
-                look_across=line,
-                body=self._paper_body(self.fixed_part(f)),
-            )
-
-        try:
-            check = await look(turned)
-        except NoSprocketHolesError:
-            check = await look(not turned)
-            self._strips_turned.symmetric_difference_update({fixed_id})
+        # Look at the holes: on wide tape they are out of view from the pocket.
+        check = await self._find_pocket(
+            self.fixed_label(fixed_id),
+            at,
+            direction,
+            line,
+            pitch,
+            look_across=line,
+            body=self._paper_body(self.fixed_part(f)),
+        )
         check = self._with_outline(check, self.fixed_part(f), direction)
         self._pockets[fixed_id] = check
         return check
+
+    async def check_strip_holes(self, fixed_id: str) -> str:
+        """Check a strip was taught the way its tape feeds: its sprocket holes beside its
+        last part, on the side its first and last parts say. If none are there but there
+        are on the other side, it was taught the wrong way round (that side is only looked
+        at to say so: a neighboring strip's holes may lie there). For use inside a machine
+        task; the camera ends over its last part."""
+        f = self.fixed(fixed_id)
+        if f.kind != "strip":
+            raise InvalidTargetError(f"{fixed_id} is a tray: trays have no sprocket holes")
+        label = self.fixed_label(fixed_id)
+        last = f.position(f.capacity - 1)
+        tape = self.tape_of(self.fixed_part(f))
+        width = tape.width if tape and tape.width else 8.0
+        pitch = math.hypot(f.step.x, f.step.y) or DEFAULT_PITCH
+        line = _pocket_line_for(width)
+        direction = _strip_direction(f)
+        try:
+            check = await self._find_pocket(label, last, direction, line, pitch, look_across=line)
+            message = (
+                f"{label}: sprocket holes found beside its last part, on the side its first "
+                f"and last parts say ({check.holes} holes): taught the way its tape feeds."
+            )
+        except NoSprocketHolesError:
+            try:
+                await self._find_pocket(
+                    label, last, direction + 180.0, line, pitch, look_across=line
+                )
+            except NoSprocketHolesError:
+                await self._machine.move_camera_to(last.x, last.y)
+                return (
+                    f"{label}: no sprocket holes seen beside its last part on either side: "
+                    "check by eye that its first part is at the end its tape feeds from."
+                )
+            await self._machine.move_camera_to(last.x, last.y)
+            raise FeederError(
+                f"{label}: its sprocket holes are on the other side from the one its first "
+                "and last parts say: it was taught the wrong way round. Teach its first part "
+                "at the other end (the end its tape feeds from: the part a feeder would bring "
+                "to the pick first), then its last part again."
+            ) from None
+        await self._machine.move_camera_to(last.x, last.y)
+        return message
+
+    def start_check_strip_holes(self, fixed_id: str) -> Operation:
+        f = self.fixed(fixed_id)
+        if f.kind != "strip":
+            raise InvalidTargetError(f"{fixed_id} is a tray: trays have no sprocket holes")
+        return self._machine.start_task("feeder_pocket", lambda: self.check_strip_holes(fixed_id))
 
     def start_locate_strip_pocket(self, fixed_id: str) -> Operation:
         f = self.fixed(fixed_id)

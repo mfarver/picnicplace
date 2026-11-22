@@ -328,6 +328,19 @@ async def locate_strip_pocket(feeders: Feeders, fixed_id: str) -> Operation:
     return feeders.start_locate_strip_pocket(fixed_id)
 
 
+@router.post(
+    "/feeders/fixed/{fixed_id}/check-holes",
+    tags=["feeders"],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=MACHINE_ERRORS,
+    dependencies=[Depends(require_control)],
+)
+async def check_strip_holes(feeders: Feeders, fixed_id: str) -> Operation:
+    """Check a strip was taught the way its tape feeds: its sprocket holes beside its last
+    part, on the side its first and last parts say. Fails if they are on the other side."""
+    return feeders.start_check_strip_holes(fixed_id)
+
+
 def _check_feeder_id(feeder_id: str) -> None:
     try:
         parse_uuid(feeder_id)

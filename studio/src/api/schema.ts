@@ -268,6 +268,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/feeders/fixed/{fixed_id}/check-holes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Strip Holes
+         * @description Check a strip was taught the way its tape feeds: its sprocket holes beside its last
+         *     part, on the side its first and last parts say. Fails if they are on the other side.
+         */
+        post: operations["check_strip_holes_api_v1_feeders_fixed__fixed_id__check_holes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/feeders/fixed/{fixed_id}/pocket": {
         parameters: {
             query?: never;
@@ -7103,6 +7124,49 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeedersState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_strip_holes_api_v1_feeders_fixed__fixed_id__check_holes_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                fixed_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
                 };
             };
             /** @description The machine cannot do this right now, or this client does not hold the control lease. */

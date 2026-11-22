@@ -668,11 +668,14 @@ correction. Implementations:
     20 levels (of 255) darker than the tape halfway to the next is a hole, if the holes
     found are about as dark as one another. That finds holes half covered by a strip
     holder's rail (two real strips), but only along the tape: across, the pocket stays
-    where the strip was taught. A strip's holes are looked for on the side its pick
-    order says, and, if none are there, on the other (a strip laid the other way round, as
-    one was on a real machine), that side then remembered until the core restarts. Where
-    no holes can be seen at all, the pick goes where the feeder's setup or the strip's
-    teaching says, and the bottom camera finds the part on the nozzle as for every pick.
+    where the strip was taught. A strip's first and last parts must be taught the way its
+    tape feeds (the first is the part a feeder would bring to the pick first), which puts
+    its holes on a known side; once its last part is taught, the top camera checks they are
+    there, and says so if they are on the other side instead (one real strip was taught the
+    wrong way round). Holes are never looked for on the other side to pick: another strip's
+    holes may lie there. Where no holes can be seen at all, the pick goes where the
+    feeder's setup or the strip's teaching says, and the bottom camera finds the part on
+    the nozzle as for every pick.
   - In paper tape, with the part's body known from its footprint, the same picture also
     says whether the pocket holds a part, and whether any part lies loose on the tape (as
     0603 resistors did on a real LumenPnP, jumping out as the cover tape was peeled). A

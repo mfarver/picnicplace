@@ -123,6 +123,8 @@ class TapeScene:
     """Smaller marks beside the fiducial (a Photon feeder's width code)."""
     feeder_ahead: float = 8.0
     """How far the feeder reaches past the pick location."""
+    tape_ahead: float = 6.0
+    """How far the tape reaches past the pick location: a cut strip's end."""
     feeder_center: float = 0.0
     """Where the middle of the feeder is across the tape, from the pocket line."""
     window: tuple[float, float, float, float] | None = None
@@ -425,7 +427,7 @@ def _tape(c: _Canvas, img: Image, t: TapeScene) -> None:
     holes_line = t.pocket_line
     edge = holes_line + SPROCKET_EDGE
     length = t.feeder_length * 0.8
-    tx, ty = at(6 - length / 2, edge - t.width / 2)
+    tx, ty = at(t.tape_ahead - length / 2, edge - t.width / 2)
     c.rect(img, tx, ty, length, t.width, t.rotation, TAPE)
 
     hole_phase = t.advance % SPROCKET_PITCH
@@ -433,6 +435,8 @@ def _tape(c: _Canvas, img: Image, t: TapeScene) -> None:
         # EIA-481: a pocket is 2 mm along the tape from a sprocket hole.
         s = 6 - k * SPROCKET_PITCH + hole_phase
         hx, hy = at(s, holes_line)
+        if s + 0.75 > t.tape_ahead:
+            continue  # past the strip's end, or cut through by it
         if c.visible(hx, hy, 2):
             c.circle(img, hx, hy, 0.75, BED)
 
@@ -447,7 +451,7 @@ def _tape(c: _Canvas, img: Image, t: TapeScene) -> None:
     pick_s = phase if phase <= t.pitch / 2 else phase - t.pitch
     for k in range(-1, int(length // t.pitch) + 1):
         s = pick_s - k * t.pitch
-        if s > 5:
+        if s > t.tape_ahead - 1:
             continue
         qx, qy = at(s, 0)
         if not c.visible(qx, qy, max(pocket) + 1):

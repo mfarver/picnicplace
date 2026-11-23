@@ -323,6 +323,21 @@ class JobPlan(WireModel):
     parts: list[PartNeed]
     fiducials: int = Field(description="Fiducials the run will look for.")
     issues: list[Issue]
+    nozzles: list[str] = Field(
+        default_factory=list[str], description="The machine's nozzles, in the profile's order."
+    )
+    taken: list[int] = Field(
+        default_factory=list[int],
+        description="Items in the order the run took them onto a nozzle (empty until it runs).",
+    )
+
+    @computed_field
+    @property
+    def order(self) -> list[int]:
+        """Every item, in the order the run deals with them: those it has taken onto a
+        nozzle, as it took them; then the rest to place, batch by batch as the run will
+        take them if every part goes on as planned; then those it will not place."""
+        return processing_order(self.items, self.nozzles, self.taken)
 
     @computed_field
     @property
@@ -335,6 +350,47 @@ class JobPlan(WireModel):
     def runnable(self) -> bool:
         """The run can start, placing what it can and skipping what is blocked."""
         return not any(i.severity == "error" and i.ref is None for i in self.issues)
+
+
+def fill_batch(pending: list[RunItem], nozzles: list[str], batch: dict[str, int]) -> dict[str, int]:
+    """Give each free nozzle the first of ``pending`` it can take, in order; a nozzle that
+    some items can use alone goes to those, if they come up. ``batch`` (nozzle ID to item
+    index) is filled in place and returned."""
+    only = {n: sum(1 for i in pending if i.nozzles == [n]) for n in nozzles}
+    for item in pending:
+        if len(batch) >= len(nozzles):
+            break
+        free = [n for n in item.nozzles if n not in batch]
+        if not free:
+            continue
+        batch[min(free, key=lambda n: only.get(n, 0))] = item.index
+    return batch
+
+
+def processing_order(items: list[RunItem], nozzles: list[str], taken: list[int]) -> list[int]:
+    """Item indices in the order a run deals with them (see ``JobPlan.order``)."""
+    order: list[int] = []
+    seen: set[int] = set()
+    for index in taken:
+        if 0 <= index < len(items) and index not in seen:
+            order.append(index)
+            seen.add(index)
+    # Dealt with but not in ``taken`` (a run kept before it was): next, in plan order.
+    for i in items:
+        if i.status in ("placed", "failed") and i.index not in seen:
+            order.append(i.index)
+            seen.add(i.index)
+    nozzles = nozzles or sorted({n for i in items for n in i.nozzles})
+    rest = [i for i in items if i.status == "pending" and i.index not in seen]
+    while rest:
+        batch = fill_batch(rest, nozzles, {})
+        if not batch:
+            break
+        order += batch.values()
+        seen.update(batch.values())
+        rest = [i for i in rest if i.index not in seen]
+    order += [i.index for i in items if i.index not in seen]
+    return order
 
 
 RunStatus = Literal["running", "paused", "finished", "stopped"]
@@ -885,6 +941,7 @@ def plan_job(
         parts=sorted(needs.values(), key=lambda n: (n.problem is None, n.part_id or "")),
         fiducials=len(chosen),
         issues=issues,
+        nozzles=[n.id for n in profile.nozzles],
     )
 
 
@@ -1674,15 +1731,11 @@ class JobRunner:
                 batch[nozzle_id] = index
         busy = set(run.held.values())
         pending = [i for i in run.plan.items if i.status == "pending" and i.index not in busy]
-        # Nozzles that some pending items can use alone go to those, if they come up.
-        only = {n: sum(1 for i in pending if i.nozzles == [n]) for n in nozzles}
-        for item in pending:
-            free = [n for n in item.nozzles if n not in batch]
-            if not free:
-                continue
-            batch[min(free, key=lambda n: only.get(n, 0))] = item.index
-            if len(batch) == len(nozzles):
-                break
+        fill_batch(pending, nozzles, batch)
+        # Kept in the order taken, for the Studio's list (``JobPlan.order``).
+        for index in batch.values():
+            if index not in run.plan.taken:
+                run.plan.taken.append(index)
         return batch
 
     async def _do_batch(self, run: RunState, batch: dict[str, int]) -> None:

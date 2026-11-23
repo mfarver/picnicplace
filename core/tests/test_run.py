@@ -407,9 +407,13 @@ def test_start_in_step_mode(lumen: TestClient) -> None:
 def test_run_a_job(lumen: TestClient) -> None:
     with connect(lumen) as s:
         set_up(lumen, s)
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
         op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
         run = lumen.get("/api/v1/run").json()
+        # The run took its parts in the order the plan said it would, and lists them so.
+        pending = [i for i in plan["order"] if plan["items"][i]["status"] == "pending"]
+        assert run["plan"]["taken"] == pending and run["plan"]["order"][:4] == pending
         assert run["status"] == "finished" and run["placed"] == 4
         fix = run["fix"]
         assert len(fix["fiducials"]) == 3 and fix["residual"] < 0.05

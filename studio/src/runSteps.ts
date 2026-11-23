@@ -175,6 +175,25 @@ export function runSteps(
   return rows;
 }
 
+/** The items in the order the run deals with them (the plan's ``order``): taken onto a
+ * nozzle, then batch by batch, then those it will not place. Any the order leaves out go
+ * last, in the plan's order. */
+export function inOrder(items: RunItem[], order?: number[]): RunItem[] {
+  if (!order?.length) return items;
+  const byIndex = new Map(items.map((i) => [i.index, i]));
+  const seen = new Set<number>();
+  const out: RunItem[] = [];
+  for (const n of order) {
+    const item = byIndex.get(n);
+    if (item && !seen.has(n)) {
+      out.push(item);
+      seen.add(n);
+    }
+  }
+  for (const item of items) if (!seen.has(item.index)) out.push(item);
+  return out;
+}
+
 /** The row to keep in view: the current step, else the next one to do, else the end. */
 export function focusIndex(rows: RunStepRow[]): number {
   const current = rows.findIndex((r) => r.current);

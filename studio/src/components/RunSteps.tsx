@@ -9,19 +9,21 @@ import {
   SkipForward,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { mediaUrl } from "../api/client";
 import type { RunItem, RunState } from "../api/types";
-import { focusIndex, padsMoved, runSteps, type RunStepRow } from "../runSteps";
+import { focusIndex, inOrder, padsMoved, runSteps, type RunStepRow } from "../runSteps";
 
 /**
  * A run's steps as a checklist, from the moment it is planned: each one checked off as
  * it is done, and the one under way highlighted (or, when a problem paused the run, the
- * one it stopped at). With ``around``, only that many steps either side of the current
- * one are shown.
+ * one it stopped at). Placements are listed in the order the run deals with them
+ * (``order``, the plan's), so the highlight moves steadily down. With ``around``, only
+ * that many steps either side of the current one are shown.
  */
 export function RunSteps({
   items,
+  order,
   run,
   fiducials,
   hasBus,
@@ -34,6 +36,8 @@ export function RunSteps({
   canLook = false,
 }: {
   items: RunItem[];
+  /** Item indices in the order the run deals with them (the plan's ``order``). */
+  order?: number[];
   /** The run of this job, if one has been started. */
   run: RunState | null;
   fiducials: number;
@@ -50,7 +54,8 @@ export function RunSteps({
   looking?: number | null;
   canLook?: boolean;
 }) {
-  const all = runSteps(items, run, fiducials, hasBus);
+  const ordered = useMemo(() => inOrder(items, order), [items, order]);
+  const all = runSteps(ordered, run, fiducials, hasBus);
   const focus = focusIndex(all);
   const rows = around === undefined ? all : windowAround(all, focus, around);
   const list = useRef<HTMLOListElement>(null);

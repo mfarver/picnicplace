@@ -278,7 +278,8 @@ area = { x_min = 197.5, y_min = 188, x_max = 237.5, y_max = 204 }
 # found from its feeder's fiducial.
 #
 # Feeder geometry is from Opulo's Photon feeder design (8 mm assembly; the 12 mm one
-# shares the nose): the frame is 137 mm long plus the peel gears, 15 mm wide, and
+# shares the nose and its fiducial's place; the pick locations here are for 8 mm tape):
+# the frame is 137 mm long plus the peel gears, 15 mm wide, and
 # reaches 27.3 mm past the pick location (the middle of its 12.75 mm pick window). Its
 # noses on the front rail reach over the camera plate's front edge, so boards cannot go
 # there. A small board on the nose carries a 1.0 mm fiducial in a 2 mm mask opening,

@@ -551,6 +551,8 @@ not finished: it starts the board over.
 **Skip after a pick fails, not while it is failing.** A part skipped while its pick was
 still being tried could not be put back.
 
-**Keep the Studio in front.** A Studio tab in the background can miss its heartbeat, and
-the core then stops the move under way. `heartbeat_timeout_s` under `[presence]` in the
-config gives it longer.
+**Keep the Studio open and awake.** The Studio sends its heartbeat from a background
+worker, which browsers do not slow down in a hidden tab, so it may sit behind other tabs.
+But a laptop that sleeps, a closed lid, or a dropped network misses heartbeats, and the
+core then stops the move under way. `heartbeat_timeout_s` under `[presence]` in the config
+gives it longer.

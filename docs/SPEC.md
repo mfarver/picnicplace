@@ -232,6 +232,9 @@ shows Python cannot hold target throughput.
 
 - **Presence** means at least one authenticated client has an open WebSocket on
   `/api/v1/events` and is answering heartbeats. One-shot REST calls do not count.
+  The Studio's heartbeat comes from a dedicated worker, because browsers slow a hidden
+  tab's own timers (Chrome to once a minute) far below the heartbeat timeout; on a real
+  run (2026-11-20), the Studio twice missed its heartbeat and the machine stopped mid-move.
   Observer clients count; the point is that a person can see the machine.
 - **Manual motion** (jog, move, actuators) is allowed only from the lease holder while it
   is connected. If the lease holder disconnects, manual motion stops immediately and the

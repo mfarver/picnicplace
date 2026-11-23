@@ -165,12 +165,16 @@ machine's own error from place to place: lower than this, the pause is a false a
 The pads are looked for no more than about 0.5 mm from where they should be."""
 
 
-TIP_HOLE_FIT = 0.75
-"""A nozzle tip suits a part when its hole is no wider than this share of the part's
-narrower side, so the hole lies well inside the part's top; of the tips that suit it, the
-one with the largest hole holds it best. On a real LumenPnP (2026-11-20), an N08 tip (0.8 mm
-hole) on 0603 capacitors (0.8 mm wide) sealed on the tape beside them and lifted nothing,
-while the N045 picked every 0603."""
+TIP_HOLE_MAX = 1.0
+"""A nozzle tip may pick a part when its hole is no wider than this share of the part's
+narrower side. On a real LumenPnP (2026-11-20) an N08 tip (0.8 mm hole) picked 0603
+resistors (0.8 mm wide) 39 times out of 39; on 0603 capacitors, thicker and heavier, it
+sealed on the tape beside them and lifted nothing. Which tip suits which part beyond size
+is learned from picks (``TipPicks``)."""
+
+TIP_HOLE_MIN = 0.35
+"""...and no narrower than this share of it: a much smaller hole holds a large part
+weakly. With no tip in between, the largest hole that is not too wide."""
 
 
 class RunError(MachineError):
@@ -454,27 +458,39 @@ def part_width(footprint: Footprint | None) -> float | None:
 
 
 def tip_nozzles(
-    nozzles: list[str], part: Part | None, library: PartsSource | None, profile: MachineProfile
+    nozzles: list[str],
+    part: Part | None,
+    library: PartsSource | None,
+    profile: MachineProfile,
+    barred: Callable[[str, str], bool] | None = None,
 ) -> list[str]:
     """Of ``nozzles``, the ones to pick ``part`` with, by the tips fitted: those whose hole
-    suits it (``TIP_HOLE_FIT``), and of those the largest hole. All of them when a tip or
-    the part's size is not known, or when no tip suits it."""
+    suits its size (``TIP_HOLE_MAX``, ``TIP_HOLE_MIN``), less any tip ``barred`` for it
+    (part ID, tip ID: one that never picked it where another tip has) unless that leaves
+    none. All of them when a tip or the part's size is not known, or when no tip suits it."""
     footprint = library.find_footprint(part.footprint_id) if library and part else None
     width = part_width(footprint)
     if width is None:
         return nozzles
     holes: dict[str, float] = {}
+    tips: dict[str, str] = {}
     for nozzle_id in nozzles:
         nozzle = next((n for n in profile.nozzles if n.id == nozzle_id), None)
         tip = profile.nozzle_tip(nozzle.tip) if nozzle is not None else None
         if tip is None or tip.inner_diameter is None:
             return nozzles
-        holes[nozzle_id] = tip.inner_diameter
-    fit = {n: h for n, h in holes.items() if h <= TIP_HOLE_FIT * width}
-    if not fit:
+        holes[nozzle_id], tips[nozzle_id] = tip.inner_diameter, tip.id
+    small = {n: h for n, h in holes.items() if h <= TIP_HOLE_MAX * width + 1e-9}
+    if not small:
         return nozzles
-    best = max(fit.values())
-    return [n for n, h in fit.items() if h == best]
+    fit = {n: h for n, h in small.items() if h >= TIP_HOLE_MIN * width}
+    if not fit:
+        best = max(small.values())
+        fit = {n: h for n, h in small.items() if h == best}
+    if barred is not None and part is not None:
+        kept = {n: h for n, h in fit.items() if not barred(part.id, tips[n])}
+        fit = kept or fit
+    return [n for n in nozzles if n in fit]
 
 
 def _inside(rect: Rect, x: float, y: float) -> bool:
@@ -567,6 +583,7 @@ def plan_job(
     library: PartsSource | None,
     revision: int | None = None,
     sniff_heights: bool = False,
+    barred: Callable[[str, str], bool] | None = None,
 ) -> JobPlan:
     result = layout(job, profile)
     issues = [i for i in result.issues if not (i.ref and i.severity == "warning")]
@@ -676,7 +693,7 @@ def plan_job(
                         if _inside(r, p.x, p.y) and all(_inside(r, q.x, q.y) for q in picks)
                     ]
                     if ok:
-                        slot_id, nozzles = sid, tip_nozzles(ok, what, library, profile)
+                        slot_id, nozzles = sid, tip_nozzles(ok, what, library, profile, barred)
                         if len(nozzles) < len(ok):
                             by_tip.add(p.ref + (p.copy_id or ""))
                         break
@@ -927,6 +944,10 @@ def fit_board(about: Point, pairs: list[tuple[Point, Point]]) -> tuple[float, fl
 # --- Running -----------------------------------------------------------------------------
 
 
+class _HandedOver(Exception):
+    """A placement given to other nozzles: the tip on this one has never picked its part."""
+
+
 class JobRunner:
     def __init__(
         self,
@@ -951,6 +972,9 @@ class JobRunner:
         self._refit = False
         """A check found the board moved: find its fiducials again before going on."""
         self._picked: set[str] = set()
+        self._missed: set[str] = set()
+        """Slots whose placement was handed to another nozzle: its part is still in the
+        pocket, so the next pick that looks first does not feed."""
         """Slots, strips, and trays picked from in this run, since the feeders were
         scanned."""
         self._board_check: BoardCheck | None = None
@@ -1081,6 +1105,7 @@ class JobRunner:
             parts,
             number,
             sniff_heights=self.sniff_board,
+            barred=self._placement.tips.barred,
         )
         aligns = any(i.status == "pending" for i in plan.items)
         for severity, message in run_issues(current(self._machine, self._feeders), aligns):
@@ -1158,6 +1183,7 @@ class JobRunner:
             for old in self.checks_dir.glob("*.jpg"):
                 old.unlink(missing_ok=True)
         self._picked = set()
+        self._missed = set()
         if self._sim_error is not None:
             self._load_sim_board(job, parts)
         recorder = self._machine.recorder
@@ -1233,7 +1259,13 @@ class JobRunner:
         for item in run.plan.items:
             if item.status == "pending" and item.part_id:
                 part = self._parts.find_part(item.part_id) if self._parts else None
-                item.nozzles = tip_nozzles(item.nozzles, part, self._parts, self._machine.profile)
+                item.nozzles = tip_nozzles(
+                    item.nozzles,
+                    part,
+                    self._parts,
+                    self._machine.profile,
+                    self._placement.tips.barred,
+                )
         error = run.error
         run.status = "running"
         run.error = None
@@ -1508,6 +1540,7 @@ class JobRunner:
             self._feeders.state(),
             self._parts,
             sniff_heights=self.sniff_board,
+            barred=self._placement.tips.barred,
         )
         now = {(i.copy_id, i.ref): i for i in plan.items}
         lost: list[str] = []
@@ -1702,6 +1735,10 @@ class JobRunner:
             assert item.slot_id is not None
             try:
                 await self._pick_item(run, item, index, nozzle_id)
+            except _HandedOver:
+                # Picked again by another nozzle in a later batch; nothing for the operator.
+                del batch[nozzle_id]
+                continue
             except (RunError, FeederError) as e:
                 failed, failed_step = e, run.current
                 del batch[nozzle_id]
@@ -1802,24 +1839,56 @@ class JobRunner:
         await self._locate_feeder(run, item.slot_id, index)
         run.message = f"{nozzle_id} picking {item.ref} from {_source(item.slot_id)}"
         run.current = RunStep(stage="item", action="picking", index=index, nozzle=nozzle_id)
+        tips = self._placement.tips
+        tip = self._tip_of(nozzle_id)
         for attempt in range(1, PICK_ATTEMPTS + 1):
             run.stats.picks += 1
             # After a miss, a pick that looks first does not feed: the camera sees whether
             # the part is still in its pocket (tried again) or gone (then it feeds), so a
             # part the nozzle failed to take is not fed past and lost.
             looks = run.pick_correction in ("top", "auto")
+            missed = attempt > 1 or item.slot_id in self._missed
             try:
                 await self._placement.pick(
                     item.slot_id,
                     nozzle,
-                    attempt == 1 or not looks,
+                    not (missed and looks),
                     run.pick_correction,
                     first=item.slot_id not in self._picked,
                 )
                 self._picked.add(item.slot_id)
+                self._missed.discard(item.slot_id)
+                if tip and item.part_id:
+                    tips.record(item.part_id, tip, True)
                 return
             except MispickError as e:
                 run.stats.empty_picks += 1
+                if tip and item.part_id:
+                    tips.record(item.part_id, tip, False)
+                    others = [
+                        n
+                        for n in item.nozzles
+                        if n != nozzle_id
+                        and (t := self._tip_of(n)) is not None
+                        and not tips.never_picked(item.part_id, t)
+                    ]
+                    if tips.never_picked(item.part_id, tip) and others:
+                        # The tip, not the feeder: this tip has never picked the part. Its
+                        # part is still in the pocket, for the next nozzle to look at first.
+                        item.nozzles = others
+                        self._missed.add(item.slot_id)
+                        self._machine.recorder.event(
+                            "run.tip_handover", ref=item.ref, tip=tip, nozzle=nozzle_id, to=others
+                        )
+                        log.info(
+                            "%s: %s on %s has never picked %s; handed to %s",
+                            item.ref,
+                            tip,
+                            nozzle_id,
+                            item.part_id,
+                            ", ".join(others),
+                        )
+                        raise _HandedOver from e
                 if attempt == PICK_ATTEMPTS:
                     where = _source(item.slot_id)
                     item.note = f"picked nothing {PICK_ATTEMPTS} times from {where}"
@@ -1827,6 +1896,11 @@ class JobRunner:
                         f"{item.ref}: {e} ({PICK_ATTEMPTS} tries). Check the feeder, "
                         "then resume to try again, or skip the placement."
                     ) from e
+
+    def _tip_of(self, nozzle_id: str) -> str | None:
+        """The tip fitted on a nozzle, if known."""
+        nozzle = next((n for n in self._machine.profile.nozzles if n.id == nozzle_id), None)
+        return nozzle.tip if nozzle is not None else None
 
     async def _check_placed(
         self, run: RunState, item: RunItem, target: Point, rotation: float

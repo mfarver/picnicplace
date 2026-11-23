@@ -400,10 +400,13 @@ effect at once. The reset button next to one forgets it.
       workspace shows the same run for someone watching from elsewhere: the map, with the
       run's status and the few steps around the current one under it.
 - [ ] Say which tip is on each nozzle (Machine workspace). The plan sends each part to the
-      nozzles whose tip suits it: the hole well inside the part's top (no wider than 75% of
-      its narrower side), and of those the largest, which holds it best. On a LumenPnP
-      with the N045 and N08 fitted, the 0603s go to the N045 and larger parts to the N08;
-      the plan lists how many go to each.
+      nozzles whose tip suits it: the hole no wider than the part's narrower side, and not
+      so small that it holds the part weakly. On a LumenPnP with the N045 and N08 fitted,
+      0603s and 0805s can go on either and larger parts on the N08; the plan lists how
+      many go to only one. If a tip comes up empty twice on a part it has never picked
+      (an N08 on 0603 capacitors, which it seals beside but cannot lift), the run hands
+      that placement to the other nozzle without pausing, and later plans leave that tip
+      out for that part.
 - [ ] **Step** places one part on each nozzle and pauses again, with the head left over
       them. Check them, then **Resume**. A jammed feeder or a failed pick pauses the run
       once the parts already on the other nozzles are placed; fix it and resume, or skip
@@ -534,8 +537,10 @@ plan names each part whose tape is still one: check the width, pitch and which w
 the parts lie against the reel, and give the part its real tape. Which way round is
 guessed only for resistors, capacitors and inductors.
 
-**Tips.** Say which tip is on each nozzle. The plan sends each part to the nozzle whose tip
-suits it (0603s to the N045, larger parts to the N08) and lists how many go to each.
+**Tips.** Say which tip is on each nozzle. The plan sends each part to the nozzles whose tip
+suits it (0603s to either the N045 or the N08, larger parts to the N08) and lists how many
+go to only one. A tip that never manages to pick a part is found out in the run and left
+out for that part from then on.
 
 **A feeder that stops answering.** A feed the feeder does not answer goes on, and the
 camera and the vacuum tell whether there was a part. If its picks keep failing, look at

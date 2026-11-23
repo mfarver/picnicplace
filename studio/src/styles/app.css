@@ -2477,6 +2477,45 @@ code,
   font-size: var(--text-lg);
 }
 
+/* The review at the end of a run: not a problem, so not in the danger color. */
+.run-review {
+  border-color: var(--warn);
+}
+
+.run-review .run-alert-title {
+  color: var(--text);
+}
+
+.run-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.run-review-item {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.run-review-picture {
+  flex: none;
+  width: 96px;
+  height: 96px;
+  border-radius: var(--radius);
+  object-fit: cover;
+}
+
+.run-review-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
 /* Reels running low: below the top bar and its banner, clear of the run's alert at the
    bottom. */
 .reel-alerts {

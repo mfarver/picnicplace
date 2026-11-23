@@ -33,6 +33,7 @@ import { LoadListPanel } from "../components/LoadListPanel";
 import { Field } from "../components/Form";
 import { Panel } from "../components/Panel";
 import { PickCorrectionSelect } from "../components/PickCorrection";
+import { RunReview } from "../components/RunReview";
 import { RunSteps } from "../components/RunSteps";
 import { Placeholder } from "../components/Placeholder";
 import { useFootprint } from "../useFootprint";
@@ -161,6 +162,15 @@ export function RunWorkspace() {
     );
     if (op) await refresh();
   };
+  const review = async (item: RunItem, placeAgain: boolean) => {
+    const state = await act(() =>
+      api.POST("/api/v1/run/items/{index}/review", {
+        params: { path: { index: item.index } },
+        body: { place_again: placeAgain },
+      }),
+    );
+    if (state) setRun(state);
+  };
   const skip = async (item: RunItem, value: boolean) => {
     const state = await act(() =>
       api.PUT("/api/v1/run/items/{index}", {
@@ -172,6 +182,8 @@ export function RunWorkspace() {
   };
 
   const paused = current?.status === "paused";
+  // Every part placed: the placements found off are looked at together before it finishes.
+  const reviewing = paused && !!current?.reviewing;
   // Why the run paused, kept in view however far the list is scrolled, until hidden.
   const [hiddenError, setHiddenError] = useState<string | null>(null);
   const alert = paused && current?.error && current.error !== hiddenError ? current.error : null;
@@ -362,18 +374,20 @@ export function RunWorkspace() {
                   onClick={() => void resume("/api/v1/run/resume")}
                 >
                   <Play size={16} aria-hidden />
-                  Resume
+                  {reviewing ? "Finish" : "Resume"}
                 </button>
-                <button
-                  type="button"
-                  className="button"
-                  disabled={!canMove}
-                  title="Place one part on each nozzle, then pause"
-                  onClick={() => void resume("/api/v1/run/step")}
-                >
-                  <StepForward size={16} aria-hidden />
-                  Step
-                </button>
+                {!reviewing && (
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={!canMove}
+                    title="Place one part on each nozzle, then pause"
+                    onClick={() => void resume("/api/v1/run/step")}
+                  >
+                    <StepForward size={16} aria-hidden />
+                    Step
+                  </button>
+                )}
               </>
             )}
             {(running || paused) && (
@@ -561,6 +575,17 @@ export function RunWorkspace() {
                   </button>
                 </div>
               </div>
+            )}
+            {reviewing && current && (
+              <RunReview
+                run={current}
+                canSignal={canSignal}
+                canMove={canMove}
+                canLook={canMove && !!topCamera}
+                onReview={(item, again) => void review(item, again)}
+                onLook={look}
+                onFinish={() => void resume("/api/v1/run/resume")}
+              />
             )}
             {current && current.stats.picks > 0 && <RunStatsLine stats={current.stats} />}
             {paused &&

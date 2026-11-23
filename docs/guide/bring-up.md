@@ -373,11 +373,15 @@ effect at once. The reset button next to one forgets it.
       two-terminal chip (a resistor, a capacitor, an LED), the top camera finds it and the
       board's pads under it, and the step list says how much of it lies on its pads and
       how it is turned. One with less than 75% of either end on its pad, turned more than
-      10°, or not found pauses the run: look at it, fix or remove it, and resume: its line
-      in the step list has a picture of it (click to enlarge), with where it was sent in
-      orange, where it landed in magenta, and its pads in green. It catches a part off its
-      pads, standing up, or gone. (Where the pads cannot be seen, it judges the part from
-      where it was sent instead: 0.25 mm.)
+      10°, or not found is held, and the run goes on: its line in the step list has a
+      picture of it (click to enlarge), with where it was sent in orange, where it landed
+      in magenta, and its pads in green. It catches a part off its pads, standing up, or
+      gone. (Where the pads cannot be seen, it judges the part from where it was sent
+      instead: 0.25 mm.) Once every part is placed, the run parks the head and pauses once
+      with all the held placements in a list, each with its picture: **Fine** leaves one
+      as it is; **Place again**, once you have taken its part off, has the machine place it
+      again; **Look** brings the camera over it. **Finish** places those again and ends
+      the run.
       If the pads themselves are more than 0.4 mm from where the board's fiducials put
       them, the board has moved since the run found it (a board not held firmly can be
       knocked by the parts pressed onto it): the run pauses and says so. Hold the board

@@ -836,10 +836,12 @@ def test_a_part_the_camera_cannot_make_out_is_not_checked(lumen: TestClient) -> 
         assert check_landed(lumen, run) == 4
 
 
-def test_a_part_that_lands_off_its_target_pauses_the_run() -> None:
-    """As a real 0603 did, dragged as the nozzle lifted: it landed 0.45 mm from its
-    target. The check finds it off its pads, which are where they should be, and pauses
-    the run."""
+def test_parts_that_land_off_their_targets_are_reviewed_at_the_end() -> None:
+    """As a real 0603 did, dragged as the nozzle lifted: every part lands 0.45 mm from its
+    target. The check finds each chip off its pads (which are where they should be), but
+    the run goes on, and pauses once every part is placed, the head parked, for the
+    operator to look at them together. One is marked fine; the other is taken off and
+    placed again, lands off again, and is looked at once more; then the run finishes."""
     config = fast_config(
         machine={
             "profile": "lumenpnp-v4.1",
@@ -850,22 +852,73 @@ def test_a_part_that_lands_off_its_target_pauses_the_run() -> None:
     )
     with TestClient(create_app(config)) as client, connect(client) as s:
         set_up(client, s)
-        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
         run = client.get("/api/v1/run").json()
-        assert run["status"] == "paused", (op, run["message"])
-        assert "% of an end on its pad" in run["error"], run["error"]
-        assert "turned" not in run["error"] and "seems to have moved" not in run["error"]
+        assert run["status"] == "paused" and run["reviewing"], (op, run["message"])
+        assert run["error"] is None and run["placed"] == 4 and run["remaining"] == 0
+        items = run["plan"]["items"]
+        held = [items[i] for i in run["to_review"]]
+        # Each chip found off its pads; one turned so that the shift runs along it stays on.
+        assert [i["ref"] for i in held] == [
+            i["ref"] for i in items if i["check"] and not i["check"]["ok"]
+        ]
+        assert len(held) == 2, run["message"]
+        assert run["message"].startswith("every part is placed: look at the 2 placements")
+        for item in held:
+            check = item["check"]
+            assert not check["ok"] and check["on_pads"] < 0.75 and check["picture"]
+            assert check["dy"] == pytest.approx(0.45, abs=0.1)
+            assert math.hypot(check["pads_dx"], check["pads_dy"]) < 0.05
+            assert "% of an end on its pad" in item["note"]
         # Out of the way of the operator's tweezers: parked at the back.
-        assert run["error"].endswith("The head moved to the back (no park location is set).")
         y = next(a for a in client.app.state.ctx.machine.profile.axes if a.name == "Y")  # type: ignore[attr-defined]
         assert client.get("/api/v1/machine").json()["position"]["Y"] == pytest.approx(y.max)
-        checked = [i for i in run["plan"]["items"] if i["check"]]
-        check = checked[-1]["check"]
-        assert checked and not check["ok"] and check["on_pads"] < 0.75
-        assert check["dy"] == pytest.approx(0.45, abs=0.1)
-        assert math.hypot(check["pads_dx"], check["pads_dy"]) < 0.05
-        assert check["picture"]
-        assert run["stats"]["bad_placements"] == 1
+
+        fine, again = held[0], held[1]
+        r = s.post(f"/api/v1/run/items/{fine['index']}/review", {"place_again": False})
+        assert r.status_code == 200 and fine["index"] not in r.json()["to_review"]
+        assert r.json()["plan"]["items"][fine["index"]]["check"]["reviewed"]
+        assert r.json()["message"].startswith("every part is placed: look at the 1 placement ")
+        # The operator takes the part off the board, and asks for it to be placed again.
+        sim = client.app.state.ctx.feeders.sim_parts  # type: ignore[attr-defined]
+        truth = runner(client).sim_target(RunItem.model_validate(again))
+        assert truth is not None and sim is not None
+        target, _ = truth
+        k = min(
+            range(len(sim.placed)),
+            key=lambda n: math.hypot(sim.placed[n].x - target.x, sim.placed[n].y - target.y),
+        )
+        del sim.placed[k]
+        r = s.post(f"/api/v1/run/items/{again['index']}/review", {"place_again": True})
+        assert r.status_code == 200
+        assert r.json()["plan"]["items"][again["index"]]["status"] == "pending"
+        assert r.json()["message"] == (
+            f"every placement is looked at: Finish places {again['ref']} again and ends the run."
+        )
+
+        # Finish: the one taken off is placed again, lands off again, and is looked at.
+        ok(s.wait(s.post("/api/v1/run/resume", {})))
+        run = client.get("/api/v1/run").json()
+        assert run["status"] == "paused" and run["reviewing"], run["message"]
+        assert [run["plan"]["items"][i]["ref"] for i in run["to_review"]] == [again["ref"]]
+        # Finish again, leaving it as it is.
+        op = ok(s.wait(s.post("/api/v1/run/resume", {})))
+        run = client.get("/api/v1/run").json()
+        assert run["status"] == "finished" and not run["reviewing"], run["message"]
+        assert run["plan"]["items"][again["index"]]["check"]["reviewed"]
+        assert run["to_review"] == [] and run["stats"]["bad_placements"] == 3
+        assert len(sim.placed) == 4
+
+
+def test_a_placement_can_only_be_reviewed_while_paused(lumen: TestClient) -> None:
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
+        run = lumen.get("/api/v1/run").json()
+        placed = next(i for i in run["plan"]["items"] if i["status"] == "placed")
+        r = s.post(f"/api/v1/run/items/{placed['index']}/review", {"place_again": True})
+        assert r.status_code == 409, r.json()
+        assert "pause it to look at its placements" in r.json()["detail"]
 
 
 def test_a_board_that_moves_mid_run_is_found_again() -> None:

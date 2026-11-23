@@ -6368,6 +6368,12 @@
             "title": "Picture",
             "type": "boolean"
           },
+          "reviewed": {
+            "default": false,
+            "description": "Not ok, and looked at by the operator (in the review at the end of the run) and left as it is.",
+            "title": "Reviewed",
+            "type": "boolean"
+          },
           "score": {
             "description": "How well the chip's pattern matched, -1 to 1.",
             "title": "Score",
@@ -6389,7 +6395,8 @@
           "pads_dy",
           "ok",
           "checked",
-          "picture"
+          "picture",
+          "reviewed"
         ],
         "title": "PlacementCheck",
         "type": "object"
@@ -7099,6 +7106,18 @@
         "title": "RefillRequest",
         "type": "object"
       },
+      "ReviewRequest": {
+        "properties": {
+          "place_again": {
+            "default": false,
+            "description": "True: the operator has taken the part off the board, to be placed again. False: it stays as it is (one the top camera found off is marked fine).",
+            "title": "Place Again",
+            "type": "boolean"
+          }
+        },
+        "title": "ReviewRequest",
+        "type": "object"
+      },
       "RevisionInfo": {
         "additionalProperties": false,
         "properties": {
@@ -7486,6 +7505,12 @@
             "title": "Remaining",
             "type": "integer"
           },
+          "reviewing": {
+            "default": false,
+            "description": "Every part is placed, and the run is paused for the operator to look at the placements the top camera found off (``to_review``): each marked fine, or taken off to be placed again. Resume finishes, placing those again first.",
+            "title": "Reviewing",
+            "type": "boolean"
+          },
           "started_at": {
             "format": "date-time",
             "title": "Started At",
@@ -7508,6 +7533,15 @@
             "default": false,
             "title": "Stop Requested",
             "type": "boolean"
+          },
+          "to_review": {
+            "description": "Placements the top camera found off, turned, or not there that the operator has\nnot yet looked at: the run goes on past them, and pauses for them at the end.",
+            "items": {
+              "type": "integer"
+            },
+            "readOnly": true,
+            "title": "To Review",
+            "type": "array"
           }
         },
         "required": [
@@ -7528,11 +7562,13 @@
           "recording",
           "held",
           "current",
+          "reviewing",
           "interrupted",
           "started_at",
           "finished_at",
           "placed",
-          "remaining"
+          "remaining",
+          "to_review"
         ],
         "title": "RunState",
         "type": "object"
@@ -16700,6 +16736,92 @@
           }
         ],
         "summary": "Skip",
+        "tags": [
+          "run"
+        ]
+      }
+    },
+    "/api/v1/run/items/{index}/review": {
+      "post": {
+        "description": "While paused (as at the review at the end of a run), leave a placed part as it is or\nplace it again.",
+        "operationId": "review_api_v1_run_items__index__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "title": "Index",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Review",
         "tags": [
           "run"
         ]

@@ -283,11 +283,14 @@ the Studio. The panel cannot do anything the API cannot.
 files for each part, in `out/` next to it. Every dimension is in the script; change it and
 run it again rather than editing the models.
 
-- **How it stands:** just left of a LumenPnP near its front, facing the operator, its
+- **How it stands:** just right of a LumenPnP near its front, facing the operator, its
   bottom edge on the table, leaning back 45° so the screen faces up between a standing and
   a sitting operator's eyes. The top is 186 mm above the table, the screen's center 115 mm.
-  A flat bracket bolts its right side to the machine's lower left 2020 rail, with two M5
-  screws into T-nuts in the rail's outer slot.
+  A flat bracket bolts its left side to the machine's lower right 2020 rail, with two M5
+  screws into T-nuts in the rail's outer slot, 130 mm above the table on a LumenPnP v4 on
+  its feet. It goes on the right because on the left there is no room in front of the
+  machine's controller. The bracket's outline is the hull around its four holes, so it
+  fits a rail below the shell's screws or, as here, between them.
 - **The screen:** the 7B in portrait, its USB-C ports at the bottom. A 2 mm lip holds the
   glass from the front, its window 166.9 × 102.9 mm: 1 mm beyond the opening in the glass's
   black print, which is not centered on the glass, but never closer than 2 mm to the
@@ -322,8 +325,9 @@ run it again rather than editing the models.
   Against Waveshare's model of 2025-10-25 and TE's, nothing overlaps but the switch's
   mounting ring, which TE's model draws 2.4 mm behind the face; the real ring threads
   back to the 3 mm face.
-- **Still to measure:** the rail's height above the table (`RAIL_HEIGHT`), which places
-  the bracket's M5 holes. Until then the bracket is drawn for 30 mm; do not print it.
+- **Measured:** the rail's height above the table (`RAIL_HEIGHT`, 130 mm to the T-slot),
+  which places the bracket's M5 holes. Check it on your machine before printing the
+  bracket.
 
 ## Other displays
 

@@ -218,6 +218,42 @@ HOLE_CORE = 0.25
 """A hole's darkness is its middle's: a square this fraction of its diameter each way
 from its center, clear of its blurred edge."""
 
+RIM_SIZE = 0.15
+"""A rim is looked for within this fraction of the expected diameter either way."""
+RIM_VOTES = 0.1
+"""How much of a rim's edge must be seen, as a fraction of its circumference."""
+RIM_STEP = 1.5
+"""The rim search's accumulator cell, in pixels: coarser is faster and less fussy about a
+rim that is not a perfect circle."""
+
+
+def find_rims(image: Image, diameter_px: float, min_gap_px: float) -> list[Circle]:
+    """Round rims of a known diameter, from their edges alone (a Hough transform), at least
+    ``min_gap_px`` apart. For holes that do not stand out as blobs: in black carrier tape
+    on a LumenPnP's Photon feeders, a sprocket hole shows the feeder's bright tooth inside
+    a dark ring that merges with the tape, and in a strip a holder's edge may cover part
+    of a hole; either way some of its rim still shows (seen on a real machine). The frame's
+    contrast is evened out first, so a dim frame of black tape still has edges. Finds
+    plenty of other round things too: the caller keeps those where holes should be."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    gray = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(gray)
+    gray = cv2.GaussianBlur(gray, (0, 0), 2)
+    radius = diameter_px / 2
+    votes = max(10, round(RIM_VOTES * 2 * math.pi * radius / RIM_STEP))
+    found = cv2.HoughCircles(
+        gray,
+        cv2.HOUGH_GRADIENT,
+        dp=RIM_STEP,
+        minDist=min_gap_px,
+        param1=60,
+        param2=votes,
+        minRadius=int(radius * (1 - RIM_SIZE)),
+        maxRadius=math.ceil(radius * (1 + RIM_SIZE)),
+    )
+    if found is None:
+        return []
+    return [Circle(float(x), float(y), 2 * float(r), circularity=1.0) for x, y, r in found[0]]
+
 
 def strength(circle: Circle, expected_diameter_px: float | None = None) -> float:
     """How sure the finder is that a blob is the fiducial: the threshold levels it was

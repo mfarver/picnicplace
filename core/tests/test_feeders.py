@@ -400,6 +400,159 @@ def test_vision_finds_the_drifted_pocket(lumen: TestClient) -> None:
         assert pocket["at"]["x"] == pytest.approx(pick.x, abs=0.05)
 
 
+def test_holes_not_seen_as_round_marks_are_found_by_their_rims(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Black tape on a real LumenPnP's feeders: each hole shows the feeder's bright tooth
+    in a dark ring that merges with the tape, so no hole stands out as a round mark. Their
+    rims still show, and the pocket is found from them as well as from the marks."""
+    with connect(lumen) as s:
+        s.home()
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+
+        async def no_marks(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        monkeypatch.setattr(machine, "locate_circles", no_marks)
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        pick = true_pick(slot_state(s, "26"))
+        s.put("/api/v1/feeders/slots/26/pick", {"at": {"x": pick.x, "y": pick.y}})
+        for _ in range(10):
+            succeeded(s.wait(s.post("/api/v1/feeders/slots/26/feed", {})))
+        op = succeeded(s.wait(s.post("/api/v1/feeders/slots/26/pocket")))
+        assert "sprocket holes" in op["message"] and "(from 1 " not in op["message"], op
+        pocket = slot_state(s, "26")["pocket"]
+        assert pocket["along"] == pytest.approx(0.4, abs=0.05), op
+        assert pocket["across"] == pytest.approx(0.0, abs=0.05)
+
+
+def test_holes_too_faint_for_round_marks_are_found_by_their_shape(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Black tape over a black strip holder on a real machine: the holes are plain to see
+    but too faint to stand out as round marks. Their shape, near the hole line, finds them,
+    along the tape and across it."""
+    with connect(lumen) as s:
+        s.home()
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+
+        async def nothing(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        monkeypatch.setattr(machine, "locate_circles", nothing)
+        monkeypatch.setattr(machine, "locate_rims", nothing)
+        feeders = lumen.app.state.ctx.feeders  # type: ignore[attr-defined]
+        monkeypatch.setattr(feeders, "_holes_by_rhythm", nothing)
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        pick = true_pick(slot_state(s, "26"))
+        s.put("/api/v1/feeders/slots/26/pick", {"at": {"x": pick.x, "y": pick.y + 0.3}})
+        for _ in range(10):
+            succeeded(s.wait(s.post("/api/v1/feeders/slots/26/feed", {})))
+        op = succeeded(s.wait(s.post("/api/v1/feeders/slots/26/pocket")))
+        assert "(from 1 " not in op["message"], op
+        pocket = slot_state(s, "26")["pocket"]
+        assert pocket["at"]["x"] == pytest.approx(pick.x, abs=0.05), op
+        assert pocket["at"]["y"] == pytest.approx(pick.y - 0.4, abs=0.05), op
+
+
+def test_holes_neither_marks_nor_rims_are_found_by_their_rhythm(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A strip holder's rail over half of each hole on a real machine: no round marks, no
+    rims, but the hole line darkens every 4 mm. The pocket is found along the tape from
+    that; across, it stays where the setup says."""
+    with connect(lumen) as s:
+        s.home()
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+
+        async def nothing(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        monkeypatch.setattr(machine, "locate_circles", nothing)
+        monkeypatch.setattr(lumen.app.state.ctx.feeders, "_holes_by_shape", nothing)  # type: ignore[attr-defined]
+        monkeypatch.setattr(machine, "locate_rims", nothing)
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        pick = true_pick(slot_state(s, "26"))
+        s.put("/api/v1/feeders/slots/26/pick", {"at": {"x": pick.x, "y": pick.y}})
+        for _ in range(10):
+            succeeded(s.wait(s.post("/api/v1/feeders/slots/26/feed", {})))
+        op = succeeded(s.wait(s.post("/api/v1/feeders/slots/26/pocket")))
+        assert "(from 1 " not in op["message"], op
+        pocket = slot_state(s, "26")["pocket"]
+        assert pocket["along"] == pytest.approx(0.4, abs=0.1), op
+        assert pocket["across"] == 0.0
+
+
+def test_a_rhythm_may_only_nudge_the_pocket(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Holes found by their rhythm are the weakest evidence: along a strip holder's rail a
+    real machine found a rhythm that would have moved the pocket 1 mm. One that far off is
+    not used."""
+    with connect(lumen) as s:
+        s.home()
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+        feeders = lumen.app.state.ctx.feeders  # type: ignore[attr-defined]
+
+        async def nothing(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        async def off_by_1mm(*args: Any, **kwargs: Any) -> list[float]:
+            return [-1.0, 3.0]  # a pocket 1 mm along from the pick location
+
+        monkeypatch.setattr(machine, "locate_circles", nothing)
+        monkeypatch.setattr(feeders, "_holes_by_shape", nothing)
+        monkeypatch.setattr(machine, "locate_rims", nothing)
+        monkeypatch.setattr(feeders, "_holes_by_rhythm", off_by_1mm)
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        op = s.wait(s.post("/api/v1/feeders/slots/26/pocket"))
+        assert op["status"] == "failed" and "no sprocket holes found" in op["error"], op
+
+
+def test_one_rim_alone_is_not_taken_for_a_hole(
+    lumen: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On a real strip the camera looked on the wrong side of the tape, and the rim search
+    found a round letter on the part next to it, near where holes should be: one rim is
+    not enough to find a pocket from."""
+    with connect(lumen) as s:
+        s.home()
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+
+        async def no_marks(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        succeeded(s.wait(s.post("/api/v1/feeders/scan")))
+        rotation = slot_state(s, "26")["slot"]["rotation"]
+
+        async def one_rim(*args: Any, **kwargs: Any) -> list[Point]:
+            # Right on the hole line, where a hole could be.
+            here = machine.camera_position()
+            off = rotate(Point(x=2.0, y=3.5), rotation)
+            return [Point(x=here.x + off.x, y=here.y + off.y)]
+
+        async def no_rhythm(*args: Any, **kwargs: Any) -> list[float]:
+            return []
+
+        monkeypatch.setattr(machine, "locate_circles", no_marks)
+        monkeypatch.setattr(machine, "locate_rims", one_rim)
+        feeders = lumen.app.state.ctx.feeders  # type: ignore[attr-defined]
+        monkeypatch.setattr(feeders, "_holes_by_shape", no_marks)
+        monkeypatch.setattr(feeders, "_holes_by_rhythm", no_rhythm)
+        op = s.wait(s.post("/api/v1/feeders/slots/26/pocket"))
+        assert op["status"] == "failed"
+        assert "no sprocket holes found" in op["error"]
+
+
+def test_holes_must_be_a_sprocket_pitch_apart() -> None:
+    """A rim search finds round things on the hole line that are not holes: those not a
+    whole sprocket pitch from the rest are left out."""
+    holes = [(2.0, 3.5), (-2.0, 3.5), (6.0, 3.5), (0.7, 3.6)]
+    fix = pocket_from_holes(holes, 3.5, 4.0)
+    assert fix is not None and fix.holes == 3
+    assert fix.along == pytest.approx(0.0, abs=1e-9)
+
+
 def test_a_simulated_pick_takes_the_part_from_its_pocket(lumen: TestClient) -> None:
     feeders = service(lumen)
     parts = feeders.sim_parts

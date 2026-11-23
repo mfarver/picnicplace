@@ -992,6 +992,38 @@ class MachineService:
         marks = await self.locate_round_marks(min_diameter, max_diameter, faint=faint)
         return [m.at for m in marks]
 
+    async def locate_rims(self, diameter: float, min_gap: float) -> list[Point]:
+        """Every round rim of about ``diameter`` the top camera sees, at least ``min_gap``
+        apart (``find_rims``): their machine positions. For holes that do not stand out
+        as round marks, such as sprocket holes in black tape."""
+        camera = self.top_camera()
+        if self._grab is None:
+            raise VisionError("the cameras are not available")
+        await self._light_for(camera)
+        await asyncio.sleep(camera.settle_s)
+        frame = await self._grab(camera.id, time.time(), FRAME_WAIT_S)
+        if frame is None:
+            raise VisionError(f"the {camera.label.lower()} sent no frame")
+        h, w = frame.image.shape[:2]
+        mm_per_px = camera.field_of_view.x / w
+        rims = await self.recorder.vision(
+            "find_rims",
+            frame.image,
+            diameter / mm_per_px,
+            min_gap / mm_per_px,
+            camera=camera.id,
+            position=dict(self._driver.position),
+            mm_per_px=mm_per_px,
+        )
+        here = self.camera_position()
+        out: list[Point] = []
+        for c in rims:
+            dx, dy = self._profile.image_to_machine(
+                (c.x - w / 2) * mm_per_px, (c.y - h / 2) * mm_per_px
+            )
+            out.append(Point(x=here.x + dx, y=here.y + dy))
+        return out
+
     async def locate_round_marks(
         self,
         min_diameter: float,

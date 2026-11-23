@@ -20,7 +20,12 @@ from pydantic import Field
 
 from picnicplace.camera.synthetic import TapeScene
 from picnicplace.feeders.photon import PhotonBus
-from picnicplace.feeders.pocket import choose_pocket, pocket_choices, pocket_from_holes
+from picnicplace.feeders.pocket import (
+    PocketFix,
+    choose_pocket,
+    pocket_choices,
+    pocket_from_holes,
+)
 from picnicplace.feeders.rails import fit_rail, residual
 from picnicplace.feeders.setup import (
     FeederAssignment,
@@ -76,6 +81,19 @@ POCKET_KEEP_OUT_MM = 0.4
 pocket: the pocket's own walls are darker than the paper."""
 HOLE_KEEP_OUT_MM = 0.25
 """...nor this far round each sprocket hole."""
+MATCH_SEARCH_MM = 1.0
+"""Holes matched by their shape are looked for up to this far either side of the hole
+line: as far as a hole may lie from it and still count (``pocket_from_holes``)."""
+RHYTHM_SEARCH_MM = 0.6
+"""Holes are looked for by their rhythm this far either side of where the hole line should
+be: no further, as another tape's holes may lie beyond."""
+RHYTHM_BAND_MM = 0.3
+"""...in bands this wide along the line."""
+RHYTHM_MAX_SHIFT_MM = 0.75
+"""Holes found by their rhythm may move the pocket no further than this along the tape."""
+MIN_HOLES = 2
+"""Sprocket holes found as round marks, fewer than this, are looked for again by their
+rims: one hole alone may be something else on the hole line."""
 
 RAIL_SEARCH_ACROSS_MM = (7.0, 14.0, 21.0)
 """Searching for a rail's end fiducial, the camera also looks this far to either side of
@@ -1377,24 +1395,84 @@ class FeederService:
         """Find a strip's next pocket from its sprocket holes. For use inside a machine
         task."""
         f = self.fixed(fixed_id)
-        _, at = self.next_fixed(fixed_id)
+        index, at = self.next_fixed(fixed_id)
         tape = self.tape_of(self.fixed_part(f))
         width = tape.width if tape and tape.width else 8.0
         pitch = math.hypot(f.step.x, f.step.y) or DEFAULT_PITCH
         line = _pocket_line_for(width)
+        direction = _strip_direction(f)
         # Look at the holes: on wide tape they are out of view from the pocket.
         check = await self._find_pocket(
             self.fixed_label(fixed_id),
             at,
-            _strip_direction(f),
+            direction,
             line,
             pitch,
             look_across=line,
             body=self._paper_body(self.fixed_part(f)),
+            look_again=_toward_middle(f, index, pitch),
         )
-        check = self._with_outline(check, self.fixed_part(f), _strip_direction(f))
+        check = self._with_outline(check, self.fixed_part(f), direction)
         self._pockets[fixed_id] = check
         return check
+
+    async def check_strip_holes(self, fixed_id: str) -> str:
+        """Check a strip was taught the way its tape feeds: its sprocket holes beside its
+        last part, on the side its first and last parts say. If none are there but there
+        are on the other side, it was taught the wrong way round (that side is only looked
+        at to say so: a neighboring strip's holes may lie there). For use inside a machine
+        task; the camera ends over its last part."""
+        f = self.fixed(fixed_id)
+        if f.kind != "strip":
+            raise InvalidTargetError(f"{fixed_id} is a tray: trays have no sprocket holes")
+        label = self.fixed_label(fixed_id)
+        last = f.position(f.capacity - 1)
+        tape = self.tape_of(self.fixed_part(f))
+        width = tape.width if tape and tape.width else 8.0
+        pitch = math.hypot(f.step.x, f.step.y) or DEFAULT_PITCH
+        line = _pocket_line_for(width)
+        direction = _strip_direction(f)
+        again = _toward_middle(f, f.capacity - 1, pitch)
+        try:
+            check = await self._find_pocket(
+                label, last, direction, line, pitch, look_across=line, look_again=again
+            )
+            message = (
+                f"{label}: sprocket holes found beside its last part, on the side its first "
+                f"and last parts say ({check.holes} holes): taught the way its tape feeds."
+            )
+        except NoSprocketHolesError:
+            try:
+                await self._find_pocket(
+                    label,
+                    last,
+                    direction + 180.0,
+                    line,
+                    pitch,
+                    look_across=line,
+                    look_again=-again,
+                )
+            except NoSprocketHolesError:
+                await self._machine.move_camera_to(last.x, last.y)
+                return (
+                    f"{label}: no sprocket holes seen beside its last part on either side: "
+                    "check by eye that its first part is at the end its tape feeds from."
+                )
+            await self._machine.move_camera_to(last.x, last.y)
+            raise FeederError(
+                f"{label}: its sprocket holes are on the other side from the one its first "
+                "and last parts say: it was taught the wrong way round. Teach its first part "
+                "at the other end (the end its tape feeds from: the part a feeder would bring "
+                "to the pick first), then its last part again."
+            ) from None
+        await self._machine.move_camera_to(last.x, last.y)
+        return message
+
+    def start_check_strip_holes(self, fixed_id: str) -> Operation:
+        f = self.fixed(fixed_id)
+        if f.kind != "strip":
+            raise InvalidTargetError(f"{fixed_id} is a tray: trays have no sprocket holes")
+        return self._machine.start_task("feeder_pocket", lambda: self.check_strip_holes(fixed_id))
 
     def start_locate_strip_pocket(self, fixed_id: str) -> Operation:
         f = self.fixed(fixed_id)
@@ -1489,20 +1567,21 @@ class FeederService:
         pitch: float,
         look_across: float = 0.0,
         body: PartSize | None = None,
+        look_again: float = 0.0,
     ) -> PocketCheck:
         """``look_across``: center the camera this far across the tape from the pick
         location, toward the holes. ``body``: the part's, in paper tape: then whether the
         pocket holds it, and parts lying loose on the tape, are looked at too, and of two
-        pockets about as near, the one holding a part is taken."""
-        look = rotate(Point(x=0, y=look_across), rotation)
-        await self._machine.move_camera_to(pick.x + look.x, pick.y + look.y)
-        low, high = SPROCKET_DIAMETER * 0.7, SPROCKET_DIAMETER * 1.3
-        seen = await self._machine.locate_circles(low, high, faint=True)
-        holes = [
-            (q.x, q.y)
-            for q in (rotate(Point(x=p.x - pick.x, y=p.y - pick.y), -rotation) for p in seen)
-        ]
-        fix = pocket_from_holes(holes, line, pitch)
+        pockets about as near, the one holding a part is taken. ``look_again``: if fewer
+        than two holes are seen, look again this far along the tape (mm, signed): at a
+        strip's end, its last hole may lie past the camera's view of the pocket."""
+        fix, seen = await self._look_for_holes(pick, rotation, line, pitch, 0.0, look_across)
+        if (fix is None or fix.holes < MIN_HOLES) and look_again:
+            again, seen_again = await self._look_for_holes(
+                pick, rotation, line, pitch, look_again, look_across
+            )
+            if again is not None and (fix is None or again.holes > fix.holes):
+                fix, seen = again, seen_again
         if fix is None:
             raise NoSprocketHolesError(f"{label}: no sprocket holes found near the pick location")
         along, part, loose = fix.along, None, []
@@ -1519,6 +1598,145 @@ class FeederService:
             part=part,
             loose=loose,
         )
+
+    async def _look_for_holes(
+        self,
+        pick: Point,
+        rotation: float,
+        line: float,
+        pitch: float,
+        look_along: float,
+        look_across: float,
+    ) -> tuple[PocketFix | None, list[Point]]:
+        """The pocket the sprocket holes in one view say, and the holes seen (machine
+        coordinates), with the camera this far along and across the tape from the pick
+        location."""
+        look = rotate(Point(x=look_along, y=look_across), rotation)
+        await self._machine.move_camera_to(pick.x + look.x, pick.y + look.y)
+        low, high = SPROCKET_DIAMETER * 0.7, SPROCKET_DIAMETER * 1.3
+        seen = await self._machine.locate_circles(low, high, faint=True)
+
+        def fix_from(marks: list[Point]) -> PocketFix | None:
+            holes = [
+                (q.x, q.y)
+                for q in (rotate(Point(x=p.x - pick.x, y=p.y - pick.y), -rotation) for p in marks)
+            ]
+            return pocket_from_holes(holes, line, pitch)
+
+        fix = fix_from(seen)
+        if fix is None or fix.holes < MIN_HOLES:
+            # Holes too faint to stand out (black tape over a black holder): their shape,
+            # looked for only near the hole line.
+            matched = await self._holes_by_shape(pick, rotation, line)
+            by_shape = fix_from(matched)
+            if (
+                by_shape is not None
+                and by_shape.holes >= MIN_HOLES
+                and (fix is None or by_shape.holes > fix.holes)
+            ):
+                fix, seen = by_shape, matched
+        if fix is None or fix.holes < MIN_HOLES:
+            # Black tape, or a strip's holder over the holes: look for their rims instead.
+            rims = await self._machine.locate_rims(SPROCKET_DIAMETER, SPROCKET_PITCH * 0.6)
+            by_rims = fix_from(rims)
+            # A rim alone may be anything round near the hole line (on a real strip, a
+            # letter on the part beside it): rims count only as two or more holes.
+            if (
+                by_rims is not None
+                and by_rims.holes >= MIN_HOLES
+                and (fix is None or by_rims.holes > fix.holes)
+            ):
+                fix, seen = by_rims, rims
+        if fix is None or fix.holes < MIN_HOLES:
+            # Holes half covered by a strip holder's rail: their rhythm along the line.
+            along = await self._holes_by_rhythm(pick, rotation, line)
+            by_rhythm = pocket_from_holes([(s, line) for s in along], line, pitch)
+            # The weakest evidence: it may only nudge the pocket (a holder's rail gave a
+            # rhythm 1 mm off; real strips needed under 0.1 mm).
+            if (
+                by_rhythm is not None
+                and abs(by_rhythm.along) <= RHYTHM_MAX_SHIFT_MM
+                and (fix is None or by_rhythm.holes > fix.holes)
+            ):
+                fix = by_rhythm
+                seen = [
+                    Point(x=pick.x + q.x, y=pick.y + q.y)
+                    for q in (rotate(Point(x=s, y=line), rotation) for s in along)
+                ]
+        return fix, seen
+
+    async def _holes_by_shape(self, pick: Point, rotation: float, line: float) -> list[Point]:
+        """Sprocket holes found by their shape near the hole line (``match_holes``): their
+        machine positions."""
+        machine = self._machine
+        camera = machine.top_camera()
+        frame = await machine.frame(camera.id, settle=False)
+        image = frame.image
+        h, w = image.shape[:2]
+        mm = camera.field_of_view.x / w
+        here = machine.camera_position()
+
+        def pixel(s: float) -> tuple[float, float]:
+            q = rotate(Point(x=s, y=line), rotation)
+            right, down = machine.profile.machine_to_image(
+                pick.x + q.x - here.x, pick.y + q.y - here.y
+            )
+            return w / 2 + right / mm, h / 2 + down / mm
+
+        (x0, y0), (x1, y1) = pixel(0.0), pixel(1.0)
+        holes = await machine.recorder.vision(
+            "match_holes",
+            image,
+            (x0, y0),
+            math.degrees(math.atan2(y1 - y0, x1 - x0)),
+            SPROCKET_DIAMETER / mm,
+            MATCH_SEARCH_MM / mm,
+            SPROCKET_PITCH * 0.6 / mm,
+            camera=camera.id,
+            position=dict(machine.driver.position),
+            mm_per_px=mm,
+        )
+        out: list[Point] = []
+        for hole in holes:
+            dx, dy = machine.profile.image_to_machine((hole.x - w / 2) * mm, (hole.y - h / 2) * mm)
+            out.append(Point(x=here.x + dx, y=here.y + dy))
+        return out
+
+    async def _holes_by_rhythm(self, pick: Point, rotation: float, line: float) -> list[float]:
+        """Sprocket holes found by their rhythm along the hole line (``find_hole_rhythm``):
+        how far each is along the tape from the pick location, in mm. Not across: the
+        holes may be half covered."""
+        machine = self._machine
+        camera = machine.top_camera()
+        frame = await machine.frame(camera.id, settle=False)
+        image = frame.image
+        h, w = image.shape[:2]
+        mm = camera.field_of_view.x / w
+        here = machine.camera_position()
+
+        def pixel(s: float) -> tuple[float, float]:
+            q = rotate(Point(x=s, y=line), rotation)
+            right, down = machine.profile.machine_to_image(
+                pick.x + q.x - here.x, pick.y + q.y - here.y
+            )
+            return w / 2 + right / mm, h / 2 + down / mm
+
+        (x0, y0), (x1, y1) = pixel(0.0), pixel(1.0)
+        px_per_mm = math.hypot(x1 - x0, y1 - y0)
+        holes = await machine.recorder.vision(
+            "find_hole_rhythm",
+            image,
+            (x0, y0),
+            math.degrees(math.atan2(y1 - y0, x1 - x0)),
+            SPROCKET_PITCH * px_per_mm,
+            SPROCKET_DIAMETER * px_per_mm,
+            RHYTHM_SEARCH_MM * px_per_mm,
+            RHYTHM_BAND_MM * px_per_mm,
+            camera=camera.id,
+            position=dict(machine.driver.position),
+            mm_per_px=mm,
+        )
+        return [hole.along / px_per_mm for hole in holes]
 
     async def _look_at_tape(
         self,
@@ -1889,6 +2107,8 @@ class FeederService:
                     feeder_center=line + 1.75 - width / 2,
                     feeder_width=width + 6,
                     feeder_length=length,
+                    # Cut half a pocket past its first part (drawn up to 6 mm ahead).
+                    tape_ahead=min(6.0, f.picked * pitch + pitch / 2),
                 )
             )
         return out
@@ -1898,6 +2118,15 @@ def _strip_direction(f: FixedFeeder) -> float:
     """A strip's tape direction (the EIA-481 view's +X) in machine degrees: the tape
     would feed opposite to the step from one pocket to the next one to pick."""
     return math.degrees(math.atan2(-f.step.y, -f.step.x))
+
+
+def _toward_middle(f: FixedFeeder, index: int, pitch: float) -> float:
+    """Half a pitch along the tape (mm, in the strip's tape frame) from one of its pockets
+    toward its middle: where to look again for holes at its ends; 0 for a one-part strip."""
+    if f.capacity < 2:
+        return 0.0
+    # The tape frame's +X is opposite the step from one pocket to the next.
+    return -pitch / 2 if index <= (f.capacity - 1) / 2 else pitch / 2
 
 
 def _geometry(f: FixedFeeder) -> tuple[object, ...]:

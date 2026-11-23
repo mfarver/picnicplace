@@ -6,12 +6,14 @@ use the demo board from ``test_run``, with one part moved from its Photon feeder
 strip or tray.
 """
 
+from dataclasses import replace
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
+from picnicplace.camera.synthetic import TapeScene
 from picnicplace.feeders.setup import FixedFeeder
 from picnicplace.machine.profile import Point
 from tests.conftest import Session, connect, fast_config, put_taped
@@ -122,6 +124,100 @@ def test_a_wide_part_from_a_strip(lumen: TestClient) -> None:  # noqa: F811
         ok(s.wait(s.post("/api/v1/feeders/fixed/T1/pocket")))
         pocket = lumen.get("/api/v1/feeders").json()["fixed"][0]["pocket"]
         assert (pocket["along"], pocket["across"]) == pytest.approx((0.15, -0.1), abs=0.05)
+
+
+def test_a_strip_taught_the_wrong_way_round_is_caught(
+    lumen: TestClient,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A strip's first and last parts say which way its tape feeds, and so which side its
+    sprocket holes are on. Checking that, once taught, catches a strip taught the wrong way
+    round (on a real machine one was: its holes were looked for beside its holder), and
+    its pockets are not looked for on the other side, where another strip's holes may be."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        library = lumen.app.state.ctx.library  # type: ignore[attr-defined]
+        mcu = library.find_part("EX-MCU-8")
+        put_taped(library, mcu, "embossed", 24.0, 12.0, library.tape_of(mcu).rotation)
+        strip = {
+            "label": "24 mm holder",
+            "kind": "strip",
+            "part_id": "EX-MCU-8",
+            "first": {"x": 150, "y": 250},
+            "step": {"x": -12, "y": 0},
+            "columns": 5,
+        }
+        move_to_bed(lumen, s, "EX-MCU-8", strip)
+        op = ok(s.wait(s.post("/api/v1/feeders/fixed/T1/check-holes")))
+        assert "taught the way its tape feeds" in op["message"], op
+
+        feeders = lumen.app.state.ctx.feeders  # type: ignore[attr-defined]
+        build = feeders._build_strips  # pyright: ignore[reportPrivateUsage]
+
+        def turned() -> list[TapeScene]:
+            # The same tape the other way round, from the last part (102, 250), with the
+            # simulated strip's error, back over the others.
+            return [replace(t, rotation=t.rotation + 180.0, pick=(102.15, 249.9)) for t in build()]
+
+        monkeypatch.setattr(feeders, "_build_strips", turned)
+        feeders._invalidate()  # pyright: ignore[reportPrivateUsage]
+        op = s.wait(s.post("/api/v1/feeders/fixed/T1/check-holes"))
+        assert op["status"] == "failed"
+        assert "taught the wrong way round" in op["error"], op
+        op = s.wait(s.post("/api/v1/feeders/fixed/T1/pocket"))
+        assert op["status"] == "failed" and "no sprocket holes found" in op["error"], op
+
+
+def test_a_strips_first_pocket_is_found_by_looking_again_toward_its_middle(
+    lumen: TestClient,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A cut strip ends half a pocket past its first part, so a view of its first pocket
+    may hold one sprocket hole and half of another (on a real machine one did). Looking
+    again half a pocket toward the strip's middle finds two, both for its first pocket and
+    for checking the holes beside its last."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        library = lumen.app.state.ctx.library  # type: ignore[attr-defined]
+        cap = library.find_part("EX-C0805-1U")
+        put_taped(library, cap, "embossed", 8.0, 4.0, library.tape_of(cap).rotation)
+        strip = {
+            "label": "8 mm strip",
+            "kind": "strip",
+            "part_id": "EX-C0805-1U",
+            "first": {"x": 150, "y": 250},
+            "step": {"x": 0, "y": 4},
+            "columns": 10,
+        }
+        move_to_bed(lumen, s, "EX-C0805-1U", strip)
+        # A real camera missed a hole the frame's edge cut through: only whole ones count.
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+
+        def whole(find: Any) -> Any:
+            async def run(*args: Any, **kwargs: Any) -> list[Point]:
+                here = machine.camera_position()
+                return [p for p in await find(*args, **kwargs) if abs(p.y - here.y) < 4.5]
+
+            return run
+
+        for name in ("locate_circles", "locate_rims"):
+            monkeypatch.setattr(machine, name, whole(getattr(machine, name)))
+        op = ok(s.wait(s.post("/api/v1/feeders/fixed/T1/pocket")))
+        assert "(from 1 " not in op["message"], op
+        pocket = lumen.get("/api/v1/feeders").json()["fixed"][0]["pocket"]
+        # The simulated strip is 0.15 mm right of and 0.1 mm in front of where it was
+        # taught; its tape feeds -Y, so its holes are on the right (+X), toward which it
+        # lies off.
+        assert (pocket["along"], pocket["across"]) == pytest.approx((0.1, 0.15), abs=0.05)
+        op = ok(s.wait(s.post("/api/v1/feeders/fixed/T1/check-holes")))
+        assert "taught the way its tape feeds" in op["message"], op
+
+        # Without looking again, its first pocket shows too few holes.
+        import picnicplace.feeders.service as service
+
+        monkeypatch.setattr(service, "_toward_middle", lambda *args: 0.0)
+        op = s.wait(s.post("/api/v1/feeders/fixed/T1/pocket"))
+        assert op["status"] == "failed" or "(from 1 " in op["message"], op
 
 
 def test_a_tray_higher_than_its_pick_height_is_found_by_touch() -> None:

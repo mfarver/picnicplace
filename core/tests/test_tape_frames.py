@@ -10,7 +10,8 @@ import pytest
 
 from picnicplace.camera.source import Image
 from picnicplace.feeders.pocket import choose_pocket, pocket_choices, pocket_from_holes
-from picnicplace.vision.fiducial import find_circles
+from picnicplace.vision.fiducial import find_circles, find_rims
+from picnicplace.vision.sprockets import find_hole_rhythm, match_holes
 from picnicplace.vision.tape import holds_part, loose_parts, pocket_darkness, pocket_ends
 
 FRAMES = Path(__file__).parent / "data" / "vision"
@@ -172,6 +173,140 @@ def test_a_gray_capacitor_is_told_from_an_empty_pocket(
     # Looked for across the part instead, its ends would fall on the pocket's dark sides.
     across = pocket_ends(image, u, v, BODY, CAP_MM_PER_PX, OUTLINE, 90.0)
     assert across is not None and across < 0.85
+
+
+BLACK_MM_PER_PX = 20.343605377340026 / 1920
+BLACK_PICK = (760.0, 540.0)
+"""The pick location in the black tape frames: columns 200 to 1399 of 1920 x 1080 frames
+taken there."""
+BLACK_LINE = 5.5
+"""12 mm tape: the hole line is 5.5 mm from the pockets, to the picture's left."""
+
+
+@pytest.mark.parametrize(
+    ("name", "pocket"),
+    [
+        # The pocket's middle (mm down the picture from the pick location, give or take
+        # whole sprocket pitches): from the hole in the middle of an empty pocket, or
+        # judged from the part and the pocket's walls.
+        ("black-tape-empty", 1.08),
+        ("black-tape-run", 1.75),
+        ("black-tape-8mm-pitch", 0.21),
+        ("black-tape-qfn", -0.34),
+        ("black-strip", 0.12),
+    ],
+)
+def test_holes_in_black_tape_are_found_by_their_rims(name: str, pocket: float) -> None:
+    """Black 12 mm tape on a LumenPnP's Photon feeders, and in a strip on its bed: the
+    holes do not stand out as round marks (the feeder's tooth shows bright in each, in a
+    dark ring that merges with the tape), but their rims do, and the pocket found from
+    them is within 0.25 mm of where it is."""
+    image = _frame(name)
+    mm, (u, v) = BLACK_MM_PER_PX, BLACK_PICK
+
+    def tape(x: float, y: float) -> tuple[float, float]:
+        """Along the tape (down the picture) and across it (toward the holes, left)."""
+        return (y - v) * mm, (u - x) * mm
+
+    rims = find_rims(image, HOLE / mm, 0.6 * PITCH / mm)
+    fix = pocket_from_holes([tape(c.x, c.y) for c in rims], BLACK_LINE, 8.0)
+    assert fix is not None and fix.holes >= 2
+    assert abs(fix.across) < 0.25
+    off = (fix.along - pocket + PITCH / 2) % PITCH - PITCH / 2
+    assert abs(off) < 0.25, (fix, off)
+
+
+@pytest.mark.parametrize("name", ["black-tape-empty", "black-tape-run", "black-strip"])
+def test_holes_in_black_tape_are_not_seen_as_round_marks(name: str) -> None:
+    """Why the rims are looked for: as round marks, fewer than two holes are found."""
+    image = _frame(name)
+    mm, (u, _) = BLACK_MM_PER_PX, BLACK_PICK
+    marks = find_circles(image, HOLE * 0.7 / mm, HOLE * 1.3 / mm)
+    assert len([c for c in marks if abs((u - c.x) * mm - BLACK_LINE) < 1.0]) < 2
+
+
+STRIP_LINE = (600.0, 540.0)
+"""The hole line runs down the middle of the strip frames (column 600), the camera
+centered on it there."""
+
+
+@pytest.mark.parametrize(
+    ("name", "first"),
+    [
+        # Where the holes are, mm down the picture from the frame's middle (judged: the
+        # holes' halves that show).
+        ("strip-half-holes", -2.04),
+        ("strip-half-holes-led", -2.0),
+    ],
+)
+def test_half_covered_holes_are_found_by_their_rhythm(name: str, first: float) -> None:
+    """Black tape in strips whose holder's rail covers half of every hole: the holes are
+    neither round marks nor much of a rim, but darken the hole line every 4 mm."""
+    image = _frame(name)
+    mm = BLACK_MM_PER_PX
+    holes = find_hole_rhythm(image, STRIP_LINE, 90.0, PITCH / mm, HOLE / mm, 0.6 / mm, 0.3 / mm)
+    assert len(holes) >= 2
+    for hole in holes:
+        off = (hole.along * mm - first + PITCH / 2) % PITCH - PITCH / 2
+        assert abs(off) < 0.2, (holes, off)
+    line = [c for c in find_circles(image, 1.05 / mm, 1.95 / mm) if abs(c.x - STRIP_LINE[0]) < 95]
+    rims = [c for c in find_rims(image, HOLE / mm, 0.6 * PITCH / mm) if abs(c.x - 600) < 95]
+    assert len(line) < 2 and len(rims) < 2
+
+
+@pytest.mark.parametrize(
+    ("name", "line", "angle"),
+    [
+        ("strip-holder-side", STRIP_LINE, 90.0),
+        # Along a holder's machined rail, which darkens here and there.
+        ("strip-rail", (599.75, 539.83), 88.21),
+    ],
+)
+def test_no_rhythm_where_there_are_no_holes(
+    name: str, line: tuple[float, float], angle: float
+) -> None:
+    """The other side of a strip: its holder, the part, and the bed beside it."""
+    image = _frame(name)
+    mm = BLACK_MM_PER_PX
+    holes = find_hole_rhythm(image, line, angle, PITCH / mm, HOLE / mm, 0.6 / mm, 0.3 / mm)
+    assert holes == []
+
+
+def test_faint_holes_at_a_strips_end_are_found_by_their_shape() -> None:
+    """Black tape over a black holder, by a strip's first part: two holes plain to see, 3.92
+    mm apart, but too faint to be round marks or rims. Their shape finds them, on the hole
+    line."""
+    image = _frame("strip-end-faint")
+    mm = BLACK_MM_PER_PX
+    holes = match_holes(image, STRIP_LINE, -90.0, HOLE / mm, 1.0 / mm, 0.6 * PITCH / mm)
+    assert len(holes) == 2, holes
+    assert all(abs(h.x - STRIP_LINE[0]) < 0.1 / mm for h in holes), holes
+    gap = abs(holes[0].y - holes[1].y) * mm
+    assert gap == pytest.approx(3.92, abs=0.05), holes
+    line = [c for c in find_circles(image, 1.05 / mm, 1.95 / mm) if abs(c.x - STRIP_LINE[0]) < 95]
+    rims = [c for c in find_rims(image, HOLE / mm, 0.6 * PITCH / mm) if abs(c.x - 600) < 95]
+    assert len(line) < 2 and len(rims) < 2
+
+
+def test_a_hole_cut_through_by_a_strips_end_is_not_taken() -> None:
+    """By a strip's last part, its end cuts through a hole: a dark half disk, off the line
+    of the whole holes (0.2 mm on a real machine), which would move the pocket."""
+    image = _frame("strip-end-cut-hole")
+    mm = BLACK_MM_PER_PX
+    holes = match_holes(image, STRIP_LINE, -90.0, HOLE / mm, 1.0 / mm, 0.6 * PITCH / mm)
+    assert [(round(h.x), round(h.y)) for h in holes] == [(604, 716)], holes
+
+
+@pytest.mark.parametrize(
+    ("name", "line", "angle"),
+    [("strip-holder-side", STRIP_LINE, 90.0), ("strip-rail", (599.75, 539.83), 88.21)],
+)
+def test_no_holes_matched_where_there_are_none(
+    name: str, line: tuple[float, float], angle: float
+) -> None:
+    """A strip's holder, its part, its machined rail and the bed: nothing hole-shaped."""
+    mm = BLACK_MM_PER_PX
+    assert match_holes(_frame(name), line, angle, HOLE / mm, 1.0 / mm, 0.6 * PITCH / mm) == []
 
 
 def test_holes_in_light_tape_under_a_blue_light_are_round_marks() -> None:

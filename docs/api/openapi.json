@@ -10620,6 +10620,82 @@
         ]
       }
     },
+    "/api/v1/feeders/fixed/{fixed_id}/check-holes": {
+      "post": {
+        "description": "Check a strip was taught the way its tape feeds: its sprocket holes beside its last\npart, on the side its first and last parts say. Fails if they are on the other side.",
+        "operationId": "check_strip_holes_api_v1_feeders_fixed__fixed_id__check_holes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fixed_id",
+            "required": true,
+            "schema": {
+              "title": "Fixed Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client ID from the event socket's hello message.",
+            "in": "header",
+            "name": "X-PicnicPlace-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client ID from the event socket's hello message.",
+              "title": "X-Picnicplace-Client"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The machine cannot do this right now, or this client does not hold the control lease."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Check Strip Holes",
+        "tags": [
+          "feeders"
+        ]
+      }
+    },
     "/api/v1/feeders/fixed/{fixed_id}/pocket": {
       "post": {
         "description": "Find a strip's next pocket from its sprocket holes, and center the camera on it.",

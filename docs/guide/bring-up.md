@@ -279,8 +279,11 @@ effect at once. The reset button next to one forgets it.
       part and click **First part**, then on the last part and click **Last part** (on a
       tray, also the end of the first row). On a strip whose tape's pitch the library
       gives, **Last part** also counts its parts, refusing if the two parts are not a whole
-      number of pockets apart. On a strip, **Find pocket** should land on
-      the next part. The map shows how many parts each one has left, and, once the part
+      number of pockets apart. On a strip, the first part must be the one at the end its
+      tape feeds from (the part a feeder would bring to the pick first), so its sprocket
+      holes are on the side PicnicPlace expects; after **Last part** the camera checks
+      they are, and says if the strip was taught the wrong way round. On a strip,
+      **Find pocket** should land on the next part. The map shows how many parts each one has left, and, once the part
       has a footprint (and, on a strip, its tape), draws them to scale: a strip's tape at
       its width with its sprocket holes, and each part's footprint as it lies, pin 1's pad
       and corner in red. Compare it with the top camera's view of the first part.
@@ -478,10 +481,13 @@ that paper tape does not wash out at the exposure black tape needs.
 **Black tape.** The top camera finds a pocket from the sprocket holes, and could not see
 them in black tape, either because a feeder's sprocket teeth filled them or because the
 tape lay black on a dark holder (strip holders cover part of the holes too). The pick then
-goes where the feeder's setup says. For each slot of black tape, center the camera on a
-part in the pick pocket and click **Pick is here** (Feeders workspace). Tape with an 8 mm
-pitch has a pocket at every second hole: check a part, not a gap, sits at the pick point,
-and if not, move the tape on one hole.
+went where the feeder's setup says. The core now looks for the holes' rims when it cannot
+see the holes themselves, and finds them in black tape and in strips; where a strip's holder
+covers half of each hole, it finds them by the dark spots they make every 4 mm (the pocket
+is then found along the tape, and across it stays where the strip was taught). Where no holes are found, center the
+camera on a part in the pick pocket and click **Pick is here** (Feeders workspace). Tape
+with an 8 mm pitch has a pocket at every second hole: check a part, not a gap, sits at the
+pick point, and if not, move the tape on one hole.
 
 **Gray capacitors.** A gray ceramic capacitor's body is no darker than an empty pocket's
 floor; the pocket check now looks for its bright metal ends too, and a pocket seen empty

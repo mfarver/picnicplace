@@ -244,8 +244,12 @@ effect at once. The reset button next to one forgets it.
       part clears the count: enter the new reel's.
 - [ ] **Calibrate rails** (under **Rails**): with feeders near both ends of each rail (the
       core uses the two farthest apart), it finds their fiducials and moves the rail's
-      slots to where the rail really is. If it cannot find one, jog the camera onto that
-      feeder's fiducial, select its slot, and click **Rail fiducial is here**.
+      slots to where the rail really is. Then a nozzle steps down onto each fiducial
+      until its vacuum seals, for the rail's height at that end: the first from safe Z to
+      the bottom of its travel, so check the nozzle tips are clear and the feeders' noses
+      clean first. If it cannot find a fiducial, jog the camera onto that feeder's
+      fiducial, select its slot, and click **Rail fiducial is here** (which touches it
+      too).
 - [ ] On one slot, center the camera over the pocket and click **Pick is here**. Then
       center it on the feeder's alignment fiducial and click **Measure fiducial here**.
 - [ ] **Calibrate all slots**: the camera visits every feeder's fiducial and corrects

@@ -6824,12 +6824,25 @@
           "found": {
             "$ref": "#/components/schemas/Point",
             "description": "Where it really is."
+          },
+          "z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nozzle height at the top of the feeder's nose, touched on the fiducial with a nozzle; None if it was not touched or did not seal.",
+            "title": "Z"
           }
         },
         "required": [
           "expected",
           "found",
-          "basis"
+          "basis",
+          "z"
         ],
         "title": "RailPoint",
         "type": "object"

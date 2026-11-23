@@ -984,9 +984,13 @@ class MachineService:
         self._check_target(target)
         await self._run_steps(self._plan_move(target), None)
 
-    async def locate_circles(self, min_diameter: float, max_diameter: float) -> list[Point]:
-        """Every round mark the top camera sees: their machine positions."""
-        return [m.at for m in await self.locate_round_marks(min_diameter, max_diameter)]
+    async def locate_circles(
+        self, min_diameter: float, max_diameter: float, faint: bool = False
+    ) -> list[Point]:
+        """Every round mark the top camera sees: their machine positions. ``faint``: as for
+        ``locate_round_marks``."""
+        marks = await self.locate_round_marks(min_diameter, max_diameter, faint=faint)
+        return [m.at for m in marks]
 
     async def locate_rims(self, diameter: float, min_gap: float) -> list[Point]:
         """Every round rim of about ``diameter`` the top camera sees, at least ``min_gap``
@@ -1021,11 +1025,16 @@ class MachineService:
         return out
 
     async def locate_round_marks(
-        self, min_diameter: float, max_diameter: float, through_lines: bool = False
+        self,
+        min_diameter: float,
+        max_diameter: float,
+        through_lines: bool = False,
+        faint: bool = False,
     ) -> list[RoundMark]:
         """Every round mark the top camera sees: where, how big, and how bright.
         ``through_lines``: find marks crossed by thin lines, such as a paper disc lying on
-        a board's silkscreen."""
+        a board's silkscreen. ``faint``: marks that differ little from around them under
+        the top light, such as sprocket holes (``find_circles``)."""
         camera = self.top_camera()
         if self._grab is None:
             raise VisionError("the cameras are not available")
@@ -1042,6 +1051,8 @@ class MachineService:
             min_diameter / mm_per_px,
             max_diameter / mm_per_px,
             _open_px(min_diameter / mm_per_px) if through_lines else 0,
+            None,
+            faint,
             camera=camera.id,
             position=dict(self._driver.position),
             mm_per_px=mm_per_px,

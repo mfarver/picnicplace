@@ -5579,6 +5579,11 @@ export interface components {
             expected: components["schemas"]["Point"];
             /** @description Where it really is. */
             found: components["schemas"]["Point"];
+            /**
+             * Z
+             * @description Nozzle height at the top of the feeder's nose, touched on the fiducial with a nozzle; None if it was not touched or did not seal.
+             */
+            z: number | null;
         };
         /** RailState */
         RailState: {

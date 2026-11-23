@@ -366,7 +366,8 @@ export function FeedersWorkspace() {
             </div>
             <p className="text-muted note">
               Finds the fiducials of the two feeders farthest apart on each rail and moves its
-              slots to where the rail really is. Do it once after setting up the machine, then
+              slots to where the rail really is, then touches each fiducial with a nozzle for
+              the rail's height at that end. Do it once after setting up the machine, then
               <strong> Calibrate all slots</strong>.
             </p>
           </Panel>
@@ -508,7 +509,28 @@ function railStatus(r: RailState): string {
   const found = Object.keys(c.points).length;
   if (!c.fitted) return `${found} fiducial${found === 1 ? "" : "s"} found; needs two far apart`;
   const moved = Math.hypot(c.shift.x, c.shift.y).toFixed(2);
-  return `placed: ${moved} mm off the profile, turned ${c.angle.toFixed(2)}°`;
+  return `placed: ${moved} mm off the profile, turned ${c.angle.toFixed(2)}°${railLevel(r)}`;
+}
+
+/** The rail's height where its feeders' noses were touched, end to end. */
+function railLevel(r: RailState): string {
+  const touched = Object.entries(r.calibration?.points ?? {})
+    .filter(([id, p]) => /^\d+$/.test(id) && p.z != null)
+    .sort(([a], [b]) => Number(a) - Number(b));
+  const head = touched.at(0);
+  const tail = touched.at(-1);
+  if (!head || !tail) return "";
+  const [firstId, first] = head;
+  const [lastId, last] = tail;
+  const z1 = first.z ?? 0;
+  const z2 = last.z ?? 0;
+  if (firstId === lastId) return `; nose at Z ${z1.toFixed(2)} (slot ${firstId})`;
+  const run = Math.hypot(last.found.x - first.found.x, last.found.y - first.found.y);
+  const per100 = run > 1 ? ((z2 - z1) / run) * 100 : 0;
+  return (
+    `; noses at Z ${z1.toFixed(2)} (slot ${firstId}) and ${z2.toFixed(2)} ` +
+    `(slot ${lastId}), ${Math.abs(per100).toFixed(2)} mm per 100 mm`
+  );
 }
 
 function slotClass(s: SlotState): string {

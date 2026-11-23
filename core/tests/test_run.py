@@ -601,6 +601,37 @@ def test_a_jammed_feeder_pauses_the_run(lumen: TestClient) -> None:
         assert check_landed(lumen, run) == 4 and run["current"] is None
 
 
+def test_a_fault_in_the_core_pauses_the_run(lumen: TestClient) -> None:
+    """Not a machine error but a fault in the core (a real one: the pad fit's solve came
+    out singular): the run pauses with the parts kept on their nozzles, rather than being
+    left marked running with nothing running it, and resuming places the rest."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        placement = lumen.app.state.ctx.placement  # type: ignore[attr-defined]
+        align = placement.align
+        calls = {"n": 0}
+
+        async def faulty(*args: Any, **kwargs: Any) -> Any:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise ValueError("singular matrix")
+            return await align(*args, **kwargs)
+
+        placement.align = faulty
+        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        assert op["status"] == "failed"
+        run = lumen.get("/api/v1/run").json()
+        assert run["status"] == "paused"
+        assert "something went wrong in the core at " in run["error"]
+        assert "ValueError: singular matrix" in run["error"]
+        assert run["current"]["action"] == "aligning" and run["held"]
+
+        placement.align = align
+        op = ok(s.wait(s.post("/api/v1/run/resume")))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
+
+
 def test_the_first_pick_from_each_feeder_finds_its_fiducial() -> None:
     """Rails a little off the profile, and no slot calibrated: the first pick from each
     feeder in the run finds its fiducial (searching around where the rail puts it), and

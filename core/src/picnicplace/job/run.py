@@ -1467,6 +1467,28 @@ class JobRunner:
         except asyncio.CancelledError:
             run.status, run.error = "paused", "cancelled"
             raise
+        except Exception as e:
+            # A fault in the core itself: paused, not left marked running with nothing
+            # running it, so the operator can resume, skip, or stop.
+            log.exception("the run failed")
+            run.status, run.pause_requested = "paused", False
+            step = run.current
+            ref = (
+                run.plan.items[step.index].ref
+                if step is not None and step.index is not None
+                else None
+            )
+            run.error = (
+                f"something went wrong in the core{f' at {ref}' if ref else ''} "
+                f"({type(e).__name__}: {e}). The run is paused: resume to try again, or skip "
+                "the placement. Please send a flight recording."
+            )
+            self._machine.recorder.event("run.paused", error=run.error, code="internal")
+            if run.stop_requested:
+                self._finish(run, "stopped", f"stopped: {self._summary(run)}")
+            else:
+                self._save()
+            raise
         finally:
             self._active = False
 

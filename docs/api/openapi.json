@@ -7508,6 +7508,19 @@
             "default": false,
             "title": "Stop Requested",
             "type": "boolean"
+          },
+          "working_since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "While the machine is working on the run: since when, beyond the time counted in stats.working_s.",
+            "title": "Working Since"
           }
         },
         "required": [
@@ -7531,6 +7544,7 @@
           "interrupted",
           "started_at",
           "finished_at",
+          "working_since",
           "placed",
           "remaining"
         ],
@@ -7587,6 +7601,12 @@
             "description": "Checked placements the camera could not make out well enough to judge.",
             "title": "Unsure",
             "type": "integer"
+          },
+          "working_s": {
+            "default": 0.0,
+            "description": "Seconds the machine spent working on the run, not counting the time it sat paused for the operator (or the core was down).",
+            "title": "Working S",
+            "type": "number"
           }
         },
         "required": [
@@ -7597,7 +7617,8 @@
           "placed",
           "checked",
           "unsure",
-          "bad_placements"
+          "bad_placements",
+          "working_s"
         ],
         "title": "RunStats",
         "type": "object"

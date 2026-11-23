@@ -10,8 +10,10 @@ the parts really landed against where the simulated board really wants them.
 
 import json
 import math
+import time
 from collections.abc import Iterator
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -384,7 +386,8 @@ def test_the_plan_names_parts_whose_tape_is_guessed(lumen: TestClient) -> None:
 
 def test_start_in_step_mode(lumen: TestClient) -> None:
     """Started in step mode, the run finds the board and pauses before the first part;
-    each step places one batch, and resume places the rest."""
+    each step places one batch, and resume places the rest. The time it sits paused is
+    not counted as working."""
     with connect(lumen) as s:
         set_up(lumen, s)
         body = {"job_id": "demo", "skip_blocked": True, "step": True}
@@ -398,10 +401,18 @@ def test_start_in_step_mode(lumen: TestClient) -> None:
         run = lumen.get("/api/v1/run").json()
         assert run["status"] == "paused" and 1 <= run["placed"] <= 2
         assert run["message"].startswith("paused: ")
+        assert run["working_since"] is None and run["stats"]["working_s"] > 0
+        time.sleep(1.0)  # the operator looks at the parts placed
 
         op = ok(s.wait(s.post("/api/v1/run/resume")))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
-        assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
+        run = lumen.get("/api/v1/run").json()
+        assert check_landed(lumen, run) == 4
+        total = (
+            datetime.fromisoformat(run["finished_at"]) - datetime.fromisoformat(run["started_at"])
+        ).total_seconds()
+        assert run["working_since"] is None
+        assert 0 < run["stats"]["working_s"] <= total - 1.0
 
 
 def test_run_a_job(lumen: TestClient) -> None:

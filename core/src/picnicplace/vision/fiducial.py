@@ -25,6 +25,7 @@ from statistics import median
 from typing import Literal
 
 import cv2
+import numpy as np
 from cv2.typing import MatLike
 
 from picnicplace.camera.source import Image
@@ -33,6 +34,16 @@ MIN_CIRCULARITY = 0.8
 """4πA/P², which is 1 for a perfect circle. Pads, ticks, and tape pockets score lower."""
 
 THRESHOLDS = range(16, 248, 8)
+
+LEVELS = 29
+"""For faint marks: threshold levels spread across the frame's own range of brightness,
+so a dim frame gets finer steps than a bright one, and a mark only a little darker than
+its surroundings is still found at several levels."""
+RANGE = (1.0, 99.0)
+"""The frame's range of brightness: these percentiles of it."""
+MIN_SPAN = 32.0
+"""The levels span at least this much (of 255), so a frame of nearly one brightness is
+not cut finer than its noise."""
 
 MIN_HITS = 3
 """A fiducial must be found at this many threshold levels."""
@@ -68,13 +79,18 @@ def find_circles(
     max_diameter_px: float,
     open_px: int = 0,
     polarity: Polarity | None = None,
+    faint: bool = False,
 ) -> list[Circle]:
     """Every round blob with a diameter in range, each found at several threshold levels
     (or, if none is, every one found at all). ``open_px``: first wipe out anything
     narrower than this, such as silkscreen lines touching a paper disc, which would
     otherwise merge with it at every level that finds it. ``polarity``: only bright marks,
-    or only dark ones."""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    or only dark ones. ``faint``: marks that differ little from around them, under a tinted
+    light (sprocket holes under a real LumenPnP's blue top light): each pixel's brightest
+    channel, at levels spread across the frame's range. Not for everything: gray suits the
+    bottom camera's nozzle tips better, and a fiducial's strength is how many of the fixed
+    levels find it."""
+    gray = brightness(image) if faint else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
     h, w = gray.shape
     kernel = (
@@ -88,7 +104,7 @@ def find_circles(
         "dark": (cv2.THRESH_BINARY_INV,),
     }[polarity]
     hits: list[Circle] = []
-    for level in THRESHOLDS:
+    for level in levels(gray) if faint else THRESHOLDS:
         for mode in modes:
             _, mask = cv2.threshold(gray, level, 255, mode)
             if kernel is not None:
@@ -123,6 +139,23 @@ def find_circles(
         )
         for g in stable
     ]
+
+
+def brightness(image: Image) -> Image:
+    """Each pixel's brightest channel. Under a tinted light (a real LumenPnP's top light is
+    blue), gray weighs the light's color least, and kept a tenth of the contrast between
+    light tape and its sprocket holes; the brightest channel keeps it all."""
+    return image.max(axis=2) if image.ndim == 3 else image
+
+
+def levels(gray: MatLike) -> list[float]:
+    """The threshold levels for a frame: ``LEVELS`` across its range of brightness."""
+    low, high = (float(v) for v in np.percentile(gray, RANGE))
+    if high - low < MIN_SPAN:
+        middle = min(max((low + high) / 2, MIN_SPAN / 2), 255 - MIN_SPAN / 2)
+        low, high = middle - MIN_SPAN / 2, middle + MIN_SPAN / 2
+    step = (high - low) / (LEVELS + 1)
+    return [low + step * (k + 1) for k in range(LEVELS)]
 
 
 def find_circle(

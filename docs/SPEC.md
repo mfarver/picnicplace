@@ -663,7 +663,15 @@ correction. Implementations:
     reply can be lost though the tape moved) does not stop the pick: the pocket check and the
     vacuum tell, and only a pick that then fails says the feeder did not answer. A sniff for a
     part's top that finds nothing searches once more, 1 mm further down (a real LumenPnP's
-    feeder rails were 0.6 to 0.9 mm lower at one end). Where no holes can be seen (black tape over a
+    feeder rails were 0.6 to 0.9 mm lower at one end). Holes are looked for as faint round
+    marks: in each pixel's brightest channel, not gray (under a real LumenPnP's blue top
+    light, gray kept a tenth of the contrast between light tape and its holes), at 29
+    threshold levels spread across the frame's own range of brightness (its 1st to 99th
+    percentile, at least 32 of 255 apart), so a dim frame is cut as finely as a bright one.
+    On 83 real strip pockets that found two or more holes at 26, where gray at fixed levels
+    had found them at 1. Fiducials, nozzle tips and the disc keep gray at fixed levels: the
+    bottom camera's tips are seen better in gray, and a fiducial's strength is how many
+    fixed levels find it. Where no holes can be seen (black tape over a
     dark holder, or holes with a feeder's sprocket teeth in them, as on a real LumenPnP),
     the pick goes where the feeder's setup or the strip's teaching says, and the bottom
     camera finds the part on the nozzle as for every pick.

@@ -1400,7 +1400,7 @@ class FeederService:
         look = rotate(Point(x=0, y=look_across), rotation)
         await self._machine.move_camera_to(pick.x + look.x, pick.y + look.y)
         low, high = SPROCKET_DIAMETER * 0.7, SPROCKET_DIAMETER * 1.3
-        seen = await self._machine.locate_circles(low, high)
+        seen = await self._machine.locate_circles(low, high, faint=True)
         holes = [
             (q.x, q.y)
             for q in (rotate(Point(x=p.x - pick.x, y=p.y - pick.y), -rotation) for p in seen)

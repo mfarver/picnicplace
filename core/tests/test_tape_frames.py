@@ -172,3 +172,20 @@ def test_a_gray_capacitor_is_told_from_an_empty_pocket(
     # Looked for across the part instead, its ends would fall on the pocket's dark sides.
     across = pocket_ends(image, u, v, BODY, CAP_MM_PER_PX, OUTLINE, 90.0)
     assert across is not None and across < 0.85
+
+
+def test_holes_in_light_tape_under_a_blue_light_are_round_marks() -> None:
+    """Light tape in a strip under a real LumenPnP's blue top light: the holes are plain,
+    but in gray the tape is only about 15 of 255 (gray weighs blue least) and the holes
+    do not stand out at any of the fixed threshold levels. Looked for as faint marks (each
+    pixel's brightest channel, at levels spread across the frame's own range), both whole
+    holes are found."""
+    image = _frame("strip-light-tape")
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    assert float(np.median(gray)) < 16
+    mm = 20.343605377340026 / 1920
+    assert find_circles(image, 1.05 / mm, 1.95 / mm) == []
+    found = find_circles(image, 1.05 / mm, 1.95 / mm, faint=True)
+    holes = sorted(found, key=lambda c: c.y)
+    assert [(round(c.x), round(c.y)) for c in holes] == [(195, 296), (196, 662)], holes
+    assert (holes[1].y - holes[0].y) * mm == pytest.approx(3.88, abs=0.05)

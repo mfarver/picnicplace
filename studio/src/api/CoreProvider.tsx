@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useReducer, useState }
 import { reconnectDelayMs } from "./backoff";
 import { eventsUrl, setClientId } from "./client";
 import { CoreContext, coreReducer, initialCoreState } from "./core";
+import { startHeartbeat } from "./heartbeat";
 import { loadToken, saveToken } from "./token";
 import type { ClientMessage, ServerEvent } from "./types";
 
@@ -18,7 +19,7 @@ export function CoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let socket: WebSocket | null = null;
-    let heartbeat: number | undefined;
+    let stopHeartbeat = () => {};
     let retry: number | undefined;
     let attempt = 0;
     let stopped = false;
@@ -28,7 +29,8 @@ export function CoreProvider({ children }: { children: ReactNode }) {
       socket.onopen = () => {
         attempt = 0;
         const ping: ClientMessage = { type: "ping" };
-        heartbeat = window.setInterval(() => socket?.send(JSON.stringify(ping)), HEARTBEAT_MS);
+        stopHeartbeat();
+        stopHeartbeat = startHeartbeat(() => socket?.send(JSON.stringify(ping)), HEARTBEAT_MS);
       };
       socket.onmessage = (msg: MessageEvent<string>) => {
         const event = JSON.parse(msg.data) as ServerEvent;
@@ -36,7 +38,7 @@ export function CoreProvider({ children }: { children: ReactNode }) {
         dispatch({ kind: "event", event });
       };
       socket.onclose = (ev) => {
-        window.clearInterval(heartbeat);
+        stopHeartbeat();
         setClientId(null);
         if (stopped) return;
         if (ev.code === CLOSE_UNAUTHORIZED) {
@@ -52,7 +54,7 @@ export function CoreProvider({ children }: { children: ReactNode }) {
     connect();
     return () => {
       stopped = true;
-      window.clearInterval(heartbeat);
+      stopHeartbeat();
       window.clearTimeout(retry);
       socket?.close();
     };

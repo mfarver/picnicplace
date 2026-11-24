@@ -167,11 +167,12 @@ def _centers(
 
 def _rigid(
     found: list[tuple[PadRect, float, float, float]], u: float, v: float, angle: float
-) -> tuple[float, float, float, float]:
+) -> tuple[float, float, float, float] | None:
     """The origin and turn that lay the pads' centers on their metal's, starting from
     (``u``, ``v``, ``angle``): weighted least squares (Gauss-Newton), each pad's miss
     weighted by its metal and, along each of its sides, by one over that side squared.
-    Also what is left over: root mean square, in pixels, on the same weights."""
+    Also what is left over: root mean square, in pixels, on the same weights. None when
+    the pads found cannot fix it (all of them at one point of the footprint)."""
     total = sum(m for _, _, _, m in found)
     residual = 0.0
     for _ in range(SOLVE_STEPS):
@@ -189,7 +190,11 @@ def _rigid(
             normal += j.T @ weight @ j
             rhs += j.T @ weight @ r
             miss += float(r @ weight @ r) * min(p.width, p.height) ** 2
-        step = np.linalg.solve(normal, -rhs)
+        try:
+            step = np.linalg.solve(normal, -rhs)
+        except np.linalg.LinAlgError:
+            # The pads found do not fix a turn (or a place): no fit, rather than a guess.
+            return None
         u, v, angle = u + float(step[0]), v + float(step[1]), angle + math.degrees(float(step[2]))
         residual = math.sqrt(miss)
     return u, v, angle, residual
@@ -228,5 +233,8 @@ def fit_pads(
         found = _centers(mask, rects, u, v, angle)
         if len(found) < 2:
             return None
-        u, v, angle, residual = _rigid(found, u, v, angle)
+        solved = _rigid(found, u, v, angle)
+        if solved is None:
+            return None
+        u, v, angle, residual = solved
     return PadFit(u=u, v=v, angle=angle, residual=residual, found=len(found))

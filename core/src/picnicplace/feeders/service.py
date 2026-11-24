@@ -551,9 +551,16 @@ class FeederService:
         if slot.id not in self._initialized:
             raise FeederError(f"{slot.label}: no initialized feeder; scan the feeders first")
 
-    async def feed(self, slot: Slot, distance: float | None = None) -> float:
+    async def feed(
+        self,
+        slot: Slot,
+        distance: float | None = None,
+        meanwhile: Callable[[], Awaitable[None]] | None = None,
+    ) -> float:
         """Feed a slot's tape and wait for it. For use inside an operation. Returns the
-        distance fed."""
+        distance fed. ``meanwhile``: something to do while the tape moves, such as the
+        head's travel to the slot (see ``PhotonBus.feed``); if the feeder does not take
+        the command, it is not done, and the caller does it after."""
         self.check_can_feed(slot)
         bus = self._need_bus()
         address = self._address(slot)
@@ -561,8 +568,16 @@ class FeederService:
         # Pause holds an advance as it holds a move.
         await self._machine.hold()
         unanswered: FeedNotAnsweredError | None = None
+        moving = False
+
+        async def alongside() -> None:
+            nonlocal moving
+            moving = True
+            if meanwhile is not None:
+                await meanwhile()
+
         try:
-            await bus.feed(address, mm)
+            await bus.feed(address, mm, alongside if meanwhile is not None else None)
         except FeedNotAnsweredError as e:
             # The reply may be lost though the tape moved: what was seen of the pocket is
             # forgotten as after a feed, so the camera looks again.
@@ -571,8 +586,22 @@ class FeederService:
         except FeederError as e:
             self._errors[slot.id] = str(e)
             raise
+        except BaseException:
+            # What was done alongside failed, or the pick was cancelled, once the feeder had
+            # taken the command: the tape moved, and is counted as fed.
+            if moving:
+                self._fed(slot, mm)
+            raise
         if unanswered is None:
             self._errors.pop(slot.id, None)
+        self._fed(slot, mm)
+        if unanswered is not None:
+            raise unanswered
+        return mm
+
+    def _fed(self, slot: Slot, mm: float) -> None:
+        """Keep count of a feed, and forget what was seen of the tape before it."""
+        address = self._address(slot)
         # A feed with no answer most often moved the tape: counted as one that did.
         self._count_feed(slot, mm)
         # The simulator's tape: taken to have moved, as real tape most often has when a
@@ -583,9 +612,6 @@ class FeederService:
                 self.sim_empty_pockets[slot.id] = left - 1
             self._sim_full[address] = left <= 1
         self._invalidate()
-        if unanswered is not None:
-            raise unanswered
-        return mm
 
     def start_feed(self, slot_id: str, distance: float | None) -> Operation:
         slot = self.slot(slot_id)

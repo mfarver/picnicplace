@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from picnicplace.api import create_app
+from picnicplace.feeders.photon import Command, Packet
 from picnicplace.feeders.service import FeederService
 from picnicplace.library import Footprint, Pad, Part, Size
 from picnicplace.simparts import PlacedPart
@@ -105,6 +106,53 @@ def test_pick_align_place_step_by_step(lumen: TestClient) -> None:
         part = placed(lumen)[-1]
         assert (part.x, part.y) == pytest.approx((300.0, 250.0), abs=0.05)
         assert angle_error(part.angle, 45.0) < 0.5
+
+
+@pytest.mark.parametrize("correction", ["top", "off"])
+def test_the_tape_advances_while_the_head_travels_to_the_feeder(
+    lumen: TestClient, correction: str
+) -> None:
+    """A pick from across the machine has the feeder advance its tape while the head
+    travels to it, rather than before it sets off: the feeder moves its tape by itself.
+    The camera looks, or the nozzle goes down, only once the tape has moved: the part
+    comes from the fed pocket."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        machine = lumen.app.state.ctx.machine  # type: ignore[attr-defined]
+        sim = feeders(lumen)._sim  # type: ignore[attr-defined]
+        assert sim is not None
+        slot = feeders(lumen).slot("1")
+        pick = feeders(lumen).pick(slot)
+        s.move(X=300.0, Y=250.0)
+        away = math.hypot(
+            *(machine.camera_position().x - pick.x, machine.camera_position().y - pick.y)
+        )
+        assert away > 100
+
+        # Where the head is each time the core asks the feeder whether it has finished.
+        polls: list[float] = []
+        answer = sim.handle
+
+        def spy(raw: bytes) -> bytes | None:
+            if Packet.decode(raw).payload[:1] == bytes([Command.MOVE_FEED_STATUS]):
+                here = machine.camera_position()
+                polls.append(math.hypot(here.x - start.x, here.y - start.y))
+            return answer(raw)
+
+        start = machine.camera_position()
+        sim.handle = spy
+        body = {"slot_id": "1", "nozzle_id": "N1", "pick_correction": correction}
+        op = ok(s.wait(s.post("/api/v1/placement/pick", body)))
+        assert "N1 picked RC0805-1K from Slot 1" in op["message"], op["message"]
+        # The head was on its way while the tape moved, not waiting where it started.
+        assert polls and max(polls) > 1.0, polls
+
+        # The part came from the fed pocket: it is placed where it is sent.
+        target = {"nozzle_id": "N1", "x": 300.0, "y": 250.0, "rotation": 0.0}
+        ok(s.wait(s.post("/api/v1/placement/align", {"nozzle_id": "N1"})))
+        ok(s.wait(s.post("/api/v1/placement/place", target)))
+        part = placed(lumen)[-1]
+        assert (part.x, part.y) == pytest.approx((300.0, 250.0), abs=0.05)
 
 
 def test_pick_and_place_with_the_other_nozzle(lumen: TestClient) -> None:
@@ -598,8 +646,8 @@ def test_a_feed_the_feeder_does_not_answer_is_picked_all_the_same(
         bus = feeders(lumen)._need_bus()  # type: ignore[attr-defined]
         real = bus.feed
 
-        async def silent(address: int, distance_mm: float) -> None:
-            await real(address, distance_mm)
+        async def silent(address: int, distance_mm: float, meanwhile: Any = None) -> None:
+            await real(address, distance_mm, meanwhile)
             raise FeedNotAnsweredError(f"no feeder answered in slot {address}")
 
         if not moved:

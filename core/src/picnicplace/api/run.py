@@ -164,6 +164,23 @@ async def stop(runner: Runner) -> RunState:
     return runner.stop()
 
 
+class ReviewRequest(WireModel):
+    place_again: bool = Field(
+        default=False,
+        description=(
+            "True: the operator has taken the part off the board, to be placed again. False: "
+            "it stays as it is (one the top camera found off is marked fine)."
+        ),
+    )
+
+
+@router.post("/items/{index}/review", responses=MACHINE_ERRORS, dependencies=Control)
+async def review(runner: Runner, index: int, body: ReviewRequest) -> RunState:
+    """While paused (as at the review at the end of a run), leave a placed part as it is or
+    place it again."""
+    return runner.review(index, body.place_again)
+
+
 @router.put("/items/{index}", responses=MACHINE_ERRORS, dependencies=Control)
 async def skip(runner: Runner, index: int, body: SkipRequest) -> RunState:
     """Skip a placement, or take back a skip (or retry a failed placement)."""

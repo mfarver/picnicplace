@@ -587,6 +587,7 @@ export function RunWorkspace() {
               ))}
             <RunSteps
               items={items}
+              order={shownPlan?.order}
               run={current}
               fiducials={shownPlan.fiducials}
               hasBus={!!feeders?.bus}

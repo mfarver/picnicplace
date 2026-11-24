@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RunItem, RunState } from "./api/types";
-import { focusIndex, padsMoved, runSteps } from "./runSteps";
+import { focusIndex, inOrder, padsMoved, runSteps } from "./runSteps";
 
 function item(
   index: number,
@@ -224,5 +224,18 @@ describe("runSteps", () => {
     });
     const rows = runSteps(items, state, 1, true);
     expect(rows[0]).toMatchObject({ label: "Scan feeders", current: true, problem: true });
+  });
+});
+
+describe("inOrder", () => {
+  const items = [item(0, "R1", "pending"), item(1, "R2", "pending"), item(2, "U1", "pending")];
+
+  it("lists the items in the order the run takes them", () => {
+    expect(inOrder(items, [0, 2, 1]).map((i) => i.ref)).toEqual(["R1", "U1", "R2"]);
+  });
+
+  it("keeps the plan's order without one, and puts any it leaves out last", () => {
+    expect(inOrder(items).map((i) => i.ref)).toEqual(["R1", "R2", "U1"]);
+    expect(inOrder(items, [2]).map((i) => i.ref)).toEqual(["U1", "R1", "R2"]);
   });
 });

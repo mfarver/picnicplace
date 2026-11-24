@@ -347,7 +347,9 @@ effect at once. The reset button next to one forgets it.
 - [ ] In the Run workspace, choose the job (its newest revision is shown). The checks are a dry run against the loaded
       feeders: each placement's feeder and nozzles, and what blocks any of them (no part
       number, no height, no feeder holding the part, tape too wide for the feeders, or
-      out of reach). Fix what you can; tick **Place the rest** to leave out the others.
+      out of reach), listed in the order the run will take them: a batch at a time, a
+      part on each nozzle, so the highlight moves steadily down the list as it runs.
+      Fix what you can; tick **Place the rest** to leave out the others.
       The **Load list** panel is what to put on the machine: every part the job uses,
       with its value, footprint, tape (width, kind, pitch, so you know the feeder size),
       references, how many, and where it is loaded, what is missing first and in red.

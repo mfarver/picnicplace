@@ -2897,11 +2897,28 @@
             "title": "Name",
             "type": "string"
           },
+          "nozzles": {
+            "description": "The machine's nozzles, in the profile's order.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Nozzles",
+            "type": "array"
+          },
           "ok": {
             "description": "Nothing stops the run, and every placement can be done.",
             "readOnly": true,
             "title": "Ok",
             "type": "boolean"
+          },
+          "order": {
+            "description": "Every item, in the order the run deals with them: those it has taken onto a\nnozzle, as it took them; then the rest to place, batch by batch as the run will\ntake them if every part goes on as planned; then those it will not place.",
+            "items": {
+              "type": "integer"
+            },
+            "readOnly": true,
+            "title": "Order",
+            "type": "array"
           },
           "parts": {
             "items": {
@@ -2927,6 +2944,14 @@
             "readOnly": true,
             "title": "Runnable",
             "type": "boolean"
+          },
+          "taken": {
+            "description": "Items in the order the run took them onto a nozzle (empty until it runs).",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Taken",
+            "type": "array"
           }
         },
         "required": [
@@ -2937,6 +2962,9 @@
           "parts",
           "fiducials",
           "issues",
+          "nozzles",
+          "taken",
+          "order",
           "ok",
           "runnable"
         ],

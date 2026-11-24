@@ -259,6 +259,7 @@ export function MachineWorkspace() {
                 </header>
                 <RunSteps
                   items={jobRun.plan.items}
+                  order={jobRun.plan.order}
                   run={jobRun}
                   fiducials={jobRun.plan.fiducials}
                   hasBus={!!feeders?.bus}

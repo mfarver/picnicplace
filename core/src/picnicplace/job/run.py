@@ -46,6 +46,10 @@ moved to the park position out of the operator's way: refill it, mark it refille
 resume. Pausing and stopping take effect after the batch in progress; a step resumes a
 paused run for one batch.
 
+**Speed.** The run counts the time the machine spends working on it (``stats.working_s``),
+leaving out the time it sits paused for the operator, so the Studio can give placements per
+hour both while working and from the start of the run to its end.
+
 A pause that asks the operator to do something (a problem, or the Pause button) parks the
 head out of the way first, as the end of a run does (finished or stopped, for the board to
 come off); the eye button on a placement's line brings the camera back
@@ -255,6 +259,13 @@ class RunStats(WireModel):
     )
     bad_placements: int = Field(
         default=0, description="Checked placements off their target, turned, or not found."
+    )
+    working_s: float = Field(
+        default=0.0,
+        description=(
+            "Seconds the machine spent working on the run, not counting the time it sat "
+            "paused for the operator (or the core was down)."
+        ),
     )
 
 
@@ -469,6 +480,13 @@ class RunState(WireModel):
     )
     started_at: datetime
     finished_at: datetime | None = None
+    working_since: datetime | None = Field(
+        default=None,
+        description=(
+            "While the machine is working on the run: since when, beyond the time counted "
+            "in stats.working_s."
+        ),
+    )
 
     @computed_field
     @property
@@ -1081,6 +1099,8 @@ class JobRunner:
                 )
             run.status = "paused"
             run.interrupted = True
+            # The time since it was last kept on disk is not known: not counted as working.
+            run.working_since = None
             run.fix = None
             run.board_z = None
             run.located = []
@@ -1098,8 +1118,19 @@ class JobRunner:
             )
         self._run = run
 
+    def _count_working(self, run: RunState) -> None:
+        """Add the time worked since ``working_since`` to the run's stats: up to now, and
+        on from now while the run's task goes on."""
+        if run.working_since is None:
+            return
+        now = datetime.now(UTC)
+        run.stats.working_s += max(0.0, (now - run.working_since).total_seconds())
+        run.working_since = now if self._active else None
+
     def _save(self) -> None:
         """Keep the run on disk, to come back after a restart."""
+        if self._run is not None:
+            self._count_working(self._run)
         if self.run_path is None or self._run is None:
             return
         try:
@@ -1428,6 +1459,7 @@ class JobRunner:
             run.status = "paused"
             raise
         self._active = True
+        run.working_since = datetime.now(UTC)
         return op
 
     def _finish(self, run: RunState, status: RunStatus, message: str) -> None:
@@ -1524,8 +1556,31 @@ class JobRunner:
         except asyncio.CancelledError:
             run.status, run.error = "paused", "cancelled"
             raise
+        except Exception as e:
+            # A fault in the core itself: paused, not left marked running with nothing
+            # running it, so the operator can resume, skip, or stop.
+            log.exception("the run failed")
+            run.status, run.pause_requested = "paused", False
+            step = run.current
+            ref = (
+                run.plan.items[step.index].ref
+                if step is not None and step.index is not None
+                else None
+            )
+            run.error = (
+                f"something went wrong in the core{f' at {ref}' if ref else ''} "
+                f"({type(e).__name__}: {e}). The run is paused: resume to try again, or skip "
+                "the placement. Please send a flight recording."
+            )
+            self._machine.recorder.event("run.paused", error=run.error, code="internal")
+            if run.stop_requested:
+                self._finish(run, "stopped", f"stopped: {self._summary(run)}")
+            else:
+                self._save()
+            raise
         finally:
             self._active = False
+            self._save()  # the time worked, counted up to here
 
     def _summary(self, run: RunState) -> str:
         counts: dict[str, int] = {}

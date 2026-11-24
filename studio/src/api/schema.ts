@@ -5918,6 +5918,11 @@ export interface components {
              * @default false
              */
             stop_requested: boolean;
+            /**
+             * Working Since
+             * @description While the machine is working on the run: since when, beyond the time counted in stats.working_s.
+             */
+            working_since: string | null;
         };
         /**
          * RunStats
@@ -5972,6 +5977,12 @@ export interface components {
              * @default 0
              */
             unsure: number;
+            /**
+             * Working S
+             * @description Seconds the machine spent working on the run, not counting the time it sat paused for the operator (or the core was down).
+             * @default 0
+             */
+            working_s: number;
         };
         /** SerialPort */
         SerialPort: {

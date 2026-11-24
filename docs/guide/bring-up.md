@@ -386,7 +386,9 @@ effect at once. The reset button next to one forgets it.
       down, set right any part that landed off, and resume: the run finds the fiducials
       again before placing the rest. At the end, the finish message and the Run workspace
       give the run's statistics: picks and empty picks, parts the bottom camera could not
-      find, placements, and checked placements off their pads.
+      find, placements, and checked placements off their pads. The Run workspace also
+      gives placements per hour (CPH) twice: while the machine was working, and over the
+      whole run from start to end, the time it sat paused waiting for you included.
 
       ![A real check: an 0603 on a LumenPnP, 0.35 mm off its target](../images/placement-check-real.jpg){ .pp-screenshot width="300" }
 - [ ] Tick **Start in step mode** and **Start**: the run scans the feeders (a feeder

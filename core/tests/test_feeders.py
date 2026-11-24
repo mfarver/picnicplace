@@ -84,6 +84,49 @@ def test_find_initialize_and_feed() -> None:
     asyncio.run(scenario())
 
 
+def test_a_feed_runs_the_heads_travel_while_the_tape_moves() -> None:
+    """The feeder is told to move, the travel runs while its tape moves, and only then is
+    it asked whether it has finished: on a LumenPnP the travel holds the serial link the
+    feeder's packets share. A travel that fails still waits for the feed before its error
+    goes on."""
+
+    async def scenario() -> None:
+        bus, sim = bus_with(3, step_scale=1.0)
+        await bus.initialize(3, format_uuid(simulated_uuid(3)))
+        events: list[str] = []
+        answer = sim.handle
+
+        def spy(raw: bytes) -> bytes | None:
+            events.append(Command(Packet.decode(raw).payload[0]).name)
+            return answer(raw)
+
+        sim.handle = spy  # type: ignore[method-assign]
+
+        async def travel() -> None:
+            events.append("travel")
+            await asyncio.sleep(0.05)
+            events.append("arrived")
+
+        await bus.feed(3, 4, travel)
+        assert events[:3] == ["MOVE_FEED_FORWARD", "travel", "arrived"]
+        assert events[3:] and set(events[3:]) == {"MOVE_FEED_STATUS"}
+        assert sim.feeders[3].fed_mm == pytest.approx(4.0)
+
+        events.clear()
+
+        async def crash() -> None:
+            events.append("travel")
+            raise RuntimeError("the head could not move")
+
+        with pytest.raises(RuntimeError, match="could not move"):
+            await bus.feed(3, 4, crash)
+        assert events[:2] == ["MOVE_FEED_FORWARD", "travel"]
+        assert events[-1] == "MOVE_FEED_STATUS"
+        assert sim.feeders[3].fed_mm == pytest.approx(8.0)
+
+    asyncio.run(scenario())
+
+
 def test_wrong_feeder_and_jams_are_reported() -> None:
     async def scenario() -> None:
         bus, sim = bus_with(4, jammed=True)

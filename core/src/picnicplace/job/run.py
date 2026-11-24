@@ -46,6 +46,10 @@ moved to the park position out of the operator's way: refill it, mark it refille
 resume. Pausing and stopping take effect after the batch in progress; a step resumes a
 paused run for one batch.
 
+**Speed.** The run counts the time the machine spends working on it (``stats.working_s``),
+leaving out the time it sits paused for the operator, so the Studio can give placements per
+hour both while working and from the start of the run to its end.
+
 A pause that asks the operator to do something (a problem, or the Pause button) parks the
 head out of the way first, as the end of a run does (finished or stopped, for the board to
 come off); the eye button on a placement's line brings the camera back
@@ -260,6 +264,13 @@ class RunStats(WireModel):
     bad_placements: int = Field(
         default=0, description="Checked placements off their target, turned, or not found."
     )
+    working_s: float = Field(
+        default=0.0,
+        description=(
+            "Seconds the machine spent working on the run, not counting the time it sat "
+            "paused for the operator (or the core was down)."
+        ),
+    )
 
 
 class PartNeed(WireModel):
@@ -327,6 +338,21 @@ class JobPlan(WireModel):
     parts: list[PartNeed]
     fiducials: int = Field(description="Fiducials the run will look for.")
     issues: list[Issue]
+    nozzles: list[str] = Field(
+        default_factory=list[str], description="The machine's nozzles, in the profile's order."
+    )
+    taken: list[int] = Field(
+        default_factory=list[int],
+        description="Items in the order the run took them onto a nozzle (empty until it runs).",
+    )
+
+    @computed_field
+    @property
+    def order(self) -> list[int]:
+        """Every item, in the order the run deals with them: those it has taken onto a
+        nozzle, as it took them; then the rest to place, batch by batch as the run will
+        take them if every part goes on as planned; then those it will not place."""
+        return processing_order(self.items, self.nozzles, self.taken)
 
     @computed_field
     @property
@@ -339,6 +365,47 @@ class JobPlan(WireModel):
     def runnable(self) -> bool:
         """The run can start, placing what it can and skipping what is blocked."""
         return not any(i.severity == "error" and i.ref is None for i in self.issues)
+
+
+def fill_batch(pending: list[RunItem], nozzles: list[str], batch: dict[str, int]) -> dict[str, int]:
+    """Give each free nozzle the first of ``pending`` it can take, in order; a nozzle that
+    some items can use alone goes to those, if they come up. ``batch`` (nozzle ID to item
+    index) is filled in place and returned."""
+    only = {n: sum(1 for i in pending if i.nozzles == [n]) for n in nozzles}
+    for item in pending:
+        if len(batch) >= len(nozzles):
+            break
+        free = [n for n in item.nozzles if n not in batch]
+        if not free:
+            continue
+        batch[min(free, key=lambda n: only.get(n, 0))] = item.index
+    return batch
+
+
+def processing_order(items: list[RunItem], nozzles: list[str], taken: list[int]) -> list[int]:
+    """Item indices in the order a run deals with them (see ``JobPlan.order``)."""
+    order: list[int] = []
+    seen: set[int] = set()
+    for index in taken:
+        if 0 <= index < len(items) and index not in seen:
+            order.append(index)
+            seen.add(index)
+    # Dealt with but not in ``taken`` (a run kept before it was): next, in plan order.
+    for i in items:
+        if i.status in ("placed", "failed") and i.index not in seen:
+            order.append(i.index)
+            seen.add(i.index)
+    nozzles = nozzles or sorted({n for i in items for n in i.nozzles})
+    rest = [i for i in items if i.status == "pending" and i.index not in seen]
+    while rest:
+        batch = fill_batch(rest, nozzles, {})
+        if not batch:
+            break
+        order += batch.values()
+        seen.update(batch.values())
+        rest = [i for i in rest if i.index not in seen]
+    order += [i.index for i in items if i.index not in seen]
+    return order
 
 
 RunStatus = Literal["running", "paused", "finished", "stopped"]
@@ -417,6 +484,13 @@ class RunState(WireModel):
     )
     started_at: datetime
     finished_at: datetime | None = None
+    working_since: datetime | None = Field(
+        default=None,
+        description=(
+            "While the machine is working on the run: since when, beyond the time counted "
+            "in stats.working_s."
+        ),
+    )
 
     @computed_field
     @property
@@ -902,6 +976,7 @@ def plan_job(
         parts=sorted(needs.values(), key=lambda n: (n.problem is None, n.part_id or "")),
         fiducials=len(chosen),
         issues=issues,
+        nozzles=[n.id for n in profile.nozzles],
     )
 
 
@@ -1048,6 +1123,8 @@ class JobRunner:
                 )
             run.status = "paused"
             run.interrupted = True
+            # The time since it was last kept on disk is not known: not counted as working.
+            run.working_since = None
             run.fix = None
             run.board_z = None
             run.located = []
@@ -1065,8 +1142,19 @@ class JobRunner:
             )
         self._run = run
 
+    def _count_working(self, run: RunState) -> None:
+        """Add the time worked since ``working_since`` to the run's stats: up to now, and
+        on from now while the run's task goes on."""
+        if run.working_since is None:
+            return
+        now = datetime.now(UTC)
+        run.stats.working_s += max(0.0, (now - run.working_since).total_seconds())
+        run.working_since = now if self._active else None
+
     def _save(self) -> None:
         """Keep the run on disk, to come back after a restart."""
+        if self._run is not None:
+            self._count_working(self._run)
         if self.run_path is None or self._run is None:
             return
         try:
@@ -1403,6 +1491,7 @@ class JobRunner:
             run.status = "paused"
             raise
         self._active = True
+        run.working_since = datetime.now(UTC)
         return op
 
     def _finish(self, run: RunState, status: RunStatus, message: str) -> None:
@@ -1499,8 +1588,31 @@ class JobRunner:
         except asyncio.CancelledError:
             run.status, run.error = "paused", "cancelled"
             raise
+        except Exception as e:
+            # A fault in the core itself: paused, not left marked running with nothing
+            # running it, so the operator can resume, skip, or stop.
+            log.exception("the run failed")
+            run.status, run.pause_requested = "paused", False
+            step = run.current
+            ref = (
+                run.plan.items[step.index].ref
+                if step is not None and step.index is not None
+                else None
+            )
+            run.error = (
+                f"something went wrong in the core{f' at {ref}' if ref else ''} "
+                f"({type(e).__name__}: {e}). The run is paused: resume to try again, or skip "
+                "the placement. Please send a flight recording."
+            )
+            self._machine.recorder.event("run.paused", error=run.error, code="internal")
+            if run.stop_requested:
+                self._finish(run, "stopped", f"stopped: {self._summary(run)}")
+            else:
+                self._save()
+            raise
         finally:
             self._active = False
+            self._save()  # the time worked, counted up to here
 
     def _summary(self, run: RunState) -> str:
         counts: dict[str, int] = {}
@@ -1707,15 +1819,11 @@ class JobRunner:
                 batch[nozzle_id] = index
         busy = set(run.held.values())
         pending = [i for i in run.plan.items if i.status == "pending" and i.index not in busy]
-        # Nozzles that some pending items can use alone go to those, if they come up.
-        only = {n: sum(1 for i in pending if i.nozzles == [n]) for n in nozzles}
-        for item in pending:
-            free = [n for n in item.nozzles if n not in batch]
-            if not free:
-                continue
-            batch[min(free, key=lambda n: only.get(n, 0))] = item.index
-            if len(batch) == len(nozzles):
-                break
+        fill_batch(pending, nozzles, batch)
+        # Kept in the order taken, for the Studio's list (``JobPlan.order``).
+        for index in batch.values():
+            if index not in run.plan.taken:
+                run.plan.taken.append(index)
         return batch
 
     async def _do_batch(self, run: RunState, batch: dict[str, int]) -> None:

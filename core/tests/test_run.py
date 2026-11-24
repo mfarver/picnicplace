@@ -10,8 +10,10 @@ the parts really landed against where the simulated board really wants them.
 
 import json
 import math
+import time
 from collections.abc import Iterator
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -384,7 +386,8 @@ def test_the_plan_names_parts_whose_tape_is_guessed(lumen: TestClient) -> None:
 
 def test_start_in_step_mode(lumen: TestClient) -> None:
     """Started in step mode, the run finds the board and pauses before the first part;
-    each step places one batch, and resume places the rest."""
+    each step places one batch, and resume places the rest. The time it sits paused is
+    not counted as working."""
     with connect(lumen) as s:
         set_up(lumen, s)
         body = {"job_id": "demo", "skip_blocked": True, "step": True}
@@ -398,18 +401,30 @@ def test_start_in_step_mode(lumen: TestClient) -> None:
         run = lumen.get("/api/v1/run").json()
         assert run["status"] == "paused" and 1 <= run["placed"] <= 2
         assert run["message"].startswith("paused: ")
+        assert run["working_since"] is None and run["stats"]["working_s"] > 0
+        time.sleep(1.0)  # the operator looks at the parts placed
 
         op = ok(s.wait(s.post("/api/v1/run/resume")))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
-        assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
+        run = lumen.get("/api/v1/run").json()
+        assert check_landed(lumen, run) == 4
+        total = (
+            datetime.fromisoformat(run["finished_at"]) - datetime.fromisoformat(run["started_at"])
+        ).total_seconds()
+        assert run["working_since"] is None
+        assert 0 < run["stats"]["working_s"] <= total - 1.0
 
 
 def test_run_a_job(lumen: TestClient) -> None:
     with connect(lumen) as s:
         set_up(lumen, s)
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
         op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
         run = lumen.get("/api/v1/run").json()
+        # The run took its parts in the order the plan said it would, and lists them so.
+        pending = [i for i in plan["order"] if plan["items"][i]["status"] == "pending"]
+        assert run["plan"]["taken"] == pending and run["plan"]["order"][:4] == pending
         assert run["status"] == "finished" and run["placed"] == 4
         fix = run["fix"]
         assert len(fix["fiducials"]) == 3 and fix["residual"] < 0.05
@@ -599,6 +614,37 @@ def test_a_jammed_feeder_pauses_the_run(lumen: TestClient) -> None:
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
         run = lumen.get("/api/v1/run").json()
         assert check_landed(lumen, run) == 4 and run["current"] is None
+
+
+def test_a_fault_in_the_core_pauses_the_run(lumen: TestClient) -> None:
+    """Not a machine error but a fault in the core (a real one: the pad fit's solve came
+    out singular): the run pauses with the parts kept on their nozzles, rather than being
+    left marked running with nothing running it, and resuming places the rest."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        placement = lumen.app.state.ctx.placement  # type: ignore[attr-defined]
+        align = placement.align
+        calls = {"n": 0}
+
+        async def faulty(*args: Any, **kwargs: Any) -> Any:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise ValueError("singular matrix")
+            return await align(*args, **kwargs)
+
+        placement.align = faulty
+        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        assert op["status"] == "failed"
+        run = lumen.get("/api/v1/run").json()
+        assert run["status"] == "paused"
+        assert "something went wrong in the core at " in run["error"]
+        assert "ValueError: singular matrix" in run["error"]
+        assert run["current"]["action"] == "aligning" and run["held"]
+
+        placement.align = align
+        op = ok(s.wait(s.post("/api/v1/run/resume")))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
 
 
 def test_the_first_pick_from_each_feeder_finds_its_fiducial() -> None:

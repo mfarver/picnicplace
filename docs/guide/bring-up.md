@@ -347,7 +347,9 @@ effect at once. The reset button next to one forgets it.
 - [ ] In the Run workspace, choose the job (its newest revision is shown). The checks are a dry run against the loaded
       feeders: each placement's feeder and nozzles, and what blocks any of them (no part
       number, no height, no feeder holding the part, tape too wide for the feeders, or
-      out of reach). Fix what you can; tick **Place the rest** to leave out the others.
+      out of reach), listed in the order the run will take them: a batch at a time, a
+      part on each nozzle, so the highlight moves steadily down the list as it runs.
+      Fix what you can; tick **Place the rest** to leave out the others.
       The **Load list** panel is what to put on the machine: every part the job uses,
       with its value, footprint, tape (width, kind, pitch, so you know the feeder size),
       references, how many, and where it is loaded, what is missing first and in red.
@@ -384,7 +386,9 @@ effect at once. The reset button next to one forgets it.
       down, set right any part that landed off, and resume: the run finds the fiducials
       again before placing the rest. At the end, the finish message and the Run workspace
       give the run's statistics: picks and empty picks, parts the bottom camera could not
-      find, placements, and checked placements off their pads.
+      find, placements, and checked placements off their pads. The Run workspace also
+      gives placements per hour (CPH) twice: while the machine was working, and over the
+      whole run from start to end, the time it sat paused waiting for you included.
 
       ![A real check: an 0603 on a LumenPnP, 0.35 mm off its target](../images/placement-check-real.jpg){ .pp-screenshot width="300" }
 - [ ] Tick **Start in step mode** and **Start**: the run scans the feeders (a feeder

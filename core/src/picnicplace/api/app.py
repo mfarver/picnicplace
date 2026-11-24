@@ -62,6 +62,7 @@ from picnicplace.simparts import (
     PartShape,
     PlacedPart,
 )
+from picnicplace.tip_picks import TipPicks
 from picnicplace.training import TrainedPartStore
 from picnicplace.wizard import SetupFacts, Wizard, WizardStore
 
@@ -213,6 +214,7 @@ def create_app(
             lambda: ctx.library,
             config.machine.pick_correction,
             TrainedPartStore(config.data.trained_parts_path, config.data.trained_frames_dir),
+            TipPicks(config.data.tip_picks_path),
         )
         jobs = JobStore(config.data.jobs_dir, config.data.setups_dir)
         ctx.runner = JobRunner(

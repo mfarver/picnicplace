@@ -95,7 +95,8 @@ Steps 1, 2 and 5 work today, and step 3 in part; the rest is planned.
    how the error depends on the part's angle (the circle of 0603s) and its place on the
    board, kept with the run and sent with a flight recording. Today the finish message
    and the Run workspace give the run's statistics: picks, empty picks, parts the bottom
-   camera could not find, placements, and checked placements off their pads.
+   camera could not find, placements, and checked placements off their pads, and the Run
+   workspace gives placements per hour, working and overall.
 5. Pick the parts up again (or peel off the tape), and the board is ready for the next
    test.
 

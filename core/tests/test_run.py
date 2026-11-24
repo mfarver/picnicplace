@@ -10,8 +10,10 @@ the parts really landed against where the simulated board really wants them.
 
 import json
 import math
+import time
 from collections.abc import Iterator
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -384,7 +386,8 @@ def test_the_plan_names_parts_whose_tape_is_guessed(lumen: TestClient) -> None:
 
 def test_start_in_step_mode(lumen: TestClient) -> None:
     """Started in step mode, the run finds the board and pauses before the first part;
-    each step places one batch, and resume places the rest."""
+    each step places one batch, and resume places the rest. The time it sits paused is
+    not counted as working."""
     with connect(lumen) as s:
         set_up(lumen, s)
         body = {"job_id": "demo", "skip_blocked": True, "step": True}
@@ -398,18 +401,30 @@ def test_start_in_step_mode(lumen: TestClient) -> None:
         run = lumen.get("/api/v1/run").json()
         assert run["status"] == "paused" and 1 <= run["placed"] <= 2
         assert run["message"].startswith("paused: ")
+        assert run["working_since"] is None and run["stats"]["working_s"] > 0
+        time.sleep(1.0)  # the operator looks at the parts placed
 
         op = ok(s.wait(s.post("/api/v1/run/resume")))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
-        assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
+        run = lumen.get("/api/v1/run").json()
+        assert check_landed(lumen, run) == 4
+        total = (
+            datetime.fromisoformat(run["finished_at"]) - datetime.fromisoformat(run["started_at"])
+        ).total_seconds()
+        assert run["working_since"] is None
+        assert 0 < run["stats"]["working_s"] <= total - 1.0
 
 
 def test_run_a_job(lumen: TestClient) -> None:
     with connect(lumen) as s:
         set_up(lumen, s)
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
         op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
         run = lumen.get("/api/v1/run").json()
+        # The run took its parts in the order the plan said it would, and lists them so.
+        pending = [i for i in plan["order"] if plan["items"][i]["status"] == "pending"]
+        assert run["plan"]["taken"] == pending and run["plan"]["order"][:4] == pending
         assert run["status"] == "finished" and run["placed"] == 4
         fix = run["fix"]
         assert len(fix["fiducials"]) == 3 and fix["residual"] < 0.05
@@ -599,6 +614,37 @@ def test_a_jammed_feeder_pauses_the_run(lumen: TestClient) -> None:
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
         run = lumen.get("/api/v1/run").json()
         assert check_landed(lumen, run) == 4 and run["current"] is None
+
+
+def test_a_fault_in_the_core_pauses_the_run(lumen: TestClient) -> None:
+    """Not a machine error but a fault in the core (a real one: the pad fit's solve came
+    out singular): the run pauses with the parts kept on their nozzles, rather than being
+    left marked running with nothing running it, and resuming places the rest."""
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        placement = lumen.app.state.ctx.placement  # type: ignore[attr-defined]
+        align = placement.align
+        calls = {"n": 0}
+
+        async def faulty(*args: Any, **kwargs: Any) -> Any:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise ValueError("singular matrix")
+            return await align(*args, **kwargs)
+
+        placement.align = faulty
+        op = s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True}))
+        assert op["status"] == "failed"
+        run = lumen.get("/api/v1/run").json()
+        assert run["status"] == "paused"
+        assert "something went wrong in the core at " in run["error"]
+        assert "ValueError: singular matrix" in run["error"]
+        assert run["current"]["action"] == "aligning" and run["held"]
+
+        placement.align = align
+        op = ok(s.wait(s.post("/api/v1/run/resume")))
+        assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
+        assert check_landed(lumen, lumen.get("/api/v1/run").json()) == 4
 
 
 def test_the_first_pick_from_each_feeder_finds_its_fiducial() -> None:
@@ -1077,9 +1123,9 @@ def test_a_run_comes_back_after_the_core_restarts() -> None:
 
 def test_parts_go_to_the_nozzles_whose_tips_suit_them(lumen: TestClient) -> None:
     """With an N045 tip (0.45 mm hole) on the left nozzle and an N08 (0.8 mm) on the
-    right, the 0603 resistors are picked by the left one only (the N08's hole is as wide as
-    they are), and the 0805 and the SOIC by the right one (the larger hole that suits them
-    holds them best). The plan says so, and the run places them all."""
+    right, the 0603 resistors and the 0805 can go on either (both holes fit inside them),
+    and the SOIC only on the right one (the N045's hole is too small to hold it well). The
+    plan says so, and the run places them all."""
     from tests.test_nozzle_tips import fit
 
     with connect(lumen) as s:
@@ -1088,22 +1134,69 @@ def test_parts_go_to_the_nozzles_whose_tips_suit_them(lumen: TestClient) -> None
         fit(s, "N2", "N08")
         plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
         nozzles = {i["ref"]: i["nozzles"] for i in plan["items"] if i["status"] == "pending"}
-        assert nozzles == {"R1": ["N1"], "R2": ["N1"], "C1": ["N2"], "U2": ["N2"]}, nozzles
+        both = ["N1", "N2"]
+        assert nozzles == {"R1": both, "R2": both, "C1": both, "U2": ["N2"]}, nozzles
         tips = [i["message"] for i in plan["issues"] if "by the tips fitted" in i["message"]]
-        assert tips and "2 only on the left nozzle (N045)" in tips[0], plan["issues"]
+        assert tips and "1 only on the right nozzle (N08)" in tips[0], plan["issues"]
         assert not [i for i in plan["issues"] if "only some of the nozzles" in i["message"]]
 
         op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
         assert op["message"] == "finished: 4 placed, 1 blocked, 3 skipped"
         run = lumen.get("/api/v1/run").json()
         by = {i["ref"]: i["nozzle"] for i in run["plan"]["items"] if i["status"] == "placed"}
-        assert by == {"R1": "N1", "R2": "N1", "C1": "N2", "U2": "N2"}, by
+        assert by["U2"] == "N2" and set(by.values()) == {"N1", "N2"}, by
         assert check_landed(lumen, run) == 4
 
 
+def test_a_tip_that_never_picks_a_part_hands_it_to_another_nozzle(lumen: TestClient) -> None:
+    """The N08 on the right nozzle lifts nothing from the resistors' slot, as a real N08
+    did on 0603 capacitors. After its second empty pick the run gives that placement to the
+    left nozzle, whose N045 picks the part, without pausing; and the next plan leaves the
+    resistors to the left nozzle alone."""
+    from picnicplace.placement import MispickError
+    from tests.test_nozzle_tips import fit
+
+    with connect(lumen) as s:
+        set_up(lumen, s)
+        fit(s, "N1", "N045")
+        fit(s, "N2", "N08")
+        plan = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        resistors = {i["slot_id"] for i in plan["items"] if i["ref"] in ("R1", "R2")}
+        assert len(resistors) == 1
+        placement = lumen.app.state.ctx.placement  # type: ignore[attr-defined]
+        pick = placement.pick
+
+        feeders = lumen.app.state.ctx.feeders  # type: ignore[attr-defined]
+
+        async def n08_lifts_nothing(
+            slot_id: str, nozzle: Any, feed: bool, *args: Any, **kw: Any
+        ) -> Any:
+            if nozzle.id == "N2" and slot_id in resistors:
+                if feed:  # the tape moves on as for any pick; the part stays in its pocket
+                    await feeders.feed(feeders.slot(slot_id))
+                raise MispickError(f"{nozzle.id} picked nothing from slot {slot_id}")
+            return await pick(slot_id, nozzle, feed, *args, **kw)
+
+        placement.pick = n08_lifts_nothing
+        op = ok(s.wait(s.post("/api/v1/run/start", {"job_id": "demo", "skip_blocked": True})))
+        assert op["message"].startswith("finished: 4 placed, 1 blocked, 3 skipped")
+        run = lumen.get("/api/v1/run").json()
+        by = {i["ref"]: i["nozzle"] for i in run["plan"]["items"] if i["status"] == "placed"}
+        assert by["R1"] == "N1" and by["R2"] == "N1", by
+        assert run["stats"]["empty_picks"] == 2
+        assert check_landed(lumen, run) == 4
+
+        part = next(i["part_id"] for i in plan["items"] if i["ref"] == "R1")
+        assert placement.tips.barred(part, "N08") and not placement.tips.barred(part, "N045")
+        again = s.post("/api/v1/run/plan", {"job_id": "demo"}).json()
+        nozzles = {i["ref"]: i["nozzles"] for i in again["items"] if i["status"] == "pending"}
+        assert nozzles["R1"] == ["N1"] and nozzles["R2"] == ["N1"], nozzles
+
+
 def test_tip_nozzles_by_part_size() -> None:
-    """The rule itself: the hole no wider than 75% of the part's narrower side, and of
-    those the largest; with no tip known, or none that suits, any nozzle."""
+    """The rule itself: the hole no wider than the part's narrower side and no narrower
+    than 35% of it, else the largest that is not too wide; less a tip barred for the part,
+    unless that leaves none; with no tip known, or none that suits, any nozzle."""
     from picnicplace.job.run import part_width, tip_nozzles
     from picnicplace.library.models import Footprint, Pad, Size
 
@@ -1143,8 +1236,13 @@ def test_tip_nozzles_by_part_size() -> None:
     assert part_width(qfn) == pytest.approx(3.2)  # the pads' extent
     part = Part(id="P", footprint_id="X")
     both = ["N1", "N2"]
-    assert tip_nozzles(both, part, Library(chip(0.8)), fitted) == ["N1"]  # 0603
-    assert tip_nozzles(both, part, Library(chip(1.25)), fitted) == ["N2"]  # 0805
-    assert tip_nozzles(both, part, Library(qfn), fitted) == ["N2"]
-    assert tip_nozzles(both, part, Library(chip(0.5)), fitted) == both  # 0402: none suits
+    assert tip_nozzles(both, part, Library(chip(0.8)), fitted) == both  # 0603
+    assert tip_nozzles(both, part, Library(chip(1.25)), fitted) == both  # 0805
+    assert tip_nozzles(both, part, Library(chip(1.6)), fitted) == ["N2"]  # 1206
+    assert tip_nozzles(both, part, Library(qfn), fitted) == ["N2"]  # the largest that fits
+    assert tip_nozzles(both, part, Library(chip(0.5)), fitted) == ["N1"]  # 0402
+    assert tip_nozzles(both, part, Library(chip(0.3)), fitted) == both  # 01005: none suits
     assert tip_nozzles(both, part, Library(chip(0.8)), profile) == both  # no tips known
+    n08 = lambda part_id, tip_id: tip_id == "N08"  # noqa: E731
+    assert tip_nozzles(both, part, Library(chip(0.8)), fitted, n08) == ["N1"]
+    assert tip_nozzles(both, part, Library(chip(1.6)), fitted, n08) == ["N2"]  # none left

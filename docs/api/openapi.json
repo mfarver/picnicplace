@@ -2897,11 +2897,28 @@
             "title": "Name",
             "type": "string"
           },
+          "nozzles": {
+            "description": "The machine's nozzles, in the profile's order.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Nozzles",
+            "type": "array"
+          },
           "ok": {
             "description": "Nothing stops the run, and every placement can be done.",
             "readOnly": true,
             "title": "Ok",
             "type": "boolean"
+          },
+          "order": {
+            "description": "Every item, in the order the run deals with them: those it has taken onto a\nnozzle, as it took them; then the rest to place, batch by batch as the run will\ntake them if every part goes on as planned; then those it will not place.",
+            "items": {
+              "type": "integer"
+            },
+            "readOnly": true,
+            "title": "Order",
+            "type": "array"
           },
           "parts": {
             "items": {
@@ -2927,6 +2944,14 @@
             "readOnly": true,
             "title": "Runnable",
             "type": "boolean"
+          },
+          "taken": {
+            "description": "Items in the order the run took them onto a nozzle (empty until it runs).",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Taken",
+            "type": "array"
           }
         },
         "required": [
@@ -2937,6 +2962,9 @@
           "parts",
           "fiducials",
           "issues",
+          "nozzles",
+          "taken",
+          "order",
           "ok",
           "runnable"
         ],
@@ -7542,6 +7570,19 @@
             "readOnly": true,
             "title": "To Review",
             "type": "array"
+          },
+          "working_since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "While the machine is working on the run: since when, beyond the time counted in stats.working_s.",
+            "title": "Working Since"
           }
         },
         "required": [
@@ -7566,6 +7607,7 @@
           "interrupted",
           "started_at",
           "finished_at",
+          "working_since",
           "placed",
           "remaining",
           "to_review"
@@ -7623,6 +7665,12 @@
             "description": "Checked placements the camera could not make out well enough to judge.",
             "title": "Unsure",
             "type": "integer"
+          },
+          "working_s": {
+            "default": 0.0,
+            "description": "Seconds the machine spent working on the run, not counting the time it sat paused for the operator (or the core was down).",
+            "title": "Working S",
+            "type": "number"
           }
         },
         "required": [
@@ -7633,7 +7681,8 @@
           "placed",
           "checked",
           "unsure",
-          "bad_placements"
+          "bad_placements",
+          "working_s"
         ],
         "title": "RunStats",
         "type": "object"

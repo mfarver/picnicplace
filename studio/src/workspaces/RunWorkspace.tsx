@@ -36,6 +36,7 @@ import { PickCorrectionSelect } from "../components/PickCorrection";
 import { RunReview } from "../components/RunReview";
 import { RunSteps } from "../components/RunSteps";
 import { Placeholder } from "../components/Placeholder";
+import { placementsPerHour } from "../runSpeed";
 import { useFootprint } from "../useFootprint";
 
 /**
@@ -587,7 +588,7 @@ export function RunWorkspace() {
                 onFinish={() => void resume("/api/v1/run/resume")}
               />
             )}
-            {current && current.stats.picks > 0 && <RunStatsLine stats={current.stats} />}
+            {current && current.stats.picks > 0 && <RunStatsLine run={current} />}
             {paused &&
               Object.entries(current.held).map(([nozzle, index]) => (
                 <div key={nozzle} className="button-row run-held">
@@ -611,6 +612,7 @@ export function RunWorkspace() {
               ))}
             <RunSteps
               items={items}
+              order={shownPlan?.order}
               run={current}
               fiducials={shownPlan.fiducials}
               hasBus={!!feeders?.bus}
@@ -671,8 +673,10 @@ function FiducialList({
   );
 }
 
-/** How the run went: picks, finding parts on the bottom camera, and placements checked. */
-function RunStatsLine({ stats }: { stats: RunState["stats"] }) {
+/** How the run went: picks, finding parts on the bottom camera, placements checked, and
+ * how fast. */
+function RunStatsLine({ run }: { run: RunState }) {
+  const stats = run.stats;
   const parts = [
     `${stats.picks} picks` + (stats.empty_picks ? `, ${stats.empty_picks} came up empty` : ""),
     `${stats.alignments} found by the bottom camera` +
@@ -684,6 +688,10 @@ function RunStatsLine({ stats }: { stats: RunState["stats"] }) {
         (stats.bad_placements ? `, ${stats.bad_placements} off target` : ", all on target") +
         (stats.unsure ? `, ${stats.unsure} could not be made out` : ""),
     );
+  }
+  const cph = placementsPerHour(run);
+  if (stats.placed > 0 && cph.working !== null && cph.total !== null) {
+    parts.push(`${cph.working} CPH working, ${cph.total} CPH overall with pauses`);
   }
   const trouble = stats.empty_picks + stats.failed_alignments + stats.bad_placements > 0;
   return (

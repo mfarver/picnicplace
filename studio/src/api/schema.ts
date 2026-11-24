@@ -3698,10 +3698,22 @@ export interface components {
             /** Name */
             name: string;
             /**
+             * Nozzles
+             * @description The machine's nozzles, in the profile's order.
+             */
+            nozzles: string[];
+            /**
              * Ok
              * @description Nothing stops the run, and every placement can be done.
              */
             readonly ok: boolean;
+            /**
+             * Order
+             * @description Every item, in the order the run deals with them: those it has taken onto a
+             *     nozzle, as it took them; then the rest to place, batch by batch as the run will
+             *     take them if every part goes on as planned; then those it will not place.
+             */
+            readonly order: number[];
             /** Parts */
             parts: components["schemas"]["PartNeed"][];
             /**
@@ -3714,6 +3726,11 @@ export interface components {
              * @description The run can start, placing what it can and skipping what is blocked.
              */
             readonly runnable: boolean;
+            /**
+             * Taken
+             * @description Items in the order the run took them onto a nozzle (empty until it runs).
+             */
+            taken: number[];
         };
         /** JobRevision */
         JobRevision: {
@@ -5949,6 +5966,11 @@ export interface components {
              *     not yet looked at: the run goes on past them, and pauses for them at the end.
              */
             readonly to_review: number[];
+            /**
+             * Working Since
+             * @description While the machine is working on the run: since when, beyond the time counted in stats.working_s.
+             */
+            working_since: string | null;
         };
         /**
          * RunStats
@@ -6003,6 +6025,12 @@ export interface components {
              * @default 0
              */
             unsure: number;
+            /**
+             * Working S
+             * @description Seconds the machine spent working on the run, not counting the time it sat paused for the operator (or the core was down).
+             * @default 0
+             */
+            working_s: number;
         };
         /** SerialPort */
         SerialPort: {

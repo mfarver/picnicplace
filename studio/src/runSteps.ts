@@ -38,13 +38,15 @@ function checkDetail(c: Check): string {
   if (!c.checked) return ", not checked: the camera could not make it out";
   const t = Math.round(c.turn * 10) / 10 || 0; // never "-0.0"
   const turn = `${t >= 0 ? "+" : ""}${t.toFixed(1)}°`;
+  // Off, once the operator has looked at it and left it: marked fine.
+  const verdict = c.reviewed ? ": marked fine" : ": look at it";
   let text: string;
   if (c.on_pads != null) {
     const share = `${Math.round(c.on_pads * 100)}% on its pads`;
-    text = c.ok ? `, ${share}, ${turn}` : `, only ${share}, ${turn}: look at it`;
+    text = c.ok ? `, ${share}, ${turn}` : `, only ${share}, ${turn}${verdict}`;
   } else {
     const off = Math.hypot(c.dx, c.dy).toFixed(2);
-    text = c.ok ? `, ${off} mm off, ${turn}` : `, landed ${off} mm off, ${turn}: look at it`;
+    text = c.ok ? `, ${off} mm off, ${turn}` : `, landed ${off} mm off, ${turn}${verdict}`;
   }
   const moved = padsMoved(c);
   if (moved != null) text += `; its pads were ${moved.toFixed(2)} mm off: the board moved`;

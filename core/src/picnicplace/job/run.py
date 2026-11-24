@@ -46,6 +46,12 @@ moved to the park position out of the operator's way: refill it, mark it refille
 resume. Pausing and stopping take effect after the batch in progress; a step resumes a
 paused run for one batch.
 
+**Review.** With placements checked, one the top camera finds off its pads, turned, or not
+there does not stop the run: it is held, and once every part is placed the run pauses
+once, the head parked, for the operator to look at all of them together. Each is marked
+fine, or its part taken off and placed again; Finish places those again (checking them in
+turn) and ends the run. Only a board that has moved pauses the run at once.
+
 **Speed.** The run counts the time the machine spends working on it (``stats.working_s``),
 leaving out the time it sits paused for the operator, so the Studio can give placements per
 hour both while working and from the start of the run to its end.
@@ -243,6 +249,13 @@ class PlacementCheck(WireModel):
     picture: bool = Field(
         default=False,
         description="A picture of it is kept (GET /api/v1/run/checks/{index}).",
+    )
+    reviewed: bool = Field(
+        default=False,
+        description=(
+            "Not ok, and looked at by the operator (in the review at the end of the run) and "
+            "left as it is."
+        ),
     )
 
 
@@ -475,6 +488,14 @@ class RunState(WireModel):
             "stopped; empty between batches and when the run ends."
         ),
     )
+    reviewing: bool = Field(
+        default=False,
+        description=(
+            "Every part is placed, and the run is paused for the operator to look at the "
+            "placements the top camera found off (``to_review``): each marked fine, or taken "
+            "off to be placed again. Resume finishes, placing those again first."
+        ),
+    )
     interrupted: bool = Field(
         default=False,
         description=(
@@ -501,6 +522,20 @@ class RunState(WireModel):
     @property
     def remaining(self) -> int:
         return sum(1 for i in self.plan.items if i.status == "pending")
+
+    @computed_field
+    @property
+    def to_review(self) -> list[int]:
+        """Placements the top camera found off, turned, or not there that the operator has
+        not yet looked at: the run goes on past them, and pauses for them at the end."""
+        return [
+            i.index
+            for i in self.plan.items
+            if i.status == "placed"
+            and i.check is not None
+            and not i.check.ok
+            and not i.check.reviewed
+        ]
 
 
 # --- Planning ----------------------------------------------------------------------------
@@ -1340,6 +1375,13 @@ class JobRunner:
             self._job, self._parts = job, parts
             if self._sim_error is not None:
                 self._load_sim_board(job, parts)
+        if run.reviewing:
+            # Finish: what the operator did not choose to place again is left as it is.
+            for index in run.to_review:
+                check = run.plan.items[index].check
+                if check is not None:
+                    check.reviewed = True
+            run.reviewing = False
         self._unblock(run)
         # The tips fitted may have changed while paused (or a run read back after a
         # restart was planned before the tips counted): each pending part goes to the
@@ -1451,6 +1493,28 @@ class JobRunner:
             self._finish(run, "stopped", "stopped")
         return run
 
+    def review(self, index: int, place_again: bool) -> RunState:
+        """While paused, say what to do with a placed part: leave it as it is (one the top
+        camera found off: marked fine), or place it again (the operator has taken it off
+        the board). Placed again, it goes back to the placements still to do."""
+        run = self._need_run()
+        if run.status != "paused":
+            raise RunError(f"the run is {run.status}: pause it to look at its placements")
+        if not 0 <= index < len(run.plan.items):
+            raise InvalidTargetError(f"no placement {index} in the run")
+        item = run.plan.items[index]
+        if item.status != "placed":
+            raise RunError(f"{item.ref} is not placed ({item.status})")
+        if place_again:
+            item.status, item.check, item.nozzle = "pending", None, None
+            item.note = "placed again: the operator took the first part off"
+        elif item.check is not None and not item.check.ok:
+            item.check.reviewed = True
+        if run.reviewing:
+            run.message = self._review_message(run)
+        self._save()
+        return run
+
     def skip(self, index: int, skip: bool) -> RunState:
         run = self._need_run()
         if not 0 <= index < len(run.plan.items):
@@ -1559,6 +1623,10 @@ class JobRunner:
                 found = None
                 batch = self._next_batch(run)
                 if not batch:
+                    if run.to_review:
+                        # Every part is placed: the operator looks at those found off, all
+                        # at once, before the run finishes.
+                        return await self._pause_for_review(run)
                     # Done: the head out of the way, for the board to come off.
                     await self._park()
                     self._finish(run, "finished", f"finished: {self._summary(run)}")
@@ -1613,6 +1681,37 @@ class JobRunner:
         finally:
             self._active = False
             self._save()  # the time worked, counted up to here
+
+    async def _pause_for_review(self, run: RunState) -> str:
+        """Pause, the head out of the way, for the operator to look at the placements the
+        top camera found off: each marked fine, or taken off and placed again."""
+        refs = [run.plan.items[i].ref for i in run.to_review]
+        run.status, run.reviewing, run.current = "paused", True, None
+        run.message = self._review_message(run) + await self._park()
+        self._machine.recorder.event("run.review", refs=refs)
+        self._save()
+        return run.message
+
+    @staticmethod
+    def _review_message(run: RunState) -> str:
+        """What the review at the end of a run asks for: the placements still to look at,
+        or, once each is decided, what Finish does."""
+        refs = [run.plan.items[i].ref for i in run.to_review]
+        again = [i.ref for i in run.plan.items if i.status == "pending"]
+        if refs:
+            shown = ", ".join(refs[:10]) + (f" and {len(refs) - 10} more" if len(refs) > 10 else "")
+            return (
+                f"every part is placed: look at the {len(refs)} placement"
+                f"{'' if len(refs) == 1 else 's'} the top camera found off ({shown}). Mark "
+                "each fine, or take its part off and choose Place again; then Finish."
+            )
+        if again:
+            return (
+                f"every placement is looked at: Finish places {', '.join(again[:10])}"
+                f"{f' and {len(again) - 10} more' if len(again) > 10 else ''} again and "
+                "ends the run."
+            )
+        return "every placement is looked at: Finish ends the run."
 
     def _summary(self, run: RunState) -> str:
         counts: dict[str, int] = {}
@@ -2013,12 +2112,13 @@ class JobRunner:
     async def _check_placed(
         self, run: RunState, item: RunItem, target: Point, rotation: float
     ) -> None:
-        """Look at a part just placed with the top camera, keep where it was found with the
-        item, and pause the run if it is off its pads, turned, or not there
-        (``CHECK_ON_PADS``, ``CHECK_TURN``, ``CHECK_SCORE``; ``CHECK_OFF_MM`` from where it
-        was sent when the pads cannot be seen), or if its pads are not where the board's
-        fit puts them (``CHECK_PADS_MOVED_MM``): the board has moved, and the run finds it
-        again on resume. Only two-terminal chips with a body are looked for
+        """Look at a part just placed with the top camera and keep where it was found with
+        the item. One off its pads, turned, or not there (``CHECK_ON_PADS``, ``CHECK_TURN``,
+        ``CHECK_SCORE``; ``CHECK_OFF_MM`` from where it was sent when the pads cannot be
+        seen) is held for the review at the end of the run, and the run goes on. Pads not
+        where the board's fit puts them (``CHECK_PADS_MOVED_MM``) pause the run at once: the
+        board has moved, every part after would land off too, and the run finds it again on
+        resume. Only two-terminal chips with a body are looked for
         (``vision.placed``); others are left unchecked."""
         footprint = self._parts.find_footprint(item.footprint_id) if self._parts else None
         if footprint is None or len(footprint.pads) != 2 or footprint.body is None:
@@ -2121,11 +2221,13 @@ class JobRunner:
                 ok=False,
                 picture=picture,
             )
-            raise RunError(
-                f"{item.ref}: the top camera did not find it where it was placed: look at "
-                "it (it may have moved, stood up, or come away with the nozzle), fix or "
-                "remove it, and resume"
+            machine.recorder.event("run.checked", ref=item.ref, check=item.check)
+            self._hold(
+                item,
+                "the top camera did not find it where it was placed (it may have moved, stood "
+                "up, or come away with the nozzle)",
             )
+            return
         r, d = chip_offset(found, w, h, mm_x, mm_y)
         dx, dy = machine.image_to_machine(camera, r, d)
         f = math.radians(found.angle)
@@ -2175,16 +2277,21 @@ class JobRunner:
                 "firmly, then resume: the run finds the fiducials again before going on"
             )
         if not ok and share is not None:
-            raise RunError(
-                f"{item.ref} landed {' and '.join(wrong)}: look at it (it may stand up when "
-                "soldered), fix or remove it, and resume"
+            self._hold(item, f"landed {' and '.join(wrong)} (it may stand up when soldered)")
+        elif not ok:
+            self._hold(
+                item,
+                f"landed {off:.2f} mm from where it was sent (X {dx:+.2f}, Y {dy:+.2f}), "
+                f"turned {turn:+.1f} degrees (off its pads, it may stand up when soldered)",
             )
-        if not ok:
-            raise RunError(
-                f"{item.ref} landed {off:.2f} mm from where it was sent (X {dx:+.2f}, Y "
-                f"{dy:+.2f}), turned {turn:+.1f} degrees: look at it (off its pads, it may "
-                "stand up when soldered), fix or remove it, and resume"
-            )
+
+    def _hold(self, item: RunItem, why: str) -> None:
+        """A placement the top camera found off, turned, or not there: kept for the
+        operator to look at with the others at the end of the run (``to_review``), and the
+        run goes on."""
+        item.note = why
+        log.info("%s %s: held for review at the end of the run", item.ref, why)
+        self._machine.recorder.event("run.held", ref=item.ref, why=why)
 
     def _save_check(self, index: int, picture: Image) -> bool:
         """Keep a checked placement's picture, for the operator; False if there is

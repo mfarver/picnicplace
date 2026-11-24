@@ -58,6 +58,7 @@ from picnicplace.machine.service import MachineService
 from picnicplace.machine.sniff import SNIFF_STEP_MM, SniffError, floor_message, sniff
 from picnicplace.recorder import VISION_FUNCTIONS
 from picnicplace.schemas import Operation, WireModel
+from picnicplace.tip_picks import TipPicks
 from picnicplace.training import (
     ANGLE_STEADY,
     FIT_UNIT,
@@ -401,10 +402,13 @@ class PlacementService:
         library: Callable[[], Library | None],
         pick_correction: PickCorrection = "top",
         trained: TrainedPartStore | None = None,
+        tips: TipPicks | None = None,
     ) -> None:
         self._machine = machine
         self.trained = trained or TrainedPartStore(None)
         """How the bottom camera sees each trained part best, on this machine."""
+        self.tips = tips or TipPicks(None)
+        """How each nozzle tip has done picking each part, on this machine."""
         self._feeders = feeders
         self._library = library
         self.pick_correction: PickCorrection = pick_correction

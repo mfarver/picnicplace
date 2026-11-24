@@ -125,6 +125,10 @@ class DataConfig(_Section):
         return self.dir.expanduser() / "trained-parts"
 
     @property
+    def tip_picks_path(self) -> Path:
+        return self.dir.expanduser() / "tip-picks.json"
+
+    @property
     def tips_path(self) -> Path:
         return self.dir.expanduser() / "nozzle-tips.json"
 

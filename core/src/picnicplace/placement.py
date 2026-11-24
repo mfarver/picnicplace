@@ -222,6 +222,18 @@ class MispickError(PlacementError):
     """The nozzle came up from a pocket without a part."""
 
 
+@dataclass
+class _HeldCheck:
+    """A pick's vacuum check, left running as the head travels on (``pick`` with
+    ``defer``): whether the part came up is known by the time it is aligned or placed."""
+
+    task: "asyncio.Task[tuple[bool | None, float | None]]"
+    missed: Callable[[float | None], str]
+    """The error to give, from the reading, if the nozzle came up empty."""
+    source_id: str = ""
+    unanswered: str = ""
+
+
 class NoSealError(MispickError):
     """A sniff for a part's top reached the bottom of its search without sealing."""
 
@@ -414,6 +426,8 @@ class PlacementService:
         """How far to press a part into the board when placing it (mm), from the config;
         None: the profile's."""
         self._loads: dict[str, NozzleLoad] = {}
+        self._checks: dict[str, _HeldCheck] = {}
+        """By nozzle ID, pick vacuum checks still running (``pick`` with ``defer``)."""
         self._look: dict[str, tuple[int, str]] = {}
         """Auto correction: by slot or strip ID, how many more picks to look at with the
         top camera first, and why."""
@@ -530,6 +544,7 @@ class PlacementService:
 
     async def release(self, nozzle: Nozzle) -> str:
         """Turn the nozzle's suction off and forget its part: taken off by hand."""
+        self._drop_check(nozzle.id)
         await self._machine.suction(nozzle, False)
         self._loads.pop(nozzle.id, None)
         return f"{nozzle.id}: suction off, and its part taken as removed by hand."
@@ -548,6 +563,7 @@ class PlacementService:
     async def discard(self, nozzle: Nozzle) -> str:
         """Drop whatever ``nozzle`` holds in the discard bin."""
         bin_ = self._discard_location()
+        self._drop_check(nozzle.id)
         await self._machine.move_nozzle_over(nozzle, bin_.position.x, bin_.position.y)
         await self._machine.suction(nozzle, False)
         await asyncio.sleep(PLACE_DWELL_S)
@@ -563,11 +579,15 @@ class PlacementService:
         feed: bool,
         correction: PickCorrection,
         first: bool = False,
+        defer: bool = False,
     ) -> str:
         """Pick from a feeder slot, or from a strip or tray on the bed by its ID.
-        ``first``: the first pick from it in a run (auto correction looks first)."""
+        ``first``: the first pick from it in a run (auto correction looks first).
+        ``defer``: leave the vacuum check after the lift running while the head travels
+        on; aligning or placing the part, or ``confirm_pick``, waits for it, and raises
+        ``MispickError`` if the nozzle came up empty."""
         if self._feeders.is_fixed(slot_id):
-            return await self._pick_fixed(slot_id, nozzle, correction, first)
+            return await self._pick_fixed(slot_id, nozzle, correction, first, defer)
         slot = self._feeders.slot(slot_id)
         bank = self._feeders.bank(slot)
         if bank.pick_height is None:
@@ -614,7 +634,7 @@ class PlacementService:
         below = EMBOSSED_SNIFF_BELOW_MM if tape is not None and tape.kind == "embossed" else None
         try:
             top = await self._take_counted(
-                slot.id, how, nozzle, at, bank.pick_height, slot.label, below=below
+                slot.id, how, nozzle, at, bank.pick_height, slot.label, below=below, defer=defer
             )
         except MispickError as e:
             if unanswered:
@@ -623,6 +643,9 @@ class PlacementService:
                     "and reseat it to restart it"
                 ) from e
             raise
+        held_check = self._checks.get(nozzle.id)
+        if held_check is not None:
+            held_check.unanswered = unanswered
         self._loads[nozzle.id] = self._picked(nozzle, part, slot.id, tape_angle, at, base, how)
         what = part.id if part else "a part"
         note = f" ({unanswered}; the part was there all the same)" if unanswered else ""
@@ -640,7 +663,12 @@ class PlacementService:
         return ""
 
     async def _pick_fixed(
-        self, fixed_id: str, nozzle: Nozzle, correction: PickCorrection, first: bool
+        self,
+        fixed_id: str,
+        nozzle: Nozzle,
+        correction: PickCorrection,
+        first: bool,
+        defer: bool = False,
     ) -> str:
         feeders = self._feeders
         f = feeders.fixed(fixed_id)
@@ -682,7 +710,9 @@ class PlacementService:
         feeders.took_fixed(fixed_id)  # tried or taken, that pocket is done with
         if check is not None:
             self._check_tape(fixed_id, label, check)
-        top = await self._take_counted(fixed_id, how, nozzle, at, height, label, search)
+        top = await self._take_counted(
+            fixed_id, how, nozzle, at, height, label, search, defer=defer
+        )
         self._loads[nozzle.id] = self._picked(nozzle, part, fixed_id, angle, at, base, how)
         what = part.id if part else "a part"
         return f"{nozzle.id} picked {what} number {index + 1} from {label}{found}{top}{why}."
@@ -733,17 +763,19 @@ class PlacementService:
         label: str,
         search: bool = False,
         below: float | None = None,
+        defer: bool = False,
     ) -> str:
         """Take the part, and keep count for auto correction: after an empty pick, look
         with the top camera next time; a part taken after a look uses one up. ``height``:
         the setup's or profile's height for the part's top, used until a sniff finds it.
         With ``search``, no height for it is known: a sniff searches down from safe Z,
-        no lower than ``height``. Returns a note for the pick's message when it sniffed."""
+        no lower than ``height``. Returns a note for the pick's message when it sniffed.
+        ``defer``: as for ``pick``."""
         top = self._feeders.part_top(source_id) if self.sniff_heights else None
         note = ""
         try:
             if search and top is None:
-                found = await self._search_take(nozzle, at, height, label)
+                found = await self._search_take(nozzle, at, height, label, defer)
                 self._feeders.set_part_top(source_id, found, nozzle)
                 note = (
                     f" (no pick height set: found the part's top at Z {found:.2f} by touch, "
@@ -753,7 +785,9 @@ class PlacementService:
                 depth = below or PART_SNIFF_BELOW_MM
                 deeper = ""
                 try:
-                    found = await self._sniff_take(nozzle, at, height, label, below=depth)
+                    found = await self._sniff_take(
+                        nozzle, at, height, label, below=depth, defer=defer
+                    )
                 except NoSealError as first:
                     # Lower than thought (a feeder rail lower at one end, say): once more,
                     # from just above where the first search stopped.
@@ -765,6 +799,7 @@ class PlacementService:
                             label,
                             above=SNIFF_STEP_MM,
                             below=DEEPER_SNIFF_MM,
+                            defer=defer,
                         )
                     except NoSealError as e:
                         raise NoSealError(
@@ -778,12 +813,13 @@ class PlacementService:
                     f"{found - height:+.2f} mm from the setup's height{deeper})"
                 )
             else:
-                await self._take(nozzle, at, height if top is None else top, label)
+                await self._take(nozzle, at, height if top is None else top, label, defer)
         except MispickError:
-            self._look[source_id] = (1, "after an empty pick")
-            # Sniff again next time: the parts may sit higher or lower than thought.
-            self._feeders.forget_part_top(source_id)
+            self._missed(source_id)
             raise
+        held_check = self._checks.get(nozzle.id)
+        if held_check is not None:
+            held_check.source_id = source_id
         if how == "top" and source_id in self._look:
             looks, why = self._look[source_id]
             if looks <= 1:
@@ -831,23 +867,86 @@ class PlacementService:
         end = rotate(nozzle.runout, self._machine.nozzle_angle(nozzle))
         return Point(x=at.x - end.x, y=at.y - end.y)
 
-    async def _take(self, nozzle: Nozzle, at: Point, height: float, label: str) -> None:
-        """Lower onto a part, take it with suction, lift, and check it came up."""
+    async def _take(
+        self, nozzle: Nozzle, at: Point, height: float, label: str, defer: bool = False
+    ) -> None:
+        """Lower onto a part, take it with suction, lift, and check it came up (or with
+        ``defer``, leave the check running: see ``pick``)."""
         axis = self._axis_over(nozzle, at)
         await self._machine.move_nozzle_over(nozzle, axis.x, axis.y)
         await self._machine.lower_nozzle(nozzle, height)
         await self._machine.suction(nozzle, True)
         await asyncio.sleep(PICK_DWELL_S)
         await self._machine.raise_nozzles()
+
+        def missed(reading: float | None) -> str:
+            if reading is None:
+                return f"{nozzle.id} picked nothing from {label}"
+            return (
+                f"{nozzle.id} picked nothing from {label}: the vacuum reads {reading:g}, "
+                "not a part. Check the pocket and the pick height."
+            )
+
+        await self._check_held(nozzle, missed, defer)
+
+    async def _check_held(
+        self, nozzle: Nozzle, missed: Callable[[float | None], str], defer: bool
+    ) -> None:
+        """After a pick's lift: check the vacuum says the part came up, raising
+        ``MispickError`` with ``missed`` if not; or with ``defer``, start the check and
+        leave it running, for ``confirm_pick``."""
+        if defer:
+            task = asyncio.create_task(
+                self._machine.holds_after_lift(nozzle, VACUUM_TIMEOUT_S),
+                name=f"pick check {nozzle.id}",
+            )
+            # Read even if nobody waits for it (the part dropped, the run stopped).
+            task.add_done_callback(lambda t: t.cancelled() or t.exception())
+            self._checks[nozzle.id] = _HeldCheck(task, missed)
+            return
         held, reading = await self._machine.holds_after_lift(nozzle, VACUUM_TIMEOUT_S)
         if held is False:
             await self._machine.suction(nozzle, False)
-            raise MispickError(
-                f"{nozzle.id} picked nothing from {label}: the vacuum reads "
-                f"{reading:g}, not a part. Check the pocket and the pick height."
-                if reading is not None
-                else f"{nozzle.id} picked nothing from {label}"
+            raise MispickError(missed(reading))
+
+    async def confirm_pick(self, nozzle: Nozzle) -> None:
+        """Wait for the vacuum check of a pick made with ``defer``, if one is running;
+        if the nozzle came up empty, turn its suction off, forget its part, and raise
+        ``MispickError``."""
+        check = self._checks.get(nozzle.id)
+        if check is None:
+            return
+        try:
+            held, reading = await check.task
+        finally:
+            if self._checks.get(nozzle.id) is check:
+                del self._checks[nozzle.id]
+        if held is not False:
+            return
+        await self._machine.suction(nozzle, False)
+        self._loads.pop(nozzle.id, None)
+        if check.source_id:
+            self._missed(check.source_id)
+        self._machine.recorder.event("mispick", nozzle=nozzle.id, source=check.source_id)
+        error = check.missed(reading)
+        if check.unanswered:
+            error = (
+                f"{error}; and {check.unanswered}: check the feeder is pushed fully into its "
+                "slot, and reseat it to restart it"
             )
+        raise MispickError(error)
+
+    def _drop_check(self, nozzle_id: str) -> None:
+        """Stop a running pick check: the part is dropped or taken off anyway."""
+        check = self._checks.pop(nozzle_id, None)
+        if check is not None:
+            check.task.cancel()
+
+    def _missed(self, source_id: str) -> None:
+        """After an empty pick: look with the top camera next time, and sniff again (the
+        parts may sit higher or lower than thought)."""
+        self._look[source_id] = (1, "after an empty pick")
+        self._feeders.forget_part_top(source_id)
 
     async def _sniff_take(
         self,
@@ -858,6 +957,7 @@ class PlacementService:
         above: float = PART_SNIFF_ABOVE_MM,
         below: float = PART_SNIFF_BELOW_MM,
         missed: str | None = None,
+        defer: bool = False,
     ) -> float:
         """Take the part by touch: step down onto it with suction on until the vacuum
         seals, from ``above`` over ``expected`` to ``below`` under it, lift, and check it
@@ -883,16 +983,16 @@ class PlacementService:
                 or f"{floor_message(nozzle, f'a part at {label}', expected, below)}: "
                 "check there is a part in the pocket, and the pick height"
             )
-        held, _ = await self._machine.holds_after_lift(nozzle, VACUUM_TIMEOUT_S)
-        if held is False:
-            await self._machine.suction(nozzle, False)
-            raise MispickError(
-                f"{nozzle.id} sealed at Z {found:.2f} over {label} but lifted nothing: check "
-                "there is a part in the pocket"
-            )
+        lifted = (
+            f"{nozzle.id} sealed at Z {found:.2f} over {label} but lifted nothing: check "
+            "there is a part in the pocket"
+        )
+        await self._check_held(nozzle, lambda _reading: lifted, defer)
         return found
 
-    async def _search_take(self, nozzle: Nozzle, at: Point, floor: float, label: str) -> float:
+    async def _search_take(
+        self, nozzle: Nozzle, at: Point, floor: float, label: str, defer: bool = False
+    ) -> float:
         """Take a part whose top is not known by touch: step down onto it from safe Z to
         a little below ``floor``. Returns its top."""
         safe = self._machine.profile.safe_z
@@ -904,7 +1004,9 @@ class PlacementService:
             "top of a part, in the Feeders workspace)"
         )
         above = max(PART_SNIFF_ABOVE_MM, safe - floor)
-        return await self._sniff_take(nozzle, at, floor, label, above, PART_SNIFF_BELOW_MM, missed)
+        return await self._sniff_take(
+            nozzle, at, floor, label, above, PART_SNIFF_BELOW_MM, missed, defer
+        )
 
     def _view(
         self, camera: Camera, part: Part | None, library: Library | None, width: int
@@ -1079,6 +1181,7 @@ class PlacementService:
         first = ""
         untrained = False  # training was tried here and found no way of seeing it
         if trained is None and part is not None and self._trains_first(part, library):
+            await self.confirm_pick(nozzle)
             trained, first = await self._train_in_run(nozzle, load, part, library, camera)
             untrained = trained is None
         way = trained
@@ -1089,6 +1192,8 @@ class PlacementService:
             now = self._machine.nozzle_angle(nozzle)
             turn = now + wrap(place_angle - load.angle - now)
         await self._machine.move_nozzle_over(nozzle, camera.position.x, camera.position.y, turn)
+        # A pick's vacuum check ran as the head traveled here: an empty nozzle stops now.
+        await self.confirm_pick(nozzle)
         await self._machine.lower_nozzle(nozzle, camera.focus_height + height)
         frame = await self._machine.frame(camera.id, light=way.light if way else None)
         view = self._view(camera, part, library, frame.image.shape[1])
@@ -1647,6 +1752,7 @@ class PlacementService:
     ) -> str:
         """Place the aligned part on ``nozzle`` with its center at ``target``, turned to
         ``rotation``, on a board whose top is at ``board_height`` (the profile's if None)."""
+        await self.confirm_pick(nozzle)
         load = self._load(nozzle)
         alignment = load.alignment
         if alignment is None:

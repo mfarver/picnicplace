@@ -1694,14 +1694,14 @@ class JobRunner:
         # the run pauses for it, so none waits on a nozzle while the feeder is seen to.
         failed: MachineError | None = None
         failed_step: RunStep | None = None
+        tries: dict[str, int] = {}
         for nozzle_id, index in list(batch.items()):
             if nozzle_id in run.held:
                 continue
             item = items[index]
-            nozzle = self._machine.nozzle(nozzle_id)
             assert item.slot_id is not None
             try:
-                await self._pick_item(run, item, index, nozzle_id)
+                tries[nozzle_id] = await self._pick_item(run, item, index, nozzle_id)
             except (RunError, FeederError) as e:
                 failed, failed_step = e, run.current
                 del batch[nozzle_id]
@@ -1718,12 +1718,14 @@ class JobRunner:
             if load is not None and load.alignment is not None:
                 continue
             nozzle = self._machine.nozzle(nozzle_id)
-            run.message = f"{nozzle_id} aligning {item.ref}"
-            run.current = RunStep(stage="item", action="aligning", index=index, nozzle=nozzle_id)
             run.stats.alignments += 1
             try:
-                # Turned to its place angle first, as it will be placed.
-                await self._placement.align(nozzle, item.rotation + run.fix.angle)
+                await self._align_item(run, item, index, nozzle_id, tries.get(nozzle_id, 1))
+            except (RunError, FeederError) as e:
+                # Its pick came up empty, and picking again failed: as for a pick above.
+                failed, failed_step = e, run.current
+                del batch[nozzle_id]
+                continue
             except VisionError as e:
                 run.stats.failed_alignments += 1
                 if isinstance(e, UntrainableError):
@@ -1794,15 +1796,19 @@ class JobRunner:
         self._machine.recorder.event("run.untrainable", part=item.part_id, ref=item.ref)
         log.warning("%s: %s; its placements are skipped", item.part_id, error)
 
-    async def _pick_item(self, run: RunState, item: RunItem, index: int, nozzle_id: str) -> None:
+    async def _pick_item(
+        self, run: RunState, item: RunItem, index: int, nozzle_id: str, tried: int = 0
+    ) -> int:
         """Pick ``item``'s part with ``nozzle_id``, trying again (feeding the next part)
-        after an empty pick, up to ``PICK_ATTEMPTS`` times."""
+        after an empty pick, up to ``PICK_ATTEMPTS`` times in all with the ``tried``
+        already made. The vacuum check after the lift runs on as the head travels, and
+        aligning the part waits for it (``_align_item``). Returns the tries made."""
         assert item.slot_id is not None
         nozzle = self._machine.nozzle(nozzle_id)
         await self._locate_feeder(run, item.slot_id, index)
         run.message = f"{nozzle_id} picking {item.ref} from {_source(item.slot_id)}"
         run.current = RunStep(stage="item", action="picking", index=index, nozzle=nozzle_id)
-        for attempt in range(1, PICK_ATTEMPTS + 1):
+        for attempt in range(tried + 1, PICK_ATTEMPTS + 1):
             run.stats.picks += 1
             # After a miss, a pick that looks first does not feed: the camera sees whether
             # the part is still in its pocket (tried again) or gone (then it feeds), so a
@@ -1815,18 +1821,47 @@ class JobRunner:
                     attempt == 1 or not looks,
                     run.pick_correction,
                     first=item.slot_id not in self._picked,
+                    defer=True,
                 )
                 self._picked.add(item.slot_id)
+                return attempt
+            except MispickError as e:
+                self._missed_pick(run, item, attempt, e)
+        raise AssertionError("unreachable: the last try raises")
+
+    def _missed_pick(self, run: RunState, item: RunItem, attempt: int, error: MispickError) -> None:
+        """Count an empty pick; after the last try, stop for it."""
+        run.stats.empty_picks += 1
+        if attempt >= PICK_ATTEMPTS:
+            where = _source(item.slot_id or "")
+            item.note = f"picked nothing {PICK_ATTEMPTS} times from {where}"
+            raise RunError(
+                f"{item.ref}: {error} ({PICK_ATTEMPTS} tries). Check the feeder, "
+                "then resume to try again, or skip the placement."
+            ) from error
+
+    async def _align_item(
+        self, run: RunState, item: RunItem, index: int, nozzle_id: str, tried: int
+    ) -> None:
+        """Align the part on ``nozzle_id``, after ``tried`` tries at picking it. Its pick's
+        vacuum check ran on as the head traveled to the camera: if the nozzle came up
+        empty, pick again (the tries left), and align that."""
+        assert run.fix is not None
+        nozzle = self._machine.nozzle(nozzle_id)
+        while True:
+            run.message = f"{nozzle_id} aligning {item.ref}"
+            run.current = RunStep(stage="item", action="aligning", index=index, nozzle=nozzle_id)
+            try:
+                # Turned to its place angle first, as it will be placed.
+                await self._placement.align(nozzle, item.rotation + run.fix.angle)
                 return
             except MispickError as e:
-                run.stats.empty_picks += 1
-                if attempt == PICK_ATTEMPTS:
-                    where = _source(item.slot_id)
-                    item.note = f"picked nothing {PICK_ATTEMPTS} times from {where}"
-                    raise RunError(
-                        f"{item.ref}: {e} ({PICK_ATTEMPTS} tries). Check the feeder, "
-                        "then resume to try again, or skip the placement."
-                    ) from e
+                del run.held[nozzle_id]
+                # The step that failed is the pick.
+                run.current = RunStep(stage="item", action="picking", index=index, nozzle=nozzle_id)
+                self._missed_pick(run, item, tried, e)
+            tried = await self._pick_item(run, item, index, nozzle_id, tried)
+            run.held[nozzle_id] = index
 
     async def _check_placed(
         self, run: RunState, item: RunItem, target: Point, rotation: float

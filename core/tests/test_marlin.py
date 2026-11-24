@@ -35,7 +35,9 @@ async def lumenpnp(
     profile = load_profile("lumenpnp-v4.1")
     assert profile.marlin is not None
     host = FakeMarlinMemory(FakeSettings(time_scale=FAST, **fake))  # type: ignore[arg-type]
-    driver = MarlinDriver(profile, profile.marlin.resolved(variant), host.open, connect_wait_s=0)
+    driver = MarlinDriver(
+        profile, profile.marlin.resolved(variant), host.open, connect_wait_s=0, move_time_scale=FAST
+    )
     await driver.connect()
     try:
         yield driver, host.firmware
@@ -187,6 +189,23 @@ def test_vacuum_readings(variant: str) -> None:
     run(scenario)
 
 
+def test_a_sensor_read_goes_out_while_the_head_travels() -> None:
+    """M400 holds the link until a move ends, so it waits until the move is about done:
+    a vacuum read during the move is answered while the head is still on its way."""
+
+    async def scenario() -> None:
+        async with lumenpnp() as (driver, fake):
+            move = asyncio.create_task(driver.move_to({"X": 400.0}, speed=20.0))
+            await asyncio.sleep(0.05)
+            await driver.refresh_input("vac_n1")
+            assert not move.done()
+            assert 0 < fake.actual()["X"] < 400
+            await move
+            assert driver.position["X"] == pytest.approx(400)
+
+    run(scenario)
+
+
 def test_stop_interrupts_a_move() -> None:
     async def scenario() -> None:
         async with lumenpnp() as (driver, _fake):
@@ -260,6 +279,7 @@ def test_over_a_pseudo_terminal() -> None:
             profile.marlin.resolved(None),
             lambda: SerialTransport.open(path, 115200),
             connect_wait_s=0,
+            move_time_scale=FAST,
         )
         try:
             await driver.connect()

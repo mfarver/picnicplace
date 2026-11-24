@@ -12,9 +12,10 @@ and writes the whole as out/panel-fit.step:
         --estop c-2416049-1-a1-3d.stp
 
 The panel is the Waveshare ESP32-S3-Touch-LCD-7B in portrait, with a 22 mm E-stop (TE
-ALCOSWITCH 2416049-1) below it. It stands just left of a LumenPnP near its front, facing
-the operator, leaning back, its bottom edge on the table, and its right side bolted to the
-machine's lower left 2020 rail by a flat bracket. Every dimension is here: change it and
+ALCOSWITCH 2416049-1) below it. It stands just right of a LumenPnP near its front, facing
+the operator, leaning back, its bottom edge on the table, and its left side bolted to the
+machine's lower right 2020 rail by a flat bracket. (On the left there is no room in front
+of the machine's controller.) Every dimension is here: change it and
 run the script again rather than editing the models. Values marked MEASURE are not yet
 checked on the real parts. The design is described in docs/hardware/control-panel.md.
 
@@ -23,10 +24,10 @@ Parts, each sized for a 220 x 220 x 220 mm printer (a Flashforge Adventurer 5M P
   - back: the shell's back cover, with posts screwed to the board's standoffs; printed flat;
   - pod: the E-stop's housing below the shell; printed on its back;
   - pod-back: the pod's back cover;
-  - bracket: the plate from the shell's right side to the rail.
+  - bracket: the plate from the shell's left side to the rail.
 
 Coordinates, in millimeters, for each part as it stands upright before leaning back: +X
-right (toward the machine), +Y up, +Z toward the operator. The screen's face is Z = 0.
+right (away from the machine), +Y up, +Z toward the operator. The screen's face is Z = 0.
 """
 
 from __future__ import annotations
@@ -109,8 +110,9 @@ the E-stop's power pole to the machine's 24 V."""
 LEAN = 45.0
 """Degrees back from vertical: the screen faces up at 45 degrees, between a standing
 operator's eyes (about 55 degrees up from the panel) and a sitting one's (about 35)."""
-RAIL_HEIGHT = 30.0
-"""MEASURE: the lower rail's center (its T-slot) above the table."""
+RAIL_HEIGHT = 130.0
+"""The lower rail's center (its T-slot) above the table: 130 mm on a LumenPnP v4 standing
+on its feet (measured 2026-11-23)."""
 RAIL_SLOT_M5 = 5.4
 RAIL_HOLE_PITCH = 40.0
 """Between the bracket's two M5 screws, along the rail."""
@@ -204,18 +206,18 @@ def shell() -> cq.Workplane:
         )
         body = body.union(boss).cut(hole)
     body = body.cut(usb_slot(+1))
-    # The right side wall: two inserts for the bracket.
-    right_x = SHELL_W / 2
+    # The left side wall, toward the machine: two inserts for the bracket.
+    left_x = -SHELL_W / 2
     for y in (-SHELL_H / 4, SHELL_H / 4):
         boss = (
-            cq.Workplane("YZ", origin=(right_x - WALL, y, -SHELL_D / 2))
+            cq.Workplane("YZ", origin=(left_x + WALL, y, -SHELL_D / 2))
             .circle(SCREW_BOSS_D / 2)
-            .extrude(-6.0)
+            .extrude(6.0)
         )
         hole = (
-            cq.Workplane("YZ", origin=(right_x, y, -SHELL_D / 2))
+            cq.Workplane("YZ", origin=(left_x, y, -SHELL_D / 2))
             .circle(INSERT_D / 2)
-            .extrude(-(WALL + 6.0))
+            .extrude(WALL + 6.0)
         )
         body = body.union(boss).cut(hole)
     return body
@@ -331,7 +333,7 @@ def to_table(y: float, z: float) -> tuple[float, float]:
 
 def bracket_points() -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
     """The bracket's screw holes, as (height, forward) on the table: two M3 into the
-    shell's right side, and two M5 into T-nuts in the rail's outer slot, at its height."""
+    shell's left side, and two M5 into T-nuts in the rail's outer slot, at its height."""
     shell_holes = [to_table(y, -SHELL_D / 2) for y in (-SHELL_H / 4, SHELL_H / 4)]
     forward = sum(f for _, f in shell_holes) / 2
     rail_holes = [
@@ -342,35 +344,15 @@ def bracket_points() -> tuple[list[tuple[float, float]], list[tuple[float, float
 
 
 def bracket() -> cq.Workplane:
-    """The plate from the shell's right side to the rail, drawn as it stands: Y up from
-    the table, Z forward, X its thickness. Printed flat."""
+    """The plate from the shell's left side to the rail, drawn as it stands: Y up from
+    the table, Z forward, X its thickness. Printed flat. Its outline is the hull around its
+    four holes, so it fits the rail wherever it is: below the shell's screws or between
+    them."""
     shell_holes, rail_holes = bracket_points()
-    points = shell_holes + rail_holes
     margin = 9.0
-    lo_y = min(h for h, _ in points) - margin
-    hi_y = max(h for h, _ in points) + margin
-    lo_z = min(f for _, f in points) - margin
-    hi_z = max(f for _, f in points) + margin
-    # The outline: around every hole, as the hull of a rounded rectangle at each.
     # On the "YZ" workplane, local x is the height (Y) and local y is forward (Z).
-    plate = (
-        cq.Workplane("YZ")
-        .polyline(
-            [
-                (lo_y, rail_holes[1][1] - margin),
-                (lo_y, rail_holes[0][1] + margin),
-                (shell_holes[0][0], shell_holes[0][1] + margin),
-                (hi_y, shell_holes[1][1] + margin),
-                (hi_y, shell_holes[1][1] - margin),
-                (lo_y + 2 * margin, lo_z),
-            ]
-        )
-        .close()
-        .extrude(BRACKET_T)
-        .edges("|X")
-        .fillet(4.0)
-    )
-    del hi_z
+    outline = cq.Sketch().push(shell_holes + rail_holes).circle(margin).reset().hull()
+    plate = cq.Workplane("YZ").placeSketch(outline).extrude(BRACKET_T)
     holes = [(p, M3_CLEAR) for p in shell_holes] + [(p, RAIL_SLOT_M5) for p in rail_holes]
     for (h, f), d in holes:
         plate = plate.cut(cq.Workplane("YZ").center(h, f).circle(d / 2).extrude(BRACKET_T))
@@ -463,11 +445,11 @@ def assembly(models: list[cq.Workplane]) -> cq.Workplane:
         )
         models = [glass, knob]
     parts = [standing(p) for p in [shell(), back(), pod(), pod_back(), *models]]
-    parts.append(bracket().translate((SHELL_W / 2, 0, 0)))
+    parts.append(bracket().translate((-SHELL_W / 2 - BRACKET_T, 0, 0)))
     rail = (
         cq.Workplane("XY")
         .box(20, 20, 400)
-        .translate((SHELL_W / 2 + BRACKET_T + 10, RAIL_HEIGHT, -100))
+        .translate((-SHELL_W / 2 - BRACKET_T - 10, RAIL_HEIGHT, -100))
     )
     table = cq.Workplane("XY").box(400, 2, 450).translate((0, -1, -100))
     result = cq.Workplane("XY")

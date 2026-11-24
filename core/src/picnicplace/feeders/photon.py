@@ -33,6 +33,7 @@ driver that can exchange packets can run this code.
 """
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -206,23 +207,53 @@ class PhotonBus:
         _check(reply, address)
         return reply.data[0] if reply.data else None
 
-    async def feed(self, address: int, distance_mm: float) -> None:
-        """Move the tape forward (or back, if negative) and wait until it has moved."""
+    async def feed(
+        self,
+        address: int,
+        distance_mm: float,
+        meanwhile: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
+        """Move the tape forward (or back, if negative) and wait until it has moved.
+
+        ``meanwhile``: something to do while the tape moves, such as the head's travel to
+        the feeder. It starts once the feeder has taken the command to move, and runs to
+        its end before the feeder is asked whether it has finished: the feeder moves its
+        tape by itself, but on a LumenPnP its packets share the motherboard's serial link,
+        which a move holds until it ends. If ``meanwhile`` fails, the feed is still waited
+        for (the tape is moving) before its error goes on."""
         command = Command.MOVE_FEED_FORWARD if distance_mm >= 0 else Command.MOVE_FEED_BACKWARD
         tenths = round(abs(distance_mm) * 10)
         while tenths > 0:
             step = min(tenths, MAX_STEP_TENTHS)
-            await self._move(address, command, step)
+            expected_s = await self._start_move(address, command, step)
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + expected_s + self._timeout_margin_s
+            if meanwhile is not None:
+                doing, meanwhile = meanwhile, None
+                try:
+                    await doing()
+                except asyncio.CancelledError:
+                    raise
+                except BaseException:
+                    with contextlib.suppress(FeederError):
+                        await self._wait_move(address, expected_s, deadline)
+                    raise
+                # However long that took, the feeder gets its margin to answer after it.
+                deadline = max(deadline, loop.time() + self._timeout_margin_s)
+            await self._wait_move(address, expected_s, deadline)
             tenths -= step
 
-    async def _move(self, address: int, command: Command, tenths: int) -> None:
+    async def _start_move(self, address: int, command: Command, tenths: int) -> float:
+        """Tell a feeder to move its tape; returns how long it says that will take (s)."""
         reply = await self.request(address, command, bytes([tenths]))
         if reply is None:
             raise FeedNotAnsweredError(f"no feeder answered in slot {address}")
         _check(reply, address)
-        expected_s = int.from_bytes(reply.data[:2], "big") / 1000 if len(reply.data) >= 2 else 1
+        return int.from_bytes(reply.data[:2], "big") / 1000 if len(reply.data) >= 2 else 1
+
+    async def _wait_move(self, address: int, expected_s: float, deadline: float) -> None:
+        """Wait until a feeder says its tape has moved, until ``deadline`` (loop time)."""
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + expected_s + self._timeout_margin_s
         while True:
             await asyncio.sleep(self._poll_interval_s)
             status = await self.request(address, Command.MOVE_FEED_STATUS)

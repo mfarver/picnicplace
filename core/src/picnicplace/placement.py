@@ -573,11 +573,23 @@ class PlacementService:
         if bank.pick_height is None:
             raise PlacementError(f"the machine profile gives no pick height for {slot.label}")
         part = self._feeders.part(slot)
-        unanswered = ""
-        if feed:
-            unanswered = await self._feed(slot)
         base = self._feeders.pick(slot)
         how, why = self._method(slot.id, correction, first)
+        unanswered = ""
+        if feed:
+            # The head travels at safe Z to where the pick starts while the tape advances:
+            # the top camera over the pick location, or the nozzle over where it will go
+            # down. It looks, or goes down, once the tape has moved.
+            start = self._learned(slot.id, base)[0] if how == "bottom" else base
+
+            async def travel() -> None:
+                if how == "top":
+                    await self._machine.move_camera_to(start.x, start.y)
+                else:
+                    axis = self._axis_over(nozzle, start)
+                    await self._machine.move_nozzle_over(nozzle, axis.x, axis.y)
+
+            unanswered = await self._feed(slot, travel)
         at, found, fed = base, "", ""
         check: PocketCheck | None = None
         if how == "top":
@@ -628,12 +640,15 @@ class PlacementService:
         note = f" ({unanswered}; the part was there all the same)" if unanswered else ""
         return f"{nozzle.id} picked {what} from {slot.label}{fed}{found}{top}{why}{note}."
 
-    async def _feed(self, slot: Slot) -> str:
-        """Feed a slot before a pick. A feed the feeder does not answer goes on all the
-        same, saying so: the reply may have been lost though the tape moved, and the pocket
-        check and the pick tell whether there is a part. Any other feeder error stops it."""
+    async def _feed(
+        self, slot: Slot, meanwhile: Callable[[], Awaitable[None]] | None = None
+    ) -> str:
+        """Feed a slot before a pick, doing ``meanwhile`` (the head's travel) while the tape
+        moves. A feed the feeder does not answer goes on all the same, saying so: the reply
+        may have been lost though the tape moved, and the pocket check and the pick tell
+        whether there is a part. Any other feeder error stops it."""
         try:
-            await self._feeders.feed(slot)
+            await self._feeders.feed(slot, meanwhile=meanwhile)
         except FeedNotAnsweredError as e:
             log.warning("%s: %s; picking all the same", slot.label, e)
             return f"the feeder did not answer its feed ({e})"

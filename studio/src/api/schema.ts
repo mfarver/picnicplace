@@ -2057,6 +2057,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/run/items/{index}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review
+         * @description While paused (as at the review at the end of a run), leave a placed part as it is or
+         *     place it again.
+         */
+        post: operations["review_api_v1_run_items__index__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/run/pause": {
         parameters: {
             query?: never;
@@ -3677,10 +3698,22 @@ export interface components {
             /** Name */
             name: string;
             /**
+             * Nozzles
+             * @description The machine's nozzles, in the profile's order.
+             */
+            nozzles: string[];
+            /**
              * Ok
              * @description Nothing stops the run, and every placement can be done.
              */
             readonly ok: boolean;
+            /**
+             * Order
+             * @description Every item, in the order the run deals with them: those it has taken onto a
+             *     nozzle, as it took them; then the rest to place, batch by batch as the run will
+             *     take them if every part goes on as planned; then those it will not place.
+             */
+            readonly order: number[];
             /** Parts */
             parts: components["schemas"]["PartNeed"][];
             /**
@@ -3693,6 +3726,11 @@ export interface components {
              * @description The run can start, placing what it can and skipping what is blocked.
              */
             readonly runnable: boolean;
+            /**
+             * Taken
+             * @description Items in the order the run took them onto a nozzle (empty until it runs).
+             */
+            taken: number[];
         };
         /** JobRevision */
         JobRevision: {
@@ -5348,6 +5386,12 @@ export interface components {
              */
             picture: boolean;
             /**
+             * Reviewed
+             * @description Not ok, and looked at by the operator (in the review at the end of the run) and left as it is.
+             * @default false
+             */
+            reviewed: boolean;
+            /**
              * Score
              * @description How well the chip's pattern matched, -1 to 1.
              */
@@ -5698,6 +5742,15 @@ export interface components {
              */
             picked: number;
         };
+        /** ReviewRequest */
+        ReviewRequest: {
+            /**
+             * Place Again
+             * @description True: the operator has taken the part off the board, to be placed again. False: it stays as it is (one the top camera found off is marked fine).
+             * @default false
+             */
+            place_again: boolean;
+        };
         /** RevisionInfo */
         RevisionInfo: {
             /**
@@ -5886,6 +5939,12 @@ export interface components {
             /** Remaining */
             readonly remaining: number;
             /**
+             * Reviewing
+             * @description Every part is placed, and the run is paused for the operator to look at the placements the top camera found off (``to_review``): each marked fine, or taken off to be placed again. Resume finishes, placing those again first.
+             * @default false
+             */
+            reviewing: boolean;
+            /**
              * Started At
              * Format: date-time
              */
@@ -5901,6 +5960,17 @@ export interface components {
              * @default false
              */
             stop_requested: boolean;
+            /**
+             * To Review
+             * @description Placements the top camera found off, turned, or not there that the operator has
+             *     not yet looked at: the run goes on past them, and pauses for them at the end.
+             */
+            readonly to_review: number[];
+            /**
+             * Working Since
+             * @description While the machine is working on the run: since when, beyond the time counted in stats.working_s.
+             */
+            working_since: string | null;
         };
         /**
          * RunStats
@@ -5955,6 +6025,12 @@ export interface components {
              * @default 0
              */
             unsure: number;
+            /**
+             * Working S
+             * @description Seconds the machine spent working on the run, not counting the time it sat paused for the operator (or the core was down).
+             * @default 0
+             */
+            working_s: number;
         };
         /** SerialPort */
         SerialPort: {
@@ -11230,6 +11306,53 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SkipRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunState"];
+                };
+            };
+            /** @description The machine cannot do this right now, or this client does not hold the control lease. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_api_v1_run_items__index__review_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client ID from the event socket's hello message. */
+                "X-PicnicPlace-Client"?: string | null;
+            };
+            path: {
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRequest"];
             };
         };
         responses: {

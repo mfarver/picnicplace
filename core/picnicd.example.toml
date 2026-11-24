@@ -90,10 +90,11 @@ speed_scale = 1.0          # Cap moves at this fraction of full speed. Use 0.25 
 #         has learned something, and after an empty pick or a part well off center.
 pick_correction = "top"
 # Look at each two-terminal chip with the top camera once a run places it, with the
-# board's pads under it, and pause if less than 75% of an end is on its pad (or, with the
-# pads not seen, it landed 0.25 mm off its target), it is turned 10 degrees, or it is not
-# there; and if its pads are 0.15 mm from where the board's fiducials put them (the board
-# moved: the run finds the fiducials again on resume).
+# board's pads under it. One with less than 75% of an end on its pad (or, with the pads
+# not seen, 0.25 mm off its target), turned 10 degrees, or not there is held, and the run
+# pauses once at the end for the operator to look at them all. If its pads are 0.4 mm
+# from where the board's fiducials put them, the board moved: the run pauses at once, and
+# finds the fiducials again on resume.
 # check_placements = false
 # Find heights by touch: with suction on, a nozzle steps down until the vacuum seals. The
 # board's top on a fiducial at the start of each run, and the top of the parts in each

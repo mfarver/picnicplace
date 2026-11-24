@@ -7,6 +7,7 @@ import type {
   MachineState,
   Nozzle,
 } from "../../api/types";
+import { withinTurn } from "../../format";
 
 /**
  * Side view of the head, floating over the machine view (spec section 8.3): nozzle heights
@@ -208,7 +209,8 @@ function SideView({
         const h = nozzleHeight(n, machine);
         const tipY = toY(h);
         const held = partHeld(n, description, machine);
-        const rotation = machine?.position[n.rotation_axis] ?? 0;
+        // Within one turn: the axis counts every turn the coupling has made.
+        const rotation = withinTurn(machine?.position[n.rotation_axis] ?? 0);
         const low = h < description.safe_z;
         const end = tipHalfWidth(n, description);
         return (

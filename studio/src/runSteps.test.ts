@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RunItem, RunState } from "./api/types";
-import { focusIndex, padsMoved, runSteps } from "./runSteps";
+import { focusIndex, inOrder, padsMoved, runSteps } from "./runSteps";
 
 function item(
   index: number,
@@ -92,7 +92,7 @@ describe("runSteps", () => {
 
   it("says where a checked part landed", () => {
     // Its pads not seen: where it landed from where it was sent.
-    const unseen = { on_pads: null, pads_dx: null, pads_dy: null, checked: true };
+    const unseen = { on_pads: null, pads_dx: null, pads_dy: null, checked: true, reviewed: false };
     const good = { dx: 0.03, dy: -0.04, turn: 1.2, score: 0.9, ok: true, picture: true, ...unseen };
     const bad = { dx: -0.12, dy: 0.41, turn: 9, score: 0.8, ok: false, picture: true, ...unseen };
     const square = { ...good, turn: -0.04 };
@@ -119,6 +119,7 @@ describe("runSteps", () => {
       ok: true,
       checked: true,
       picture: true,
+      reviewed: false,
     };
     const onPads = { ...good, ...pads, on_pads: 0.98 };
     // The board moved: its pads more than 0.4 mm from where its fiducials put them.
@@ -134,6 +135,10 @@ describe("runSteps", () => {
         check: { ...good, on_pads: 0.72, pads_dx: -0.02, pads_dy: 0.45, ok: false },
       }),
       item(3, "R4", "placed", { nozzle: "N2", check: moved }),
+      item(4, "R5", "placed", {
+        nozzle: "N1",
+        check: { ...good, ...pads, on_pads: 0.54, ok: false, reviewed: true },
+      }),
     ];
     const rows = runSteps(items, run(items, {}), 0, false);
     expect(rows[1]).toMatchObject({ detail: "placed by N1, 98% on its pads, +0.5°" });
@@ -147,6 +152,10 @@ describe("runSteps", () => {
     });
     expect(rows[4]).toMatchObject({
       detail: "placed by N2, 97% on its pads, +0.5°; its pads were 0.45 mm off: the board moved",
+    });
+    // Looked at in the review at the end of the run, and left as it is.
+    expect(rows[5]).toMatchObject({
+      detail: "placed by N1, only 54% on its pads, +0.5°: marked fine",
     });
     expect(padsMoved(onPads)).toBeNull();
     expect(padsMoved(moved)).toBeCloseTo(0.447, 3);
@@ -163,6 +172,7 @@ describe("runSteps", () => {
       ok: true,
       checked: false,
       picture: true,
+      reviewed: false,
       on_pads: null,
       pads_dx: null,
       pads_dy: null,
@@ -182,6 +192,7 @@ describe("runSteps", () => {
       ok: false,
       checked: true,
       picture: true,
+      reviewed: false,
       on_pads: null,
       pads_dx: null,
       pads_dy: null,
@@ -224,5 +235,18 @@ describe("runSteps", () => {
     });
     const rows = runSteps(items, state, 1, true);
     expect(rows[0]).toMatchObject({ label: "Scan feeders", current: true, problem: true });
+  });
+});
+
+describe("inOrder", () => {
+  const items = [item(0, "R1", "pending"), item(1, "R2", "pending"), item(2, "U1", "pending")];
+
+  it("lists the items in the order the run takes them", () => {
+    expect(inOrder(items, [0, 2, 1]).map((i) => i.ref)).toEqual(["R1", "U1", "R2"]);
+  });
+
+  it("keeps the plan's order without one, and puts any it leaves out last", () => {
+    expect(inOrder(items).map((i) => i.ref)).toEqual(["R1", "R2", "U1"]);
+    expect(inOrder(items, [2]).map((i) => i.ref)).toEqual(["U1", "R1", "R2"]);
   });
 });

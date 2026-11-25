@@ -125,6 +125,12 @@ VACUUM_STEADY_S = 0.3
 updates about every 0.1 s in steps of 65,536 counts, so two polls can agree while the
 vacuum is still rising. With an N045's small hole it rose for 0.6 s in open air, and an
 open reading taken at 0.3 s made the first step of a touch read as a seal."""
+VACUUM_HELD_S = 0.25
+"""After a lift, readings past the held level that have not weakened for this long (two
+or more of the sensor's updates) mean the part is held. A part dropped on the way up
+shows them weakening toward the open reading; one held seals harder for a while (on a
+real LumenPnP the reading crept stronger for half a second after each pick, so waiting
+for it to stop changing took 0.76 s after the lift, where 0.25 s tells)."""
 
 
 def _open_px(min_diameter_px: float) -> int:
@@ -878,17 +884,44 @@ class MachineService:
         after the lift it still reads the seal, so a part that fell off on the way up looks
         held until the reading falls. ``level``: as for ``holds_part``. None, None if the
         nozzle has no vacuum sensor."""
-        reading = await self.settled_vacuum(nozzle, 0.0, most_s)
+        sensor = self.vacuum_sensor(nozzle)
+        if sensor is None or sensor.range is None:
+            return None, None
+        scale = sensor.range
+        held_s = max(2 * VACUUM_POLL_S, VACUUM_HELD_S / self._driver.time_scale)
+        holding: tuple[float, float] | None = None  # since when held, and the last reading
+
+        def holds(value: float | None) -> bool:
+            """Held, and not weakening: the readings have stayed past the held level for
+            ``held_s``, none weaker than the one before."""
+            nonlocal holding
+            now = asyncio.get_running_loop().time()
+            if not self.reads_held(nozzle, value, level) or value is None:
+                holding = None
+            elif holding is None or scale.fraction(value) < scale.fraction(holding[1]):
+                holding = (now, value)
+            else:
+                holding = (holding[0], value)
+            return holding is not None and now - holding[0] >= held_s
+
+        reading = await self.settled_vacuum(nozzle, 0.0, most_s, until=holds)
         if reading is None:
             return None, None
         held = self.reads_held(nozzle, reading, level)
         self.recorder.event("vacuum", nozzle=nozzle.id, expect=True, held=held, reading=reading)
         return held, reading
 
-    async def settled_vacuum(self, nozzle: Nozzle, least_s: float, most_s: float) -> float | None:
+    async def settled_vacuum(
+        self,
+        nozzle: Nozzle,
+        least_s: float,
+        most_s: float,
+        until: Callable[[float | None], bool] | None = None,
+    ) -> float | None:
         """The nozzle's vacuum reading once it has stopped changing: after at least
-        ``least_s`` (for the pump to start), and at most ``most_s``. None if the nozzle
-        has no vacuum sensor."""
+        ``least_s`` (for the pump to start), and at most ``most_s``; or sooner, once
+        ``until`` (given each reading) says it is enough. None if the nozzle has no vacuum
+        sensor."""
         sensor = self.vacuum_sensor(nozzle)
         if sensor is None or sensor.range is None:
             return None
@@ -903,6 +936,8 @@ class MachineService:
             await self._driver.refresh_input(sensor.id)
             value = self.vacuum_reading(nozzle)
             now = loop.time()
+            if until is not None and until(value):
+                return value
             if value is None or last is None or abs(value - last) > VACUUM_STEADY * span:
                 since, last = now, value
             elif since is not None and now - since >= steady_s:

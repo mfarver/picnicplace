@@ -11,8 +11,11 @@ supplies the machine-specific parts):
   profile's connect commands, all outputs off, then ``M114`` for the position.
 - Home: the profile's home commands (``G28``), then ``M114``.
 - Move: ``G0`` with only the axes that change and a feed rate, then ``M400`` to wait for
-  the move to finish, then ``M114``. While a move runs, the reported position is
-  interpolated so clients see the head travel; ``M114`` corrects it at the end.
+  the move to finish, then ``M114``. ``M400`` holds the link until the move ends, so it is
+  sent only once the move should be about done: until then the link is free, and sensor
+  reads and feeder packets go out while the head travels (the firmware answers them as
+  it moves). While a move runs, the reported position is interpolated so clients see the
+  head travel; ``M114`` corrects it at the end.
 - Outputs: the profile's on and off commands.
 - Analog inputs (vacuum sensors): polled with the profile's read commands, faster while
   any output is on.
@@ -49,6 +52,9 @@ POLL_IDLE_S = 1.0
 INTERPOLATE_S = 0.05
 """How often the estimated position is updated during a move."""
 
+TRAVEL_MARGIN_S = 0.02
+"""How long before a move's planned end ``M400`` is sent: a short move takes no wait."""
+
 HOME_TIMEOUT_S = 120.0
 RESET_TIMEOUT_S = 30.0
 """How long ``reset`` waits for the firmware to answer again after an emergency stop."""
@@ -79,13 +85,17 @@ class MarlinDriver(MotionDriver):
         *,
         connect_wait_s: float = 3.0,
         command_timeout_s: float = 10.0,
+        move_time_scale: float = 1.0,
     ) -> None:
+        """``move_time_scale``: how much faster than real time moves run, above 1 only
+        against a fake controller: a move's travel is waited out in its time over it."""
         super().__init__()
         self._profile = profile
         self._settings = settings
         self._open_transport = open_transport
         self._connect_wait_s = connect_wait_s
         self._timeout_s = command_timeout_s
+        self._move_time_scale = move_time_scale
         self._axes = [a.name for a in profile.axes]
         self._speeds = {a.name: a.max_speed for a in profile.axes}
         self._position = dict.fromkeys(self._axes, 0.0)
@@ -252,11 +262,12 @@ class MarlinDriver(MotionDriver):
             feed = min(feed, speed)
         words = " ".join(f"{a}{v:.4f}" for a, v in moves.items())
         distance = math.sqrt(sum((v - start[a]) ** 2 for a, v in moves.items()))
-        duration = distance / feed
+        duration = distance / feed / self._move_time_scale
 
         await self._command(f"G0 {words} F{feed * 60:.0f}")
         follow = asyncio.create_task(self._interpolate(start, {**start, **moves}, duration))
         try:
+            await self._travel(duration)
             await self._command("M400", timeout_s=duration * 2 + self._timeout_s)
         finally:
             follow.cancel()
@@ -265,6 +276,19 @@ class MarlinDriver(MotionDriver):
         if self._connected and not self._halted:
             await self._sync_position()
         self._check_stopped()
+
+    async def _travel(self, duration: float) -> None:
+        """Wait out most of a move with the link free, so other commands (sensor reads,
+        feeder packets) go out while the head travels, until the move should be about done
+        or is stopped. ``M400`` then waits for its true end: a move with acceleration takes
+        a little longer than its distance over its speed."""
+        loop = asyncio.get_running_loop()
+        end = loop.time() + duration - TRAVEL_MARGIN_S
+        while not self._stopping and not self._halted and self._connected:
+            left = end - loop.time()
+            if left <= 0:
+                return
+            await asyncio.sleep(min(left, INTERPOLATE_S))
 
     async def _interpolate(
         self, start: dict[str, float], end: dict[str, float], duration: float

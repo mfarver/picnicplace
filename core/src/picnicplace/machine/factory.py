@@ -130,6 +130,11 @@ def build_driver(config: MachineConfig) -> DriverBundle:
         return await SerialTransport.open(path, marlin.baud)
 
     driver = MarlinDriver(
-        profile, settings, open_fake, connect_wait_s=0, command_timeout_s=marlin.command_timeout_s
+        profile,
+        settings,
+        open_fake,
+        connect_wait_s=0,
+        command_timeout_s=marlin.command_timeout_s,
+        move_time_scale=config.sim_time_scale,
     )
     return DriverBundle(driver, fake.stop, photon_sim=photon)

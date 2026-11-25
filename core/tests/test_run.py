@@ -479,6 +479,89 @@ def test_a_run_feeds_past_an_empty_pocket() -> None:
         assert check_landed(client, run) == 4
 
 
+def test_a_picks_vacuum_check_runs_while_the_head_travels_on() -> None:
+    """Each pick's vacuum check runs on as the head travels from the feeder. N2 drops its
+    first part as it lifts: the check finds the nozzle empty by the time the part is to
+    be aligned, and the run picks again and places every part."""
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_drops_on_lift": {"N2": 1}},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        machine = client.app.state.ctx.machine  # type: ignore[attr-defined]
+        check = machine.holds_after_lift
+        traveled: list[float] = []
+
+        async def spy(*args: Any, **kwargs: Any) -> Any:
+            start = dict(machine.driver.position)
+            result = await check(*args, **kwargs)
+            end = machine.driver.position
+            traveled.append(math.hypot(end["X"] - start["X"], end["Y"] - start["Y"]))
+            return result
+
+        machine.holds_after_lift = spy
+        # Without correction, a pick after an empty one feeds the next part.
+        start = {"job_id": "demo", "skip_blocked": True, "pick_correction": "off"}
+        op = ok(s.wait(s.post("/api/v1/run/start", start)))
+        assert op["message"] == (
+            "finished: 4 placed, 1 blocked, 3 skipped (1 of 5 picks came up empty)"
+        )
+        run = client.get("/api/v1/run").json()
+        assert run["stats"]["empty_picks"] == 1
+        # N2's first part fell back onto the feeder as it lifted; the rest are on the board.
+        parts = client.app.state.ctx.feeders.sim_parts  # type: ignore[attr-defined]
+        dropped = [p for p in parts.placed if p.fell > 1.0]
+        assert len(dropped) == 1
+        parts.placed.remove(dropped[0])
+        assert check_landed(client, run) == 4
+        # The head was well on its way while the checks ran.
+        assert max(traveled) > 5.0, traveled
+
+
+def test_an_empty_pick_found_on_the_way_to_the_camera_can_hand_the_part_over() -> None:
+    """N2's N08 drops its first two parts as it lifts, both of the same part, which it has
+    never picked. The checks find it empty on the way to the bottom camera; after the
+    second, the placement goes to N1 without pausing, as for a miss seen at the feeder."""
+    from tests.test_nozzle_tips import fit
+
+    config = fast_config(
+        machine={"profile": "lumenpnp-v4.1", "sim_drops_on_lift": {"N2": 2}},
+        presence={"heartbeat_timeout_s": 300.0},
+    )
+    with TestClient(create_app(config)) as client, connect(client) as s:
+        set_up(client, s)
+        fit(s, "N1", "N045")
+        fit(s, "N2", "N08")
+        recorder = client.app.state.ctx.machine.recorder  # type: ignore[attr-defined]
+        event = recorder.event
+        handed: list[dict[str, Any]] = []
+
+        def spy(kind: str, **data: Any) -> None:
+            if kind == "run.tip_handover":
+                handed.append(data)
+            event(kind, **data)
+
+        recorder.event = spy
+        start = {"job_id": "demo", "skip_blocked": True, "pick_correction": "off"}
+        op = ok(s.wait(s.post("/api/v1/run/start", start)))
+        assert op["message"].startswith("finished: 4 placed, 1 blocked, 3 skipped"), op
+        run = client.get("/api/v1/run").json()
+        assert run["stats"]["empty_picks"] == 2
+        parts = client.app.state.ctx.feeders.sim_parts  # type: ignore[attr-defined]
+        dropped = [p for p in parts.placed if p.fell > 1.0]
+        assert len(dropped) == 2
+        for p in dropped:
+            parts.placed.remove(p)
+        assert check_landed(client, run) == 4
+        assert len(handed) == 1 and handed[0]["nozzle"] == "N2", handed
+        by = {i["ref"]: i for i in run["plan"]["items"]}
+        item = by[handed[0]["ref"]]
+        assert item["status"] == "placed" and item["nozzle"] == "N1", item
+        placement = client.app.state.ctx.placement  # type: ignore[attr-defined]
+        assert placement.tips.never_picked(item["part_id"], "N08")
+
+
 def test_a_long_empty_leader_pauses_the_run() -> None:
     """Slot 2's reel has a long empty leader. Pockets seen empty are fed past, and one
     seen empty twice is tried anyway; after three tries come up empty, the run stops for

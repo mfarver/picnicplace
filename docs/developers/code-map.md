@@ -82,7 +82,8 @@ the same way: a run in `job/run.py` calls the same placement code for each part.
    recorder and to the driver.
 7. **The driver** moves the machine. The simulator moves its model and knows where the
    part really is (`simparts.py`); the Marlin driver (`machine/marlin/driver.py`) sends
-   `G0` and waits for `M400`.
+   `G0`, leaves the link free for sensor reads and feeder packets while the head
+   travels, and then waits for `M400`.
 8. **The operation ends.** `operations.py` stores it as succeeded, or failed with the
    error's message, written for the user, and publishes it on the event bus
    (`events.py`). The socket (`api/websocket.py`) sends it to every client, and the

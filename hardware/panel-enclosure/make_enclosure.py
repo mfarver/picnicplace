@@ -23,7 +23,7 @@ Parts, each sized for a 220 x 220 x 220 mm printer (a Flashforge Adventurer 5M P
   - shell: the screen's housing, its front lip holding the glass; printed face down;
   - back: the shell's back cover, with posts screwed to the board's standoffs; printed flat;
   - pod: the E-stop's housing below the shell; printed on its back;
-  - pod-back: the pod's back cover;
+  - pod-back: the pod's back cover, screwed into inserts in the pod's corners;
   - bracket: the plate from the shell's left side to the rail.
 
 Coordinates, in millimeters, for each part as it stands upright before leaning back: +X
@@ -100,6 +100,9 @@ POD_H = 64.0
 POD_DEPTH = ESTOP_FACE + ESTOP_BEHIND + 1.0 + 6.0
 """The face to the pod's back cover: the switch, its tolerance, and room for the screw
 terminals' wires, which leave the contact blocks sideways."""
+POD_BACK_BOSS = 10.0
+"""How far the corner bosses for the pod's back cover reach in from its back: behind the
+switch's contact blocks, which end 10 mm short of them across."""
 POD_SCREW_X = 46.0
 """The two screws from the pod up into the shell, either side of the USB opening."""
 POD_CABLES = (18.0, 10.0)
@@ -257,10 +260,16 @@ def pod_center_y() -> float:
     return -SHELL_H / 2 - POD_H / 2
 
 
+def pod_corner_points() -> list[tuple[float, float]]:
+    """The screws of the pod's back cover, in its corners."""
+    x, y, cy = SHELL_W / 2 - CORNER_INSET, POD_H / 2 - CORNER_INSET, pod_center_y()
+    return [(-x, cy - y), (x, cy - y), (-x, cy + y), (x, cy + y)]
+
+
 def pod() -> cq.Workplane:
     """The E-stop's housing, below the shell: its face flush with the screen's, its top
-    screwed to the shell's bottom. Leaning back, the panel stands on the pod's back bottom
-    edge."""
+    screwed to the shell's bottom, and corner bosses at its back with inserts for the back
+    cover's screws."""
     top = -SHELL_H / 2
     cy = pod_center_y()
     outer = (
@@ -287,6 +296,22 @@ def pod() -> cq.Workplane:
         .extrude(-ESTOP_FACE)
     )
     body = body.cut(hole).cut(key)
+    # Corner bosses for the back cover, as the shell's for its own.
+    bosses = (
+        cq.Workplane("XY")
+        .workplane(offset=-POD_DEPTH)
+        .pushPoints(pod_corner_points())
+        .circle(SCREW_BOSS_D / 2)
+        .extrude(POD_BACK_BOSS)
+    )
+    inserts = (
+        cq.Workplane("XY")
+        .workplane(offset=-POD_DEPTH)
+        .pushPoints(pod_corner_points())
+        .circle(INSERT_D / 2)
+        .extrude(8.0)
+    )
+    body = body.union(bosses).cut(inserts)
     # The top wall: screws up into the shell's inserts, and the opening into the shell.
     for x in (-POD_SCREW_X, POD_SCREW_X):
         screw = cq.Workplane("XZ", origin=(x, top, -SHELL_D / 2)).circle(M3_CLEAR / 2).extrude(WALL)
@@ -295,16 +320,27 @@ def pod() -> cq.Workplane:
 
 
 def pod_back() -> cq.Workplane:
-    """The pod's back cover, pressed into the pod's back: a slot for the USB cable, its far
-    plug passing through, and a hole for the cable from the E-stop's power pole."""
+    """The pod's back cover, on the pod's back edge and screwed into its corner bosses: a
+    slot for the USB cable, its far plug passing through, and a hole for the cable from the
+    E-stop's power pole. Leaning back, the panel stands on its bottom edge."""
     cy = pod_center_y()
     plate = (
         cq.Workplane("XY")
         .workplane(offset=-POD_DEPTH)
         .center(0, cy)
-        .rect(SHELL_W - 2 * WALL - 0.4, POD_H - 2 * WALL - 0.4)
+        .rect(SHELL_W, POD_H)
         .extrude(-BACK)
+        .edges("|Z")
+        .fillet(CORNER_R)
     )
+    screws = (
+        cq.Workplane("XY")
+        .workplane(offset=-POD_DEPTH - BACK)
+        .pushPoints(pod_corner_points())
+        .circle(M3_CLEAR / 2)
+        .extrude(BACK)
+    )
+    plate = plate.cut(screws)
     usb = (
         cq.Workplane("XY")
         .workplane(offset=-POD_DEPTH - BACK)
@@ -324,10 +360,10 @@ def pod_back() -> cq.Workplane:
 
 def to_table(y: float, z: float) -> tuple[float, float]:
     """A point on the panel's side (upright coordinates) as it stands leaned back: its
-    height above the table, and how far in front of the pod's back bottom edge (+) or
+    height above the table, and how far in front of the pod back's bottom edge (+) or
     behind it (-). The panel leans back about that edge, which stands on the table."""
     lean = math.radians(LEAN)
-    ry, rz = y - (-SHELL_H / 2 - POD_H), z + POD_DEPTH
+    ry, rz = y - (-SHELL_H / 2 - POD_H), z + POD_DEPTH + BACK
     return ry * math.cos(lean) + rz * math.sin(lean), -ry * math.sin(lean) + rz * math.cos(lean)
 
 
@@ -369,9 +405,10 @@ PARTS = {
 
 
 def standing(part: cq.Workplane) -> cq.Workplane:
-    """A panel part as it stands, leaned back on the pod's back bottom edge: Y up from the
+    """A panel part as it stands, leaned back on the pod back's bottom edge: Y up from the
     table, Z forward from that edge."""
-    return part.translate((0, SHELL_H / 2 + POD_H, POD_DEPTH)).rotate((0, 0, 0), (1, 0, 0), -LEAN)
+    moved = part.translate((0, SHELL_H / 2 + POD_H, POD_DEPTH + BACK))
+    return moved.rotate((0, 0, 0), (1, 0, 0), -LEAN)
 
 
 BOARD_STEP_ORIGIN = (1.02, 0.8)
@@ -508,12 +545,11 @@ def main() -> None:
             str(out / f"{name}-{view}.svg"),
             opt={"width": 900, "height": 700, "projectionDir": direction, "showHidden": False},
         )
-    lean = math.radians(LEAN)
-    total = SHELL_H + POD_H
+    top, behind = to_table(SHELL_H / 2, 0)
     print(
-        f"leaning {LEAN:g} degrees back: the top is {total * math.cos(lean):.0f} mm above the "
-        f"table and {total * math.sin(lean):.0f} mm behind the front edge; the screen's "
-        f"center is {(POD_H + SHELL_H / 2) * math.cos(lean):.0f} mm up"
+        f"leaning {LEAN:g} degrees back: the top is {top:.0f} mm above the table and "
+        f"{-behind:.0f} mm behind the bottom edge; the screen's center is "
+        f"{to_table(0, 0)[0]:.0f} mm up"
     )
 
 

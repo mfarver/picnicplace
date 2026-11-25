@@ -284,8 +284,9 @@ files for each part, in `out/` next to it. Every dimension is in the script; cha
 run it again rather than editing the models.
 
 - **How it stands:** just right of a LumenPnP near its front, facing the operator, its
-  bottom edge on the table, leaning back 45° so the screen faces up between a standing and
-  a sitting operator's eyes. The top is 186 mm above the table, the screen's center 115 mm.
+  bottom edge (the pod's back cover's) on the table, leaning back 45° so the screen faces
+  up between a standing and a sitting operator's eyes. The top is 227 mm above the table,
+  the screen's center 157 mm.
   A flat bracket bolts its left side to the machine's lower right 2020 rail, with two M5
   screws into T-nuts in the rail's outer slot, 130 mm above the table on a LumenPnP v4 on
   its feet. It goes on the right because on the left there is no room in front of the
@@ -311,7 +312,9 @@ run it again rather than editing the models.
   cover; the USB slot passes a USB-A plug.
 - **Parts:** shell, back cover, pod, pod back and bracket, each within a 220 mm cube (a
   Flashforge Adventurer 5M Pro). The shell and pod screw together with two M3 screws into
-  inserts; the bracket takes two more.
+  inserts; the bracket takes two more. The pod's back cover lies on the pod's back edge,
+  held by four M3 screws into heat-set inserts in bosses in the pod's corners, which reach
+  10 mm in from the back and stay 10 mm clear of the switch's contact blocks.
 - **Test fit:** give the script the makers' STEP models (not kept in the repository) and
   it reports any part that overlaps them, writes the whole fit as glTF
   (`out/panel-fit.glb`), and writes the enclosure and switch in Waveshare's coordinates

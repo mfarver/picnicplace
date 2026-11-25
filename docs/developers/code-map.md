@@ -183,6 +183,7 @@ with the simulator, or read `test_placement.py`, which does the same through the
 | `feeders/pocket.py` | Where the pocket is, from the sprocket holes seen (those a whole sprocket pitch apart); of two about as near, which to take |
 | `feeders/rails.py` | Fitting a feeder rail to the feeder fiducials found on it |
 | `placement.py` | Pick, align (outline, then pads, or the outline alone when no metal shows: a white chip's body; a trained part as trained), train, and place one part; pick correction (top or bottom camera) |
+| `tip_picks.py` | How each nozzle tip has done picking each part, and which tips that rules out for it |
 | `training.py` | Training how the bottom camera sees a part: the lights, thresholds and turns tried, how a way of seeing it is scored, the trained parts kept (to be approved), and the approval pictures with the footprint drawn over and beside the part |
 | `simparts.py` | The simulator's parts: which nozzle holds what, where placed parts landed (and how far they fell), the calibration disc, and crashes: a tip pressed into a part, or a part into the board. Part tops come from the feeders' tapes, strips, and trays, and board tops from the staging plates, each off by the config's simulator errors |
 | `board/` | Boards and panels, and reading them from KiCad (`kicad.py`, with a small S-expression reader) and KiKit panels |
@@ -207,6 +208,7 @@ The core keeps the owner's data in one folder (`data.dir` in the config; by defa
 | `recordings/` | Flight recordings | `recorder.py` |
 | `run-checks/` | Pictures of the current run's checked placements | `job/run.py` |
 | `trained-parts.json`, `trained-parts/` | Trained parts, and their pictures | `training.py` |
+| `tip-picks.json` | For each part and nozzle tip, the parts picked and the empty picks | `tip_picks.py` |
 | `bring-up.json` | Progress through the bring-up checklist | `bringup.py` |
 | `wizard.json` | The setup wizard's pages the owner confirmed or skipped | `wizard.py` |
 | `machine-setup.json` | The setup wizard's choices: the machine, its serial port and cameras, and the last probe | `machine_setup.py` |
@@ -247,7 +249,7 @@ client. Useful pieces:
 | `components/` | Panels and controls used by the workspaces; `machine/` holds the machine view (the overhead map and head inset), `wizard/` the setup wizard (a panel over the map) and the calibration banner, `job/` and `library/` their own pieces |
 | `api/schema.ts` | **Generated** TypeScript types for the whole API (`make api`); never edit by hand |
 | `api/types.ts` | Short names for the generated types |
-| `tape.ts`, `runSteps.ts`, `fiducials.ts` | Pure logic with unit tests: tape geometry, fit check, pin-1 quadrant, and table-cell parsing; a run's step list; the fiducials a job can be placed from |
+| `tape.ts`, `runSteps.ts`, `runSpeed.ts`, `fiducials.ts` | Pure logic with unit tests: tape geometry, fit check, pin-1 quadrant, and table-cell parsing; a run's step list; its placements per hour, working and overall; the fiducials a job can be placed from |
 | `cameraMarks.ts` | Marks drawn on a top camera's picture where vision found something (the pick pocket, loose parts), and footprints drawn where a part should lie (a placement, a pick), placed from machine coordinates as the head moves |
 | `useFootprint.ts` | A library footprint by ID, fetched once a session |
 | `mjpeg.ts` | Reads a camera's MJPEG stream with `fetch`, so leaving a view closes its connection (an `<img>` can hold it open and use up the browser's six connections to the core) |

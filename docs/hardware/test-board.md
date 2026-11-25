@@ -84,10 +84,10 @@ Steps 1, 2 and 5 work today, and step 3 in part; the rest is planned.
    and **Check each part with the top camera once placed** ticked.
 3. **Inspect placements.** Today, the top camera looks at each two-terminal chip as soon
    as it is placed, finds the part and its pads in the same picture, and measures how
-   much of each of the part's ends lies on its pad; the run pauses on one with less than
-   75% of an end on its pad, or turned more than 10°. Since the part is measured from its
+   much of each of the part's ends lies on its pad; one with less than 75% of an end on
+   its pad, or turned more than 10°, is held for a review once every part is placed. Since the part is measured from its
    own pads, the gantry's position and the board's fit hardly enter the measurement. If
-   the pads are more than 0.15 mm from where the board's fit puts them, the board has
+   the pads are more than 0.4 mm from where the board's fit puts them, the board has
    moved: the run pauses, and finds the fiducials again on resume. Planned: measuring
    each part from the copper ring around it as well, so ICs and QFNs, whose pads the
    part hides, are measured too.
@@ -95,7 +95,8 @@ Steps 1, 2 and 5 work today, and step 3 in part; the rest is planned.
    how the error depends on the part's angle (the circle of 0603s) and its place on the
    board, kept with the run and sent with a flight recording. Today the finish message
    and the Run workspace give the run's statistics: picks, empty picks, parts the bottom
-   camera could not find, placements, and checked placements off their pads.
+   camera could not find, placements, and checked placements off their pads, and the Run
+   workspace gives placements per hour, working and overall.
 5. Pick the parts up again (or peel off the tape), and the board is ready for the next
    test.
 

@@ -347,7 +347,9 @@ effect at once. The reset button next to one forgets it.
 - [ ] In the Run workspace, choose the job (its newest revision is shown). The checks are a dry run against the loaded
       feeders: each placement's feeder and nozzles, and what blocks any of them (no part
       number, no height, no feeder holding the part, tape too wide for the feeders, or
-      out of reach). Fix what you can; tick **Place the rest** to leave out the others.
+      out of reach), listed in the order the run will take them: a batch at a time, a
+      part on each nozzle, so the highlight moves steadily down the list as it runs.
+      Fix what you can; tick **Place the rest** to leave out the others.
       The **Load list** panel is what to put on the machine: every part the job uses,
       with its value, footprint, tape (width, kind, pitch, so you know the feeder size),
       references, how many, and where it is loaded, what is missing first and in red.
@@ -373,18 +375,24 @@ effect at once. The reset button next to one forgets it.
       two-terminal chip (a resistor, a capacitor, an LED), the top camera finds it and the
       board's pads under it, and the step list says how much of it lies on its pads and
       how it is turned. One with less than 75% of either end on its pad, turned more than
-      10°, or not found pauses the run: look at it, fix or remove it, and resume: its line
-      in the step list has a picture of it (click to enlarge), with where it was sent in
-      orange, where it landed in magenta, and its pads in green. It catches a part off its
-      pads, standing up, or gone. (Where the pads cannot be seen, it judges the part from
-      where it was sent instead: 0.25 mm.)
+      10°, or not found is held, and the run goes on: its line in the step list has a
+      picture of it (click to enlarge), with where it was sent in orange, where it landed
+      in magenta, and its pads in green. It catches a part off its pads, standing up, or
+      gone. (Where the pads cannot be seen, it judges the part from where it was sent
+      instead: 0.25 mm.) Once every part is placed, the run parks the head and pauses once
+      with all the held placements in a list, each with its picture: **Fine** leaves one
+      as it is; **Place again**, once you have taken its part off, has the machine place it
+      again; **Look** brings the camera over it. **Finish** places those again and ends
+      the run.
       If the pads themselves are more than 0.4 mm from where the board's fiducials put
       them, the board has moved since the run found it (a board not held firmly can be
       knocked by the parts pressed onto it): the run pauses and says so. Hold the board
       down, set right any part that landed off, and resume: the run finds the fiducials
       again before placing the rest. At the end, the finish message and the Run workspace
       give the run's statistics: picks and empty picks, parts the bottom camera could not
-      find, placements, and checked placements off their pads.
+      find, placements, and checked placements off their pads. The Run workspace also
+      gives placements per hour (CPH) twice: while the machine was working, and over the
+      whole run from start to end, the time it sat paused waiting for you included.
 
       ![A real check: an 0603 on a LumenPnP, 0.35 mm off its target](../images/placement-check-real.jpg){ .pp-screenshot width="300" }
 - [ ] Tick **Start in step mode** and **Start**: the run scans the feeders (a feeder
@@ -400,10 +408,13 @@ effect at once. The reset button next to one forgets it.
       workspace shows the same run for someone watching from elsewhere: the map, with the
       run's status and the few steps around the current one under it.
 - [ ] Say which tip is on each nozzle (Machine workspace). The plan sends each part to the
-      nozzles whose tip suits it: the hole well inside the part's top (no wider than 75% of
-      its narrower side), and of those the largest, which holds it best. On a LumenPnP
-      with the N045 and N08 fitted, the 0603s go to the N045 and larger parts to the N08;
-      the plan lists how many go to each.
+      nozzles whose tip suits it: the hole no wider than the part's narrower side, and not
+      so small that it holds the part weakly. On a LumenPnP with the N045 and N08 fitted,
+      0603s and 0805s can go on either and larger parts on the N08; the plan lists how
+      many go to only one. If a tip comes up empty twice on a part it has never picked
+      (an N08 on 0603 capacitors, which it seals beside but cannot lift), the run hands
+      that placement to the other nozzle without pausing, and later plans leave that tip
+      out for that part.
 - [ ] **Step** places one part on each nozzle and pauses again, with the head left over
       them. Check them, then **Resume**. A jammed feeder or a failed pick pauses the run
       once the parts already on the other nozzles are placed; fix it and resume, or skip
@@ -534,8 +545,10 @@ plan names each part whose tape is still one: check the width, pitch and which w
 the parts lie against the reel, and give the part its real tape. Which way round is
 guessed only for resistors, capacitors and inductors.
 
-**Tips.** Say which tip is on each nozzle. The plan sends each part to the nozzle whose tip
-suits it (0603s to the N045, larger parts to the N08) and lists how many go to each.
+**Tips.** Say which tip is on each nozzle. The plan sends each part to the nozzles whose tip
+suits it (0603s to either the N045 or the N08, larger parts to the N08) and lists how many
+go to only one. A tip that never manages to pick a part is found out in the run and left
+out for that part from then on.
 
 **A feeder that stops answering.** A feed the feeder does not answer goes on, and the
 camera and the vacuum tell whether there was a part. If its picks keep failing, look at

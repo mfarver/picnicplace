@@ -38,13 +38,15 @@ function checkDetail(c: Check): string {
   if (!c.checked) return ", not checked: the camera could not make it out";
   const t = Math.round(c.turn * 10) / 10 || 0; // never "-0.0"
   const turn = `${t >= 0 ? "+" : ""}${t.toFixed(1)}°`;
+  // Off, once the operator has looked at it and left it: marked fine.
+  const verdict = c.reviewed ? ": marked fine" : ": look at it";
   let text: string;
   if (c.on_pads != null) {
     const share = `${Math.round(c.on_pads * 100)}% on its pads`;
-    text = c.ok ? `, ${share}, ${turn}` : `, only ${share}, ${turn}: look at it`;
+    text = c.ok ? `, ${share}, ${turn}` : `, only ${share}, ${turn}${verdict}`;
   } else {
     const off = Math.hypot(c.dx, c.dy).toFixed(2);
-    text = c.ok ? `, ${off} mm off, ${turn}` : `, landed ${off} mm off, ${turn}: look at it`;
+    text = c.ok ? `, ${off} mm off, ${turn}` : `, landed ${off} mm off, ${turn}${verdict}`;
   }
   const moved = padsMoved(c);
   if (moved != null) text += `; its pads were ${moved.toFixed(2)} mm off: the board moved`;
@@ -173,6 +175,25 @@ export function runSteps(
     }),
   );
   return rows;
+}
+
+/** The items in the order the run deals with them (the plan's ``order``): taken onto a
+ * nozzle, then batch by batch, then those it will not place. Any the order leaves out go
+ * last, in the plan's order. */
+export function inOrder(items: RunItem[], order?: number[]): RunItem[] {
+  if (!order?.length) return items;
+  const byIndex = new Map(items.map((i) => [i.index, i]));
+  const seen = new Set<number>();
+  const out: RunItem[] = [];
+  for (const n of order) {
+    const item = byIndex.get(n);
+    if (item && !seen.has(n)) {
+      out.push(item);
+      seen.add(n);
+    }
+  }
+  for (const item of items) if (!seen.has(item.index)) out.push(item);
+  return out;
 }
 
 /** The row to keep in view: the current step, else the next one to do, else the end. */

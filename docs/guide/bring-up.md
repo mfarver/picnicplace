@@ -239,9 +239,11 @@ effect at once. The reset button next to one forgets it.
       a **Warn at** level, and **Save reel**. Each feed takes one part off the count (a
       feed back adds one), and the count stays with the feeder, as the part does. When it
       gets down to the level, a popup in the Studio says the reel is low (and again when
-      it should be empty), so the next reel is ready. The run's checks warn before a run
-      when a reel's count is less than the job places from it. Giving the feeder another
-      part clears the count: enter the new reel's.
+      it should be empty), so the next reel is ready. The count is written along the
+      feeder on the map in the Feeders and Machine workspaces, amber at or under the
+      level and red at zero. The run's checks warn before a run when a reel's count is
+      less than the job places from it. Giving the feeder another part clears the count:
+      enter the new reel's.
 - [ ] **Calibrate rails** (under **Rails**): with feeders near both ends of each rail (the
       core uses the two farthest apart), it finds their fiducials and moves the rail's
       slots to where the rail really is. Then a nozzle steps down onto each fiducial

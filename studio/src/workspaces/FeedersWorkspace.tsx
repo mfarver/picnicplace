@@ -459,6 +459,7 @@ export function FeedersWorkspace() {
           overlay={state && <SlotOverlay slots={state.slots} selected={selected} />}
           fixedFeeders={state?.fixed}
           selectedFixed={selectedFixed}
+          feederSlots={state?.slots}
         />
         {fixed && (
           <FixedFeederDetail

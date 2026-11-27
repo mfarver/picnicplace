@@ -17,6 +17,7 @@ import type {
   MachineProfile,
   MachineState,
   Point,
+  SlotState,
   StagingPlate,
 } from "../../api/types";
 
@@ -120,6 +121,8 @@ interface Props {
   /** Strips and trays on the bed, with the parts left in each. */
   fixedFeeders?: FixedFeederState[];
   selectedFixed?: string | null;
+  /** The feeder slots: each feeder with a counted reel shows the parts left on it. */
+  feederSlots?: SlotState[];
 }
 
 export function MachineView({
@@ -130,6 +133,7 @@ export function MachineView({
   overlay,
   fixedFeeders,
   selectedFixed,
+  feederSlots,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [view, setView] = useState<ViewBox>(() => fitView(description));
@@ -305,7 +309,11 @@ export function MachineView({
             )}
 
             {description.feeder_banks.map((bank) => (
-              <FeederBankShape key={bank.id} bank={bank} />
+              <FeederBankShape
+                key={bank.id}
+                bank={bank}
+                states={feederSlots?.filter((s) => s.slot.bank === bank.id)}
+              />
             ))}
             {fixedFeeders && fixedFeeders.length > 0 && (
               <FixedFeederShapes fixed={fixedFeeders} selected={selectedFixed} />
@@ -517,7 +525,8 @@ const NOSE_PAST_FIDUCIAL = 5;
  * feeder with a fiducial is drawn to just past it, so the gap between the noses and the
  * staging plates shows; boards are still kept clear of the bank's whole reach.
  */
-function FeederBankShape({ bank }: { bank: FeederBank }) {
+function FeederBankShape({ bank, states }: { bank: FeederBank; states?: SlotState[] }) {
+  const { xs, ys } = useContext(ViewOrientation);
   const behind = bank.length - bank.pick_to_front;
   const ahead = bank.fiducial_offset
     ? Math.min(bank.pick_to_front, bank.fiducial_offset.x + NOSE_PAST_FIDUCIAL)
@@ -540,9 +549,72 @@ function FeederBankShape({ bank }: { bank: FeederBank }) {
             rx={1.5}
           />
           <circle className="mv-pick" r={1.6} />
+          {states?.[i] && (
+            <ReelLeft
+              slot={states[i]}
+              x={(ahead - behind) / 2}
+              size={Math.min(10, bank.width * 0.65)}
+              turn={bank.rotation}
+              xs={xs}
+              ys={ys}
+            />
+          )}
         </g>
       ))}
     </g>
+  );
+}
+
+/**
+ * The parts left on a feeder's reel, by its count, written along the feeder's body (at
+ * `x` along it) so it reads left to right or bottom to top however the view is flipped.
+ * Nothing is drawn for a slot with no feeder, or a reel that is not counted.
+ */
+function ReelLeft({
+  slot,
+  x,
+  size,
+  turn,
+  xs,
+  ys,
+}: {
+  slot: SlotState;
+  x: number;
+  size: number;
+  /** The bank's rotation, which the feeder's group is drawn turned by. */
+  turn: number;
+  xs: number;
+  ys: number;
+}) {
+  const a = slot.feeder?.assignment;
+  if (!a || a.reel_left == null) return null;
+  const left = a.reel_left;
+  // The feeder's length on screen, as an angle; then the nearer way up to read.
+  const r = (turn * Math.PI) / 180;
+  let angle = (Math.atan2(-ys * Math.sin(r), xs * Math.cos(r)) * 180) / Math.PI;
+  if (angle >= 90) angle -= 180;
+  if (angle < -90) angle += 180;
+  const status = !a.enabled
+    ? " mv-reel-off"
+    : left === 0
+      ? " mv-reel-empty"
+      : a.reel_low != null && left <= a.reel_low
+        ? " mv-reel-low"
+        : "";
+  return (
+    <text
+      className={`mv-reel${status}`}
+      transform={`translate(${x} 0) rotate(${turn}) scale(${xs} ${ys}) rotate(${angle})`}
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={size}
+    >
+      <title>
+        {`${slot.slot.label}: ${left === 0 ? "reel empty" : `${left} left on the reel`}` +
+          `${a.part_id ? ` of ${a.part_id}` : ""}, by its count`}
+      </title>
+      {left}
+    </text>
   );
 }
 

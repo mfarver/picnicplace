@@ -849,6 +849,25 @@ code,
   fill: var(--warn);
 }
 
+.mv-reel {
+  fill: var(--text);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.mv-reel-low {
+  fill: var(--warn);
+}
+
+.mv-reel-empty {
+  fill: var(--danger);
+}
+
+.mv-reel-off {
+  opacity: 0.5;
+}
+
 .mv-camera rect {
   fill: var(--mv-camera-soft);
   stroke: var(--mv-camera);

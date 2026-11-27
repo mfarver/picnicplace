@@ -220,6 +220,7 @@ export function MachineWorkspace() {
                 canMove={canMove && !!machine?.homed}
                 onMoveTo={(p) => moveTo({ X: p.x, Y: p.y })}
                 fixedFeeders={feeders?.fixed}
+                feederSlots={feeders?.slots}
                 overlay={
                   jobRun && (
                     <>

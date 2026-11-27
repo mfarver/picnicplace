@@ -298,9 +298,11 @@ run it again rather than editing the models.
   glass's edge. Behind the glass there is 31 mm for the connectors with their plugs in
   (about 22 mm) and their wires' bends.
 - **Holding the board:** the board's own 8 mm standoffs go in the four M3 holes of its
-  frame. Posts on the back cover meet their ends, and four M3 × 20 screws through the
-  cover hold the board, pressing the glass against the lip. Four more M3 screws, into
-  heat-set inserts in the shell's corners, close the cover.
+  frame. Posts on the back cover meet their ends, and four M3 × 20 flat-head screws
+  through the cover hold the board, pressing the glass against the lip. Four more M3
+  flat-head screws, into heat-set inserts in the shell's corners, close the cover. Both
+  back covers take 90° flat-head screws (ISO 10642 or DIN 7991) in countersinks 6.4 mm
+  across, so the heads sit just under the surface; print the covers outside face down.
 - **The E-stop:** a TE ALCOSWITCH 2416049-1 (PBES22, 22 mm, illuminated), in a pod below
   the screen, its face flush with the screen's. The hole is 22.5 mm with the
   anti-rotation ring's notch, in a 3 mm face (the ring takes 1.2 to 4.5 mm); behind it
@@ -309,12 +311,14 @@ run it again rather than editing the models.
 - **Cables:** an opening between the shell and the pod carries the USB-C cable, plugged
   straight down into the board, and the sensing pole's wires to the board's header. Both
   cables, USB and the power pole's to the machine's 24 V, leave through the pod's back
-  cover; the USB slot passes a USB-A plug.
+  cover. The USB cable ends in a USB-C panel-mount connector on the cover, in a 9.4 ×
+  3.8 mm slot (a USB-C receptacle with clearance: check it against the connector's nose)
+  between two M3 flat-head screws 17 mm apart; the power cable goes through a 10 mm hole.
 - **Parts:** shell, back cover, pod, pod back and bracket, each within a 220 mm cube (a
   Flashforge Adventurer 5M Pro). The shell and pod screw together with two M3 screws into
   inserts; the bracket takes two more. The pod's back cover lies on the pod's back edge,
-  held by four M3 screws into heat-set inserts in bosses in the pod's corners, which reach
-  10 mm in from the back and stay 10 mm clear of the switch's contact blocks.
+  held by four M3 flat-head screws into heat-set inserts in bosses in the pod's corners,
+  which reach 10 mm in from the back and stay 10 mm clear of the switch's contact blocks.
 - **Test fit:** give the script the makers' STEP models (not kept in the repository) and
   it reports any part that overlaps them, writes the whole fit as glTF
   (`out/panel-fit.glb`), and writes the enclosure and switch in Waveshare's coordinates

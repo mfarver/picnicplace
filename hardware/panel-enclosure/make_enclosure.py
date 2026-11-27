@@ -21,9 +21,11 @@ checked on the real parts. The design is described in docs/hardware/control-pane
 
 Parts, each sized for a 220 x 220 x 220 mm printer (a Flashforge Adventurer 5M Pro):
   - shell: the screen's housing, its front lip holding the glass; printed face down;
-  - back: the shell's back cover, with posts screwed to the board's standoffs; printed flat;
+  - back: the shell's back cover, with posts screwed to the board's standoffs; printed
+    outside face down;
   - pod: the E-stop's housing below the shell; printed on its back;
-  - pod-back: the pod's back cover, screwed into inserts in the pod's corners;
+  - pod-back: the pod's back cover, screwed into inserts in the pod's corners, with a
+    USB-C panel-mount connector; printed outside face down;
   - bracket: the plate from the shell's left side to the rail.
 
 Coordinates, in millimeters, for each part as it stands upright before leaning back: +X
@@ -79,7 +81,9 @@ SCREW_BOSS_D = 7.0
 INSERT_D = 4.0
 """Holes for M3 heat-set inserts (most M3 inserts take a 4.0 mm hole)."""
 M3_CLEAR = 3.4
-M3_HEAD_D = 6.0
+M3_SINK_D = 6.4
+"""The countersinks for the covers' M3 flat-head screws (90 degrees, ISO 10642 or DIN 7991:
+a 6.0 mm head), so the heads sit just under the surface."""
 CORNER_R = 4.0
 
 # The E-stop: TE ALCOSWITCH 2416049-1 (PBES22, illuminated), from TE's datasheet and model.
@@ -105,9 +109,13 @@ POD_BACK_BOSS = 10.0
 switch's contact blocks, which end 10 mm short of them across."""
 POD_SCREW_X = 46.0
 """The two screws from the pod up into the shell, either side of the USB opening."""
-POD_CABLES = (18.0, 10.0)
-"""Out of the pod's back: the USB cable (its far plug passes through) and the cable from
-the E-stop's power pole to the machine's 24 V."""
+POWER_HOLE = 10.0
+"""Out of the pod's back: the cable from the E-stop's power pole to the machine's 24 V."""
+USB_C_SLOT = (9.4, 3.8)
+"""The USB-C panel-mount connector's opening, its ends round: a USB-C receptacle's shell
+(8.94 x 3.26 mm) with clearance. MEASURE: the connector's nose."""
+USB_C_SCREWS = 17.0
+"""Between the connector's two M3 flat-head screws, either side of its opening."""
 
 # How it stands.
 LEAN = 45.0
@@ -137,6 +145,21 @@ def window() -> tuple[float, float, float, float]:
 def rounded_box(w: float, h: float, d: float, r: float) -> cq.Workplane:
     """A box from Z = 0 to -d, centered in X and Y, its edges along Z rounded."""
     return cq.Workplane("XY").rect(w, h).extrude(-d).edges("|Z").fillet(r)
+
+
+def countersinks(z: float, points: list[tuple[float, float]]) -> cq.Workplane:
+    """Holes for M3 flat-head screws, from a cover's outside face at Z = z inward (+Z):
+    each a 90-degree cone to the clearance hole, and the hole on through the cover."""
+    out = cq.Workplane("XY")
+    depth = (M3_SINK_D - M3_CLEAR) / 2
+    for x, y in points:
+        # A little past the face, so the cut leaves no skin.
+        cone = cq.Solid.makeCone(
+            M3_SINK_D / 2 + 0.1, M3_CLEAR / 2, depth + 0.1, cq.Vector(x, y, z - 0.1)
+        )
+        hole = cq.Solid.makeCylinder(M3_CLEAR / 2, BACK + 0.2, cq.Vector(x, y, z - 0.1))
+        out = out.add(cone).add(hole)
+    return out
 
 
 def corner_points(inset: float) -> list[tuple[float, float]]:
@@ -246,13 +269,16 @@ def back() -> cq.Workplane:
         .extrude(SHELL_D - standoff_end)
     )
     plate = plate.union(posts)
+    points = FRAME_MOUNTS + corner_points(CORNER_INSET)
     screws = (
         cq.Workplane("XY")
         .workplane(offset=-SHELL_D - BACK)
-        .pushPoints(FRAME_MOUNTS + corner_points(CORNER_INSET))
+        .pushPoints(points)
         .circle(M3_CLEAR / 2)
         .extrude(SHELL_D)
     )
+    for solid in countersinks(-SHELL_D - BACK, points).vals():
+        plate = plate.cut(solid)
     return plate.cut(screws)
 
 
@@ -321,8 +347,8 @@ def pod() -> cq.Workplane:
 
 def pod_back() -> cq.Workplane:
     """The pod's back cover, on the pod's back edge and screwed into its corner bosses: a
-    slot for the USB cable, its far plug passing through, and a hole for the cable from the
-    E-stop's power pole. Leaning back, the panel stands on its bottom edge."""
+    USB-C panel-mount connector, held by two M3 flat-head screws, and a hole for the cable
+    from the E-stop's power pole. Leaning back, the panel stands on its bottom edge."""
     cy = pod_center_y()
     plate = (
         cq.Workplane("XY")
@@ -333,26 +359,22 @@ def pod_back() -> cq.Workplane:
         .edges("|Z")
         .fillet(CORNER_R)
     )
-    screws = (
-        cq.Workplane("XY")
-        .workplane(offset=-POD_DEPTH - BACK)
-        .pushPoints(pod_corner_points())
-        .circle(M3_CLEAR / 2)
-        .extrude(BACK)
-    )
-    plate = plate.cut(screws)
+    ux = -SHELL_W / 4 - 6  # the USB-C connector, left of the power cable
+    points = [*pod_corner_points(), (ux - USB_C_SCREWS / 2, cy), (ux + USB_C_SCREWS / 2, cy)]
+    for solid in countersinks(-POD_DEPTH - BACK, points).vals():
+        plate = plate.cut(solid)
     usb = (
         cq.Workplane("XY")
         .workplane(offset=-POD_DEPTH - BACK)
-        .center(-SHELL_W / 4 - 6, cy)
-        .slot2D(POD_CABLES[0], POD_CABLES[1])
+        .center(ux, cy)
+        .slot2D(USB_C_SLOT[0], USB_C_SLOT[1])
         .extrude(BACK)
     )
     power = (
         cq.Workplane("XY")
         .workplane(offset=-POD_DEPTH - BACK)
         .center(-8.0, cy)
-        .circle(POD_CABLES[1] / 2)
+        .circle(POWER_HOLE / 2)
         .extrude(BACK)
     )
     return plate.cut(usb).cut(power)
